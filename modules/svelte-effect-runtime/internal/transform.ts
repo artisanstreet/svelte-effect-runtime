@@ -702,7 +702,7 @@ function makeInjectedImports(
 }
 
 function makeTypedStateBinding(name: string, stateTypeText: string): string {
-  return `let ${name}: ${stateTypeText} | undefined = $state(undefined as ${stateTypeText} | undefined);`;
+  return `let ${name}: ${stateTypeText} = $state(undefined as unknown as ${stateTypeText});`;
 }
 
 function create_lowered_declaration_helper(

@@ -21,6 +21,13 @@ export interface EffectPreprocessOptions {
   svelteModuleId?: string;
 }
 
+const EMPTY_MAP = {
+  version: 3,
+  sources: [],
+  names: [],
+  mappings: "",
+};
+
 /**
  * Low-level Svelte preprocessor for `<script effect>` and supported markup
  * `yield*` transforms.
@@ -64,7 +71,7 @@ export function effect_preprocess(
 
       return {
         code: transformed.code,
-        map: transformed.map,
+        map: EMPTY_MAP,
         attributes: nextAttributes,
       };
     },

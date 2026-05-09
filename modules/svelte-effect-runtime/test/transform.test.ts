@@ -53,7 +53,7 @@ Deno.test("rewrites effect-enabled scripts into a mount-time Effect program", as
   );
   assertMatch(
     result.code,
-    /let count: __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_count_\d+>> \| undefined = \$state\(undefined as __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_count_\d+>> \| undefined\);/,
+    /let count: __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_count_\d+>> = \$state\(undefined as unknown as __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_count_\d+>>\);/,
   );
   assertMatch(
     result.code,
@@ -96,7 +96,7 @@ Deno.test("preserves explicit type annotations when lowering yield declarations"
 
   assertStringIncludes(
     result.code,
-    `let count: number | undefined = $state(undefined as number | undefined);`,
+    `let count: number = $state(undefined as unknown as number);`,
   );
 });
 
@@ -118,7 +118,7 @@ Deno.test("supports destructuring declarations that depend on yield*", async () 
   );
   assertMatch(
     result.code,
-    /let __svelteEffectRuntimeTemp_\d+: __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_value_\d+>> \| undefined = \$state\(undefined as __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_value_\d+>> \| undefined\);/,
+    /let __svelteEffectRuntimeTemp_\d+: __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_value_\d+>> = \$state\(undefined as unknown as __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_value_\d+>>\);/,
   );
   assertMatch(
     result.code,
@@ -146,11 +146,11 @@ Deno.test("later declarations can depend on yielded values", async () => {
 
   assertMatch(
     result.code,
-    /let count: __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_count_\d+>> \| undefined = \$state\(undefined as __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_count_\d+>> \| undefined\);/,
+    /let count: __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_count_\d+>> = \$state\(undefined as unknown as __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_count_\d+>>\);/,
   );
   assertMatch(
     result.code,
-    /let doubled: ReturnType<typeof __svelteEffectRuntime_doubled_\d+> \| undefined = \$state\(undefined as ReturnType<typeof __svelteEffectRuntime_doubled_\d+> \| undefined\);/,
+    /let doubled: ReturnType<typeof __svelteEffectRuntime_doubled_\d+> = \$state\(undefined as unknown as ReturnType<typeof __svelteEffectRuntime_doubled_\d+>\);/,
   );
   assertMatch(
     result.code,

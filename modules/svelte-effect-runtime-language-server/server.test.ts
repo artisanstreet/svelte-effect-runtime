@@ -323,7 +323,7 @@ Deno.test("lowered yield declarations still map to generated script symbols", as
   assert(generated_test.line >= 0);
   assert_match(
     generated_test_window,
-    /let test: __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_test_\d+>> \| undefined = \$state/,
+    /let test: __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_test_\d+>> = \$state/,
   );
   assert(generated_remote.line >= 0);
   assert_match(generated_remote_window, /TestRemote\(\{ name: "John", age: 20 \}\)/);
@@ -404,7 +404,7 @@ Deno.test("hover stays typed in script declarations and markup for checkout flow
       result_decl_hover as string,
       /kind: "ok"/,
     );
-    assert_match(
+    assert_not_match(
       result_decl_hover as string,
       /\| undefined/,
     );
@@ -414,7 +414,7 @@ Deno.test("hover stays typed in script declarations and markup for checkout flow
       markup_hover as string,
       /kind: "ok"/,
     );
-    assert_match(
+    assert_not_match(
       markup_hover as string,
       /\| undefined/,
     );

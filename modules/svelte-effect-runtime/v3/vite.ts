@@ -98,11 +98,17 @@ function resolve_kit_internal_runtime_path(relative_path: string): string {
   return pathToFileURL(resolve(kit_root, relative_path)).href;
 }
 
+function resolve_runtime_dependency_path(package_id: string): string {
+  const runtime_require = createRequire(import.meta.url);
+  return pathToFileURL(runtime_require.resolve(package_id)).href;
+}
+
 function create_remote_runtime_module_code(): string {
   const adapter_module_path = resolve_runtime_internal_path(
     "../internal/remote-client.ts",
     "../internal/remote-client.js",
   );
+  const devalue_module_path = resolve_runtime_dependency_path("devalue");
   const kit_query_module_path = resolve_kit_internal_runtime_path(
     "src/runtime/client/remote-functions/query.svelte.js",
   );
@@ -129,9 +135,9 @@ function create_remote_runtime_module_code(): string {
   );
 
   return `
-import * as devalue from "devalue";
+import * as devalue from ${JSON.stringify(devalue_module_path)};
 import { base, app_dir } from "$app/paths/internal/client";
-import { query as native_query, query_batch as native_query_batch } from ${
+import * as native_query_module from ${
     JSON.stringify(kit_query_module_path)
   };
 import { command as native_command } from ${
@@ -172,8 +178,13 @@ const request_dependencies = {
   stringify_remote_arg
 };
 
+const native_query = native_query_module.query;
+const native_query_batch = Reflect.get(native_query_module, "query_batch");
+
 export const query = create_remote_query_adapter(native_query, decode_payload, request_dependencies, "query");
-export const query_batch = create_remote_query_adapter(native_query_batch, decode_payload, request_dependencies, "query_batch");
+export const query_batch = native_query_batch
+  ? create_remote_query_adapter(native_query_batch, decode_payload, request_dependencies, "query_batch")
+  : create_remote_query_adapter(native_query, decode_payload, request_dependencies, "query");
 export const command = create_remote_command_adapter(native_command, decode_payload, request_dependencies);
 export const prerender = create_remote_query_adapter(native_prerender, decode_payload, request_dependencies, "prerender");
 export const form = create_remote_form_adapter(native_form, decode_payload, {
