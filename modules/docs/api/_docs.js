@@ -205,7 +205,7 @@ async function resolveRouteFiles(pathname) {
   };
 }
 
-async function readRouteContent(filePath) {
+function readRouteContent(filePath) {
   return readFile(filePath, "utf8");
 }
 

@@ -60,7 +60,7 @@ export function register_transform_behaviors(harness: VersionHarness): void {
       );
       assertMatch(
         result.code,
-        /let count: __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_count_\d+>> \| undefined = \$state\(undefined as __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_count_\d+>> \| undefined\);/,
+        /let count: __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_count_\d+>> = \$state\(undefined as unknown as __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_count_\d+>>\);/,
       );
       assertMatch(
         result.code,
@@ -111,7 +111,7 @@ export function register_transform_behaviors(harness: VersionHarness): void {
 
       assertStringIncludes(
         result.code,
-        `let count: number | undefined = $state(undefined as number | undefined);`,
+        `let count: number = $state(undefined as unknown as number);`,
       );
     },
   );
@@ -136,7 +136,7 @@ export function register_transform_behaviors(harness: VersionHarness): void {
       );
       assertMatch(
         result.code,
-        /let __svelteEffectRuntimeTemp_\d+: __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_value_\d+>> \| undefined = \$state\(undefined as __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_value_\d+>> \| undefined\);/,
+        /let __svelteEffectRuntimeTemp_\d+: __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_value_\d+>> = \$state\(undefined as unknown as __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_value_\d+>>\);/,
       );
       assertMatch(
         result.code,
@@ -167,11 +167,11 @@ export function register_transform_behaviors(harness: VersionHarness): void {
 
       assertMatch(
         result.code,
-        /let count: __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_count_\d+>> \| undefined = \$state\(undefined as __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_count_\d+>> \| undefined\);/,
+        /let count: __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_count_\d+>> = \$state\(undefined as unknown as __svelteEffectRuntimeYielded<ReturnType<typeof __svelteEffectRuntime_count_\d+>>\);/,
       );
       assertMatch(
         result.code,
-        /let doubled: ReturnType<typeof __svelteEffectRuntime_doubled_\d+> \| undefined = \$state\(undefined as ReturnType<typeof __svelteEffectRuntime_doubled_\d+> \| undefined\);/,
+        /let doubled: ReturnType<typeof __svelteEffectRuntime_doubled_\d+> = \$state\(undefined as unknown as ReturnType<typeof __svelteEffectRuntime_doubled_\d+>\);/,
       );
       assertMatch(
         result.code,
@@ -270,6 +270,44 @@ export function register_transform_behaviors(harness: VersionHarness): void {
       assertStringIncludes(
         result.code,
         `return (yield* increment());`,
+      );
+    },
+  );
+
+  Deno.test(
+    name(
+      "keeps markup yield rewrites idempotent across repeated preprocess passes",
+    ),
+    async () => {
+      const source = `<script lang="ts" effect>
+  import { Effect } from "effect";
+
+  const save = () => Effect.succeed("saved");
+</script>
+
+<button onclick={() => yield* save()}>Save</button>
+`;
+
+      const first = await preprocess(source, effect_preprocess(), {
+        filename: "InlineEventIdempotent.svelte",
+      });
+      const second = await preprocess(first.code, effect_preprocess(), {
+        filename: "InlineEventIdempotent.svelte",
+      });
+
+      assertEquals(
+        second.code.match(
+          /import \{ Effect as __svelteEffectRuntimeMarkupEffect \}/g,
+        )
+          ?.length ?? 0,
+        1,
+      );
+      assertEquals(
+        second.code.match(
+          /void __svelteEffectRuntimeMarkupRun\(function\* \(\) \{/g,
+        )
+          ?.length ?? 0,
+        1,
       );
     },
   );

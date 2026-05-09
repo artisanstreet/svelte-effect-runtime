@@ -30,7 +30,8 @@ export const Form: typeof Server_module.Form = Server_module.Form;
  *
  * @see https://ser.barekey.dev/content/remote-functions/prerender
  */
-export const Prerender: typeof Server_module.Prerender = Server_module.Prerender;
+export const Prerender: typeof Server_module.Prerender =
+  Server_module.Prerender;
 /**
  * Effect `Context.Tag` for the current SvelteKit `RequestEvent`.
  *
@@ -52,8 +53,9 @@ export const ServerRuntime: typeof Server_module.ServerRuntime =
  *
  * @see https://ser.barekey.dev/content/reference/transport
  */
-export const create_effect_transport: typeof Server_module.create_effect_transport =
-  Server_module.create_effect_transport;
+export const create_effect_transport:
+  typeof Server_module.create_effect_transport =
+    Server_module.create_effect_transport;
 /**
  * Resolve the active server runtime, lazily creating a default empty runtime
  * when no explicit one has been registered.

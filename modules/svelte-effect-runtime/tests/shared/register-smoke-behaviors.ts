@@ -278,7 +278,8 @@ function create_kit_form_descriptor_fixture(
 </html>
 `,
     "src/routes/+layout.ts": `export const prerender = true;`,
-    "src/routes/+page.server.ts": `import { oauth_remote } from "./oauth.remote";
+    "src/routes/+page.server.ts":
+      `import { oauth_remote } from "./oauth.remote";
 
 export function load() {
   const descriptor = Object.getOwnPropertyDescriptor(oauth_remote, "native");

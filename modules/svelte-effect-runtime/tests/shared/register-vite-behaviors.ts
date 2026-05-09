@@ -70,7 +70,16 @@ export function register_vite_behaviors(harness: VersionHarness): void {
       assertStringIncludes(String(loaded), "create_remote_query_adapter");
       assertStringIncludes(String(loaded), "create_remote_command_adapter");
       assertStringIncludes(String(loaded), "create_remote_form_adapter");
+      assertStringIncludes(String(loaded), "devalue");
+      assertStringIncludes(String(loaded), "node_modules");
+      assertStringIncludes(String(loaded), "import * as native_query_module");
+      assertStringIncludes(String(loaded), "const native_query_batch");
       assertStringIncludes(String(loaded), 'from "$app/paths/internal/client"');
+      if (String(loaded).includes('from "devalue"')) {
+        throw new Error(
+          "Expected devalue to resolve through the runtime package.",
+        );
+      }
     },
   );
 

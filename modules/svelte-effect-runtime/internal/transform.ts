@@ -257,13 +257,16 @@ function transformVariableStatement(
     }
 
     if (declaration.initializer && isRuneInitializer(declaration.initializer)) {
-      const renderedDeclaration =
-        `${getDeclarationKind(statement.declarationList.flags)} ${
-          normalizeStatementText(sliceNode(content, declaration))
-        };`;
+      const renderedDeclaration = `${
+        getDeclarationKind(statement.declarationList.flags)
+      } ${normalizeStatementText(sliceNode(content, declaration))};`;
       hoistedDeclarations.push(renderedDeclaration);
       pendingRelocations.push(
-        ...make_declaration_relocations(declaration, renderedDeclaration, content),
+        ...make_declaration_relocations(
+          declaration,
+          renderedDeclaration,
+          content,
+        ),
       );
       continue;
     }
@@ -275,13 +278,16 @@ function transformVariableStatement(
         effectBoundBindings,
       )
     ) {
-      const renderedDeclaration =
-        `${getDeclarationKind(statement.declarationList.flags)} ${
-          normalizeStatementText(sliceNode(content, declaration))
-        };`;
+      const renderedDeclaration = `${
+        getDeclarationKind(statement.declarationList.flags)
+      } ${normalizeStatementText(sliceNode(content, declaration))};`;
       hoistedDeclarations.push(renderedDeclaration);
       pendingRelocations.push(
-        ...make_declaration_relocations(declaration, renderedDeclaration, content),
+        ...make_declaration_relocations(
+          declaration,
+          renderedDeclaration,
+          content,
+        ),
       );
       continue;
     }
@@ -314,7 +320,9 @@ function transformVariableStatement(
 
     if (declaration.initializer) {
       if (helper?.tempName) {
-        effectTexts.push(`${helper.tempName} = ${helper.assignmentExpression};`);
+        effectTexts.push(
+          `${helper.tempName} = ${helper.assignmentExpression};`,
+        );
         effectTexts.push(
           makeEffectAssignment(
             declaration.name,
@@ -702,7 +710,7 @@ function makeInjectedImports(
 }
 
 function makeTypedStateBinding(name: string, stateTypeText: string): string {
-  return `let ${name}: ${stateTypeText} | undefined = $state(undefined as ${stateTypeText} | undefined);`;
+  return `let ${name}: ${stateTypeText} = $state(undefined as unknown as ${stateTypeText});`;
 }
 
 function create_lowered_declaration_helper(
@@ -719,7 +727,9 @@ function create_lowered_declaration_helper(
   const helperName = `__svelteEffectRuntime_${baseName}_${suffix}`;
   const expressionNode = getYieldOperand(declaration.initializer) ??
     declaration.initializer;
-  const expressionText = normalizeStatementText(sliceNode(content, expressionNode));
+  const expressionText = normalizeStatementText(
+    sliceNode(content, expressionNode),
+  );
   const declarationText = `const ${helperName} = () => ${expressionText};`;
   const yieldedExpression = getYieldOperand(declaration.initializer);
   const stateTypeText = yieldedExpression
@@ -784,7 +794,10 @@ function make_declaration_relocations(
   return relocations;
 }
 
-function find_binding_name_start(name: ts.BindingName, bindingName: string): number {
+function find_binding_name_start(
+  name: ts.BindingName,
+  bindingName: string,
+): number {
   if (ts.isIdentifier(name)) {
     return name.text === bindingName ? name.getStart() : -1;
   }
@@ -803,7 +816,10 @@ function find_binding_name_start(name: ts.BindingName, bindingName: string): num
   return -1;
 }
 
-function find_binding_name_end(name: ts.BindingName, bindingName: string): number {
+function find_binding_name_end(
+  name: ts.BindingName,
+  bindingName: string,
+): number {
   if (ts.isIdentifier(name)) {
     return name.text === bindingName ? name.end : -1;
   }
@@ -853,7 +869,10 @@ function resolvePendingRelocations(
   let searchStart = 0;
 
   for (const relocation of pendingRelocations) {
-    const generatedStart = code.indexOf(relocation.generatedSnippet, searchStart);
+    const generatedStart = code.indexOf(
+      relocation.generatedSnippet,
+      searchStart,
+    );
 
     if (generatedStart === -1) {
       continue;

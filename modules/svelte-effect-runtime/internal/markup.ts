@@ -241,6 +241,10 @@ function getCandidateForBraceTag(
   const leadingWhitespaceLength = inner.length - trimmed.length;
   const tag = getBraceTagInfo(trimmed);
 
+  if (trimmed.includes(MARKUP_HELPER_PREFIX)) {
+    return undefined;
+  }
+
   if (!containsYieldStarText(trimmed)) {
     return undefined;
   }
@@ -409,7 +413,7 @@ function makeAstReplacement(
     // Use a no-op snippet as the fallback so SSR and the initial client render
     // both have a callable snippet even before the Effect has resolved.
     replacementText =
-          `(${MARKUP_HELPER_PREFIX}Value("${helperId}", ${depsText}, function* () { return (${trimmedExpression}); }, function () {}))()`;
+      `(${MARKUP_HELPER_PREFIX}Value("${helperId}", ${depsText}, function* () { return (${trimmedExpression}); }, function () {}))()`;
   } else {
     replacementText =
       `${MARKUP_HELPER_PREFIX}Value("${helperId}", ${depsText}, function* () { return (${trimmedExpression}); }, ${
@@ -1496,6 +1500,14 @@ function injectMarkupHelpers(
   content: string,
   options: TransformEffectMarkupOptions,
 ): void {
+  if (
+    content.includes(
+      `const ${MARKUP_HELPER_PREFIX}Values = Object.create(null);`,
+    )
+  ) {
+    return;
+  }
+
   const helperBlock = makeMarkupHelperBlock(options);
   const scriptTagMatch = findInstanceScriptTag(content);
 
