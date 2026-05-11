@@ -4,110 +4,105 @@
 import { Prerender } from "svelte-effect-runtime";
 ```
 
-```ts
-declare const Prerender:
-  & (<Output, ErrorType, Requirements>(
-    fn: () => Effect.Effect<Output, ErrorType, Requirements>,
-    options?: {
-      inputs?: (
-        event: RequestEventService,
-      ) => AsyncIterable<void> | Iterable<void>;
-      dynamic?: boolean;
-    },
-  ) => EffectPrerenderFunction<void, Output, ErrorType>)
-  & (<Input, Output, ErrorType, Requirements>(
-    validate: "unchecked",
-    fn: (arg: Input) => Effect.Effect<Output, ErrorType, Requirements>,
-    options?: {
-      inputs?: (
-        event: RequestEventService,
-      ) => AsyncIterable<Input> | Iterable<Input>;
-      dynamic?: boolean;
-    },
-  ) => EffectPrerenderFunction<Input, Output, ErrorType>)
-  & (<SchemaType extends EffectSchema, Output, ErrorType, Requirements>(
-    validate: SchemaType,
-    fn: (
-      arg: SchemaOutput<SchemaType>,
-    ) => Effect.Effect<Output, ErrorType, Requirements>,
-    options?: {
-      inputs?: (
-        event: RequestEventService,
-      ) =>
-        | AsyncIterable<SchemaInput<SchemaType>>
-        | Iterable<SchemaInput<SchemaType>>;
-      dynamic?: boolean;
-    },
-  ) => EffectPrerenderFunction<SchemaInput<SchemaType>, Output, ErrorType>);
-```
+`Prerender(...)` is like `Query`, but the result is captured at build
+time and replayed on subsequent reads. Use it for data that changes at
+most once per redeploy — content pages, static config, version banners.
 
-The `prerender` function is similar to `query`, except that it will be invoked
-at build time to prerender the result. Use this for data that changes at most
-once per redeployment.
+## Minimal example
 
-```ts
-import { Effect } from "effect";
+::: code-group
+
+```ts [src/lib/topics.remote.ts]
+import { Data, Effect, Schema } from "effect";
 import { Prerender } from "svelte-effect-runtime";
-import { Database } from "$lib/server/database";
 
-export const get_posts = Query(Effect.gen(function* () {
-  const db = yield* Database;
+class MissingTopic extends Data.TaggedError("MissingTopic")<{
+  readonly slug: string;
+}> {}
 
-  return yield* Database.sql`
-    select title, slug
-		from post
-		order by published_at
-		desc
-	`;
-}));
-```
+const TOPICS = [
+  { slug: "intro", title: "Intro", body: "Hello." },
+  { slug: "guide", title: "Guide", body: "Read this next." }
+];
 
-## Prerender arguments
-
-As with queries, prerender functions can accept an argument, which should be
-validated with an Effect schema:
-
-```ts
-export const get_post_by_slug = Query(
-  Effect.Struct({
-    slug: Effect.String,
-  }),
-  Effect.gen(function* () {
-    const db = yield* Database;
-
-    const [post] = yield* db.sql`
-      select * from post
-      where slug = ${slug}
-    `;
-
-    return yield* pipe(
-      post,
-      Option.fromNullable,
-      Option.match({
-        onNone: () => Effect.fail(new Error("Post not found")),
-        onSome: (post) => post,
-      }),
-    );
-  }),
-);
-```
-
-Any calls to `get_post(...)` found by SvelteKit's crawler while prerendering
-pages will be saved automatically, but you can also specify which values it
-should be called with using the `inputs` option:
-
-```ts
-export const get_post = Prerender(
-  Effect.Struct({
-    slug: Effect.String,
-  }),
-  async (slug) => {/* ... */},
+export const get_topic = Prerender(
+  Schema.String,
+  (slug) =>
+    Effect.gen(function* () {
+      const topic = TOPICS.find((t) => t.slug === slug);
+      if (!topic) return yield* new MissingTopic({ slug });
+      return topic;
+    }),
   {
-    inputs: () => [
-      "first-post",
-      "second-post",
-      "third-post",
-    ],
-  },
+    // SvelteKit needs to know which slugs to evaluate at build time.
+    inputs: function* () {
+      for (const t of TOPICS) yield t.slug;
+    }
+  }
 );
 ```
+
+```svelte [src/routes/topics/[slug]/+page.svelte]
+<script lang="ts" effect>
+  import { page } from "$app/state";
+  import { get_topic } from "$lib/topics.remote";
+
+  const topic = yield* get_topic(page.params.slug);
+</script>
+
+<article>
+  <h1>{topic.title}</h1>
+  <p>{topic.body}</p>
+</article>
+```
+
+```ts [src/routes/topics/[slug]/+page.ts]
+export const prerender = true;
+```
+
+:::
+
+::: warning
+In `npm run dev`, non-dynamic prerender results aren't populated —
+they're build artefacts. Run `npm run build && npm run preview` to see
+the cached results, or set `{ dynamic: true }` on the prerender
+declaration to evaluate at runtime instead.
+:::
+
+## Dynamic prerender
+
+`{ dynamic: true }` keeps the function evaluating at runtime rather
+than locking the build-time snapshot in place:
+
+```ts
+export const get_topic = Prerender(
+  Schema.String,
+  (slug) =>
+    Effect.gen(function* () {
+      const topic = TOPICS.find((t) => t.slug === slug);
+      if (!topic) return yield* new MissingTopic({ slug });
+      return { ...topic, snapshot_at: Date.now() };
+    }),
+  { dynamic: true }
+);
+```
+
+## Validation variants
+
+```ts
+// Schema-validated.
+Prerender(Schema.String, (slug) => ..., { inputs: ... });
+
+// Unchecked.
+Prerender("unchecked", (slug: string) => ..., { inputs: ... });
+
+// No-arg.
+Prerender(() => ...);
+```
+
+## See also
+
+- [Prerender examples in the gallery](https://github.com/usebarekey/svelte-effect-runtime/tree/master/examples/sveltekit/src/routes/prerender)
+  — static `inputs` generator vs. `dynamic: true` refresh.
+- [Server runtime](../runtimes/server) — prerender runs through the
+  same server runtime model as `Query`, `Command`, and `Form`.

@@ -4,79 +4,104 @@
 import { Query } from "svelte-effect-runtime";
 ```
 
-```ts
-declare const Query:
-  & (<Output, ErrorType, Requirements>(
-    fn: () => Effect.Effect<Output, ErrorType, Requirements>,
-  ) => EffectQueryFunction<void, Output, ErrorType>)
-  & (<Input, Output, ErrorType, Requirements>(
-    validate: "unchecked",
-    fn: (arg: Input) => Effect.Effect<Output, ErrorType, Requirements>,
-  ) => EffectQueryFunction<Input, Output, ErrorType>)
-  & (<SchemaType extends EffectSchema, Output, ErrorType, Requirements>(
-    validate: SchemaType,
-    fn: (
-      arg: SchemaOutput<SchemaType>,
-    ) => Effect.Effect<Output, ErrorType, Requirements>,
-  ) => EffectQueryFunction<SchemaInput<SchemaType>, Output, ErrorType>);
-```
+`Query(...)` wraps SvelteKit's native `query()` for read-only data
+fetches. The handler always runs on the server. On the client, calling
+the query returns an `Effect<Output, RemoteFailure<Error>, never>` —
+compose it like any other Effect.
 
-The `Query` function is a wrapper over SvelteKit's `query`. It allows you to
-read dynamic data from the server (for static data, consider using
-[prerender](/content/remote-functions/prerender) instead):
+For static or build-time data, use [Prerender](./prerender) instead.
+
+## Minimal example
 
 ::: code-group
 
-```ts [src/routes/blog/data.remote.ts]
-import { Effect } from "effect";
+```ts [src/lib/posts.remote.ts]
+import { Data, Effect, Schema } from "effect";
 import { Query } from "svelte-effect-runtime";
-import { Database } from "$lib/server/database";
 
-export const get_posts = Query(Effect.gen(function* () {
-  const db = yield* Database;
+class PostNotFound extends Data.TaggedError("PostNotFound")<{
+  readonly slug: string;
+}> {}
 
-  return yield* Database.sql`
-    select title, slug
-		from post
-		order by published_at
-		desc
-	`;
-}));
+const POSTS = [
+  { slug: "alpha", title: "Alpha post", body: "First!" },
+  { slug: "beta", title: "Beta post", body: "Second!" }
+];
 
-export const get_post_by_slug = Query(
-  Effect.Struct({
-    slug: Effect.String,
-  }),
+// No-arg query.
+export const get_all_posts = Query(() => Effect.succeed(POSTS));
+
+// Schema-validated query.
+export const get_post = Query(Schema.String, (slug) =>
   Effect.gen(function* () {
-    const db = yield* Database;
-
-    const [post] = yield* Database.sql`
-      select * from post
-      where slug = ${slug}
-    `;
-
-    return yield* pipe(
-      post,
-      Option.fromNullable,
-      Option.match({
-        onNone: () => Effect.fail(new Error("Post not found")),
-        onSome: (post) => post,
-      }),
-    );
-  }),
+    const post = POSTS.find((p) => p.slug === slug);
+    if (!post) return yield* new PostNotFound({ slug });
+    return post;
+  })
 );
 ```
 
-```svelte [src/routes/blog/+page.svelte]
+```svelte [src/routes/+page.svelte]
 <script lang="ts" effect>
-  import { get_posts } from "./data.remote";
+  import { get_all_posts } from "$lib/posts.remote";
+
+  const posts = yield* get_all_posts();
 </script>
 
-<h1>Recent posts</h1>
-
 <ul>
-  {#each await get_posts() as { title, slug }}
-    <li><a href="/blog/{slug}">{title}</a></li>
+  {#each posts as post (post.slug)}
+    <li>
+      <a href="/blog/{post.slug}">{post.title}</a>
+    </li>
   {/each}
 </ul>
 ```
+
+:::
+
+::: warning
+`yield*` works at the **top level** of a `<script effect>` block,
+inside `Effect.gen`, and inside inline-arrow event handlers. It does
+**not** work inside regular `function` declarations or `async function`
+bodies — those are not rewritten by the preprocessor.
+:::
+
+## Recovering from tagged failures
+
+Server-side `Effect.fail(new PostNotFound(...))` arrives on the client
+as the raw tagged error, ready for `Effect.catchTag`:
+
+```svelte
+<script lang="ts" effect>
+  import { Effect } from "effect";
+  import { get_post } from "$lib/posts.remote";
+
+  const post = yield* get_post("missing-slug").pipe(
+    Effect.catchTag("PostNotFound", (err) =>
+      Effect.succeed({ slug: err.slug, title: "(not found)", body: "" })
+    )
+  );
+</script>
+```
+
+`RemoteFailure<E>` is the union of your tagged error and SvelteKit's
+transport failures (`RemoteValidationError`, `RemoteHttpError`,
+`RemoteTransportError`); see the [errors reference](./errors).
+
+## Validation variants
+
+```ts
+// Schema-validated (recommended).
+Query(Schema.String, (slug) => ...);
+
+// Unchecked — input type is whatever you pass at the call site.
+Query("unchecked", (slug: string) => ...);
+
+// No-arg.
+Query(() => ...);
+```
+
+## See also
+
+- [Query examples in the gallery](https://github.com/usebarekey/svelte-effect-runtime/tree/master/examples/sveltekit/src/routes/query)
+  — basic, schema-validated, unchecked, and tagged-error recovery.

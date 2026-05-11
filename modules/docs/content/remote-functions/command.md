@@ -4,96 +4,121 @@
 import { Command } from "svelte-effect-runtime";
 ```
 
-```ts
-declare const Command: (<Output, ErrorType, Requirements>(
-  fn: () => Effect.Effect<Output, ErrorType, Requirements>,
-) => EffectCommand<void, Output, ErrorType>) &
-  (<Input, Output, ErrorType, Requirements>(
-    validate: "unchecked",
-    fn: (arg: Input) => Effect.Effect<Output, ErrorType, Requirements>,
-  ) => EffectCommand<Input, Output, ErrorType>) &
-  (<SchemaType extends EffectSchema, Output, ErrorType, Requirements>(
-    validate: SchemaType,
-    fn: (arg: SchemaOutput<SchemaType>) => Effect.Effect<Output, ErrorType, Requirements>,
-  ) => EffectCommand<SchemaInput<SchemaType>, Output, ErrorType>);
-```
+`Command(...)` wraps SvelteKit's native `command()`. Like `Form`,
+commands write data to the server; unlike `Form`, they're not bound to
+a `<form>` element and can be called from anywhere. The client-side
+return value is `Effect<Output, RemoteFailure<Error>, never>`.
 
-The `Command` function is a wrapper over SvelteKit's `command`. The command
-function, like form, allows you to write data to the server. Unlike form, it's
-not specific to an element and can be called from anywhere.
+> Prefer [`Form`](./form) where possible — it gracefully degrades when
+> JavaScript is disabled.
 
-<script setup>
-import { Lightbulb } from "lucide-vue-next";
-</script>
-
-<div class="ser-callout">
-  <Lightbulb class="ser-callout__icon" :size="20" />
-  <p class="ser-callout__text">
-    Prefer
-    <code>form</code>
-    where possible, since it gracefully degrades if JavaScript is disabled or fails to load.
-  </p>
-</div>
+## Minimal example
 
 ::: code-group
 
-```ts [src/routes/blog/data.remote.ts]
-import { Effect, Option, pipe, Schema } from "effect";
+```ts [src/lib/counter.remote.ts]
+import { Data, Effect, Schema } from "effect";
 import { Command } from "svelte-effect-runtime";
-import { Database } from "$lib/server/database";
 
-export const like_post = Command(
-  Schema.Struct({
-    slug: Schema.String,
-  }),
-  ({ slug }) =>
-    Effect.gen(function* () {
-      const db = yield* Database;
+class CounterOverflow extends Data.TaggedError("CounterOverflow")<{
+  readonly attempted: number;
+}> {}
 
-      const [like] = yield* db.sql`
-      update item
-      set likes = likes + 1
-      where slug = ${slug}
-      returning
-    `;
+let counter = 0;
 
-      return yield* pipe(
-        like,
-        Option.fromNullable,
-        Option.match({
-          onNone: () => Effect.fail(new Error("Post not found")),
-        }),
-      );
-    }),
+export const increment = Command(Schema.Number, (by) =>
+  Effect.gen(function* () {
+    if (by > 1_000_000) {
+      return yield* new CounterOverflow({ attempted: by });
+    }
+    counter += by;
+    return counter;
+  })
+);
+
+export const reset = Command(() =>
+  Effect.sync(() => {
+    counter = 0;
+    return counter;
+  })
 );
 ```
 
-```svelte [src/routes/blog/+page.svelte]
+```svelte [src/routes/+page.svelte]
 <script lang="ts" effect>
-  import { Effect } from "effect";
-  import { get_posts, like_post } from "./data.remote";
-  import { toast } from "svelte-sonner";
+  import { increment, reset } from "$lib/counter.remote";
 
-  const like = (slug: string) =>
-    like_post({ slug }).pipe(
-      Effect.tapError((err) =>
-        Effect.sync(() => {
-          toast.error(String(err));
-        })
-      ),
-    );
+  let value = $state<number | null>(null);
 </script>
 
-<h1>Recent posts</h1>
+<button
+  onclick={() => {
+    value = yield* increment(1);
+  }}
+>
+  +1
+</button>
 
-<ul>
-  {#each yield* get_posts() as { title, slug }}
-    <li>
-      <a href="/blog/{slug}">{title}</a>
-      <button onclick={yield* like(slug)}>
-        Like
-      </button>
-    </li>
-  {/each}
-</ul>
+<button
+  onclick={() => {
+    value = yield* reset();
+  }}
+>
+  Reset
+</button>
+
+{#if value !== null}
+  <p>counter: {value}</p>
+{/if}
 ```
+
+:::
+
+`yield*` works inside the **inline arrow** passed to `onclick` because
+the preprocessor rewrites it. It does **not** work inside a separately
+declared `function` — call the Effect directly in the arrow handler.
+
+## Pending state
+
+The wrapped command exposes a non-enumerable `pending` getter that
+aggregates SvelteKit's native pending count plus any in-flight Effect
+calls:
+
+```svelte
+<button disabled={increment.pending > 0} onclick={() => yield* increment(1)}>
+  {increment.pending > 0 ? "saving…" : "+1"}
+</button>
+```
+
+## Recovering from tagged failures
+
+```svelte
+<script lang="ts" effect>
+  import { Effect } from "effect";
+  import { increment } from "$lib/counter.remote";
+
+  const value = yield* increment(2_000_000).pipe(
+    Effect.catchTag("CounterOverflow", (err) =>
+      Effect.succeed(`refusing to add ${err.attempted}`)
+    )
+  );
+</script>
+```
+
+## Validation variants
+
+```ts
+// Schema-validated (recommended).
+Command(Schema.Number, (by) => ...);
+
+// Unchecked — input type is whatever you pass at the call site.
+Command("unchecked", (payload: unknown) => ...);
+
+// No-arg.
+Command(() => ...);
+```
+
+## See also
+
+- [Command examples in the gallery](https://github.com/usebarekey/svelte-effect-runtime/tree/master/examples/sveltekit/src/routes/command)
+  — schema-validated, void, pending, tagged-error recovery.

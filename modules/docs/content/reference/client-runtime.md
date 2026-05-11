@@ -1,81 +1,104 @@
 # Client Runtime
 
-Client runtime APIs are used by `<script effect>` components and by the client-side remote adapters.
+Client runtime APIs used by `<script effect>` components and by the
+client-side remote adapters.
 
 ```ts
-import {
-  ClientRuntime,
-  getEffectRuntimeOrThrow,
-  runComponentEffect,
-  runInlineEffect
-} from "svelte-effect-runtime";
+import { ClientRuntime } from "svelte-effect-runtime";
 ```
 
-## Signatures
+`ClientRuntime.make(...)` is the only symbol most apps need. The
+`get_effect_runtime_or_throw`, `run_component_effect`, and
+`run_inline_effect` helpers are emitted by the preprocessor; they are
+exported for completeness but are **not** intended for hand-written
+imports.
+
+## `ClientRuntime`
 
 ```ts
 interface ClientRuntimeSeed {
   pipe(): Layer.Layer<never>;
-  pipe<const Ops extends readonly [RuntimeOperator, ...Array<RuntimeOperator>]>(
+  pipe<const Ops extends readonly RuntimeOperator[]>(
     ...ops: Ops
   ): FinalRuntimeLayer<Ops>;
 
   make(): ManagedRuntime.ManagedRuntime<never, never>;
-  make<const Ops extends readonly [RuntimeOperator, ...Array<RuntimeOperator>]>(
+  make<const Ops extends readonly RuntimeOperator[]>(
     ...ops: Ops
   ): ManagedRuntimeFromOps<Ops>;
 }
 ```
 
 ```ts
-export interface EffectRuntime<R = unknown> {
+interface EffectRuntime<R = unknown> {
   runCallback<A, E, R2>(
-    effect: Effect.Effect<A, E, R2>,
-    options?: { onExit?: (exit: Exit.Exit<A, E>) => void }
+    effect: Effect<A, E, R2>,
+    options?: { onExit?: (exit: Exit<A, E>) => void }
   ): () => void;
-  runPromise<A, E, R2>(effect: Effect.Effect<A, E, R2>): Promise<A>;
+  runPromise<A, E, R2>(effect: Effect<A, E, R2>): Promise<A>;
   dispose(): Promise<void>;
 }
 ```
 
-```ts
-export function getEffectRuntimeOrThrow<
-  T extends EffectRuntime = EffectRuntime<never>
->(): T;
-
-export function runComponentEffect<A, E, R>(
-  runtime: EffectRuntime<R>,
-  program: Effect.Effect<A, E, R>
-): () => void;
-
-export function runInlineEffect<A, E, R>(
-  runtime: EffectRuntime<R>,
-  program: Effect.Effect<A, E, R>
-): Promise<A>;
-```
-
-## Semantics
-
-- `ClientRuntime.make(...)` builds a `ManagedRuntime`.
-- If called from `hooks.client.ts`, the runtime is stored globally for subsequent effect components.
-- If called from a component, the runtime is also placed into Svelte context and disposed on component destroy.
-- Calling `ClientRuntime.make(...)` again replaces the active client runtime.
-- `getEffectRuntimeOrThrow()`, `runComponentEffect()`, and `runInlineEffect()` are generated-code helpers used by the compiler output. They are exported for runtime integration, but are internal APIs and not intended for hand-written imports.
-- `getEffectRuntimeOrThrow()` first checks Svelte context, then the global runtime. If neither is set, a default runtime with an empty layer is created automatically. `ClientRuntime.make()` is optional and only needed when you want to provide custom services or layers.
-
 ## Default runtime
 
-Calling `ClientRuntime.make()` from `hooks.client.ts` is **optional**. When no runtime has been registered, the first `<script effect>` component to mount creates a default runtime automatically. This is sufficient for effects that do not depend on any custom services.
+`ClientRuntime.make(...)` is **optional**. When no runtime has been
+registered, the first `<script effect>` component to mount creates a
+default runtime with an empty layer automatically. That's enough for
+effects that don't depend on any custom services.
 
-If your effects use `Context` services, call `ClientRuntime.make(...)` with the appropriate layers before any component mounts:
+```svelte
+<script lang="ts" effect>
+  import { get_version } from "$lib/version.remote";
+
+  let version = $state("");
+  version = yield* get_version();
+</script>
+```
+
+No `hooks.client.ts` is required for this case.
+
+## Registering services
+
+Call `ClientRuntime.make(...)` from `src/hooks.client.ts` when your
+effects need `Context` services that should be available everywhere:
 
 ```ts
 // src/hooks.client.ts
+import { Layer } from "effect";
 import { ClientRuntime } from "svelte-effect-runtime";
 import { MyApi } from "$lib/my-api";
-import { Layer } from "effect";
 
 export const init = () => {
   ClientRuntime.make(Layer.provide(MyApi.Live));
 };
 ```
+
+Each argument is a runtime operator — typically `Layer.provide(...)`
+applied to the layer you want to add. Calling `ClientRuntime.make(...)`
+again disposes the previous runtime and installs the new one.
+
+## Internal helpers
+
+These are emitted by the preprocessor; they exist on the public surface
+only so generated code can import them.
+
+```ts
+function get_effect_runtime_or_throw<
+  T extends EffectRuntime = EffectRuntime<never>
+>(): T;
+
+function run_component_effect<A, E, R>(
+  runtime: EffectRuntime<R>,
+  program: Effect<A, E, R>
+): () => void;
+
+function run_inline_effect<A, E, R>(
+  runtime: EffectRuntime<R>,
+  program: Effect<A, E, R>
+): Promise<A>;
+```
+
+`get_effect_runtime_or_throw()` checks Svelte context first, falls back
+to the module-scoped runtime registered by `ClientRuntime.make(...)`,
+and lazily creates a default if neither is set.

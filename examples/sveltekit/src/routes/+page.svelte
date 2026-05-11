@@ -14,11 +14,11 @@
 </p>
 
 <p>
-	This app installs SER from a local tarball
-	(<code>svelte-effect-runtime-1.5.0.tgz</code>, the build that ships the
-	form-spread fix). You can edit the example pages live with
-	<code>npm run dev</code>; remote handlers live in
-	<code>src/lib/*.remote.ts</code>.
+	This app installs SER from npm
+	(<code>svelte-effect-runtime@^1.6.0</code>, which ships the form-spread
+	fix and the Effect-shaped <code>enhance</code> / <code>validate</code>).
+	Edit the example pages live with <code>npm run dev</code>; remote
+	handlers live in <code>src/lib/*.remote.ts</code>.
 </p>
 
 <h2>Groups</h2>

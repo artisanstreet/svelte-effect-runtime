@@ -1,5 +1,5 @@
 {
-  "name": "form-spread",
+  "name": "ser-examples-sveltekit",
   "private": true,
   "version": "0.0.1",
   "type": "module",
@@ -21,6 +21,6 @@
   },
   "dependencies": {
     "effect": "^3.21.1",
-    "svelte-effect-runtime": "^1.5.0"
+    "svelte-effect-runtime": "^1.6.0"
   }
 }

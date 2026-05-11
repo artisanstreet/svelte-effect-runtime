@@ -1,75 +1,149 @@
-<script setup>
-import { Lightbulb } from "lucide-vue-next";
-</script>
+# Best practices
 
-# Best Practices
+A short list of patterns that come up repeatedly in production
+`svelte-effect-runtime` apps. The runnable companion is
+[`examples/sveltekit/`](https://github.com/usebarekey/svelte-effect-runtime/tree/master/examples/sveltekit)
+in the repo.
 
-## Error handling
+## Tagged errors via `Data.TaggedError`
 
-When using remote functions or code intended to be used by the client, consider using Effect's error handling via `Effect.fail` with tagged errors. Tagged errors allow the client to differentiate between errors over the network.
+Use `Data.TaggedError` for every domain failure your remote functions
+emit. The tag survives the wire, so the client can recover with
+`Effect.catchTag("Tag", err => ...)` and read the typed payload fields
+directly.
 
-<div class="ser-callout">
-  <Lightbulb class="ser-callout__icon" :size="20" />
-  <p class="ser-callout__text">
-    While you can create a shared file in <code>$lib</code> for errors, the client can infer the errors returned automatically.
-    Remember that it uses the string given in <code>Data.TaggedError(...)</code> to do this.
-  </p>
-</div>
+> You don't have to colocate error classes — but a `src/lib/errors.ts`
+> module keeps tags consistent across remotes. The client's type
+> inference works either way.
 
 ::: code-group
 
-```ts [src/routes/blog/data.remote.ts]
-import { Data, Effect, Option, Schema, pipe } from "effect";
+```ts [src/lib/errors.ts]
+import { Data } from "effect";
+
+export class PostNotFound extends Data.TaggedError("PostNotFound")<{
+  readonly slug: string;
+}> {}
+```
+
+```ts [src/lib/posts.remote.ts]
+import { Effect, Schema } from "effect";
 import { Query } from "svelte-effect-runtime";
 import { Database } from "$lib/server/database";
+import { PostNotFound } from "$lib/errors";
 
-class NoPostFoundError extends Data.TaggedError("NoPostFoundError")<{}> {}
+export const get_post_by_slug = Query(Schema.String, (slug) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
 
-export const get_post_by_slug = Query(
-    Schema.Struct({
-        slug: Schema.String,
-    }),
-    ({ slug }) =>
-        Effect.gen(function* () {
-            const db = yield* Database;
+    const [row] = yield* db.sql`
+      select * from post
+      where slug = ${slug}
+    `;
 
-            const [row] = yield* db.sql`
-                select * from post
-                where slug = ${slug}
-            `;
-
-            return pipe(
-                post,
-                Option.fromNullable,
-                Option.match({
-                    onNone: () => Effect.fail(new NoPostFoundError()),
-                    onSome: (p) => Effect.succeed(p),
-                }),
-            );
-        }),
+    if (!row) return yield* new PostNotFound({ slug });
+    return row;
+  })
 );
 ```
 
 ```svelte [src/routes/blog/[slug]/+page.svelte]
 <script lang="ts" effect>
-    import { Effect } from "effect";
-    import { toast } from "svelte-sonner";
-    import { page } from "$app/state";
-    import { get_post_by_slug } from "../data.remote";
+  import { Effect } from "effect";
+  import { page } from "$app/state";
+  import { get_post_by_slug } from "$lib/posts.remote";
 
-    const post = yield* get_post_by_slug({ slug: page.params.slug }).pipe(
-        Effect.catchTags({
-            NoPostFoundError: () => 
-                Effect.sync(() => 
-                    toast.error(`No post found for ${page.params.slug}.`)
-                ),
-        }),
-    );
+  const post = yield* get_post_by_slug(page.params.slug).pipe(
+    Effect.catchTag("PostNotFound", () => Effect.succeed(null))
+  );
 </script>
 
 {#if post}
-    {@html post.content}
+  {@html post.content}
+{:else}
+  <p>No post found for "{page.params.slug}".</p>
 {/if}
 ```
 
 :::
+
+## `yield*`, not `await`
+
+Inside `<script effect>`, all remote calls return `Effect`s. Use
+`yield*` to resolve them; `await` will not work — Effects don't have a
+`.then`.
+
+```svelte
+<script lang="ts" effect>
+  import { get_posts } from "$lib/posts.remote";
+
+  // ✅ correct — top-level yield* is rewritten by the preprocessor
+  const posts = yield* get_posts();
+
+  // ❌ wrong — Effects are not awaitable
+  // const posts = await get_posts();
+</script>
+```
+
+The `yield*` rewrite only fires in three places: top-level statements
+of `<script effect>`, bodies of `Effect.gen(function* () { ... })`, and
+**inline-arrow** event handlers. Wrapping it in
+`function foo() { yield* ... }` will hit a JS parser error before the
+preprocessor even sees it.
+
+```svelte
+<!-- ✅ inline arrow — preprocessor lowers the yield* -->
+<button onclick={() => { yield* increment(1); }}>+1</button>
+
+<!-- ✅ explicit Effect.gen — works because gen accepts yield* -->
+<script lang="ts" effect>
+  const increment_twice = Effect.gen(function* () {
+    yield* increment(1);
+    yield* increment(1);
+  });
+</script>
+```
+
+## Compose with Effect operators on `submit(data)`
+
+`form.submit(data)` returns `Effect<Output, RemoteFailure<Error>, never>`
+— pipe it through any Effect combinator you'd use elsewhere:
+
+```svelte
+const slug = yield* create_post.submit({ title, body }).pipe(
+  Effect.tap((post) => Effect.log(`created ${post.slug}`)),
+  Effect.catchTag("TitleTooShort", () => Effect.succeed("draft"))
+);
+```
+
+The same goes for `Query`, `Command`, and the new (1.6.0)
+`form.validate()` and `form.enhance(callback)` callback.
+
+## Keep request-scoped data out of `ServerRuntime`
+
+`ServerRuntime.make(...)` is for long-lived services: database pools,
+loggers, configuration. Read per-request values (`cookies`, `headers`,
+the route, the current user) from `RequestEvent` inside the Effect
+instead:
+
+```ts
+export const get_session = Query(() =>
+  Effect.gen(function* () {
+    const event = yield* RequestEvent;
+    const users = yield* UserRepository;     // from ServerRuntime
+    const session_id = event.cookies.get("session_id");  // from request
+    return yield* users.find_by_session(session_id);
+  })
+);
+```
+
+## `<form {...form}>` for everything that can submit
+
+The 1.5.0+ wrapper makes `<form {...form}>` bit-identical to spreading
+SvelteKit's native `form()`. Prefer it over `Command`: forms degrade
+gracefully without JavaScript, and the spread wires up
+progressive-enhancement plus the attachment that intercepts submission
+via `fetch`.
+
+Use `form.submit(data)` when there's genuinely no `<form>` (wizard
+modals, keyboard shortcuts) — same Effect-shape either way.

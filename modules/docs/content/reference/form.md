@@ -1,64 +1,92 @@
 # Form
 
-`Form` wraps SvelteKit `form(...)`. It preserves the native form object surface and adds an Effect-returning `submit(...)`.
+`Form` wraps SvelteKit's `form(...)`. The return value is **spreadable**
+onto a `<form>` element exactly like SvelteKit's native form, with the
+I/O surfaces overridden to be Effect-shaped.
 
 ```ts
 import { Form } from "svelte-effect-runtime";
 ```
 
-## Signatures
+## `EffectForm`
 
 ```ts
-type EffectForm<Input extends RemoteFormInput | void, Output, Error = never> =
-  RemoteForm<Input, Output> & {
-    native: RemoteForm<Input, Output>;
-    submit(
-      data: OptionalArgument<Input>
-    ): Effect.Effect<Output, RemoteFailure<Error>, never>;
-    for: RemoteForm<Input, Output>["for"] extends (...args: infer Args) => infer Result
-      ? (...args: Args) => EffectForm<Input, Output, Error>
-      : never;
-  };
+type EffectForm<Input, Output, Error = never> =
+  & Omit<RemoteForm<Input, Output>, "enhance" | "validate" | "for">
+  & {
+      native: RemoteForm<Input, Output>;
+
+      submit(
+        data: OptionalArgument<Input>
+      ): Effect<Output, RemoteFailure<Error>, never>;
+
+      enhance(
+        callback: (args: {
+          form: HTMLFormElement;
+          data: Input;
+          submit: () => Effect<void, RemoteFailure<Error>, never>;
+        }) => Effect<unknown, unknown, never> | void
+      ): { method: "POST"; action: string; [attachment: symbol]: ... };
+
+      validate(options?: {
+        includeUntouched?: boolean;
+        preflightOnly?: boolean;
+      }): Effect<void, RemoteFailure<Error>, never>;
+
+      for(id): EffectForm<Input, Output, Error>;
+    };
 ```
+
+The non-overridden properties from `RemoteForm` (`method`, `action`,
+`fields`, `result`, `pending`, `preflight`, the `@attach` symbol) keep
+their SvelteKit semantics.
+
+## `Form` overloads
 
 ```ts
 interface EffectFormFactory {
+  // No-arg.
   <Output, ErrorType, Requirements>(
-    fn: () => Effect.Effect<Output, ErrorType, Requirements>
+    fn: () => Effect<Output, ErrorType, Requirements>
   ): EffectForm<void, Output, ErrorType>;
 
+  // Unchecked — caller-supplied input shape.
   <Input extends RemoteFormInput, Output, ErrorType, Requirements>(
     validate: "unchecked",
     fn: (args: {
       data: Input;
       invalid: Invalid;
-    }) => Effect.Effect<Output, ErrorType | FormError, Requirements>
+    }) => Effect<Output, ErrorType | FormError, Requirements>
   ): EffectForm<Input, Output, ErrorType>;
 
+  // Schema-validated.
   <SchemaType extends EffectSchema, Output, ErrorType, Requirements>(
     validate: SchemaType,
     fn: (args: {
       data: SchemaOutput<SchemaType>;
       invalid: Invalid<SchemaType>;
-    }) => Effect.Effect<
-      Output,
-      ErrorType | FormError<SchemaType>,
-      Requirements
-    >
-  ): EffectForm<
-    SchemaInput<SchemaType> & RemoteFormInput,
-    Output,
-    ErrorType
-  >;
+    }) => Effect<Output, ErrorType | FormError<SchemaType>, Requirements>
+  ): EffectForm<SchemaInput<SchemaType> & RemoteFormInput, Output, ErrorType>;
 }
 ```
 
-## `invalid`
+## `Invalid`
+
+The proxy passed into a form handler for producing validation issues:
 
 ```ts
 type Invalid<SchemaType = unknown> = {
-  form: (message: string) => Effect.Effect<never, FormError<SchemaType>, never>;
-} & FieldHelpers<...>;
+  form: (message: string) => Effect<never, FormError<SchemaType>, never>;
+} & {
+  [Field in keyof SchemaOutput<SchemaType>]: (
+    message: string
+  ) => Effect<never, FormError<SchemaType>, never>;
+};
 ```
 
-Schema-backed forms derive top-level field helpers from the schema output shape.
+Yield `invalid.<field>(message)` to attach an issue to a specific field
+or `invalid.form(message)` for a top-level one. Schema-backed forms get
+typed field helpers derived from the schema's output shape.
+
+See the [Form guide](../remote-functions/form) for usage and the
+[errors reference](./errors) for `RemoteFailure<E>`.

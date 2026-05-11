@@ -9,7 +9,7 @@
 	<aside>
 		<a href="/" class="brand">
 			<strong>SER Examples</strong>
-			<small>svelte-effect-runtime 1.5.0</small>
+			<small>svelte-effect-runtime 1.6.0</small>
 		</a>
 
 		<nav>
@@ -34,7 +34,7 @@
 
 		<footer>
 			<small>
-				<code>svelte-effect-runtime@1.5.0</code> from npm
+				<code>svelte-effect-runtime@1.6.0</code> from npm
 			</small>
 		</footer>
 	</aside>

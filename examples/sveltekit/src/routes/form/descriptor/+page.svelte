@@ -25,7 +25,7 @@
 
 <h1>Descriptor diagnostics</h1>
 <p>
-	Live inspection of the wrapped <code>EffectForm</code>. After the 1.5.0
+	Live inspection of the wrapped <code>EffectForm</code>. After the 1.5.0+
 	spread fix, these descriptors should match what SvelteKit's native
 	<code>form()</code> emits — same enumerable keys, same getters preserved,
 	same attachment Symbol shape.

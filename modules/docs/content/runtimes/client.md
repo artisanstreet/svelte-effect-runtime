@@ -44,21 +44,28 @@ That lets you compose remote calls with normal Effect operators on the client:
 
 ```svelte
 <script lang="ts" effect>
-  import { Effect } from "effect";
   import { get_post } from "./posts.remote";
 
   let slug = $state("intro");
   let post = $state<{ title: string } | null>(null);
 
-  post = yield* get_post({ slug });
-
-  const refresh = Effect.gen(function* () {
-    post = yield* get_post({ slug });
-  });
+  post = yield* get_post(slug);
 </script>
 
-<button onclick={yield* refresh}>Refresh</button>
+<button
+  onclick={() => {
+    post = yield* get_post(slug);
+  }}
+>
+  Refresh
+</button>
 ```
+
+`yield*` is only rewritten by the preprocessor at the top level of
+`<script effect>`, inside `Effect.gen`, and inside **inline arrow**
+event handlers. Wrapping it in a `function refresh() { yield* ... }`
+declaration will not work — the parser rejects it as a reserved-word
+error.
 
 The remote function still executes on the server. The client runtime only runs
 the browser-side Effect that initiates the call, awaits the response, and
