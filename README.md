@@ -1,4 +1,4 @@
-# svelte-effect-runtime
+<h1 align="center">svelte-effect-runtime</h1>
 <p align="center">
   <a href="https://www.npmjs.com/package/svelte-effect-runtime">npm</a>
   •
