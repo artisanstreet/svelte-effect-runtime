@@ -420,6 +420,87 @@ export function register_remote_behaviors(harness: VersionHarness): void {
     }
   });
 
+  Deno.test(`[${label}] form adapters expose a SvelteKit-compatible spread shape`, () => {
+    const attachment = Symbol("@attach");
+    const native_form: Record<string | symbol, unknown> = {};
+
+    native_form.method = "POST";
+    Object.defineProperty(native_form, "action", {
+      configurable: true,
+      enumerable: true,
+      get: () => "?/remote=hash%2Fcreate_post",
+    });
+    Object.defineProperty(native_form, "fields", {
+      configurable: true,
+      enumerable: false,
+      get: () => ({ allIssues: [] }),
+    });
+    Object.defineProperty(native_form, "result", {
+      configurable: true,
+      enumerable: false,
+      get: () => undefined,
+    });
+    Object.defineProperty(native_form, "pending", {
+      configurable: true,
+      enumerable: false,
+      get: () => 0,
+    });
+    Object.defineProperty(native_form, "enhance", {
+      configurable: true,
+      enumerable: false,
+      value: () => ({ method: "POST", action: "?/remote=hash%2Fcreate_post" }),
+    });
+    native_form[attachment] = (_form: HTMLFormElement) => () => {};
+
+    const form_factory = create_remote_form_adapter(
+      () => native_form,
+      (serialized) => devalue.parse(serialized),
+      create_form_dependencies(),
+    );
+    const create_post = form_factory("hash/create_post") as Record<
+      string | symbol,
+      unknown
+    >;
+
+    const string_keys = Object.keys(create_post).sort();
+    assertEquals(string_keys, ["action", "method"]);
+
+    const enumerable_symbol_keys = Object.getOwnPropertySymbols(create_post)
+      .filter(
+        (key) => Object.getOwnPropertyDescriptor(create_post, key)?.enumerable,
+      );
+    assertEquals(enumerable_symbol_keys.length, 1);
+    assertEquals(enumerable_symbol_keys[0].description, "@attach");
+
+    const method_descriptor =
+      Object.getOwnPropertyDescriptor(create_post, "method");
+    assertEquals(method_descriptor?.enumerable, true);
+    assertEquals(method_descriptor?.value, "POST");
+
+    const action_descriptor =
+      Object.getOwnPropertyDescriptor(create_post, "action");
+    assertEquals(action_descriptor?.enumerable, true);
+    assertEquals(typeof action_descriptor?.get, "function");
+    assertEquals(
+      (action_descriptor?.get as () => unknown)(),
+      "?/remote=hash%2Fcreate_post",
+    );
+
+    for (const key of ["native", "submit", "fields", "result", "pending"]) {
+      const desc = Object.getOwnPropertyDescriptor(create_post, key);
+      assertEquals(
+        desc?.enumerable,
+        false,
+        `expected ${key} to be non-enumerable`,
+      );
+    }
+
+    const spread: Record<string | symbol, unknown> = { ...create_post };
+    assertEquals(spread.method, "POST");
+    assertEquals(spread.action, "?/remote=hash%2Fcreate_post");
+    assertEquals(typeof spread[enumerable_symbol_keys[0]], "function");
+  });
+
   Deno.test(`[${label}] form adapters wrap non-configurable for() accessors`, () => {
     const child_form = {
       action: "http://localhost/?/remote=hash%2Fcreate_post%2Fchild",

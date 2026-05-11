@@ -44,6 +44,7 @@ import { Cause, Effect, Exit, Layer, ManagedRuntime, Schema } from "effect";
 import type { Context } from "effect";
 import {
   create_form_error,
+  create_remote_http_error,
   create_serialized_remote_failure_envelope,
   type FormError,
   is_form_error,
@@ -826,6 +827,59 @@ function create_native_wrapper(value: object) {
   return define_native_property(wrapped, value);
 }
 
+function wrap_form_remote(native: Record<string | symbol, unknown>): object {
+  const wrapped: Record<string | symbol, unknown> = {};
+
+  for (const key of Reflect.ownKeys(native)) {
+    const descriptor = Object.getOwnPropertyDescriptor(native, key);
+    if (!descriptor) {
+      continue;
+    }
+
+    if (key === "for" && typeof descriptor.value === "function") {
+      Object.defineProperty(wrapped, key, {
+        configurable: descriptor.configurable ?? true,
+        enumerable: descriptor.enumerable ?? false,
+        writable: descriptor.writable ?? false,
+        value: (id: string | number) =>
+          wrap_form_remote(
+            (descriptor.value as (
+              id: string | number,
+            ) => Record<string | symbol, unknown>).call(native, id),
+          ),
+      });
+      continue;
+    }
+
+    Object.defineProperty(wrapped, key, descriptor);
+  }
+
+  Object.defineProperty(wrapped, "native", {
+    configurable: true,
+    enumerable: false,
+    value: native,
+    writable: false,
+  });
+
+  Object.defineProperty(wrapped, "submit", {
+    configurable: true,
+    enumerable: false,
+    writable: false,
+    value: () =>
+      Effect.fail(
+        create_remote_http_error(
+          new Error(
+            "form.submit() can only be called on the client. " +
+              "It does not run during server-side rendering.",
+          ),
+          { status: 500 },
+        ),
+      ),
+  });
+
+  return wrapped;
+}
+
 function query_batch_factory(
   validate_or_fn: unknown,
   maybe_fn?: unknown,
@@ -1017,7 +1071,7 @@ const form_impl = (validate_or_fn: unknown, maybe_fn?: unknown): unknown => {
         ),
     );
 
-  return create_native_wrapper(native);
+  return wrap_form_remote(native as unknown as Record<string | symbol, unknown>);
 };
 
 /**

@@ -1,6 +1,6 @@
 {
   "name": "svelte-effect-runtime",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "description": "Client-side Effect runtime support for Svelte <script> blocks.",
   "license": "BSD-3-Clause",
   "type": "module",

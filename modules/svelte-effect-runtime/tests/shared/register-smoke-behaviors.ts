@@ -282,29 +282,76 @@ function create_kit_form_descriptor_fixture(
       `import { oauth_remote } from "./oauth.remote";
 
 export function load() {
-  const descriptor = Object.getOwnPropertyDescriptor(oauth_remote, "native");
+  const native_descriptor =
+    Object.getOwnPropertyDescriptor(oauth_remote, "native");
+  const submit_descriptor =
+    Object.getOwnPropertyDescriptor(oauth_remote, "submit");
+  const method_descriptor =
+    Object.getOwnPropertyDescriptor(oauth_remote, "method");
+  const action_descriptor =
+    Object.getOwnPropertyDescriptor(oauth_remote, "action");
+
+  const attachment_symbols = Object.getOwnPropertySymbols(oauth_remote).filter(
+    (symbol) => symbol.description === "@attach",
+  );
 
   return {
-    configurable: descriptor?.configurable ?? null,
-    enumerable: descriptor?.enumerable ?? null,
-    writable: "writable" in (descriptor ?? {})
-      ? (descriptor as PropertyDescriptor).writable ?? null
-      : null,
+    native: {
+      configurable: native_descriptor?.configurable ?? null,
+      enumerable: native_descriptor?.enumerable ?? null,
+      writable: "writable" in (native_descriptor ?? {})
+        ? (native_descriptor as PropertyDescriptor).writable ?? null
+        : null,
+    },
+    submit: {
+      present: submit_descriptor !== undefined,
+      enumerable: submit_descriptor?.enumerable ?? null,
+    },
+    method: {
+      enumerable: method_descriptor?.enumerable ?? null,
+      value: method_descriptor?.value ?? null,
+    },
+    action: {
+      enumerable: action_descriptor?.enumerable ?? null,
+      value_starts_with_remote: typeof action_descriptor?.value === "string"
+        ? action_descriptor.value.startsWith("?/remote=")
+        : null,
+    },
+    attachment_symbol_count: attachment_symbols.length,
   };
 }
 `,
     "src/routes/+page.svelte": `<script lang="ts">
   let { data } = $props<{
     data: {
-      configurable: boolean | null;
-      enumerable: boolean | null;
-      writable: boolean | null;
+      native: {
+        configurable: boolean | null;
+        enumerable: boolean | null;
+        writable: boolean | null;
+      };
+      submit: {
+        present: boolean;
+        enumerable: boolean | null;
+      };
+      method: {
+        enumerable: boolean | null;
+        value: string | null;
+      };
+      action: {
+        enumerable: boolean | null;
+        value_starts_with_remote: boolean | null;
+      };
+      attachment_symbol_count: number;
     };
   }>();
 </script>
 
 <h1>form descriptor smoke</h1>
-<p>{String(data.configurable)} / {String(data.enumerable)} / {String(data.writable)}</p>
+<p>native: {String(data.native.configurable)} / {String(data.native.enumerable)} / {String(data.native.writable)}</p>
+<p>submit: {String(data.submit.present)} / {String(data.submit.enumerable)}</p>
+<p>method: {String(data.method.enumerable)} / {String(data.method.value)}</p>
+<p>action: {String(data.action.enumerable)} / {String(data.action.value_starts_with_remote)}</p>
+<p>attachments: {data.attachment_symbol_count}</p>
 `,
     "src/routes/oauth.remote.ts": `import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";

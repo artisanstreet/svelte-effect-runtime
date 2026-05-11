@@ -977,156 +977,196 @@ function create_form_submit_effect<Success, ErrorType>(
   });
 }
 
+function wrap_attachment(
+  native_attachment: (element: HTMLFormElement) => void | (() => void),
+  native: Record<string, unknown>,
+  tracker: Attached_form_tracker,
+): (element: HTMLFormElement) => () => void {
+  return (element: HTMLFormElement) => {
+    log_remote_client_step("wrap_native_form:attach", {
+      action: element.action,
+      native_action: (native as { action?: unknown }).action,
+    });
+    tracker.current = element;
+    const cleanup = native_attachment.call(native, element);
+
+    return () => {
+      log_remote_client_step("wrap_native_form:detach", {
+        action: element.action,
+      });
+      if (tracker.current === element) {
+        tracker.current = null;
+      }
+
+      if (typeof cleanup === "function") {
+        cleanup();
+      }
+    };
+  };
+}
+
+function copy_native_descriptors(
+  source: Record<string | symbol, unknown>,
+  target: Record<string | symbol, unknown>,
+  options: {
+    readonly native: Record<string, unknown>;
+    readonly tracker: Attached_form_tracker;
+    readonly wrap_for?: (key: string | number) => Record<string, unknown>;
+    readonly wrap_enhance?: (
+      callback: (args: {
+        readonly form: HTMLFormElement;
+        readonly data: unknown;
+        readonly submit: () => Promise<unknown>;
+      }) => Promise<void> | void,
+    ) => Record<string | symbol, unknown>;
+  },
+): void {
+  for (const key of Reflect.ownKeys(source)) {
+    const descriptor = Object.getOwnPropertyDescriptor(source, key);
+    if (!descriptor) {
+      continue;
+    }
+
+    if (
+      key === "for" &&
+      typeof descriptor.value === "function" &&
+      options.wrap_for
+    ) {
+      Object.defineProperty(target, key, {
+        configurable: descriptor.configurable ?? true,
+        enumerable: descriptor.enumerable ?? false,
+        writable: descriptor.writable ?? false,
+        value: options.wrap_for,
+      });
+      continue;
+    }
+
+    if (
+      key === "enhance" &&
+      typeof descriptor.value === "function" &&
+      options.wrap_enhance
+    ) {
+      Object.defineProperty(target, key, {
+        configurable: descriptor.configurable ?? true,
+        enumerable: descriptor.enumerable ?? false,
+        writable: descriptor.writable ?? false,
+        value: options.wrap_enhance,
+      });
+      continue;
+    }
+
+    if (typeof key === "symbol" && typeof descriptor.value === "function") {
+      Object.defineProperty(target, key, {
+        configurable: descriptor.configurable ?? true,
+        enumerable: descriptor.enumerable ?? true,
+        writable: descriptor.writable ?? true,
+        value: wrap_attachment(
+          descriptor.value as (
+            element: HTMLFormElement,
+          ) => void | (() => void),
+          options.native,
+          options.tracker,
+        ),
+      });
+      continue;
+    }
+
+    Object.defineProperty(target, key, descriptor);
+  }
+}
+
+function wrap_enhanced(
+  enhanced: Record<string | symbol, unknown>,
+  native: Record<string, unknown>,
+  tracker: Attached_form_tracker,
+): Record<string | symbol, unknown> {
+  const wrapped: Record<string | symbol, unknown> = {};
+  copy_native_descriptors(enhanced, wrapped, { native, tracker });
+  return wrapped;
+}
+
 function wrap_native_form(
   native: Record<string, unknown>,
   decode_payload: Decode_remote_payload,
   dependencies: Form_request_dependencies,
-) {
-  const attached_form_tracker: Attached_form_tracker = {
-    current: null,
-  };
-  const wrapped_symbol_properties = new Map<symbol, unknown>();
-  const proxy_target: Record<string, unknown> = {};
-  Object.defineProperty(proxy_target, "native", {
+): Record<string | symbol, unknown> {
+  const tracker: Attached_form_tracker = { current: null };
+  const wrapped: Record<string | symbol, unknown> = {};
+
+  copy_native_descriptors(
+    native as Record<string | symbol, unknown>,
+    wrapped,
+    {
+      native,
+      tracker,
+      wrap_for: (key: string | number) => {
+        const native_for = (native as { for?: unknown }).for;
+        if (typeof native_for !== "function") {
+          throw new Error(
+            "Underlying SvelteKit form does not expose a `for` method.",
+          );
+        }
+        return wrap_native_form(
+          (native_for as (key: string | number) => Record<string, unknown>)
+            .call(native, key),
+          decode_payload,
+          dependencies,
+        ) as Record<string, unknown>;
+      },
+      wrap_enhance: (callback) => {
+        const native_enhance = (native as { enhance?: unknown }).enhance;
+        if (typeof native_enhance !== "function") {
+          throw new Error(
+            "Underlying SvelteKit form does not expose an `enhance` method.",
+          );
+        }
+        const enhanced = (native_enhance as (
+          cb: typeof callback,
+        ) => Record<string | symbol, unknown>).call(native, callback);
+        return wrap_enhanced(enhanced, native, tracker);
+      },
+    },
+  );
+
+  Object.defineProperty(wrapped, "native", {
     configurable: true,
     enumerable: false,
     value: native,
     writable: false,
   });
-  const wrapped = new Proxy(proxy_target, {
-    get(_target, property, receiver) {
-      if (property === "native") {
-        return native;
-      }
 
-      if (property === "submit") {
-        return (input: unknown) =>
-          create_form_submit_effect(
-            receiver as {
-              readonly native: {
-                readonly action: string;
-                readonly result?: unknown;
-                readonly fields?: {
-                  readonly allIssues?: unknown;
-                };
-                enhance(
-                  callback: (args: {
-                    readonly form: HTMLFormElement;
-                    readonly data: unknown;
-                    readonly submit: () => Promise<unknown>;
-                  }) => Promise<void> | void,
-                ): Record<string | symbol, unknown>;
-              };
-            },
-            input,
-            decode_payload,
-            attached_form_tracker,
-            dependencies,
-          );
-      }
-
-      if (typeof property === "symbol") {
-        if (wrapped_symbol_properties.has(property)) {
-          return wrapped_symbol_properties.get(property);
-        }
-
-        const native_value = Reflect.get(native, property, native);
-
-        if (typeof native_value === "function") {
-          const wrapped_attachment = (element: HTMLFormElement) => {
-            log_remote_client_step("wrap_native_form:attach", {
-              action: element.action,
-              native_action: (native as { action?: unknown }).action,
-            });
-            attached_form_tracker.current = element;
-            const cleanup = native_value.call(native, element);
-
-            return () => {
-              log_remote_client_step("wrap_native_form:detach", {
-                action: element.action,
-              });
-              if (attached_form_tracker.current === element) {
-                attached_form_tracker.current = null;
-              }
-
-              if (typeof cleanup === "function") {
-                cleanup();
-              }
+  Object.defineProperty(wrapped, "submit", {
+    configurable: true,
+    enumerable: false,
+    writable: false,
+    value: (input: unknown) =>
+      create_form_submit_effect(
+        wrapped as {
+          readonly native: {
+            readonly action: string;
+            readonly result?: unknown;
+            readonly fields?: {
+              readonly allIssues?: unknown;
             };
+            enhance(
+              callback: (args: {
+                readonly form: HTMLFormElement;
+                readonly data: unknown;
+                readonly submit: () => Promise<unknown>;
+              }) => Promise<void> | void,
+            ): Record<string | symbol, unknown>;
           };
-
-          wrapped_symbol_properties.set(property, wrapped_attachment);
-          return wrapped_attachment;
-        }
-      }
-
-      if (property === "for") {
-        const native_for = Reflect.get(native, property, native);
-
-        if (typeof native_for === "function") {
-          return (key: string | number) =>
-            wrap_native_form(
-              native_for.call(native, key) as Record<string, unknown>,
-              decode_payload,
-              dependencies,
-            );
-        }
-      }
-
-      return Reflect.get(native, property, native);
-    },
-    has(_target, property) {
-      if (
-        property === "native" ||
-        property === "submit" ||
-        property === "for"
-      ) {
-        return true;
-      }
-
-      return Reflect.has(native, property);
-    },
-    ownKeys() {
-      return Array.from(
-        new Set([
-          ...Reflect.ownKeys(native),
-          "native",
-          "submit",
-          "for",
-          ...wrapped_symbol_properties.keys(),
-        ]),
-      );
-    },
-    getOwnPropertyDescriptor(
-      _target,
-      property,
-    ): PropertyDescriptor | undefined {
-      if (property === "native") {
-        return Reflect.getOwnPropertyDescriptor(proxy_target, property);
-      }
-
-      if (property === "submit" || property === "for") {
-        return {
-          configurable: true,
-          enumerable: false,
-          writable: false,
-        };
-      }
-
-      const descriptor = Reflect.getOwnPropertyDescriptor(native, property);
-
-      if (!descriptor) {
-        return descriptor;
-      }
-
-      return {
-        ...descriptor,
-        configurable: true,
-      };
-    },
+        },
+        input,
+        decode_payload,
+        tracker,
+        dependencies,
+      ),
   });
 
-  return wrapped as Record<string, unknown>;
+  define_remote_error_decoder(wrapped, decode_payload);
+
+  return wrapped;
 }
 
 export function create_remote_form_adapter(

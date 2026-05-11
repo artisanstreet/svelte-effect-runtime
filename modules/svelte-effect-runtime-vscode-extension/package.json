@@ -2,7 +2,7 @@
   "name": "svelte-effect-runtime-vscode",
   "displayName": "Svelte Effect Runtime",
   "description": "Cursor/VS Code integration for svelte-effect-runtime grammar-aware Svelte language support.",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "publisher": "barekey",
   "license": "BSD-3-Clause",
   "type": "module",
