@@ -11,3 +11,7 @@
 <p align="center">
   Visit the <a href="https://ser.barekey.dev">docs</a> for more information.
 </p>
+
+<p align="center">
+  Runnable example apps live under <a href="./examples"><code>examples/</code></a>.
+</p>
