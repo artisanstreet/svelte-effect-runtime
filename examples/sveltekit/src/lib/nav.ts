@@ -18,6 +18,7 @@ export const NAV: ReadonlyArray<NavGroup> = [
 			{ href: "/form/programmatic", label: "Programmatic .submit()" },
 			{ href: "/form/for-loop", label: ".for(id) in {#each}" },
 			{ href: "/form/enhance", label: "Custom .enhance()" },
+			{ href: "/form/validate", label: "Programmatic validate()" },
 			{ href: "/form/validation", label: "Validation issues" },
 			{ href: "/form/unchecked", label: 'Form("unchecked")' },
 			{ href: "/form/no-input", label: "Void-input form" },

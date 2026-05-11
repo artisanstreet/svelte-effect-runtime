@@ -2,11 +2,15 @@ node_modules
 **/node_modules
 **/.svelte-kit
 **/.vercel
+.claude
+.tmp
 coverage
 .DS_Store
 dist
 modules/svelte-effect-runtime/dist
 modules/svelte-effect-runtime/.tmp
+modules/svelte-effect-runtime/*.tgz
+modules/svelte-effect-runtime-language-server/.tmp
 modules/svelte-effect-runtime-language-server/dist
 modules/svelte-effect-runtime-language-server/runtime
 modules/svelte-effect-runtime-vscode-extension/dist

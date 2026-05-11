@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Effect } from "effect";
 	import { create_post } from "$lib/posts.remote";
 
 	let title = $state("enhanced post");
@@ -13,25 +14,32 @@
 
 <h1>Custom <code>.enhance(callback)</code></h1>
 <p>
-	<code>create_post.enhance(cb)</code> returns a fresh spreadable object whose
-	attachment routes submission through your callback. You can run pre-flight
-	logic, await <code>submit()</code> manually, then react to the result.
+	As of 1.6.0, <code>EffectForm.enhance</code> is Effect-shaped: the callback
+	receives <code>submit</code> as a thunk returning
+	<code>Effect&lt;void, RemoteFailure&lt;Error&gt;, never&gt;</code>, and may
+	itself return an Effect (which the runtime will run for you) or
+	<code>void</code>. No more <code>async</code>/<code>await</code> mixing
+	with the rest of your Effect code.
 </p>
 
 <form
-	{...create_post.enhance(async ({ data, submit }) => {
-		log(`enhance start with ${JSON.stringify(data)}`);
-		if (!confirmed) {
-			log("blocked: not confirmed");
-			return;
-		}
-		try {
-			await submit();
-			log("submit resolved");
-		} catch (cause) {
-			log(`submit threw: ${String(cause)}`);
-		}
-	})}
+	{...create_post.enhance(({ data, submit }) =>
+		Effect.gen(function* () {
+			log(`enhance start with ${JSON.stringify(data)}`);
+			if (!confirmed) {
+				log("blocked: not confirmed");
+				return;
+			}
+
+			const outcome = yield* submit().pipe(
+				Effect.matchCause({
+					onSuccess: () => "submit resolved",
+					onFailure: (cause) => `submit failed: ${cause.toString()}`
+				})
+			);
+			log(outcome);
+		})
+	)}
 >
 	<label>
 		Title

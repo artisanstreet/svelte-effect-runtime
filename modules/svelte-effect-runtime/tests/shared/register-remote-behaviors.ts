@@ -501,6 +501,104 @@ export function register_remote_behaviors(harness: VersionHarness): void {
     assertEquals(typeof spread[enumerable_symbol_keys[0]], "function");
   });
 
+  Deno.test(`[${label}] form adapters Effect-shape enhance() and validate()`, async () => {
+    const dom = installDom();
+
+    try {
+      let user_submit_invocations = 0;
+      let validate_invocations = 0;
+      const enhanced_object = {
+        method: "POST",
+        action: "http://localhost/?/remote=hash%2Fcreate_post",
+      } as Record<string | symbol, unknown>;
+
+      const native_form: Record<string | symbol, unknown> = {
+        action: "http://localhost/?/remote=hash%2Fcreate_post",
+        fields: { allIssues: [] as Array<FormIssue> },
+        method: "POST",
+        result: undefined,
+        enhance(
+          callback: (args: {
+            readonly form: HTMLFormElement;
+            readonly data: unknown;
+            readonly submit: () => Promise<void>;
+          }) => Promise<void> | void,
+        ) {
+          // Stash the native callback so the test can drive it.
+          (enhanced_object as Record<string, unknown>).__native_callback =
+            callback;
+          return enhanced_object;
+        },
+        validate(_opts?: {
+          includeUntouched?: boolean;
+          preflightOnly?: boolean;
+        }): Promise<void> {
+          validate_invocations++;
+          return Promise.resolve();
+        },
+      };
+
+      const form_factory = create_remote_form_adapter(
+        () => native_form,
+        (serialized) => devalue.parse(serialized),
+        create_form_dependencies(),
+      );
+      const create_post = form_factory("hash/create_post") as {
+        enhance(
+          cb: (args: {
+            readonly submit: () => Effect.Effect<unknown, unknown, never>;
+          }) => Effect.Effect<unknown, unknown, never> | void,
+        ): Record<string | symbol, unknown>;
+        validate(opts?: {
+          readonly includeUntouched?: boolean;
+        }): Effect.Effect<void, unknown, never>;
+      };
+
+      // validate() now returns an Effect — yielding it should resolve void.
+      assertEquals(validate_invocations, 0);
+      await Effect.runPromise(create_post.validate());
+      assertEquals(validate_invocations, 1);
+      await Effect.runPromise(create_post.validate({ includeUntouched: true }));
+      assertEquals(validate_invocations, 2);
+
+      // enhance(callback) — the user's callback receives an Effect submit and
+      // may return an Effect. The wrapper adapts this back to a native
+      // Promise-based callback for SvelteKit.
+      const enhanced = create_post.enhance(({ submit }) =>
+        Effect.gen(function* () {
+          user_submit_invocations++;
+          yield* submit();
+        })
+      );
+      assertEquals(enhanced, enhanced_object);
+
+      // Drive the stashed native callback the way SvelteKit's form attachment
+      // would, with a Promise-based submit. The wrapper should run the user's
+      // Effect to completion.
+      const native_callback = (enhanced_object as Record<string, unknown>)
+        .__native_callback as (args: {
+          form: HTMLFormElement;
+          data: unknown;
+          submit: () => Promise<void>;
+        }) => Promise<void>;
+
+      let native_submit_invocations = 0;
+      await native_callback({
+        form: document.createElement("form") as HTMLFormElement,
+        data: {},
+        submit: () => {
+          native_submit_invocations++;
+          return Promise.resolve();
+        },
+      });
+
+      assertEquals(user_submit_invocations, 1);
+      assertEquals(native_submit_invocations, 1);
+    } finally {
+      dom.cleanup();
+    }
+  });
+
   Deno.test(`[${label}] form adapters wrap non-configurable for() accessors`, () => {
     const child_form = {
       action: "http://localhost/?/remote=hash%2Fcreate_post%2Fchild",

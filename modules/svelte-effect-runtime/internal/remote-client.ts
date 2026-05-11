@@ -1005,6 +1005,23 @@ function wrap_attachment(
   };
 }
 
+type EffectEnhanceCallback = (
+  args: {
+    readonly form: HTMLFormElement;
+    readonly data: unknown;
+    readonly submit: () => Effect.Effect<
+      void,
+      RemoteFailure<unknown>,
+      never
+    >;
+  },
+) => Effect.Effect<unknown, unknown, never> | void;
+
+type ValidateOptions = {
+  readonly includeUntouched?: boolean;
+  readonly preflightOnly?: boolean;
+};
+
 function copy_native_descriptors(
   source: Record<string | symbol, unknown>,
   target: Record<string | symbol, unknown>,
@@ -1013,12 +1030,11 @@ function copy_native_descriptors(
     readonly tracker: Attached_form_tracker;
     readonly wrap_for?: (key: string | number) => Record<string, unknown>;
     readonly wrap_enhance?: (
-      callback: (args: {
-        readonly form: HTMLFormElement;
-        readonly data: unknown;
-        readonly submit: () => Promise<unknown>;
-      }) => Promise<void> | void,
+      callback: EffectEnhanceCallback,
     ) => Record<string | symbol, unknown>;
+    readonly wrap_validate?: (
+      options?: ValidateOptions,
+    ) => Effect.Effect<void, RemoteFailure<unknown>, never>;
   },
 ): void {
   for (const key of Reflect.ownKeys(source)) {
@@ -1051,6 +1067,20 @@ function copy_native_descriptors(
         enumerable: descriptor.enumerable ?? false,
         writable: descriptor.writable ?? false,
         value: options.wrap_enhance,
+      });
+      continue;
+    }
+
+    if (
+      key === "validate" &&
+      typeof descriptor.value === "function" &&
+      options.wrap_validate
+    ) {
+      Object.defineProperty(target, key, {
+        configurable: descriptor.configurable ?? true,
+        enumerable: descriptor.enumerable ?? false,
+        writable: descriptor.writable ?? false,
+        value: options.wrap_validate,
       });
       continue;
     }
@@ -1113,17 +1143,70 @@ function wrap_native_form(
           dependencies,
         ) as Record<string, unknown>;
       },
-      wrap_enhance: (callback) => {
+      wrap_enhance: (effect_callback) => {
         const native_enhance = (native as { enhance?: unknown }).enhance;
         if (typeof native_enhance !== "function") {
           throw new Error(
             "Underlying SvelteKit form does not expose an `enhance` method.",
           );
         }
+
+        // Adapt the user's Effect-shaped callback to SvelteKit's native
+        // Promise-shaped callback. The user receives `submit` as a thunk
+        // returning Effect<void, RemoteFailure, never>; we run their Effect
+        // through Effect.runPromise so any failure propagates back to
+        // SvelteKit as a rejected Promise.
+        const native_callback = async (args: {
+          form: HTMLFormElement;
+          data: unknown;
+          submit: () => Promise<unknown>;
+        }) => {
+          const effect_submit = (): Effect.Effect<
+            void,
+            RemoteFailure<unknown>,
+            never
+          > =>
+            Effect.tryPromise({
+              try: () => args.submit() as Promise<void>,
+              catch: (error) =>
+                decode_remote_error<unknown>(error, decode_payload),
+            });
+
+          const program = effect_callback({
+            form: args.form,
+            data: args.data,
+            submit: effect_submit,
+          });
+
+          if (program === undefined) {
+            return;
+          }
+
+          await Effect.runPromise(
+            program as Effect.Effect<unknown, unknown, never>,
+          );
+        };
+
         const enhanced = (native_enhance as (
-          cb: typeof callback,
-        ) => Record<string | symbol, unknown>).call(native, callback);
+          cb: typeof native_callback,
+        ) => Record<string | symbol, unknown>).call(native, native_callback);
         return wrap_enhanced(enhanced, native, tracker);
+      },
+      wrap_validate: (validate_options) => {
+        const native_validate = (native as { validate?: unknown }).validate;
+        if (typeof native_validate !== "function") {
+          throw new Error(
+            "Underlying SvelteKit form does not expose a `validate` method.",
+          );
+        }
+        return Effect.tryPromise({
+          try: () =>
+            (native_validate as (
+              opts?: ValidateOptions,
+            ) => Promise<void>).call(native, validate_options),
+          catch: (error) =>
+            decode_remote_error<unknown>(error, decode_payload),
+        });
       },
     },
   );

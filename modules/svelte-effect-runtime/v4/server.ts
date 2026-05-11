@@ -227,8 +227,9 @@ export type EffectPrerenderFunction<Input, Output, Error = never> =
   };
 
 /**
- * v4 shape of an Effect-returning remote `form`. Adds `submit(data)` and
- * `for(...)` on top of the underlying SvelteKit form.
+ * v4 shape of an Effect-returning remote `form`. Effect-aware overrides for
+ * the surfaces that SvelteKit exposes as Promises: `submit(data)`,
+ * `enhance(callback)`, `validate(options?)`, and `for(id)`.
  *
  * @see https://ser.barekey.dev/content/remote-functions/form
  */
@@ -236,23 +237,50 @@ export type EffectForm<
   Input extends RemoteFormInput | void,
   Output,
   Error = never,
-> = RemoteForm<Input, Output> & {
-  /** Underlying SvelteKit `form` object, for fallback direct usage. */
-  native: RemoteForm<Input, Output>;
-  /** Submit the form programmatically and receive the result as an Effect. */
-  submit(
-    data: OptionalArgument<Input>,
-  ): Effect_type.Effect<
-    Output,
-    RemoteFailure<Error>,
-    never
-  >;
-  /** Clone the form binding for a specific value - mirrors `RemoteForm.for`. */
-  for: RemoteForm<Input, Output>["for"] extends
-    (...args: infer Args) => infer Result
-    ? (...args: Args) => EffectForm<Input, Output, Error> & Result
-    : never;
-};
+> =
+  & Omit<RemoteForm<Input, Output>, "enhance" | "validate" | "for">
+  & {
+    /** Underlying SvelteKit `form` object, for fallback direct usage. */
+    native: RemoteForm<Input, Output>;
+    /** Submit the form programmatically and receive the result as an Effect. */
+    submit(
+      data: OptionalArgument<Input>,
+    ): Effect_type.Effect<
+      Output,
+      RemoteFailure<Error>,
+      never
+    >;
+    /**
+     * Effect-aware version of SvelteKit's `enhance`. The callback receives
+     * `submit` as a thunk returning an Effect, and may return an Effect
+     * (which the runtime will run for you) or `void`.
+     */
+    enhance(
+      callback: (args: {
+        readonly form: HTMLFormElement;
+        readonly data: Input;
+        readonly submit: () => Effect_type.Effect<
+          void,
+          RemoteFailure<Error>,
+          never
+        >;
+      }) => Effect_type.Effect<unknown, unknown, never> | void,
+    ): {
+      method: "POST";
+      action: string;
+      [attachment: symbol]: (node: HTMLFormElement) => void;
+    };
+    /** Effect-returning version of SvelteKit's `validate`. */
+    validate(options?: {
+      readonly includeUntouched?: boolean;
+      readonly preflightOnly?: boolean;
+    }): Effect_type.Effect<void, RemoteFailure<Error>, never>;
+    /** Clone the form binding for a specific value - mirrors `RemoteForm.for`. */
+    for: RemoteForm<Input, Output>["for"] extends
+      (...args: infer Args) => unknown
+      ? (...args: Args) => EffectForm<Input, Output, Error>
+      : never;
+  };
 
 /**
  * v4 type of the SvelteKit `RequestEvent` exposed through the
