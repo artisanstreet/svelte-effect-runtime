@@ -245,7 +245,10 @@ function getCandidateForBraceTag(
     return undefined;
   }
 
-  if (!containsYieldStarText(trimmed)) {
+  // Strip the tag prefix (e.g. `...`, `@render`, `#each`) before checking
+  // for top-level `yield*` — the inner expression is what the transform
+  // ultimately wraps, and tag tokens aren't valid standalone JS.
+  if (!containsYieldStarText(trimmed.slice(tag.prefixLength))) {
     return undefined;
   }
 
@@ -1106,7 +1109,85 @@ function shouldSkipIdentifier(node: ts.Identifier): boolean {
 }
 
 function containsYieldStarText(text: string): boolean {
-  return /\byield\s*\*/.test(text);
+  if (!/\byield\s*\*/.test(text)) {
+    return false;
+  }
+
+  // The cheap regex picks up `yield*` that lives inside nested generators
+  // (e.g. `Effect.gen(function* () { yield* foo(); })` passed as an enhance
+  // callback). Those yields belong to the inner generator and must not be
+  // lowered by the markup transform. Walk the Babel AST and only count
+  // `yield*` that's reachable without crossing a function boundary.
+  try {
+    return topLevelYieldStarPresent(text);
+  } catch {
+    // Parser failure — fall back to the conservative regex match so we
+    // don't lose lowering for valid yield* usage that happens to confuse
+    // the parser in isolation.
+    return true;
+  }
+}
+
+function topLevelYieldStarPresent(text: string): boolean {
+  const ast = parseBabelExpression(text, {
+    sourceType: "module",
+    allowAwaitOutsideFunction: true,
+    allowYieldOutsideFunction: true,
+  });
+
+  return hasTopLevelYieldStar(ast as unknown as BabelNode);
+}
+
+interface BabelNode {
+  type: string;
+  delegate?: boolean;
+  [key: string]: unknown;
+}
+
+function hasTopLevelYieldStar(node: BabelNode | null | undefined): boolean {
+  if (!node || typeof node !== "object" || typeof node.type !== "string") {
+    return false;
+  }
+
+  if (node.type === "YieldExpression" && node.delegate === true) {
+    return true;
+  }
+
+  // Function-like scopes own their own `yield*` semantics. The user's
+  // `yield*` inside `Effect.gen(function* () { ... })` is a normal
+  // generator yield, not a marker for the markup transform.
+  if (
+    node.type === "FunctionDeclaration" ||
+    node.type === "FunctionExpression" ||
+    node.type === "ArrowFunctionExpression" ||
+    node.type === "ObjectMethod" ||
+    node.type === "ClassMethod" ||
+    node.type === "ClassPrivateMethod"
+  ) {
+    return false;
+  }
+
+  for (const key of Object.keys(node)) {
+    if (key === "type" || key === "loc" || key === "start" || key === "end") {
+      continue;
+    }
+
+    const value = (node as Record<string, unknown>)[key];
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (hasTopLevelYieldStar(item as BabelNode)) {
+          return true;
+        }
+      }
+    } else if (value && typeof value === "object") {
+      if (hasTopLevelYieldStar(value as BabelNode)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 function findMarkupBraceClose(

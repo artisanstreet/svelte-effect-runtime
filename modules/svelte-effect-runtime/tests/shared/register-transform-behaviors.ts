@@ -445,6 +445,46 @@ export function register_transform_behaviors(harness: VersionHarness): void {
   );
 
   Deno.test(
+    name(
+      "leaves spread expressions whose yield* lives inside a nested generator untouched",
+    ),
+    async () => {
+      // Regression for issue #19: the 1.6.0 Effect-shaped enhance callback
+      // is a nested generator passed to a spread attribute. The outer
+      // expression does not itself yield* — the yield* is inside
+      // Effect.gen(function* () { ... }). The markup transform must
+      // recognise the spread as a normal value, not a yield* candidate.
+      const source = `<script lang="ts" effect>
+  import { Effect } from "effect";
+  import { send_otp } from "$lib/otp.remote";
+</script>
+
+<form
+  {...send_otp.enhance(({ submit }) =>
+    Effect.gen(function* () {
+      yield* submit().pipe(
+        Effect.matchCause({
+          onSuccess: () => Effect.log("OTP sent"),
+          onFailure: (cause) => Effect.logError("OTP failed", cause)
+        })
+      );
+    })
+  )}
+>
+  <button type="submit">Send</button>
+</form>
+`;
+
+      const result = await preprocess(source, effect_preprocess(), {
+        filename: "EnhanceCallback.svelte",
+      });
+
+      // The spread should pass through unmodified — no markup helper wrap.
+      assertStringIncludes(result.code, "{...send_otp.enhance(");
+    },
+  );
+
+  Deno.test(
     name("rewrites render tags through the markup AST pass"),
     async () => {
       const source = `<script lang="ts" effect>
