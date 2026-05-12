@@ -446,6 +446,53 @@ export function register_transform_behaviors(harness: VersionHarness): void {
 
   Deno.test(
     name(
+      "skips per-brace Babel parsing for files with no yield* in markup",
+    ),
+    async () => {
+      // Perf regression guard: components without any `yield*` text used to
+      // pay an O(braces × Babel parse) cost during Vite startup because the
+      // markup scanner Babel-parsed every `{...}` to find its matching `}`.
+      // The fast path checks the whole file once and returns identity when
+      // no `yield*` appears anywhere.
+      const source = `<script lang="ts">
+  let { title = "Hello", items = [1, 2, 3] } = $props();
+</script>
+
+<h1>{title}</h1>
+<ul>
+  {#each items as item (item)}
+    <li>{item} — {\`item #\${item}\`}</li>
+  {/each}
+</ul>
+
+{#if items.length > 0}
+  <p>{items.length} items</p>
+{/if}
+
+<style>
+  h1 { color: red; }
+</style>
+`;
+
+      const start = performance.now();
+      const result = await preprocess(source, effect_preprocess(), {
+        filename: "PlainComponent.svelte",
+      });
+      const elapsed = performance.now() - start;
+
+      assertEquals(result.code, source);
+      // Generous budget: the fast path is a single regex test on the file
+      // body. Without it, this case used to take many ms per file.
+      assertEquals(
+        elapsed < 50,
+        true,
+        `expected fast path under 50ms, got ${elapsed.toFixed(2)}ms`,
+      );
+    },
+  );
+
+  Deno.test(
+    name(
       "leaves spread expressions whose yield* lives inside a nested generator untouched",
     ),
     async () => {

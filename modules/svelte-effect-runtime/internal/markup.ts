@@ -62,21 +62,23 @@ export function transformEffectMarkup(
   content: string,
   options: TransformEffectMarkupOptions,
 ): TransformEffectMarkupResult {
+  // Fast path. The markup transform exists to lower `yield*` expressions
+  // inside curly-brace tags. If the file's text contains no `yield*` at all,
+  // there is nothing to lower — skip the per-brace Babel scan entirely. For
+  // a typical SvelteKit app, only `<script effect>` components contain
+  // `yield*`; everything else (most components) hits this path and pays
+  // a single regex test per file instead of O(braces × Babel parse).
+  if (!containsAnyYieldStarText(content)) {
+    return identityMarkupResult(content, options.filename);
+  }
+
   const sanitized = sanitizeEffectMarkup(
     content,
     options.filename,
   );
 
   if (sanitized.candidates.length === 0) {
-    const identity = new MagicString(content);
-    return {
-      code: content,
-      map: identity.generateMap({
-        hires: true,
-        includeContent: true,
-        source: options.filename,
-      }),
-    };
+    return identityMarkupResult(content, options.filename);
   }
 
   const replacements = collectMarkupReplacements(
@@ -99,6 +101,25 @@ export function transformEffectMarkup(
       hires: true,
       includeContent: true,
       source: options.filename,
+    }),
+  };
+}
+
+function containsAnyYieldStarText(content: string): boolean {
+  return /\byield\s*\*/.test(content);
+}
+
+function identityMarkupResult(
+  content: string,
+  filename: string,
+): TransformEffectMarkupResult {
+  const identity = new MagicString(content);
+  return {
+    code: content,
+    map: identity.generateMap({
+      hires: true,
+      includeContent: true,
+      source: filename,
     }),
   };
 }
