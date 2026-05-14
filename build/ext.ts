@@ -24,8 +24,8 @@ await Deno.remove(package_dist, { recursive: true }).catch(() => undefined);
 
 await build({
   input: {
-    extension: join(package_dir, "extension.ts"),
-    server: join(package_dir, "server.ts"),
+    extension: join(package_dir, "src", "extension.ts"),
+    server: join(package_dir, "src", "server.ts"),
   },
   output: {
     dir: output_dir,

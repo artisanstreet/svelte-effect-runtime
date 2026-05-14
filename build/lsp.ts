@@ -21,7 +21,7 @@ await Deno.mkdir(output_dir, { recursive: true });
 await Deno.remove(package_dist, { recursive: true }).catch(() => undefined);
 
 await build({
-  input: join(package_dir, "server.ts"),
+  input: join(package_dir, "src", "server.ts"),
   output: {
     file: join(output_dir, "server.cjs"),
     format: "cjs",

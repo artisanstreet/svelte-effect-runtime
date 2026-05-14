@@ -4,7 +4,7 @@ import { assertExists, assertStringIncludes, assertThrows } from "@std/assert";
 // This test exercises the actual exports, not just type assertions.
 
 Deno.test("generators exports get_dispatcher", async () => {
-  const mod = await import("../../../modules/svelte-effect-runtime/v2/generators.ts");
+  const mod = await import("../../../modules/svelte-effect-runtime/src/v2/generators.ts");
   assertExists(mod.get_dispatcher);
   assertEquals(typeof mod.get_dispatcher, "function");
 });

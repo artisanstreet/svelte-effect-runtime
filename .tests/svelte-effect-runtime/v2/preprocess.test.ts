@@ -1,6 +1,6 @@
 import { assertMatch, assertNotMatch, assertStringIncludes, assertThrows } from "@std/assert";
-import { transform_script_effect } from "../../../modules/svelte-effect-runtime/v2/preprocess.ts";
-import type { ScriptTransformResult } from "../../../modules/svelte-effect-runtime/v2/preprocess.ts";
+import { transform_script_effect } from "../../../modules/svelte-effect-runtime/src/v2/preprocess.ts";
+import type { ScriptTransformResult } from "../../../modules/svelte-effect-runtime/src/v2/preprocess.ts";
 
 function assert_transform(
   source: string,

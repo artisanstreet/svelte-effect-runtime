@@ -3,7 +3,7 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "rootDir": ".",
+    "rootDir": "./src",
     "outDir": "./.dist",
     "declaration": true,
     "verbatimModuleSyntax": true,
@@ -18,40 +18,40 @@
     "baseUrl": ".",
     "paths": {
       "$": [
-        "./mod.ts"
+        "./src/mod.ts"
       ],
       "$/*": [
-        "./*"
+        "./src/*"
       ],
       "$internal/*": [
-        "./internal/*"
+        "./src/internal/*"
       ],
       "$tests/*": [
         "./tests/*"
       ],
       "$app/server": [
-        "./internal/app-server-shim.ts"
+        "./src/internal/app-server-shim.ts"
       ],
       "@sveltejs/kit/internal/server": [
-        "./internal/sveltekit-internal-server-shim.d.ts"
+        "./src/internal/sveltekit-internal-server-shim.d.ts"
       ]
     }
   },
   "include": [
-    "./mod.ts",
-    "./root-node.ts",
-    "./v4/mod.ts",
-    "./v4/root-node.ts",
-    "./v4/effect.ts",
-    "./v4/preprocess.ts",
-    "./v4/server.ts",
-    "./v4/vite.ts",
-    "./effect.ts",
-    "./client.ts",
-    "./server.ts",
-    "./language-server.ts",
-    "./preprocess.ts",
-    "./vite.ts",
-    "./internal/**/*.ts"
+    "./src/mod.ts",
+    "./src/root-node.ts",
+    "./src/v4/mod.ts",
+    "./src/v4/root-node.ts",
+    "./src/v4/effect.ts",
+    "./src/v4/preprocess.ts",
+    "./src/v4/server.ts",
+    "./src/v4/vite.ts",
+    "./src/effect.ts",
+    "./src/client.ts",
+    "./src/server.ts",
+    "./src/language-server.ts",
+    "./src/preprocess.ts",
+    "./src/vite.ts",
+    "./src/internal/**/*.ts"
   ]
 }
