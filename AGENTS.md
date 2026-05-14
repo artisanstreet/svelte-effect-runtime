@@ -7,6 +7,16 @@
 - **File names**: `kebab-case.ts`
 - **Directories**: group related files by directory, not by filename prefix (e.g. `internal/transform.ts` not `internal-transform.ts`)
 
+## V2 Focus
+
+The `v2` branch focuses exclusively on the runtime module (`modules/svelte-effect-runtime`). The language server (`modules/svelte-effect-runtime-language-server`) and VS Code extension (`modules/svelte-effect-runtime-vscode-extension`) modules are not being actively developed during V2. All new code, tests, and CI work targets only the runtime package.
+
+- **Source**: `modules/svelte-effect-runtime/src/v2/`
+- **Tests**: `.tests/svelte-effect-runtime/v2/`
+- **Build output**: `.dist/svelte-effect-runtime/`
+
+Run tests: `cd .tests/svelte-effect-runtime && deno test --no-check -A v2/`
+
 ## JSDoc
 
 Every exported function, class, and type must have a JSDoc block with:

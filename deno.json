@@ -36,8 +36,7 @@
     "docs:dev": "cd modules/docs && deno task dev",
     "lint": "deno lint",
     "package:extension": "cd modules/svelte-effect-runtime-vscode-extension && deno task package",
-    "test": "deno task test:runtime && deno task test:lsp",
-    "test:lsp": "cd modules/svelte-effect-runtime-language-server && deno task test",
+    "test": "deno task test:runtime",
     "test:runtime": "cd modules/svelte-effect-runtime && deno task test"
   }
 }
