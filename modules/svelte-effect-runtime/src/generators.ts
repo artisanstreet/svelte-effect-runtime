@@ -9,5 +9,4 @@
  * @since 2.0.0
  * @internal
  */
-export { onMount } from "svelte";
 export { get_dispatcher } from "./dispatcher.ts";
