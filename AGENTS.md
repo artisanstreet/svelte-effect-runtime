@@ -7,11 +7,130 @@
 - **File names**: `kebab-case.ts`
 - **Directories**: group related files by directory, not by filename prefix (e.g. `internal/transform.ts` not `internal-transform.ts`)
 
+### Spacing
+
+Every function gives its logic room to breathe. No dense walls of code.
+
+- **Variables grouped at the top** of a function, followed by a blank line before the logic begins.
+- **Logical phases** separated by a blank line and a `/** */` doc comment summarising what the phase does.
+- **Guard clauses** early and concise — return or continue fast so the happy path stays indented cleanly.
+- **if/else branches** get a blank line between them when they contain more than a single return.
+- **Return statements** always have a blank line above them unless preceded by only a single guard clause.
+- **No inline returns** for multi-step logic — split across lines.
+
+```typescript
+/** Correct — phases separated, returns breathe. */
+
+export function transform_script_effect(
+  content: string,
+  filename: string,
+): ScriptTransformResult {
+
+  const source_file = ts.createSourceFile(/* ... */);
+  const magic = new MagicString(content);
+
+  const has_effect_import = source_file.statements.some(/* ... */);
+
+  /**
+   * Phase 2 — lower every statement containing top-level `yield*`.
+   */
+  for (const stmt of source_file.statements) {
+
+    if (contains_top_level_await(stmt)) {
+      throw new Error("await is not supported");
+    }
+
+    if (!contains_top_level_yield_star(stmt)) {
+      continue;
+    }
+
+    const lowered = lower_statement(stmt, content);
+    magic.overwrite(lowered.range.start, lowered.range.end, lowered.rewritten_text);
+  }
+
+  /**
+   * Phase 3 — inject imports.
+   */
+  const imports = make_imports(has_effect_import);
+
+  const last_import = [...source_file.statements]
+    .reverse()
+    .find(ts.isImportDeclaration);
+
+  if (last_import) {
+    magic.appendRight(last_import.end, "\n" + imports);
+  } else {
+    magic.prepend(imports + "\n");
+  }
+
+  return { code: magic.toString(), blocks: [] };
+}
+```
+
+### Syntax
+
+Favor modern, intentful operators over imperative ceremony.
+
+| Use | Instead of |
+|-----|------------|
+| `x ?? default` / `x ??= default` | `if (x === null \|\| x === undefined) x = default` |
+| `.some(predicate)` | manual `for` loop setting a boolean flag |
+| `.find(predicate)` | manual `for` loop with `break` |
+| `.filter(Boolean).join()` | `.push()` in a conditional loop |
+| `.map(fn)` / `for...of` | `for(let i=0; i<arr.length; i++)` |
+| ternary (for compact returns) | `if/else` assigning the same variable |
+| `?.` optional chaining | nested `if (x && x.y)` checks |
+| `[...arr, item]` spread | `arr.push(item)` when building a new array |
+
+```typescript
+/** Correct — declarative operators showing intent. */
+
+const has_effect_import = source_file.statements.some(
+  (stmt) =>
+    ts.isImportDeclaration(stmt) &&
+    ts.isStringLiteral(stmt.moduleSpecifier) &&
+    stmt.moduleSpecifier.text === "effect",
+);
+
+const last_import = [...source_file.statements]
+  .reverse()
+  .find(ts.isImportDeclaration);
+
+function get_dispatcher(): Dispatcher {
+  current_dispatcher ??= new Dispatcher();
+  return current_dispatcher;
+}
+
+function make_imports(has_effect_import: boolean): string {
+  return [
+    `import { onMount } from "svelte";`,
+    !has_effect_import && `import { Effect } from "effect";`,
+    `import { get_dispatcher } from "svelte-effect-runtime/generators";`,
+  ].filter(Boolean).join("\n");
+}
+```
+
+### Comments
+
+All comments use `/** */` JSDoc style. No bare `//` or `/* */` comments anywhere.
+
+```typescript
+/** Correct */
+/** Registry of active cleanup handles. */
+#cleanups = new Set<Dispose>();
+```
+
+```typescript
+/** Wrong — bare comment */
+// Registry of active cleanup handles
+#cleanups = new Set<Dispose>();
+```
+
 ## V2 Focus
 
 The `v2` branch focuses exclusively on the runtime module (`modules/svelte-effect-runtime`). The language server (`modules/svelte-effect-runtime-language-server`) and VS Code extension (`modules/svelte-effect-runtime-vscode-extension`) modules are not being actively developed during V2. All new code, tests, and CI work targets only the runtime package.
 
-- **Source**: `modules/svelte-effect-runtime/src/v2/`
+- **Source**: `modules/svelte-effect-runtime/src/`
 - **Tests**: `.tests/svelte-effect-runtime/v2/`
 - **Build output**: `.dist/svelte-effect-runtime/`
 
