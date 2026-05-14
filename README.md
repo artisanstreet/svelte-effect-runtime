@@ -33,4 +33,4 @@ Write **Svelte 5** components and **SvelteKit** remote functions using [Effect-T
 | [`svelte-effect-runtime-language-server`](./modules/svelte-effect-runtime-language-server) | LSP binary that teaches the Svelte language server about `yield*` syntax. |
 | [`svelte-effect-runtime-vsix`](./modules/svelte-effect-runtime-vsix) | VS Code / Cursor extension. Installs the language server and configures the editor. |
 
-Visit the **[docs](https://ser.barekey.dev)** for guides, API reference, and runnable examples under [`examples/`](./examples).
+Visit the **[docs](https://ser.barekey.dev)** for guides and API reference.
