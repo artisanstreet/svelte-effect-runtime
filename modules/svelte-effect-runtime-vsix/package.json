@@ -1,7 +1,7 @@
 {
   "name": "svelte-effect-runtime-vscode",
   "displayName": "Svelte Effect Runtime",
-  "description": "Cursor/VS Code integration for svelte-effect-runtime grammar-aware Svelte language support.",
+  "description": "Higher level VSIX extension that has the SER LSP bundled.",
   "version": "1.6.2",
   "publisher": "barekey",
   "license": "BSD-3-Clause",

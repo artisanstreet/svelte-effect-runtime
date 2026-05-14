@@ -1,5 +1,5 @@
 # Svelte Effect Runtime (Zed)
 
-A Zed editor extension that integrates the Svelte Effect Runtime language server, providing editor support for Effect-TS code inside Svelte components.
+Higher level Zed extension that has the LSP bundled.
 
 Visit the [docs](https://ser.barekey.dev) for more information.

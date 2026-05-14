@@ -14,23 +14,15 @@
 
 ---
 
-Write **Svelte 5** components and **SvelteKit** remote functions using [Effect-TS](https://effect.website). Use `yield*` inside `<script effect>` blocks — the preprocessor lowers them into `Effect.gen` programs that fork on mount, wire into `$state`, and cancel on unmount.
-
-```svelte
-<script lang="ts" effect>
-  import { getUser } from "$lib/api.js";
-  let user = $state(yield* getUser(id));
-</script>
-
-<h1>{user.name}</h1>
-```
+Write effectful code without any hassle. Seriously!
 
 ## Packages
 
 | Package | Description |
 |---------|-------------|
-| [`svelte-effect-runtime`](./modules/svelte-effect-runtime) | Runtime + preprocessor + Vite plugin. Installed in your SvelteKit project. |
-| [`svelte-effect-runtime-language-server`](./modules/svelte-effect-runtime-language-server) | LSP binary that teaches the Svelte language server about `yield*` syntax. |
-| [`svelte-effect-runtime-vsix`](./modules/svelte-effect-runtime-vsix) | VS Code / Cursor extension. Installs the language server and configures the editor. |
+| [`svelte-effect-runtime`](./modules/svelte-effect-runtime) | Core module that houses the Vite plugin to enable effectful execution. |
+| [`svelte-effect-runtime-language-server`](./modules/svelte-effect-runtime-language-server) | The lower level standalone server that houses the LSP contract. |
+| [`svelte-effect-runtime-vsix`](./modules/svelte-effect-runtime-vsix) | Higher level VSIX extension that has the LSP bundled.  |
+| [`svelte-effect-runtime-zed`](./modules/svelte-effect-runtime-zed) | Higher level Zed extension that has the LSP bundled.  |
 
 Visit the **[docs](https://ser.barekey.dev)** for guides and API reference.

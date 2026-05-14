@@ -1,7 +1,7 @@
 {
   "name": "svelte-effect-runtime",
   "version": "1.6.2",
-  "description": "Client-side Effect runtime support for Svelte <script> blocks.",
+  "description": "Core module that houses the Vite plugin to enable effectful execution.",
   "license": "BSD-3-Clause",
   "type": "module",
   "repository": {
