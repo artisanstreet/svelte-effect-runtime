@@ -138,20 +138,17 @@ export function transform_script_effect(
   const block_refs: BlockRef[] = [];
 
   let has_effect = false;
-  let has_effect_import = false;
 
   /**
    * Phase 1 — detect whether the user already imports `Effect` so we
    * avoid emitting a duplicate `import { Effect } from "effect"`.
    */
-  for (const stmt of source_file.statements) {
-    if (ts.isImportDeclaration(stmt) && ts.isStringLiteral(stmt.moduleSpecifier)) {
-      if (stmt.moduleSpecifier.text === "effect") {
-        has_effect_import = true;
-        break;
-      }
-    }
-  }
+  const has_effect_import = source_file.statements.some(
+    (stmt) =>
+      ts.isImportDeclaration(stmt) &&
+      ts.isStringLiteral(stmt.moduleSpecifier) &&
+      stmt.moduleSpecifier.text === "effect",
+  );
 
   /**
    * Phase 2 — scan every statement. Statements containing top-level
@@ -437,9 +434,9 @@ function lower_variable_statement(
       temps.push({ name: temp_name });
 
       const names = extract_binding_names(decl.name);
-      for (const n of names) {
-        temps.push({ name: n });
-      }
+
+      temps.push({ name: temp_name });
+      temps.push(...names.map((n) => ({ name: n })));
 
       const rewritten_expr = rewrite_expression_swapping_yield_star(
         decl.initializer,
@@ -758,16 +755,9 @@ function extract_binding_names(name: ts.BindingName): string[] {
     return [name.text];
   }
 
-  const result: string[] = [];
-
-  for (const element of name.elements) {
-    if (ts.isOmittedExpression(element)) {
-      continue;
-    }
-    result.push(...extract_binding_names(element.name));
-  }
-
-  return result;
+  return name.elements
+    .filter((e): e is ts.BindingElement => !ts.isOmittedExpression(e))
+    .flatMap((e) => extract_binding_names(e.name));
 }
 
 /**
