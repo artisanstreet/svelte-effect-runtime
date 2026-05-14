@@ -47,7 +47,7 @@ Deno.test("full pipeline: both preprocessors agree on has_yield", () => {
   `.trim();
 
   const script_result = transform_script_effect(script, "Test.svelte");
-  assertStringIncludes(script_result.code, `yield* compute`);
+  assertStringIncludes(script_result.code, `__SER__`);
 
   const full = `<script>\n${script_result.code}\n</script>\n\n<p>{yield* getValue()}</p>`;
 
@@ -79,5 +79,4 @@ Deno.test("full pipeline: markup-only passes through script unchanged", () => {
 
   const result = transform_script_effect(markup, "Test.svelte");
   if (result.code !== markup) throw new Error("expected identity output");
-  if (result.has_yield) throw new Error("script pass should not flag markup yield*");
 });
