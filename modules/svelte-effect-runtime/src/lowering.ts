@@ -23,7 +23,7 @@ export interface Extraction {
  * @example
  * ```ts
  * const sf = ts.createSourceFile("t.ts", "$state(yield* f())", ...);
- * const result = extractYieldStars(sf.statements[0].expression, "file.ts");
+ * const result = extract_yield_stars(sf.statements[0].expression, "file.ts");
  * // result has one Extraction { temp_name: "__SER__0", yield_target: "f()" }
  * ```
  *
@@ -32,7 +32,7 @@ export interface Extraction {
  * @param filename - The source filename, used in error messages.
  * @returns Array of extractions found, or empty if none.
  */
-export function extractYieldStars(
+export function extract_yield_stars(
   _expression: ts.Expression,
   _filename: string,
 ): readonly Extraction[] {
