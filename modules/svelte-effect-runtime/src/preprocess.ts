@@ -302,11 +302,11 @@ function lower_statement(
 ): LoweredStatement {
 
   if (ts.isExpressionStatement(stmt)) {
-    return lower_expression_statement(stmt, content, filename);
+    return lower_expression_statement(stmt, content);
   }
 
   if (ts.isVariableStatement(stmt)) {
-    return lower_variable_statement(stmt, content, filename);
+    return lower_variable_statement(stmt, content);
   }
 
   const text = slice(content, stmt);
@@ -755,9 +755,16 @@ function extract_binding_names(name: ts.BindingName): string[] {
     return [name.text];
   }
 
-  return name.elements
-    .filter((e): e is ts.BindingElement => !ts.isOmittedExpression(e))
-    .flatMap((e) => extract_binding_names(e.name));
+  const result: string[] = [];
+
+  for (const element of name.elements) {
+    if (ts.isOmittedExpression(element)) {
+      continue;
+    }
+    result.push(...extract_binding_names(element.name));
+  }
+
+  return result;
 }
 
 /**
