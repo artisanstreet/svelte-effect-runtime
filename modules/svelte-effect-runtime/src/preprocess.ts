@@ -1,6 +1,7 @@
 import MagicString from "magic-string";
 import ts from "typescript";
 import { contains_top_level_yield_star } from "./detect.ts";
+import { TopLevelAwaitError } from "./error.ts";
 
 /**
  * Block reference emitted by the preprocessor to track what blocks were
@@ -159,11 +160,7 @@ export function transform_script_effect(
 
     if (contains_top_level_await(stmt)) {
       const text = slice(content, stmt);
-      throw new Error(
-        `${filename}: top-level await is not supported in <script effect>.\n` +
-          `Use yield* Effect.promise(...) or yield* Effect.tryPromise(...) instead.\n\n` +
-          `Problematic statement:\n${text}`,
-      );
+      throw new TopLevelAwaitError(filename, text);
     }
 
     if (!contains_top_level_yield_star(stmt)) {
