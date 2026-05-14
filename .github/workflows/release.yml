@@ -7,7 +7,7 @@ on:
     paths:
       - modules/svelte-effect-runtime/package.json
       - modules/svelte-effect-runtime-language-server/package.json
-      - modules/svelte-effect-runtime-vscode-extension/package.json
+      - modules/svelte-effect-runtime-vsix/package.json
     tags:
       - "v*"
   workflow_dispatch:
@@ -41,7 +41,7 @@ jobs:
         run: |
           RUNTIME_VERSION="$(node -p "require('./modules/svelte-effect-runtime/package.json').version")"
           LSP_VERSION="$(node -p "require('./modules/svelte-effect-runtime-language-server/package.json').version")"
-          VSIX_VERSION="$(node -p "require('./modules/svelte-effect-runtime-vscode-extension/package.json').version")"
+          VSIX_VERSION="$(node -p "require('./modules/svelte-effect-runtime-vsix/package.json').version")"
 
           if [ "$RUNTIME_VERSION" != "$LSP_VERSION" ] || [ "$RUNTIME_VERSION" != "$VSIX_VERSION" ]; then
             echo "Release versions are out of sync." >&2
@@ -79,7 +79,7 @@ jobs:
           if git diff --unified=0 "${{ github.event.before }}" "${{ github.sha }}" -- \
             modules/svelte-effect-runtime/package.json \
             modules/svelte-effect-runtime-language-server/package.json \
-            modules/svelte-effect-runtime-vscode-extension/package.json \
+            modules/svelte-effect-runtime-vsix/package.json \
             | grep -Eq '^[+-][[:space:]]*"version":[[:space:]]*"'
           then
             echo "has_version_bump=true" >> "$GITHUB_OUTPUT"
@@ -136,7 +136,7 @@ jobs:
         run: |
           RUNTIME_VERSION="$(node -p "require('./modules/svelte-effect-runtime/package.json').version")"
           LSP_VERSION="$(node -p "require('./modules/svelte-effect-runtime-language-server/package.json').version")"
-          VSIX_VERSION="$(node -p "require('./modules/svelte-effect-runtime-vscode-extension/package.json').version")"
+          VSIX_VERSION="$(node -p "require('./modules/svelte-effect-runtime-vsix/package.json').version")"
           JSR_VERSION="$(node -e "const fs=require('fs'); const config=JSON.parse(fs.readFileSync('./modules/svelte-effect-runtime/deno.json', 'utf8')); process.stdout.write(config.version ?? '')")"
           JSR_NAME="$(node -e "const fs=require('fs'); const config=JSON.parse(fs.readFileSync('./modules/svelte-effect-runtime/deno.json', 'utf8')); process.stdout.write(config.name ?? '')")"
 
@@ -189,7 +189,7 @@ jobs:
         run: deno task build
 
       - name: package_vsix
-        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-vscode-extension
+        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-vsix
         run: deno task package
 
       - name: pack_runtime
@@ -226,7 +226,7 @@ jobs:
             exit 0
           fi
 
-          VSIX_PATH="${{ github.workspace }}/..dist/svelte-effect-runtime-vscode-extension/svelte-effect-runtime-vscode-${RELEASE_VERSION}.vsix"
+          VSIX_PATH="${{ github.workspace }}/..dist/svelte-effect-runtime-vsix/svelte-effect-runtime-vscode-${RELEASE_VERSION}.vsix"
           if [ ! -f "$VSIX_PATH" ]; then
             echo "Expected VSIX package not found at $VSIX_PATH" >&2
             exit 1
@@ -242,7 +242,7 @@ jobs:
             exit 1
           fi
 
-          VSIX_PATH="$(find "${{ github.workspace }}/..dist/svelte-effect-runtime-vscode-extension" -maxdepth 1 -name '*.vsix' -print -quit)"
+          VSIX_PATH="$(find "${{ github.workspace }}/..dist/svelte-effect-runtime-vsix" -maxdepth 1 -name '*.vsix' -print -quit)"
           if [ -z "$VSIX_PATH" ]; then
             echo "No VSIX package found." >&2
             exit 1
@@ -330,7 +330,7 @@ jobs:
         run: |
           RUNTIME_TGZ="$(find .dist/svelte-effect-runtime -maxdepth 1 -name '*.tgz' -print -quit)"
           LSP_TGZ="$(find ..dist/svelte-effect-runtime-language-server -maxdepth 1 -name '*.tgz' -print -quit)"
-          VSIX_PATH="$(find ..dist/svelte-effect-runtime-vscode-extension -maxdepth 1 -name '*.vsix' -print -quit)"
+          VSIX_PATH="$(find ..dist/svelte-effect-runtime-vsix -maxdepth 1 -name '*.vsix' -print -quit)"
 
           if [ -z "$RUNTIME_TGZ" ] || [ -z "$LSP_TGZ" ] || [ -z "$VSIX_PATH" ]; then
             echo "Missing one or more release artifacts." >&2

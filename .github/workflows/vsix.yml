@@ -5,7 +5,7 @@ on:
     branches:
       - master
     paths:
-      - modules/svelte-effect-runtime-vscode-extension/package.json
+      - modules/svelte-effect-runtime-vsix/package.json
   workflow_dispatch:
 
 permissions:
@@ -37,7 +37,7 @@ jobs:
             exit 0
           fi
 
-          if git diff --unified=0 "${{ github.event.before }}" "${{ github.sha }}" -- modules/svelte-effect-runtime-vscode-extension/package.json | grep -Eq '^[+-][[:space:]]*"version":[[:space:]]*"'; then
+          if git diff --unified=0 "${{ github.event.before }}" "${{ github.sha }}" -- modules/svelte-effect-runtime-vsix/package.json | grep -Eq '^[+-][[:space:]]*"version":[[:space:]]*"'; then
             echo "has_version_bump=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_version_bump=false" >> "$GITHUB_OUTPUT"
@@ -80,12 +80,12 @@ jobs:
           deno-version: v2.x
 
       - name: package_vsix
-        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-vscode-extension
+        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-vsix
         run: deno task package
 
       - name: upload_vsix
         uses: actions/upload-artifact@v4
         with:
           name: svelte-effect-runtime-vscode
-          path: dist/svelte-effect-runtime-vscode-extension/*.vsix
+          path: dist/svelte-effect-runtime-vsix/*.vsix
           if-no-files-found: error

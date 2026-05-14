@@ -4,7 +4,7 @@ import { dirname, fromFileUrl, join, resolve } from "@std/path";
 
 const package_dir = fromFileUrl(
   new URL(
-    "../modules/svelte-effect-runtime-vscode-extension/",
+    "../modules/svelte-effect-runtime-vsix/",
     import.meta.url,
   ),
 );
@@ -12,7 +12,7 @@ const repo_root = resolve(dirname(fromFileUrl(import.meta.url)), "..");
 const output_dir = join(
   repo_root,
   ".dist",
-  "svelte-effect-runtime-vscode-extension",
+  "svelte-effect-runtime-vsix",
 );
 const package_dist = join(package_dir, ".dist");
 const package_runtime_dir = join(package_dir, "runtime");

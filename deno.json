@@ -2,7 +2,8 @@
   "workspace": [
     "./modules/svelte-effect-runtime",
     "./modules/svelte-effect-runtime-language-server",
-    "./modules/svelte-effect-runtime-vscode-extension",
+    "./modules/svelte-effect-runtime-vsix",
+    "./modules/svelte-effect-runtime-zed",
     "./modules/docs",
     "./.tests/svelte-effect-runtime"
   ],
@@ -30,12 +31,12 @@
     "build:docs": "cd modules/docs && deno task build",
     "build:runtime": "cd modules/svelte-effect-runtime && deno task build",
     "build:lsp": "cd modules/svelte-effect-runtime-language-server && deno task build",
-    "build:extension": "cd modules/svelte-effect-runtime-vscode-extension && deno task build",
+    "build:extension": "cd modules/svelte-effect-runtime-vsix && deno task build",
     "check": "deno task check:runtime",
     "check:runtime": "cd modules/svelte-effect-runtime && deno task check",
     "docs:dev": "cd modules/docs && deno task dev",
     "lint": "deno lint",
-    "package:extension": "cd modules/svelte-effect-runtime-vscode-extension && deno task package",
+    "package:extension": "cd modules/svelte-effect-runtime-vsix && deno task package",
     "test": "deno task test:runtime",
     "test:runtime": "cd modules/svelte-effect-runtime && deno task test"
   }

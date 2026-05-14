@@ -12,7 +12,7 @@ modules/svelte-effect-runtime/*.tgz
 modules/svelte-effect-runtime-language-server/.tmp
 modules/svelte-effect-runtime-language-server/.dist
 modules/svelte-effect-runtime-language-server/runtime
-modules/svelte-effect-runtime-vscode-extension/.dist
-modules/svelte-effect-runtime-vscode-extension/runtime
-modules/svelte-effect-runtime-vscode-extension/*.vsix
+modules/svelte-effect-runtime-vsix/.dist
+modules/svelte-effect-runtime-vsix/runtime
+modules/svelte-effect-runtime-vsix/*.vsix
 *.tsbuildinfo

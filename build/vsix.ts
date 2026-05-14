@@ -5,12 +5,12 @@ const repo_root = resolve(dirname(fromFileUrl(import.meta.url)), "..");
 const package_dir = join(
   repo_root,
   "modules",
-  "svelte-effect-runtime-vscode-extension",
+  "svelte-effect-runtime-vsix",
 );
 const output_dir = join(
   repo_root,
   ".dist",
-  "svelte-effect-runtime-vscode-extension",
+  "svelte-effect-runtime-vsix",
 );
 const staging_dir = await Deno.makeTempDir({
   prefix: "svelte-effect-runtime-vsix-",

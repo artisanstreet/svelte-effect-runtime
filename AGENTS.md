@@ -128,7 +128,7 @@ All comments use `/** */` JSDoc style. No bare `//` or `/* */` comments anywhere
 
 ## V2 Focus
 
-The `v2` branch focuses exclusively on the runtime module (`modules/svelte-effect-runtime`). The language server (`modules/svelte-effect-runtime-language-server`) and VS Code extension (`modules/svelte-effect-runtime-vscode-extension`) modules are not being actively developed during V2. All new code, tests, and CI work targets only the runtime package.
+The `v2` branch focuses exclusively on the runtime module (`modules/svelte-effect-runtime`). The language server (`modules/svelte-effect-runtime-language-server`) and VS Code extension (`modules/svelte-effect-runtime-vsix`) modules are not being actively developed during V2. All new code, tests, and CI work targets only the runtime package.
 
 - **Source**: `modules/svelte-effect-runtime/src/`
 - **Tests**: `.tests/svelte-effect-runtime/v2/`
@@ -194,7 +194,7 @@ All packages must share the same semantic version. The four files that carry a v
 | `modules/svelte-effect-runtime/package.json` | `"version"` |
 | `modules/svelte-effect-runtime/deno.json` | `"version"` |
 | `modules/svelte-effect-runtime-language-server/package.json` | `"version"` |
-| `modules/svelte-effect-runtime-vscode-extension/package.json` | `"version"` |
+| `modules/svelte-effect-runtime-vsix/package.json` | `"version"` |
 
 When releasing:
 
