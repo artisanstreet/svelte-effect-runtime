@@ -2,7 +2,7 @@
 
 ## Status
 
-**Current**: Preprocessor ✅ | Detection ✅ | Dispatcher stubs | Markup transform ❌ | Runtime ❌ | Vite plugin ❌
+**Current**: P1 ✅ | P2 in progress | P3 ❌ | P4 ❌
 
 ## Architecture
 
@@ -23,109 +23,166 @@ Source → Detection → Extraction → Code Generation → Dispatcher
 | Component | File | Status |
 |-----------|------|--------|
 | yield* detection | `src/detect.ts` | ✅ 17 tests |
-| Dispatcher class | `src/dispatcher.ts` | ⚠️ stub — `fork`, `value`, `promise`, `run` all return placeholders |
-| Script preprocessor | `src/preprocess.ts` | ✅ 22 tests — `transform_script_effect` handles all lowering patterns |
-| Markup preprocessor | `src/preprocess.ts` | ❌ `transform_markup_effect` throws "not implemented" |
-| Generators barrel | `src/generators.ts` | ✅ exports `get_dispatcher` only |
-| Lowering helper | `src/lowering.ts` | ⚠️ `extract_yield_stars` throws "not implemented" (not currently used) |
-| Error classes | `src/error.ts` | ✅ `TopLevelAwaitError`, `YieldStarInRuneError`, `PreprocessError` |
+| Dispatcher class | `src/dispatcher.ts` | ✅ 24 tests — real fiber lifecycle with cancel/retry/dispose |
+| Script preprocessor | `src/preprocess.ts` | ✅ 22 tests — all lowering patterns |
+| Markup preprocessor | `src/preprocess.ts` | ⚠️ Phase 2 |
+| Generators barrel | `src/generators.ts` | ✅ |
+| Lowering helper | `src/lowering.ts` | ⚠️ unused stub |
+| Error classes | `src/error.ts` | ✅ |
 | Public API barrel | `src/mod.ts` | ✅ |
-| Vite plugin | `src/vite.ts` | ❌ not created |
-| Server runtime | `src/server.ts` | ❌ not created |
-| Markup helpers | `src/markup/` | ❌ not created |
-| Remote adapters | `src/remote/` | ❌ not created |
+| Vite plugin | `src/vite.ts` | ❌ Phase 3 |
+| Server runtime | `src/server.ts` | ❌ Phase 3 |
+| Markup helpers | `src/markup/` | ⚠️ Phase 2 |
+| Remote adapters | `src/remote/` | ❌ Phase 3 |
 
-## Generated code conventions
+**Test suite**: 66 tests, 0 failures, ~1.2s
 
-All as-designed and implemented:
+---
 
-| Convention | Example |
-|-----------|---------|
-| Generated temp bindings | `__SER__user`, `__SER__post`, `__SER__0` |
-| Generated program | `__SER__program` |
-| Generator imports | `import { get_dispatcher } from "svelte-effect-runtime/generators"` |
-| `onMount` import | emitted directly: `import { onMount } from "svelte"` — NOT re-exported |
-| `Effect` import | emitted directly: `import { Effect } from "effect"` — peer dep, NOT re-exported |
+## Phase 2 — Markup Transform
 
-## Preprocessor — verified lowering patterns
+### What needs to be built
 
-All verified by 22 tests in `preprocess.test.ts`:
+1. **`src/markup/value.ts`** — runtime helper for `{yield* expr}` in markup
+2. **`src/markup/promise.ts`** — runtime helper for `{#await yield* expr}`
+3. **`src/markup/run.ts`** — runtime helper for inline event handlers
+4. **`transform_markup_effect()`** — the markup preprocessor that detects `{yield* expr}` and rewrites to helper calls
+5. **Tests** for all of the above
+
+### Design — `transform_markup_effect()`
+
+The markup preprocessor operates on a full `.svelte` file string. It must:
+
+1. **Fast-path**: If the file contains no `yield*` text at all (`/\byield\s*\*/.test(content)`), return the content unchanged.
+2. **Find brace expressions**: Walk Svelte's AST (using `svelte/compiler`) to find `ExpressionTag` nodes.
+3. **Classify context**: For each tag containing `yield*`, determine whether it's a plain expression, an `{#await}`, `{#each}`, `{#if}`, event handler, or `{@render}`.
+4. **Replace**: Swap the expression with the appropriate helper call:
+   - Plain `{yield* expr}` → `{value({ id, deps, fallback, factory })}`
+   - `{#await yield* promise}` → `{#await promise({ id, deps, factory })}`
+   - Event handler → wrapped with `run()` inside the handler
+   - `{@render yield* fn()}` → `{(value({ ... }))()}` (Svelte snippet convention)
+5. **Inject imports**: Add `import { value, promise, run } from "svelte-effect-runtime/generators"` into the instance `<script>` tag (the non-context, non-module script tag).
+
+### Key simplification vs V1
+
+| V1 approach | P2 approach |
+|------------|-------------|
+| Custom character-by-character brace parser (148-line `findClosingBrace`) | Use Svelte's own AST for expression boundaries |
+| Babel-based yield* detection using parser failure semantics | Use our own `contains_top_level_yield_star` (already built) |
+| Complex helper code injection (100+ line template) | Simple import injection into existing `<script>` tag |
+| Free identifier analysis for deps | Simple identifiers only — same as script preprocessor |
+
+### Free identifier detection
+
+For `value()` calls, we need to detect which identifiers in the expression are "free" (not declared locally). This lets Svelte track reactive dependencies. Example:
 
 ```
-$state(yield* expr)       ✅  temp + preserved $state() wrapper
-const x = yield* expr     ✅  becomes let x = $state(temp)
-const {a,b} = yield*      ✅  destructuring with individual $state per name
-$derived(yield* x + 1)    ✅  $derived() preserved, yield* swapped
-$state.raw(yield* expr)   ✅  .raw preserved
-$inspect(yield* expr)     ✅  call expression lowered
-count = yield* expr       ✅  assignment expression extracted
-yield* logView(id)        ✅  bare yield* moved to effect body
-yield* inside () =>       ✅  NOT lowered (function boundary)
-yield* in Effect.gen       ✅  NOT lowered (nested generator)
-await top-level            ✅  rejected with TopLevelAwaitError
-No yield* at all           ✅  identity pass-through
+{user.name} → deps: ["user"]       (both are free identifiers)
+{format(user)} → deps: ["format", "user"]  
 ```
 
-## What's next
+We walk the TS AST of the expression, skip function boundaries and locally-declared bindings (e.g., `{#each items as item}` declares `item`), and collect the remaining identifiers.
 
-### Phase 1 — finish the runtime (highest priority)
+### `value()` helper API
 
-1. **Implement `Dispatcher.fork()`** — actually run effects via `ManagedRuntime`, manage fiber lifecycle, wire up cleanup
-2. **Implement `Dispatcher.value()`** — cache results by `id::depsHash`, return fallback before resolved, wire into `$state`
-3. **Implement `Dispatcher.promise()`** — return a promise that resolves when the effect completes
-4. **Implement `Dispatcher.run()`** — fire-and-forget for event handlers
-5. **Add runtime tests** — verify fibers start, complete, cancel, and fail correctly
+```typescript
+/**
+ * Runtime helper for `{yield* expr}` markup expressions.
+ * Calls `get_dispatcher().value()`.
+ */
+function value(
+  id: string,
+  deps: unknown[],
+  fallback: unknown,
+  factory: () => Generator<unknown, unknown, unknown>,
+): unknown {
+  return get_dispatcher().value({ id, deps, fallback, factory });
+}
+```
 
-### Phase 2 — finish the preprocessor
+### `promise()` helper API
 
-6. **Implement `transform_markup_effect()`** — detect `{yield* expr}` in template braces, emit `value()`/`promise()`/`run()` calls
-7. **Create `src/markup/value.ts`** — runtime helper for value expressions in markup
-8. **Create `src/markup/promise.ts`** — runtime helper for `{#await}` blocks
-9. **Create `src/markup/run.ts`** — runtime helper for event handlers
+```typescript
+function promise(
+  id: string,
+  deps: unknown[],
+  factory: () => Generator<unknown, unknown, unknown>,
+): Promise<unknown> {
+  return get_dispatcher().promise({ id, deps, factory });
+}
+```
 
-### Phase 3 — server & tooling
+### `run()` helper API
 
-10. **Create `src/server.ts`** — ServerRuntime, Query, Command, Form, Prerender (Effect v4 only)
-11. **Create `src/vite.ts`** — Vite plugin for SvelteKit remote function integration
-12. **Create `src/remote/shared.ts`** — RemoteFailure, FormError, serialization types
-13. **Create `src/remote/server.ts`** — server-side remote handlers
-14. **Create `src/remote/client.ts`** — client-side remote adapters
+```typescript
+function run(
+  factory: () => Generator<unknown, unknown, unknown>,
+): Promise<unknown> {
+  return get_dispatcher().run(Effect.gen(factory));
+}
+```
 
-### Phase 4 — polish
+### Tests for Phase 2
 
-15. Remove stubs from `dispatcher.ts` — delete `reset_dispatcher()` or implement it properly
-16. Implement `src/lowering.ts` — `extract_yield_stars()` or remove it
-17. Integration test: full pipeline from `.svelte` file → preprocessor → dispatcher → mounted component
+**markup preprocessor tests** (`markup.test.ts`):
+- Identity pass-through for files with no `yield*`
+- `{yield* expr}` → `value(...)` call
+- `{#if yield* expr}` → `value(...)` in condition
+- `{#each yield* expr as item}` → `value(...)` in list expression
+- `{#await yield* promise}` → `promise(...)` call
+- `{@render yield* fn()}` → `(value(...))()` IIFE
+- Event handler `on:click={() => yield* fn()}` → `run()` wrapper
+- `{@const x = yield* expr}` → `value(...)` in const initializer
+- Multiple yield* in markup → all replaced
+- Free identifier collection (correct deps array)
+- Script tag injection for import
+- No script tag → creates one with imports
+- Module context script is skipped
+- Idempotency (double-preprocess)
 
-## What the preprocessor does NOT do (by design, not by omission)
+**markup helper tests** (`markup.test.ts`):
+- `value()` returns fallback synchronously
+- `value()` returns resolved value after completion
+- `value()` caches by id + deps
+- `promise()` returns Promise
+- `promise()` resolves with effect result
+- `run()` fires and forgets
 
-| Not done | Why |
-|----------|-----|
-| Scope tracking of effect-bound bindings | User writes `$derived(format(user))` themselves |
-| Statement classification (hoisted vs lowered) | Single rule: does it contain top-level `yield*`? |
-| Helper thunk extraction | No longer needed — variables are `$state` signals |
-| `onMount` re-export from generators | Emitted directly from `"svelte"` |
-| `Effect` re-export from generators | Emitted directly from `"effect"` — it's a peer dep |
-| v3/v4/effect-compat compat layers | Deleted — Effect v4 only |
+---
+
+## Phase 3 — Server + Vite + Remote
+
+10. Create `src/server.ts` — ServerRuntime, Query, Command, Form, Prerender (Effect v4 only)
+11. Create `src/vite.ts` — Vite plugin for SvelteKit
+12. Create `src/remote/shared.ts` — RemoteFailure, FormError
+13. Create `src/remote/server.ts` — server-side remote handlers
+14. Create `src/remote/client.ts` — client-side remote adapters
+
+## Phase 4 — Polish
+
+15. Remove `lowering.ts` stub or implement it
+16. Add `Dispatcher.make()` factory
+17. Integration test: full pipeline
+18. Remove `reset_dispatcher()` after integration tests no longer need it
 
 ## File structure
 
 ```
 src/
-├── mod.ts           ✅ Public API
-├── detect.ts        ✅ yield* detection
-├── dispatcher.ts    ⚠️ Dispatcher (stubs)
-├── preprocess.ts    ⚠️ script ✅, markup ❌
-├── generators.ts    ✅ preprocessor imports
-├── lowering.ts      ⚠️ stub
-├── error.ts         ✅ error classes
-├── server.ts        ❌ not yet
-├── vite.ts          ❌ not yet
-├── markup/          ❌ not yet
+├── mod.ts           ✅
+├── detect.ts        ✅
+├── dispatcher.ts    ✅
+├── preprocess.ts    ⚠️ script ✅, markup → P2
+├── generators.ts    ✅
+├── lowering.ts      ⚠️ unused stub
+├── error.ts         ✅
+├── server.ts        ❌ P3
+├── vite.ts          ❌ P3
+├── markup/          ⚠️ P2
 │   ├── value.ts
 │   ├── promise.ts
 │   └── run.ts
-├── remote/          ❌ not yet
+├── remote/          ❌ P3
 │   ├── server.ts
 │   ├── client.ts
 │   └── shared.ts

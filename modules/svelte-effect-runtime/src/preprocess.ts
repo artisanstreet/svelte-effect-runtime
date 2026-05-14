@@ -29,18 +29,6 @@ export interface ScriptTransformResult {
 }
 
 /**
- * Result of the markup preprocessor pass.
- *
- * @since 2.0.0
- */
-export interface MarkupTransformResult {
-  /** The transformed source code. */
-  code: string;
-  /** Whether any yield* expressions were found and lowered. */
-  has_yield: boolean;
-}
-
-/**
  * Internal descriptor for a single `$state` temp variable that will be
  * emitted at component scope before the rewritten statement.
  */
@@ -790,27 +778,4 @@ function slice_start(content: string, node: ts.Node): string {
   return content.slice(node.getStart(), node.end);
 }
 
-/**
- * Transforms Svelte markup containing `{yield* expr}` brace expressions
- * into calls to the markup runtime helpers (`value`, `promise`, `run`).
- *
- * @example
- * ```ts
- * const result = transform_markup_effect(
- *   `<span>{yield* renderDate()}</span>`,
- *   "App.svelte",
- * );
- * ```
- *
- * @since 2.0.0
- * @param content - The raw `.svelte` file content.
- * @param filename - The source filename, used in error messages.
- * @returns The transformed markup and a flag indicating whether yield* was
- *   found.
- */
-export function transform_markup_effect(
-  _content: string,
-  _filename: string,
-): MarkupTransformResult {
-  throw new Error("not implemented yet");
-}
+export { type MarkupTransformResult, transform_markup_effect } from "./markup/transform.ts";
