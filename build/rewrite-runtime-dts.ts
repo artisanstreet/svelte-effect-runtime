@@ -14,12 +14,6 @@ const alias_patterns = [
       return specifier.slice(2).replace(/\.ts$/, ".js");
     },
   },
-  {
-    prefix: "$internal/",
-    resolve(specifier: string): string {
-      return `internal/${specifier.slice("$internal/".length).replace(/\.ts$/, ".js")}`;
-    },
-  },
 ] as const;
 
 function to_posix_relative(from_file: string, target_from_dist: string): string {
@@ -30,17 +24,13 @@ function to_posix_relative(from_file: string, target_from_dist: string): string 
 }
 
 function rewrite_alias_specifiers(file_path: string, content: string): string {
-  return content.replace(/(["'])(\$\/[^"']+\.ts|\$internal\/[^"']+\.ts)\1/g, (
+  return content.replace(/(["'])(\$\/[^"']+\.ts)\1/g, (
     match,
     quote: string,
     specifier: string,
   ) => {
     const alias = alias_patterns.find(({ prefix }) => specifier.startsWith(prefix));
-
-    if (!alias) {
-      return match;
-    }
-
+    if (!alias) return match;
     return `${quote}${to_posix_relative(file_path, alias.resolve(specifier))}${quote}`;
   });
 }
@@ -57,13 +47,10 @@ async function visit(relative_path: string): Promise<void> {
     for await (const entry of Deno.readDir(file_path)) {
       await visit(`${relative_path}/${entry.name}`);
     }
-
     return;
   }
 
-  if (!file_path.endsWith(".d.ts")) {
-    return;
-  }
+  if (!file_path.endsWith(".d.ts")) return;
 
   const content = await Deno.readTextFile(file_path);
   const rewritten = rewrite_alias_specifiers(file_path, content);

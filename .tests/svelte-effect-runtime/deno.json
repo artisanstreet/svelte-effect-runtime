@@ -2,11 +2,9 @@
   "imports": {
     "$": "../../modules/svelte-effect-runtime/src/mod.ts",
     "$/": "../../modules/svelte-effect-runtime/src/",
-    "$internal/": "../../modules/svelte-effect-runtime/src/internal/",
     "@std/assert": "jsr:@std/assert@^1.0.15",
     "@std/path": "jsr:@std/path@^1.1.2",
     "svelte-effect-runtime": "../../modules/svelte-effect-runtime/src/mod.ts",
-    "$app/server": "../../modules/svelte-effect-runtime/src/internal/app-server-shim.ts",
     "effect": "npm:effect@^3.21.0",
     "effect/": "npm:/effect@^3.21.0/",
     "magic-string": "npm:magic-string@^0.30.21",

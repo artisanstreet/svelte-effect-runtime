@@ -12,43 +12,19 @@
     "allowImportingTsExtensions": true,
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
-    "types": [
-      "node"
-    ],
+    "types": ["node"],
     "baseUrl": ".",
     "paths": {
-      "$": [
-        "./src/mod.ts"
-      ],
-      "$/*": [
-        "./src/*"
-      ],
-      "$internal/*": [
-        "./src/internal/*"
-      ],
-      "$app/server": [
-        "./src/internal/app-server-shim.ts"
-      ],
-      "@sveltejs/kit/internal/server": [
-        "./src/internal/sveltekit-internal-server-shim.d.ts"
-      ]
+      "$": ["./src/mod.ts"],
+      "$/*": ["./src/*"]
     }
   },
   "include": [
     "./src/mod.ts",
-    "./src/root-node.ts",
-    "./src/v4/mod.ts",
-    "./src/v4/root-node.ts",
-    "./src/v4/effect.ts",
-    "./src/v4/preprocess.ts",
-    "./src/v4/server.ts",
-    "./src/v4/vite.ts",
-    "./src/effect.ts",
-    "./src/client.ts",
-    "./src/server.ts",
-    "./src/language-server.ts",
-    "./src/preprocess.ts",
-    "./src/vite.ts",
-    "./src/internal/**/*.ts"
+    "./src/detect.ts",
+    "./src/dispatcher.ts",
+    "./src/generators.ts",
+    "./src/lowering.ts",
+    "./src/preprocess.ts"
   ]
 }

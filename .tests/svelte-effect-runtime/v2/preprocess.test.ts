@@ -1,6 +1,6 @@
 import { assertMatch, assertNotMatch, assertStringIncludes, assertThrows } from "@std/assert";
-import { transform_script_effect } from "../../../modules/svelte-effect-runtime/src/v2/preprocess.ts";
-import type { ScriptTransformResult } from "../../../modules/svelte-effect-runtime/src/v2/preprocess.ts";
+import { transform_script_effect } from "../../../modules/svelte-effect-runtime/src/preprocess.ts";
+import type { ScriptTransformResult } from "../../../modules/svelte-effect-runtime/src/preprocess.ts";
 
 function assert_transform(
   source: string,
@@ -69,7 +69,7 @@ Deno.test("extracts $state(yield* expr) into a temp $state binding", () => {
     `= yield* getUser(id);`,
     `import { onMount } from "svelte"`,
     `import { Effect } from "effect"`,
-    `import { get_dispatcher } from "svelte-effect-runtime/v2/generators"`,
+    `import { get_dispatcher } from "svelte-effect-runtime/generators"`,
   ]);
 });
 

@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { contains_top_level_yield_star, is_function_boundary } from "../../../modules/svelte-effect-runtime/src/v2/detect.ts";
+import { contains_top_level_yield_star, is_function_boundary } from "../../../modules/svelte-effect-runtime/src/detect.ts";
 import ts from "typescript";
 
 function parse_expression(text: string): ts.Node {

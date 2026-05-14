@@ -4,39 +4,28 @@
   "license": "BSD-3-Clause",
   "exports": {
     ".": "./src/mod.ts",
-    "./v3": "./src/mod.ts",
-    "./v4": "./src/v4/mod.ts",
     "./preprocess": "./src/preprocess.ts",
-    "./v3/preprocess": "./src/preprocess.ts",
     "./vite": "./src/vite.ts",
-    "./v3/vite": "./src/vite.ts",
-    "./v4/preprocess": "./src/v4/preprocess.ts",
-    "./v4/vite": "./src/v4/vite.ts",
-    "./_server": "./src/server.ts",
-    "./v3/_server": "./src/server.ts",
-    "./v4/_server": "./src/v4/server.ts",
-    "./language-server": "./src/language-server.ts"
+    "./generators": "./src/generators.ts",
+    "./_server": "./src/server.ts"
   },
   "compilerOptions": {
     "lib": ["deno.ns", "dom", "dom.iterable", "es2022"]
   },
   "tasks": {
     "build": "deno task clean && deno run -A ../../build/runtime.ts && tsc -p tsconfig.build.json --emitDeclarationOnly && deno run -A ../../build/rewrite-runtime-dts.ts",
-    "check": "deno check --node-modules-dir=auto src/mod.ts src/root-node.ts src/effect.ts src/client.ts src/server.ts src/preprocess.ts src/vite.ts src/v4/mod.ts src/v4/root-node.ts src/v4/effect.ts src/v4/preprocess.ts src/v4/server.ts src/v4/vite.ts",
-    "clean": "rm -rf .dist ../../.dist/svelte-effect-runtime",
-    "test": "deno task test:v2",
-    "test:v2": "cd ../../.tests/svelte-effect-runtime && deno test --no-check -A v2",
+    "check": "deno check --node-modules-dir=auto src/mod.ts src/detect.ts src/dispatcher.ts src/generators.ts src/lowering.ts src/preprocess.ts",
+    "clean": "rm -rf ../../.dist/svelte-effect-runtime",
+    "test": "cd ../../.tests/svelte-effect-runtime && deno test --no-check -A v2",
     "fmt": "deno fmt",
     "lint": "deno lint"
   },
   "imports": {
     "$": "./src/mod.ts",
     "$/": "./src/",
-    "$internal/": "./src/internal/",
     "@std/assert": "jsr:@std/assert@^1.0.15",
     "@std/path": "jsr:@std/path@^1.1.2",
     "svelte-effect-runtime": "./src/mod.ts",
-    "$app/server": "./src/internal/app-server-shim.ts",
     "effect": "npm:effect@^3.21.0",
     "effect/": "npm:/effect@^3.21.0/",
     "@babel/parser": "npm:@babel/parser@^7.29.2",
@@ -49,9 +38,7 @@
     "@sveltejs/vite-plugin-svelte": "npm:@sveltejs/vite-plugin-svelte@^6.2.4",
     "@sveltejs/kit": "npm:@sveltejs/kit@^2.56.1",
     "@sveltejs/kit/": "npm:/@sveltejs/kit@^2.56.1/",
-    "@sveltejs/kit/internal/server": "npm:/@sveltejs/kit@^2.56.1/internal/server",
-    "@sveltejs/adapter-static": "npm:@sveltejs/adapter-static@^3.0.10",
-    "jsdom": "npm:jsdom@^26.1.0"
+    "@sveltejs/kit/internal/server": "npm:/@sveltejs/kit@^2.56.1/internal/server"
   },
   "publish": {
     "exclude": []

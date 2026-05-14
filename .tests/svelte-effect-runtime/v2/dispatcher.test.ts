@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { Dispatcher } from "../../../modules/svelte-effect-runtime/src/v2/dispatcher.ts";
+import { Dispatcher } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
 
 // ─── Constructor ─────────────────────────────────────────────
 
