@@ -1,13 +1,8 @@
 import { Effect } from "effect";
 import {
   type RemoteFailure,
-  type FormError,
   type FormIssue,
-  REMOTE_ERROR_DECODER,
-  EFFECT_REMOTE_ERROR_MARKER,
   is_serialized_remote_failure_envelope,
-  is_form_error,
-  create_remote_http_error,
   create_remote_transport_error,
 } from "$/remote/shared.ts";
 
@@ -215,42 +210,6 @@ export function create_remote_form_adapter<Input, Output>(
           } catch (err: unknown) {
             throw create_remote_transport_error(err);
           }
-        },
-      ) as unknown;
-  }
-
-            const data = await response.json();
-            const decoded = decode_payload(data) as Output;
-            resume(Effect.succeed(decoded));
-          } catch (err: unknown) {
-            resume(
-              Effect.fail(create_remote_transport_error(err)),
-            );
-          }
-        })();
-      }) as unknown;
-  }
-
-  /** Wrap .validate() to return an Effect. */
-  const original_validate = form_obj.validate as
-    | ((opts?: Record<string, unknown>) => Promise<{ issues?: readonly FormIssue[]; valid: boolean }>)
-    | undefined;
-
-  if (original_validate) {
-    form_obj.validate = (opts?: Record<string, unknown>) =>
-
-      Effect.async<{ issues?: readonly FormIssue[]; valid: boolean }, RemoteFailure<unknown>>(
-        (resume) => {
-          void (async () => {
-            try {
-              const result = await original_validate(opts);
-              resume(Effect.succeed(result));
-            } catch (err: unknown) {
-              resume(
-                Effect.fail(create_remote_transport_error(err)),
-              );
-            }
-          })();
         },
       ) as unknown;
   }

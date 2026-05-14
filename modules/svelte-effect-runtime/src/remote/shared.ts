@@ -6,12 +6,20 @@
  * @since 2.0.0
  */
 
-/** Well-known marker injected into every serialised remote-failure envelope
- * so the client can reliably distinguish runtime errors from domain values. */
+/**
+ * Well-known marker injected into every serialised remote-failure envelope
+ * so the client can reliably distinguish runtime errors from domain values.
+ *
+ * @since 2.0.0
+ */
 export const EFFECT_REMOTE_ERROR_MARKER = "__svelte_effect_remote__";
 
-/** Well-known symbol used to attach a payload decoder to a remote function
- * so the client's transport layer can decode domain error types. */
+/**
+ * Well-known symbol used to attach a payload decoder to a remote function
+ * so the client's transport layer can decode domain error types.
+ *
+ * @since 2.0.0
+ */
 export const REMOTE_ERROR_DECODER = Symbol.for(
   "svelte-effect-runtime/remote-error-decoder",
 );

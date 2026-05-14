@@ -99,6 +99,14 @@ export function encode_remote_failure(cause: Cause.Cause<unknown>): string {
  * Throws a SvelteKit `invalid` response from a {@link FormError}, calling
  * through to the request-scoped `invalid` helper.
  *
+ * @example
+ * ```ts
+ * throw_form_error(
+ *   [{ message: "Name is required", path: ["name"] }],
+ *   invalid,
+ * );
+ * ```
+ *
  * @since 2.0.0
  * @param issues - The list of form validation issues.
  * @param invalid - SvelteKit's `invalid` helper bound to the current request.
@@ -113,6 +121,15 @@ export function throw_form_error(
 /**
  * Remaps low-level SvelteKit errors (e.g. "Cannot use ___ outside a route")
  * into clear, actionable messages.
+ *
+ * @example
+ * ```ts
+ * try {
+ *   return native_query(handler);
+ * } catch (err) {
+ *   throw normalize_remote_helper_error(err, "Query");
+ * }
+ * ```
  *
  * @since 2.0.0
  * @param err - The error thrown by SvelteKit's native functions.

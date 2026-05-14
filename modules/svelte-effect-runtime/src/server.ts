@@ -7,15 +7,7 @@ import {
   form as native_form,
   prerender as native_prerender,
 } from "$app/server";
-import {
-  type FormIssue,
-  create_serialized_remote_failure_envelope,
-} from "$/remote/shared.ts";
-import {
-  run_remote_effect,
-  throw_form_error,
-  normalize_remote_helper_error,
-} from "$/remote/server.ts";
+import { run_remote_effect, normalize_remote_helper_error } from "$/remote/server.ts";
 
 // ─── RequestEvent tag ─────────────────────────────────────────
 
@@ -112,6 +104,12 @@ let current_server_runtime: ManagedRuntime.ManagedRuntime<unknown> | undefined;
 /**
  * Returns the active server runtime, lazily creating a default
  * empty-layer runtime if none has been configured.
+ *
+ * @example
+ * ```ts
+ * const runtime = get_server_runtime_or_throw();
+ * const result = await runtime.runPromise(myEffect);
+ * ```
  *
  * @since 2.0.0
  * @returns The current ManagedRuntime instance.
