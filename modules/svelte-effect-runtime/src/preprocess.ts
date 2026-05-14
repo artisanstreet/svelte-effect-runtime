@@ -77,7 +77,9 @@ let temp_counter = 0;
  */
 function next_temp_name(hint?: string): string {
   const name = hint ? `__SER__${hint}` : `__SER__${temp_counter}`;
+
   temp_counter += 1;
+
   return name;
 }
 
@@ -133,11 +135,15 @@ export function transform_script_effect(
 
   const magic = new MagicString(content);
   const effect_assignments: string[] = [];
-  let has_effect = false;
   const block_refs: BlockRef[] = [];
+
+  let has_effect = false;
   let has_effect_import = false;
 
-  /** Scan existing imports to avoid emitting a duplicate `Effect` import. */
+  /**
+   * Phase 1 — detect whether the user already imports `Effect` so we
+   * avoid emitting a duplicate `import { Effect } from "effect"`.
+   */
   for (const stmt of source_file.statements) {
     if (ts.isImportDeclaration(stmt) && ts.isStringLiteral(stmt.moduleSpecifier)) {
       if (stmt.moduleSpecifier.text === "effect") {
@@ -147,8 +153,13 @@ export function transform_script_effect(
     }
   }
 
+  /**
+   * Phase 2 — scan every statement. Statements containing top-level
+   * `yield*` are lowered; everything else passes through unchanged.
+   * Top-level `await` is rejected with a clear error.
+   */
   for (const stmt of source_file.statements) {
-    /** Top-level `await` is not supported — error with guidance. */
+
     if (contains_top_level_await(stmt)) {
       const text = slice(content, stmt);
       throw new Error(
@@ -158,7 +169,6 @@ export function transform_script_effect(
       );
     }
 
-    /** Statements without `yield*` pass through unchanged. */
     if (!contains_top_level_yield_star(stmt)) {
       continue;
     }
@@ -166,31 +176,34 @@ export function transform_script_effect(
     has_effect = true;
     const lowered = lower_statement(stmt, content, filename);
 
-    /** Replace the original statement text with the rewritten version. */
-    magic.overwrite(lowered.range.start, lowered.range.end, lowered.rewritten_text);
+    magic.overwrite(
+      lowered.range.start,
+      lowered.range.end,
+      lowered.rewritten_text,
+    );
 
-    /** Emit temp `$state` bindings before the statement. */
     if (lowered.temps.length > 0) {
       const prefix = lowered.temps
         .map((t) => `let ${t.name} = $state(undefined);`)
         .join("\n");
+
       magic.appendLeft(lowered.range.start, prefix + "\n");
     }
 
     effect_assignments.push(...lowered.effect_assignments);
   }
 
-  /** If no yield* was found anywhere, return the original code as-is. */
   if (!has_effect) {
     block_refs.push({ id: filename, kind: "script" });
     return { code: content, blocks: block_refs };
   }
 
   /**
-   * Inject runtime imports after the last user import, or prepend if there
-   * are no existing imports.
+   * Phase 3 — inject runtime imports after the last user import.
+   * If there are no existing imports, prepend to the file.
    */
   const imports = make_imports(has_effect_import);
+
   let insert_pos = 0;
   for (const stmt of [...source_file.statements].reverse()) {
     if (ts.isImportDeclaration(stmt)) {
@@ -198,22 +211,32 @@ export function transform_script_effect(
       break;
     }
   }
+
   if (insert_pos > 0) {
     magic.appendRight(insert_pos, "\n" + imports);
   } else {
     magic.prepend(imports + "\n");
   }
 
-  /** Append the `Effect.gen` + `onMount` block at the end of the script. */
+  /**
+   * Phase 4 — append the `Effect.gen` + `onMount` + `fork` block at the
+   * end of the script. This wraps all lowered assignments in a single
+   * effect program that starts on mount and cancels on unmount or HMR.
+   */
   const runtime_block = make_runtime_block(effect_assignments);
   magic.append("\n" + runtime_block);
 
   block_refs.push({ id: filename, kind: "script" });
+
   return { code: magic.toString(), blocks: block_refs };
 }
 
 /**
  * Builds the import statements injected by the preprocessor.
+ *
+ * `onMount` comes directly from Svelte. `Effect` comes from the `effect`
+ * package (only if the user didn't already import it). `get_dispatcher`
+ * comes from SER's own generators module.
  *
  * @since 2.0.0
  * @param has_effect_import - Whether the user already imports `Effect`.
@@ -221,19 +244,31 @@ export function transform_script_effect(
  */
 function make_imports(has_effect_import: boolean): string {
   const lines: string[] = [];
+
   lines.push(`import { onMount } from "svelte";`);
+
   if (!has_effect_import) {
     lines.push(`import { Effect } from "effect";`);
   }
+
   lines.push(
     `import { get_dispatcher } from "svelte-effect-runtime/generators";`,
   );
+
   return lines.join("\n");
 }
 
 /**
- * Builds the `Effect.gen` + `onMount` + `fork` runtime block that wraps all
- * lowered effect assignments and wires them into the component lifecycle.
+ * Builds the `Effect.gen` + `onMount` + `fork` runtime block that wraps
+ * all lowered effect assignments and wires them into the component
+ * lifecycle via `onMount`.
+ *
+ * The generated code:
+ *
+ * 1. Creates `__SER__program` via `Effect.gen`.
+ * 2. On mount, resolves the dispatcher, forks the program, and registers
+ *    the cleanup both as the `onMount` return value and as an HMR dispose
+ *    handler.
  *
  * @since 2.0.0
  * @param assignments - The effect-body assignment strings (e.g.
@@ -242,7 +277,10 @@ function make_imports(has_effect_import: boolean): string {
  *   script.
  */
 function make_runtime_block(assignments: string[]): string {
-  const body = assignments.map((a) => `  ${a}`).join("\n");
+  const body = assignments
+    .map((a) => `  ${a}`)
+    .join("\n");
+
   return [
     "",
     "const __SER__program = Effect.gen(function* () {",
@@ -261,8 +299,8 @@ function make_runtime_block(assignments: string[]): string {
 
 /**
  * Delegates a statement to the correct lowerer based on its syntax kind.
- * Variable statements and expression statements each have their own lowering
- * logic.
+ * Variable statements and expression statements each have dedicated
+ * lowering logic. Anything else falls through to the effect body as-is.
  *
  * @since 2.0.0
  * @param stmt - The statement to lower.
@@ -275,14 +313,17 @@ function lower_statement(
   content: string,
   filename: string,
 ): LoweredStatement {
+
   if (ts.isExpressionStatement(stmt)) {
     return lower_expression_statement(stmt, content, filename);
   }
+
   if (ts.isVariableStatement(stmt)) {
     return lower_variable_statement(stmt, content, filename);
   }
-  /** Fallback: move the entire statement into the effect body. */
+
   const text = slice(content, stmt);
+
   return {
     temps: [],
     rewritten_text: "",
@@ -292,19 +333,26 @@ function lower_statement(
 }
 
 /**
- * Lowers a variable statement containing `yield*` initializers. For each
- * declaration in the list:
+ * Lowers a variable statement containing `yield*` initializers.
  *
- * - **Simple identifier** (`const x = yield* expr`): emits a `$state` temp,
- *   rewrites to `let x = $state(temp)`, emits `temp = yield* expr` in the
- *   effect body.
+ * For each declaration in the declaration list:
  *
- * - **Wrapped identifier** (`let x = $state(yield* expr)`): emits a temp,
- *   keeps the `$state(temp)` wrapper, emits `temp = yield* expr`.
+ * - **Simple identifier, bare yield*** (`const x = yield* expr`):
+ *   emits a `$state` temp, rewrites to `let x = $state(temp)`, emits
+ *   `temp = yield* expr` in the effect body.
  *
- * - **Destructuring** (`const {a,b} = yield* expr`): emits a temp + one
- *   `$state` per binding name, rewrites to `let {a,b} = temp`, emits the
- *   yield assignment + destructure in the effect body.
+ * - **Simple identifier, wrapped** (`let x = $state(yield* expr)`):
+ *   emits a temp, keeps the `$state(temp)` wrapper, emits the yield
+ *   assignment.
+ *
+ * - **Destructuring** (`const {a, b} = yield* expr`):
+ *   emits a temp + one `$state` per binding name, rewrites to
+ *   `let {a, b} = temp`, emits the yield assignment followed by a
+ *   destructuring assignment in the effect body.
+ *
+ * When any declaration has a bare `yield*` initializer (not wrapped in a
+ * rune like `$state`), the entire statement is emitted with `let` even if
+ * the user wrote `const`, because the binding is inherently reactive.
  *
  * @since 2.0.0
  * @param stmt - The variable statement to lower.
@@ -315,16 +363,21 @@ function lower_variable_statement(
   stmt: ts.VariableStatement,
   content: string,
 ): LoweredStatement {
+
   const temps: TempBinding[] = [];
   const rewritten_decls: string[] = [];
   const assignments: string[] = [];
+
   const decl_list = stmt.declarationList;
-  /** Preserve the original declaration kind unless we must force `let`. */
   const kind = (decl_list.flags & ts.NodeFlags.Let) !== 0 ? "let" : "const";
   let has_bare_yield = false;
 
   for (const decl of decl_list.declarations) {
-    /** Declarations without yield* keep their original text. */
+
+    /**
+     * Declarations without a `yield*` initializer keep their original
+     * text and are hoisted to component scope unchanged.
+     */
     if (!decl.initializer || !contains_top_level_yield_star(decl.initializer)) {
       rewritten_decls.push(slice(content, decl).trim());
       continue;
@@ -333,39 +386,83 @@ function lower_variable_statement(
     const binding_text = slice(content, decl.name).trim();
 
     if (ts.isIdentifier(decl.name)) {
-      /** Simple binding: `const user = yield* expr` or `let user = $state(yield* expr)`. */
+      /**
+       * Simple identifier binding.
+       *
+       *   const user = yield* getUser(id)
+       *   let user = $state(yield* getUser(id))
+       *
+       * Both produce a temp `$state` binding. The difference is whether
+       * we add our own `$state()` wrapper (bare case) or keep the user's
+       * existing wrapper.
+       */
+
       const original_name = binding_text;
       const temp_name = next_temp_name(original_name);
+
       temps.push({ name: temp_name });
 
       if (is_yield_star_expression(decl.initializer)) {
-        /** Bare `yield*` as the initializer — wrap in `$state()`. */
+        /**
+         * Bare `yield*` as the initializer — we must wrap the result in
+         * `$state()` ourselves so the binding stays reactive.
+         */
         has_bare_yield = true;
         rewritten_decls.push(`${original_name} = $state(${temp_name})`);
       } else {
-        /** Wrapped `yield*` — user already has `$state(yield* expr)`, just swap. */
+        /**
+         * Wrapped `yield*` — the user already placed `$state(yield* expr)`
+         * or some other rune. Swap in the temp reference and keep
+         * everything else intact.
+         */
         const rewritten_expr = rewrite_expression_swapping_yield_star(
-          decl.initializer, content, temp_name,
+          decl.initializer,
+          content,
+          temp_name,
         );
         rewritten_decls.push(`${original_name} = ${rewritten_expr}`);
       }
-      const yield_text = extract_yield_star_full_text(decl.initializer, content);
+
+      const yield_text = extract_yield_star_full_text(
+        decl.initializer,
+        content,
+      );
+
       assignments.push(`${temp_name} = ${yield_text};`);
+
     } else {
-      /** Destructuring: `const {a, b} = yield* expr`. */
+      /**
+       * Destructuring binding.
+       *
+       *   const { title, body } = yield* getPost(id)
+       *
+       * The yield result flows into a temp, then each destructured name
+       * gets its own `$state` binding. The effect body first assigns the
+       * yield result to the temp, then destructures from the temp.
+       */
+
       has_bare_yield = true;
+
       const temp_name = next_temp_name("destructure");
       temps.push({ name: temp_name });
+
       const names = extract_binding_names(decl.name);
-      /** Emit a separate `$state` for each destructured name. */
       for (const n of names) {
         temps.push({ name: n });
       }
+
       const rewritten_expr = rewrite_expression_swapping_yield_star(
-        decl.initializer, content, temp_name,
+        decl.initializer,
+        content,
+        temp_name,
       );
       rewritten_decls.push(`${binding_text} = ${rewritten_expr};`);
-      const yield_text = extract_yield_star_full_text(decl.initializer, content);
+
+      const yield_text = extract_yield_star_full_text(
+        decl.initializer,
+        content,
+      );
+
       assignments.push(`${temp_name} = ${yield_text};`);
       assignments.push(`(${binding_text} = ${temp_name});`);
     }
@@ -374,6 +471,7 @@ function lower_variable_statement(
   const rewritten_text = rewritten_decls.length === 0
     ? ""
     : `${has_bare_yield ? "let" : kind} ${rewritten_decls.join(", ")};`;
+
   return {
     temps,
     rewritten_text,
@@ -401,8 +499,10 @@ function lower_expression_statement(
   stmt: ts.ExpressionStatement,
   content: string,
 ): LoweredStatement {
+
   const expr = stmt.expression;
 
+  /** No yield* in this expression — pass through unchanged. */
   if (!contains_top_level_yield_star(expr)) {
     return {
       temps: [],
@@ -415,6 +515,7 @@ function lower_expression_statement(
   /** Bare `yield*` as a statement — fire and forget in the effect body. */
   if (is_yield_star_expression(expr)) {
     const text = slice(content, expr).trim();
+
     return {
       temps: [],
       rewritten_text: "",
@@ -424,15 +525,18 @@ function lower_expression_statement(
   }
 
   /** Assignment with `yield*` on the right-hand side. */
-  if (ts.isBinaryExpression(expr) && expr.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+  if (
+    ts.isBinaryExpression(expr) &&
+    expr.operatorToken.kind === ts.SyntaxKind.EqualsToken
+  ) {
     const target = slice(content, expr.left).trim();
     const temp_name = next_temp_name("assign");
-    const temps: TempBinding[] = [{ name: temp_name }];
-    const rewritten = `${target} = ${temp_name};`;
+
     const yield_text = extract_yield_star_full_text(expr, content);
+
     return {
-      temps,
-      rewritten_text: rewritten,
+      temps: [{ name: temp_name }],
+      rewritten_text: `${target} = ${temp_name};`,
       effect_assignments: [`${temp_name} = ${yield_text};`],
       range: { start: stmt.getStart(), end: stmt.end },
     };
@@ -440,11 +544,17 @@ function lower_expression_statement(
 
   /** Call expression wrapping `yield*` (e.g. `$inspect(yield* expr)`). */
   const temp_name = next_temp_name("call");
-  const temps: TempBinding[] = [{ name: temp_name }];
-  const rewritten = rewrite_expression_swapping_yield_star(expr, content, temp_name);
+
+  const rewritten = rewrite_expression_swapping_yield_star(
+    expr,
+    content,
+    temp_name,
+  );
+
   const yield_text = extract_yield_star_full_text(expr, content);
+
   return {
-    temps,
+    temps: [{ name: temp_name }],
     rewritten_text: rewritten + ";",
     effect_assignments: [`${temp_name} = ${yield_text};`],
     range: { start: stmt.getStart(), end: stmt.end },
@@ -455,6 +565,9 @@ function lower_expression_statement(
  * Replaces every top-level `yield*` sub-expression inside the given
  * expression with a reference to `temp_name`. Returns the rewritten
  * expression text.
+ *
+ * Replacements are applied from right to left so that earlier source
+ * offsets remain valid after each swap.
  *
  * @since 2.0.0
  * @param expr - The expression whose `yield*` spans should be swapped.
@@ -467,20 +580,32 @@ function rewrite_expression_swapping_yield_star(
   content: string,
   temp_name: string,
 ): string {
-  const replacements: Array<{ start: number; end: number; text: string }> = [];
+
+  const replacements: Array<{
+    start: number;
+    end: number;
+    text: string;
+  }> = [];
+
   collect_yield_star_replacements(expr, content, temp_name, replacements);
 
-  if (replacements.length === 0) return slice(content, expr).trim();
+  if (replacements.length === 0) {
+    return slice(content, expr).trim();
+  }
 
-  /** Apply replacements from right to left to preserve source offsets. */
   replacements.sort((a, b) => b.start - a.start);
+
   let text = slice(content, expr);
+
+  const offset_in_expr = expr.getFullStart();
+
   for (const r of replacements) {
-    const offset_in_expr = expr.getFullStart();
-    text = text.slice(0, r.start - offset_in_expr) +
+    text =
+      text.slice(0, r.start - offset_in_expr) +
       r.text +
       text.slice(r.end - offset_in_expr);
   }
+
   return text.trim();
 }
 
@@ -501,7 +626,10 @@ function collect_yield_star_replacements(
   temp_name: string,
   replacements: Array<{ start: number; end: number; text: string }>,
 ): void {
-  if (is_function_boundary_node(node)) return;
+
+  if (is_function_boundary_node(node)) {
+    return;
+  }
 
   if (is_yield_star_expression(node)) {
     replacements.push({
@@ -518,26 +646,34 @@ function collect_yield_star_replacements(
 }
 
 /**
- * Finds the first top-level `yield*` expression in the given expression and
- * returns its full source text (e.g. `yield* getUser(id)`).
+ * Finds the first top-level `yield*` expression in the given expression
+ * and returns its full source text (e.g. `yield* getUser(id)`).
+ *
+ * Uses `slice_start` to exclude leading whitespace trivia when extracting
+ * the yield text.
  *
  * @since 2.0.0
  * @param expr - The expression to search.
  * @param content - The original source text.
  * @returns The full `yield*` source text, or `"undefined"` if none found.
  */
-function extract_yield_star_full_text(expr: ts.Expression, content: string): string {
+function extract_yield_star_full_text(
+  expr: ts.Expression,
+  content: string,
+): string {
+
   let found = "";
+
   find_yield_star_node(expr, (node) => {
-    /** Use `slice_start` to exclude leading whitespace trivia. */
     found = slice_start(content, node).trim();
   });
+
   return found || "undefined";
 }
 
 /**
- * Walks an expression AST and invokes the callback with the first top-level
- * `yield*` expression node found (skipping function boundaries).
+ * Walks an expression AST and invokes the callback with the first
+ * top-level `yield*` expression node found (skipping function boundaries).
  *
  * @since 2.0.0
  * @param node - The AST node to search.
@@ -547,7 +683,10 @@ function find_yield_star_node(
   node: ts.Node,
   on_found: (node: ts.Node) => void,
 ): void {
-  if (is_function_boundary_node(node)) return;
+
+  if (is_function_boundary_node(node)) {
+    return;
+  }
 
   if (is_yield_star_expression(node)) {
     on_found(node);
@@ -568,10 +707,12 @@ function find_yield_star_node(
  * @returns Whether the node represents a `yield*` expression.
  */
 function is_yield_star_expression(node: ts.Node): boolean {
-  return ts.isBinaryExpression(node) &&
+  return (
+    ts.isBinaryExpression(node) &&
     node.operatorToken.kind === ts.SyntaxKind.AsteriskToken &&
     ts.isIdentifier(node.left) &&
-    node.left.text === "yield";
+    node.left.text === "yield"
+  );
 }
 
 /**
@@ -584,12 +725,14 @@ function is_yield_star_expression(node: ts.Node): boolean {
  * @returns Whether the node is a function boundary.
  */
 function is_function_boundary_node(node: ts.Node): boolean {
-  return ts.isArrowFunction(node) ||
+  return (
+    ts.isArrowFunction(node) ||
     ts.isFunctionDeclaration(node) ||
     ts.isFunctionExpression(node) ||
     ts.isMethodDeclaration(node) ||
     ts.isGetAccessorDeclaration(node) ||
-    ts.isSetAccessorDeclaration(node);
+    ts.isSetAccessorDeclaration(node)
+  );
 }
 
 /**
@@ -601,9 +744,13 @@ function is_function_boundary_node(node: ts.Node): boolean {
  * @returns Whether a top-level `await` expression was found.
  */
 function contains_top_level_await(node: ts.Node): boolean {
-  if (ts.isAwaitExpression(node)) return true;
+  if (ts.isAwaitExpression(node)) {
+    return true;
+  }
+
   return node.getChildren().some(
-    (child) => !is_function_boundary_node(child) && contains_top_level_await(child),
+    (child) =>
+      !is_function_boundary_node(child) && contains_top_level_await(child),
   );
 }
 
@@ -617,12 +764,19 @@ function contains_top_level_await(node: ts.Node): boolean {
  * @returns Array of identifier name strings.
  */
 function extract_binding_names(name: ts.BindingName): string[] {
-  if (ts.isIdentifier(name)) return [name.text];
+  if (ts.isIdentifier(name)) {
+    return [name.text];
+  }
+
   const result: string[] = [];
+
   for (const element of name.elements) {
-    if (ts.isOmittedExpression(element)) continue;
+    if (ts.isOmittedExpression(element)) {
+      continue;
+    }
     result.push(...extract_binding_names(element.name));
   }
+
   return result;
 }
 
@@ -653,8 +807,8 @@ function slice_start(content: string, node: ts.Node): string {
 }
 
 /**
- * Transforms Svelte markup containing `{yield* expr}` brace expressions into
- * calls to the markup runtime helpers (`value`, `promise`, `run`).
+ * Transforms Svelte markup containing `{yield* expr}` brace expressions
+ * into calls to the markup runtime helpers (`value`, `promise`, `run`).
  *
  * @example
  * ```ts
