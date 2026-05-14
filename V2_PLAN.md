@@ -2,7 +2,7 @@
 
 ## Status
 
-**Current**: P1 ✅ | P2 in progress | P3 ❌ | P4 ❌
+**Current**: P1 ✅ | P2 ✅ | P3 ❌ | P4 ❌
 
 ## Architecture
 
@@ -25,8 +25,8 @@ Source → Detection → Extraction → Code Generation → Dispatcher
 | yield* detection | `src/detect.ts` | ✅ 17 tests |
 | Dispatcher class | `src/dispatcher.ts` | ✅ 24 tests — real fiber lifecycle with cancel/retry/dispose |
 | Script preprocessor | `src/preprocess.ts` | ✅ 22 tests — all lowering patterns |
-| Markup preprocessor | `src/preprocess.ts` | ⚠️ Phase 2 |
-| Generators barrel | `src/generators.ts` | ✅ |
+| Markup preprocessor | `src/markup/transform.ts` | ✅ 20 tests — sanitize-before-parse approach |
+| Markup helpers | `src/markup/{value,promise,run}.ts` | ✅ |
 | Lowering helper | `src/lowering.ts` | ⚠️ unused stub |
 | Error classes | `src/error.ts` | ✅ |
 | Public API barrel | `src/mod.ts` | ✅ |
@@ -35,7 +35,7 @@ Source → Detection → Extraction → Code Generation → Dispatcher
 | Markup helpers | `src/markup/` | ⚠️ Phase 2 |
 | Remote adapters | `src/remote/` | ❌ Phase 3 |
 
-**Test suite**: 66 tests, 0 failures, ~1.2s
+**Test suite**: 86 tests, 0 failures, ~2s
 
 ---
 
@@ -172,13 +172,14 @@ src/
 ├── mod.ts           ✅
 ├── detect.ts        ✅
 ├── dispatcher.ts    ✅
-├── preprocess.ts    ⚠️ script ✅, markup → P2
+├── preprocess.ts    ✅
 ├── generators.ts    ✅
 ├── lowering.ts      ⚠️ unused stub
 ├── error.ts         ✅
 ├── server.ts        ❌ P3
 ├── vite.ts          ❌ P3
-├── markup/          ⚠️ P2
+├── markup/          ✅
+│   ├── transform.ts
 │   ├── value.ts
 │   ├── promise.ts
 │   └── run.ts

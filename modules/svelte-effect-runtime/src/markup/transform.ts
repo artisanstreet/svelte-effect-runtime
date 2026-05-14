@@ -125,38 +125,42 @@ function sanitize_markup(content: string): SanitizeResult {
 
     const inner = content.slice(open + 1, close);
 
-    /** Check if this brace contains yield*. */
-    if (!contains_yield_star_in_text(inner)) {
-      cursor = close + 1;
-      continue;
-    }
-
-    /** Extract the relevant expression text (after stripping tag prefixes). */
     const trimmed = inner.trimStart();
     const leading_ws = inner.length - trimmed.length;
 
     const tag_info = get_tag_info(trimmed);
 
-    /** Check if this is an event handler expression (arrow function containing yield*). */
+    let expr_body = trimmed.slice(tag_info.prefix_length);
+
+    /** For @const, only use the RHS after `=` as the expression body. */
+    const equal_idx = tag_info.kind === "plain" && trimmed.startsWith("@const ")
+      ? expr_body.indexOf("=")
+      : -1;
+
+    /** Check if this is an event handler (arrow function containing yield*). */
     const is_event = is_event_expression(inner);
 
-    /** Skip if the placeholder would replace tag prefix tokens. */
-    const expr_body = trimmed.slice(tag_info.prefix_length);
+    /** Determine if this brace contains yield* that needs lowering. */
+    const has_yield =
+      is_event
+        ? /\byield\s*\*/.test(inner)
+        : contains_yield_star_in_text(expr_body);
 
-    const contains = contains_yield_star_in_text(expr_body);
-
-    if (!is_event && !contains) {
+    if (!has_yield) {
       cursor = close + 1;
       continue;
     }
 
-    if (is_event && !/\byield\s*\*/.test(inner)) {
-      cursor = close + 1;
-      continue;
+    /** The expression starts after the tag prefix. For @const, after the `=`. */
+    let extra_prefix = 0;
+
+    if (equal_idx !== -1) {
+      const after_eq_raw = expr_body.slice(equal_idx + 1);
+      expr_body = after_eq_raw.trimStart();
+      extra_prefix = equal_idx + 1 + (after_eq_raw.length - expr_body.length);
     }
 
-    /** The expression starts after the tag prefix. */
-    const expr_start = open + 1 + leading_ws + tag_info.prefix_length;
+    const expr_start = open + 1 + leading_ws + tag_info.prefix_length + extra_prefix;
 
     /** For each/await, the expression ends before ` as ` or ` then `/` catch `. */
     let expr_end = close;
@@ -197,7 +201,7 @@ function sanitize_markup(content: string): SanitizeResult {
       key,
     });
 
-    magic.overwrite(expr_start, expr_end, placeholder);
+    magic.overwrite(expr_start, expr_end, key === "render" ? `${placeholder}()` : placeholder);
 
     cursor = close + 1;
   }
