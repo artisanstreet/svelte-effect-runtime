@@ -1,5 +1,5 @@
 # Svelte Effect Runtime
 
-VS Code and Cursor extension that bundles the `svelte-effect-runtime` language server and auto-configures the Svelte extension so editors provide full TypeScript support for `<script effect>` blocks and `yield*` expressions.
+An editor extension that plugs the Svelte Effect Runtime language server into VS Code and Cursor, giving you full editor support for Effect-TS code inside your Svelte components.
 
 Visit the [docs](https://ser.barekey.dev) for more information.

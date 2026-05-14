@@ -1,5 +1,5 @@
 # svelte-effect-runtime
 
-Runtime, Svelte preprocessor, and Vite plugin for writing Effect-TS programs inside Svelte 5 `<script effect>` blocks and SvelteKit `*.remote.ts` files. Uses `yield*` syntax that gets lowered into `Effect.gen` programs managed by a fiber-based dispatcher.
+The core package that lets you use Effect-TS inside Svelte components. Install it in your SvelteKit project to write async logic with `yield*` directly in your component scripts, keeping everything clean and type-safe.
 
 Visit the [docs](https://ser.barekey.dev) for more information.
