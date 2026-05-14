@@ -26,9 +26,6 @@
       "$internal/*": [
         "./src/internal/*"
       ],
-      "$tests/*": [
-        "./tests/*"
-      ],
       "$app/server": [
         "./src/internal/app-server-shim.ts"
       ],

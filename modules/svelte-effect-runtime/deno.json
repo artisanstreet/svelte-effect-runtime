@@ -22,12 +22,10 @@
   },
   "tasks": {
     "build": "deno task clean && deno run -A ../../build/runtime.ts && tsc -p tsconfig.build.json --emitDeclarationOnly && deno run -A ../../build/rewrite-runtime-dts.ts",
-    "check": "deno check --node-modules-dir=auto src/mod.ts src/root-node.ts src/effect.ts src/client.ts src/server.ts src/preprocess.ts src/vite.ts src/v4/mod.ts src/v4/root-node.ts src/v4/effect.ts src/v4/preprocess.ts src/v4/server.ts src/v4/vite.ts tests/shared/*.ts tests/v3/*.test.ts tests/v4/*.test.ts",
+    "check": "deno check --node-modules-dir=auto src/mod.ts src/root-node.ts src/effect.ts src/client.ts src/server.ts src/preprocess.ts src/vite.ts src/v4/mod.ts src/v4/root-node.ts src/v4/effect.ts src/v4/preprocess.ts src/v4/server.ts src/v4/vite.ts",
     "clean": "rm -rf .dist ../../.dist/svelte-effect-runtime",
-    "smoke:v4": "deno run -A ../../build/v4-package-smoke.ts",
-    "test": "deno task test:v2 && deno test --node-modules-dir=auto -A tests/v3 tests/v4",
+    "test": "deno task test:v2",
     "test:v2": "cd ../../.tests/svelte-effect-runtime && deno test --no-check -A v2",
-    "coverage": "deno test --node-modules-dir=auto -A --coverage=.coverage tests/v3 tests/v4 && deno coverage .coverage",
     "fmt": "deno fmt",
     "lint": "deno lint"
   },
@@ -35,7 +33,6 @@
     "$": "./src/mod.ts",
     "$/": "./src/",
     "$internal/": "./src/internal/",
-    "$tests/": "./tests/",
     "@std/assert": "jsr:@std/assert@^1.0.15",
     "@std/path": "jsr:@std/path@^1.1.2",
     "svelte-effect-runtime": "./src/mod.ts",
@@ -57,8 +54,6 @@
     "jsdom": "npm:jsdom@^26.1.0"
   },
   "publish": {
-    "exclude": [
-      "test/**"
-    ]
+    "exclude": []
   }
 }
