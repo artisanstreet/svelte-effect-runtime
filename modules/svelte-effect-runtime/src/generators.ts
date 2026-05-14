@@ -9,4 +9,4 @@
  * @since 2.0.0
  * @internal
  */
-export { get_dispatcher } from "./dispatcher.ts";
+export { get_dispatcher } from "$/dispatcher.ts";
