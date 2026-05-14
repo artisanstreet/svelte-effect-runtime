@@ -3,9 +3,8 @@ import { dirname, fromFileUrl, join, relative, resolve } from "@std/path";
 const repo_root = resolve(dirname(fromFileUrl(import.meta.url)), "..");
 const dist_root = join(
   repo_root,
-  "modules",
-  "svelte-effect-runtime",
   ".dist",
+  "svelte-effect-runtime",
 ).replaceAll("\\", "/");
 
 const alias_patterns = [
