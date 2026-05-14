@@ -1,4 +1,7 @@
-<h1 align="center">svelte-effect-runtime</h1>
+<p align="center">
+  <img src="./assets/banner.png" alt="Svelte Effect Runtime">
+</p>
+
 <p align="center">
   <a href="https://www.npmjs.com/package/svelte-effect-runtime">npm</a>
   •
