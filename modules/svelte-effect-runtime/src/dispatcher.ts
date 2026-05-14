@@ -44,8 +44,11 @@ export interface PromiseOptions<R, E, A> {
  * @since 2.0.0
  */
 export class Dispatcher {
+  /** Registry of active cleanup handles, keyed by the returned dispose function itself. */
   #cleanups = new Set<Dispose>();
+  /** Cache of resolved values keyed by `"id::depsHash"`. */
   #values = new Map<string, unknown>();
+  /** Whether {@link dispose} has been called, blocking new forks. */
   #disposed = false;
 
   /**
@@ -55,7 +58,7 @@ export class Dispatcher {
   fork<R, E, A>(_effect: unknown): Dispose {
     if (this.#disposed) return () => {};
     let called = false;
-    const cleanup = () => {
+    const cleanup = (): void => {
       if (called) return;
       called = true;
       this.#cleanups.delete(cleanup);
@@ -70,8 +73,9 @@ export class Dispatcher {
    * effect completes.
    */
   value<R, E, A>(options: ValueOptions<R, E, A>): A {
-    const cacheKey = `${options.id}::${options.deps.map(String).join(",")}`;
-    const cached = this.#values.get(cacheKey);
+    /** Build a cache key from the stable id and a hash of the dependency array. */
+    const cache_key = `${options.id}::${options.deps.map(String).join(",")}`;
+    const cached = this.#values.get(cache_key);
     if (cached !== undefined) return cached as A;
     return options.fallback;
   }
@@ -105,7 +109,7 @@ export class Dispatcher {
   }
 }
 
-// Global dispatcher instance per component context
+/** Singleton dispatcher shared across all components when no explicit runtime is configured. */
 let current_dispatcher: Dispatcher | null = null;
 
 /**

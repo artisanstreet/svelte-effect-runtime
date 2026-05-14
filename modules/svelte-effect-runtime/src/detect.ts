@@ -52,6 +52,14 @@ export function is_function_boundary(node: ts.Node): boolean {
     ts.isSetAccessorDeclaration(node);
 }
 
+/**
+ * Returns `true` when the node is a binary expression shaped like
+ * `yield * operand` — a yield* delegate expression in TypeScript's AST.
+ *
+ * @since 2.0.0
+ * @param node - The node to check.
+ * @returns Whether the node is a `yield*` expression.
+ */
 function is_yield_star_expression(node: ts.Node): boolean {
   return ts.isBinaryExpression(node) &&
     node.operatorToken.kind === ts.SyntaxKind.AsteriskToken &&
