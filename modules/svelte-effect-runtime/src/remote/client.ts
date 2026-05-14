@@ -153,20 +153,36 @@ export function create_remote_command_adapter<Input, Output>(
 
 /**
  * Creates a remote form adapter. Wraps SvelteKit's native form object
- * so that `.submit()` and `.validate()` return `Effect` values instead
- * of raw Promises.
+ * so that the form is **directly callable as an Effect** (just like
+ * Query and Command) while still exposing `.submit()`, `.validate()`,
+ * `.enhance()` and other form methods as properties on the callable.
+ *
+ * @example
+ * ```ts
+ * const myForm = Form(handler);
+ *
+ * // Call directly — same API as Query / Command
+ * const result = yield* myForm(input);
+ *
+ * // Or use the explicit .submit() method
+ * const same = yield* myForm.submit(input);
+ *
+ * // Validation and progressive enhancement still work
+ * const issues = yield* myForm.validate();
+ * <form use:myForm.enhance>...</form>
+ * ```
  *
  * @since 2.0.0
  * @param native_factory - SvelteKit's native form factory.
  * @param decode_payload - Function to decode the response payload.
  * @param base - The base path for SvelteKit server endpoints.
- * @returns An enhanced form object with Effect-returning methods.
+ * @returns A callable form function whose properties mirror the native form.
  */
 export function create_remote_form_adapter<Input, Output>(
   native_factory: unknown,
   decode_payload: (value: unknown) => unknown,
   base: string,
-): Record<string, unknown> {
+): ((input: Input) => Effect.Effect<Output, RemoteFailure<unknown>>) & Record<string, unknown> {
 
   const form_obj = native_factory as Record<string, unknown>;
 
@@ -175,8 +191,10 @@ export function create_remote_form_adapter<Input, Output>(
     | ((input: Input) => Promise<Response>)
     | undefined;
 
+  let submit_effect: (input: Input) => Effect.Effect<Output, RemoteFailure<unknown>>;
+
   if (original_submit) {
-    form_obj.submit = (input: Input) =>
+    submit_effect = (input: Input) =>
 
       Effect.promise<Output>(async () => {
         try {
@@ -192,7 +210,14 @@ export function create_remote_form_adapter<Input, Output>(
         } catch (err: unknown) {
           throw create_remote_transport_error(err);
         }
-      }) as unknown;
+      }) as Effect.Effect<Output, RemoteFailure<unknown>>;
+  } else {
+    submit_effect = () =>
+      Effect.fail(
+        create_remote_transport_error(
+          new Error("Form has no submit method"),
+        ),
+      ) as Effect.Effect<Output, RemoteFailure<unknown>>;
   }
 
   /** Wrap .validate() to return an Effect. */
@@ -200,8 +225,12 @@ export function create_remote_form_adapter<Input, Output>(
     | ((opts?: Record<string, unknown>) => Promise<{ issues?: readonly FormIssue[]; valid: boolean }>)
     | undefined;
 
+  let validate_effect:
+    | ((opts?: Record<string, unknown>) => Effect.Effect<{ issues?: readonly FormIssue[]; valid: boolean }, RemoteFailure<unknown>>)
+    | undefined;
+
   if (original_validate) {
-    form_obj.validate = (opts?: Record<string, unknown>) =>
+    validate_effect = (opts?: Record<string, unknown>) =>
 
       Effect.promise<{ issues?: readonly FormIssue[]; valid: boolean }>(
         async () => {
@@ -211,8 +240,26 @@ export function create_remote_form_adapter<Input, Output>(
             throw create_remote_transport_error(err);
           }
         },
-      ) as unknown;
+      ) as Effect.Effect<{ issues?: readonly FormIssue[]; valid: boolean }, RemoteFailure<unknown>>;
   }
 
-  return form_obj;
+  /**
+   * Build the callable: calling the function delegates to .submit(),
+   * and all form methods/properties are attached as own properties.
+   */
+  const callable = (input: Input) => submit_effect(input);
+  callable.submit = submit_effect;
+
+  if (validate_effect) {
+    callable.validate = validate_effect;
+  }
+
+  /** Copy remaining form properties (enhance, for, action, etc.). */
+  for (const key of Object.keys(form_obj)) {
+    if (key !== "submit" && key !== "validate" && !(key in callable)) {
+      (callable as Record<string, unknown>)[key] = form_obj[key];
+    }
+  }
+
+  return callable as typeof callable & Record<string, unknown>;
 }
