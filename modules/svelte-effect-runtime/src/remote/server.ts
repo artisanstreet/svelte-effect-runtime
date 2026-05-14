@@ -46,16 +46,19 @@ function handle_failure(
   error: (status: number, body: unknown) => never,
 ): never {
 
-  const failures = Cause.failures(cause);
+  const reasons = (cause as unknown as { reasons: Array<{ _tag: string; error?: unknown }> }).reasons;
 
-  for (const failure of failures) {
-    if (
-      typeof failure === "object" &&
-      failure !== null &&
-      (failure as Record<string, unknown>)._tag === "FormError"
-    ) {
-      const issues = (failure as { issues?: readonly FormIssue[] }).issues ?? [];
-      invalid(400, { issues });
+  for (const reason of reasons) {
+    if (Cause.isFailReason(reason)) {
+      const failure = reason.error;
+      if (
+        typeof failure === "object" &&
+        failure !== null &&
+        (failure as Record<string, unknown>)._tag === "FormError"
+      ) {
+        const issues = (failure as { issues?: readonly FormIssue[] }).issues ?? [];
+        invalid(400, { issues });
+      }
     }
   }
 
@@ -74,14 +77,17 @@ function handle_failure(
  */
 export function encode_remote_failure(cause: Cause.Cause<unknown>): string {
 
-  const failures = Cause.failures(cause);
+  const reasons = (cause as unknown as { reasons: Array<{ _tag: string; error?: unknown }> }).reasons;
 
-  for (const failure of failures) {
-    if (typeof failure === "object" && failure !== null) {
-      try {
-        return JSON.stringify(failure);
-      } catch {
-        continue;
+  for (const reason of reasons) {
+    if (Cause.isFailReason(reason)) {
+      const failure = reason.error;
+      if (typeof failure === "object" && failure !== null) {
+        try {
+          return JSON.stringify(failure);
+        } catch {
+          continue;
+        }
       }
     }
   }

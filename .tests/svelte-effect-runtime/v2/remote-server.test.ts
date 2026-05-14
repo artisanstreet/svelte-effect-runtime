@@ -78,8 +78,8 @@ Deno.test("encode_remote_failure serialises a tagged error from a Cause", () => 
 });
 
 Deno.test("encode_remote_failure handles cause with no failures gracefully", () => {
-  /** A synthetic Cause with no failures array. */
-  const cause = { _tag: "Fail", failures: [] };
+  /** A v4-style Cause with empty reasons array. */
+  const cause = { reasons: [] };
   const encoded = encode_remote_failure(cause);
   const parsed = JSON.parse(encoded);
 

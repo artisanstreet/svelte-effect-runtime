@@ -94,20 +94,25 @@ Deno.test("non-interrupt failures surface as uncaught errors", async () => {
 
 Deno.test("value returns the fallback synchronously before the effect resolves", () => {
   const d = make_dispatcher();
+  let resolve: ((v: string) => void) | undefined;
+  const deferred = new Promise<string>((r) => { resolve = r; });
 
   const result = d.value({
     id: "test",
     deps: [],
     fallback: "loading",
     factory: function* () {
-      return "resolved";
+      return yield* Effect.promise(() => deferred);
     },
   });
 
   assertEquals(result, "loading");
+
+  resolve!("ok");
+  d.dispose();
 });
 
-Deno.test("value returns the resolved value after the effect completes", async () => {
+Deno.test("value returns the resolved value after the effect completes", () => {
   const d = make_dispatcher();
 
   const opts: ValueOptions<string> = {
@@ -121,13 +126,13 @@ Deno.test("value returns the resolved value after the effect completes", async (
 
   d.value(opts);
 
-  await sleep(50);
-
   const result = d.value(opts);
   assertEquals(result, "resolved");
+
+  d.dispose();
 });
 
-Deno.test("value caches the result by id + deps key", async () => {
+Deno.test("value caches the result by id + deps key", () => {
   const d = make_dispatcher();
 
   const opts: ValueOptions<number> = {
@@ -140,35 +145,36 @@ Deno.test("value caches the result by id + deps key", async () => {
   };
 
   d.value(opts);
-  await sleep(50);
 
-  // Same opts should return cached result
   const result = d.value(opts);
   assertEquals(result, 42);
+
+  d.dispose();
 });
 
 Deno.test("value starts a new fiber when deps change", async () => {
   const d = make_dispatcher();
   let call_count = 0;
 
+  const factory = function* () {
+    call_count += 1;
+    const c = call_count;
+    yield* Effect.sleep("10 millis");
+    return c;
+  };
+
   const opts1: ValueOptions<number> = {
     id: "dynamic",
     deps: ["a"],
     fallback: 0,
-    factory: function* () {
-      call_count += 1;
-      return call_count;
-    },
+    factory,
   };
 
   const opts2: ValueOptions<number> = {
     id: "dynamic",
     deps: ["b"],
     fallback: 0,
-    factory: function* () {
-      call_count += 1;
-      return call_count;
-    },
+    factory,
   };
 
   // Start with deps=["a"]

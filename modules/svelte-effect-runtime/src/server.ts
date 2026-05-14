@@ -1,4 +1,4 @@
-import { type Effect, type Layer, ManagedRuntime, Context } from "effect";
+import { Effect, type Layer, ManagedRuntime, Context } from "effect";
 import {
   error as svelte_error,
   invalid as svelte_invalid,
@@ -34,7 +34,7 @@ import {
  *
  * @since 2.0.0
  */
-export const RequestEvent = Context.GenericTag<RequestEvent>(
+export const RequestEvent = Context.Reference<RequestEvent>(
   "@ser/RequestEvent",
 );
 
@@ -157,7 +157,7 @@ function make_remote_wrapper(
     try {
       const result = handler(event, rest[0]);
 
-      const effect: Effect.Effect<unknown, unknown> = Context.provide(
+      const effect: Effect.Effect<unknown, unknown> = Effect.provideService(
         result as Effect.Effect<unknown, unknown>,
         RequestEvent,
         event,

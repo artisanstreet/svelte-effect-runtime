@@ -88,32 +88,21 @@ export function create_remote_query_adapter<Input, Output>(
 
   return (input: Input) =>
 
-    Effect.async<Output, RemoteFailure<unknown>>((resume) => {
-      void (async () => {
-        try {
-          const response = await call(input);
+    Effect.promise<Output>(async () => {
+      try {
+        const response = await call(input);
 
-          if (!response.ok) {
-            const body = await response.json().catch(() => undefined);
-            resume(
-              Effect.fail(
-                decode_remote_error(body, decode_payload as (s: string) => unknown) as
-                  RemoteFailure<unknown>,
-              ),
-            );
-            return;
-          }
-
-          const data = await response.json();
-          const decoded = decode_payload(data) as Output;
-          resume(Effect.succeed(decoded));
-        } catch (err: unknown) {
-          resume(
-            Effect.fail(create_remote_transport_error(err)),
-          );
+        if (!response.ok) {
+          const body = await response.json().catch(() => undefined);
+          throw decode_remote_error(body, decode_payload as (s: string) => unknown);
         }
-      })();
-    });
+
+        const data = await response.json();
+        return decode_payload(data) as Output;
+      } catch (err: unknown) {
+        throw create_remote_transport_error(err);
+      }
+    }) as Effect.Effect<Output, RemoteFailure<unknown>>;
 }
 
 /**
@@ -146,36 +135,25 @@ export function create_remote_command_adapter<Input, Output>(
 
   return (input: Input) =>
 
-    Effect.async<Output, RemoteFailure<unknown>>((resume) => {
+    Effect.promise<Output>(async () => {
       count.value += 1;
 
-      void (async () => {
-        try {
-          const response = await call(input);
+      try {
+        const response = await call(input);
 
-          if (!response.ok) {
-            const body = await response.json().catch(() => undefined);
-            resume(
-              Effect.fail(
-                decode_remote_error(body, decode_payload as (s: string) => unknown) as
-                  RemoteFailure<unknown>,
-              ),
-            );
-            return;
-          }
-
-          const data = await response.json();
-          const decoded = decode_payload(data) as Output;
-          resume(Effect.succeed(decoded));
-        } catch (err: unknown) {
-          resume(
-            Effect.fail(create_remote_transport_error(err)),
-          );
-        } finally {
-          count.value -= 1;
+        if (!response.ok) {
+          const body = await response.json().catch(() => undefined);
+          throw decode_remote_error(body, decode_payload as (s: string) => unknown);
         }
-      })();
-    });
+
+        const data = await response.json();
+        return decode_payload(data) as Output;
+      } catch (err: unknown) {
+        throw create_remote_transport_error(err);
+      } finally {
+        count.value -= 1;
+      }
+    }) as Effect.Effect<Output, RemoteFailure<unknown>>;
 }
 
 /**
@@ -205,21 +183,41 @@ export function create_remote_form_adapter<Input, Output>(
   if (original_submit) {
     form_obj.submit = (input: Input) =>
 
-      Effect.async<Output, RemoteFailure<unknown>>((resume) => {
-        void (async () => {
-          try {
-            const response = await original_submit(input);
+      Effect.promise<Output>(async () => {
+        try {
+          const response = await original_submit(input);
 
-            if (!response.ok) {
-              const body = await response.json().catch(() => undefined);
-              resume(
-                Effect.fail(
-                  decode_remote_error(body, decode_payload as (s: string) => unknown) as
-                    RemoteFailure<unknown>,
-                ),
-              );
-              return;
-            }
+          if (!response.ok) {
+            const body = await response.json().catch(() => undefined);
+            throw decode_remote_error(body, decode_payload as (s: string) => unknown);
+          }
+
+          const data = await response.json();
+          return decode_payload(data) as Output;
+        } catch (err: unknown) {
+          throw create_remote_transport_error(err);
+        }
+      }) as unknown;
+  }
+
+  /** Wrap .validate() to return an Effect. */
+  const original_validate = form_obj.validate as
+    | ((opts?: Record<string, unknown>) => Promise<{ issues?: readonly FormIssue[]; valid: boolean }>)
+    | undefined;
+
+  if (original_validate) {
+    form_obj.validate = (opts?: Record<string, unknown>) =>
+
+      Effect.promise<{ issues?: readonly FormIssue[]; valid: boolean }>(
+        async () => {
+          try {
+            return await original_validate(opts);
+          } catch (err: unknown) {
+            throw create_remote_transport_error(err);
+          }
+        },
+      ) as unknown;
+  }
 
             const data = await response.json();
             const decoded = decode_payload(data) as Output;

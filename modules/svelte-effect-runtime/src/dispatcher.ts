@@ -158,11 +158,11 @@ export class Dispatcher {
     /** Watch the fiber and surface unhandled failures. */
     this.#runtime.runFork(
       Effect.gen(function* () {
-        const exit = yield* fiber.await;
+        const exit = yield* Fiber.await(fiber);
 
         self.#fibers.delete(key);
 
-        if (Exit.isFailure(exit) && !Cause.isInterruptedOnly(exit.cause)) {
+        if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) {
           queueMicrotask(() => {
             throw Cause.squash(exit.cause);
           });
@@ -242,13 +242,13 @@ export class Dispatcher {
       /** Watch the fiber and cache the result on success. */
       this.#runtime.runFork(
         Effect.gen(function* () {
-          const exit = yield* fiber.await;
+          const exit = yield* Fiber.await(fiber);
 
           self.#fibers.delete(cache_key);
 
           if (Exit.isSuccess(exit)) {
             self.#values.set(cache_key, exit.value);
-          } else if (!Cause.isInterruptedOnly(exit.cause)) {
+          } else if (!Cause.hasInterruptsOnly(exit.cause)) {
             queueMicrotask(() => {
               throw Cause.squash(exit.cause);
             });
