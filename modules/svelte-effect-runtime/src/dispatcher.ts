@@ -75,9 +75,8 @@ export class Dispatcher {
   value<R, E, A>(options: ValueOptions<R, E, A>): A {
     /** Build a cache key from the stable id and a hash of the dependency array. */
     const cache_key = `${options.id}::${options.deps.map(String).join(",")}`;
-    const cached = this.#values.get(cache_key);
-    if (cached !== undefined) return cached as A;
-    return options.fallback;
+
+    return (this.#values.get(cache_key) as A) ?? options.fallback;
   }
 
   /**
@@ -120,9 +119,8 @@ let current_dispatcher: Dispatcher | null = null;
  * @internal
  */
 export function get_dispatcher(): Dispatcher {
-  if (current_dispatcher === null) {
-    current_dispatcher = new Dispatcher();
-  }
+  current_dispatcher ??= new Dispatcher();
+
   return current_dispatcher;
 }
 

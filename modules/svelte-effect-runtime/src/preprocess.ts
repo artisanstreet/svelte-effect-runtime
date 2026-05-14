@@ -204,16 +204,12 @@ export function transform_script_effect(
    */
   const imports = make_imports(has_effect_import);
 
-  let insert_pos = 0;
-  for (const stmt of [...source_file.statements].reverse()) {
-    if (ts.isImportDeclaration(stmt)) {
-      insert_pos = stmt.end;
-      break;
-    }
-  }
+  const last_import = [...source_file.statements]
+    .reverse()
+    .find(ts.isImportDeclaration);
 
-  if (insert_pos > 0) {
-    magic.appendRight(insert_pos, "\n" + imports);
+  if (last_import) {
+    magic.appendRight(last_import.end, "\n" + imports);
   } else {
     magic.prepend(imports + "\n");
   }
@@ -243,19 +239,13 @@ export function transform_script_effect(
  * @returns A string of newline-separated import statements.
  */
 function make_imports(has_effect_import: boolean): string {
-  const lines: string[] = [];
-
-  lines.push(`import { onMount } from "svelte";`);
-
-  if (!has_effect_import) {
-    lines.push(`import { Effect } from "effect";`);
-  }
-
-  lines.push(
+  return [
+    `import { onMount } from "svelte";`,
+    !has_effect_import && `import { Effect } from "effect";`,
     `import { get_dispatcher } from "svelte-effect-runtime/generators";`,
-  );
-
-  return lines.join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 /**
@@ -662,13 +652,13 @@ function extract_yield_star_full_text(
   content: string,
 ): string {
 
-  let found = "";
+  let found: string | undefined;
 
   find_yield_star_node(expr, (node) => {
     found = slice_start(content, node).trim();
   });
 
-  return found || "undefined";
+  return found ?? "undefined";
 }
 
 /**
