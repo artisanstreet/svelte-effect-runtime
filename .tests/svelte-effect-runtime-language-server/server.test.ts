@@ -13,7 +13,7 @@ const require = createRequire(import.meta.url);
 const module_dir = path.dirname(fileURLToPath(import.meta.url));
 const language_server_root = path.join(
   path.dirname(require.resolve("svelte-language-server/package.json")),
-  "dist",
+  ".dist",
   "src",
 );
 const { DocumentManager, Document } = require(path.join(
