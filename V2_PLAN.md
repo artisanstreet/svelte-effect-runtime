@@ -35,7 +35,7 @@ Source → Detection → Extraction → Code Generation → Dispatcher
 | Markup helpers | `src/markup/` | ⚠️ Phase 2 |
 | Remote adapters | `src/remote/` | ❌ Phase 3 |
 
-**Test suite**: 86 tests, 0 failures, ~2s
+**Test suite**: 90 tests, 0 failures, ~1s
 
 ---
 

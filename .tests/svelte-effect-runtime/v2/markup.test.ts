@@ -62,6 +62,16 @@ Deno.test("rewrites {#if yield* expr} in condition", () => {
   if (!result.has_yield) throw new Error("has_yield should be true");
 });
 
+Deno.test("rewrites {:else if yield* expr} in alternate condition", () => {
+  const source = `{#if a}{:else if yield* checkFlag()}<p>flag</p>{/if}`;
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `__ser_markup_value`);
+  assertStringIncludes(result.code, `checkFlag`);
+  assertStringIncludes(result.code, `:else if`);
+  if (!result.has_yield) throw new Error("has_yield should be true");
+});
+
 Deno.test("rewrites {#each yield* expr as item} in list", () => {
   const source = `{#each yield* getItems() as item}<li>{item}</li>{/each}`;
   const result = transform_markup_effect(source, "Test.svelte");
@@ -78,6 +88,15 @@ Deno.test("rewrites {#await yield* expr} as promise() call", () => {
 
   assertStringIncludes(result.code, `__ser_markup_promise`);
   assertStringIncludes(result.code, `loadData`);
+  if (!result.has_yield) throw new Error("has_yield should be true");
+});
+
+Deno.test("rewrites {#await yield* expr} with :catch clause", () => {
+  const source = `{#await yield* fetchUser()}<p>loading</p>{:then u}<p>{u.name}</p>{:catch err}<p>Error: {err.message}</p>{/await}`;
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `__ser_markup_promise`);
+  assertStringIncludes(result.code, `fetchUser`);
   if (!result.has_yield) throw new Error("has_yield should be true");
 });
 
@@ -212,4 +231,20 @@ Deno.test("does not choke on template literal expressions", () => {
   const result = transform_markup_effect(source, "Test.svelte");
 
   assertStringIncludes(result.code, `__ser_markup_value`);
+});
+
+Deno.test("rewrites {@html yield* expr} in raw HTML insertion", () => {
+  const source = `{@html yield* renderMarkup()}`;
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `__ser_markup_value`);
+  assertStringIncludes(result.code, `renderMarkup`);
+});
+
+Deno.test("rewrites {@debug yield* expr} in debug expression", () => {
+  const source = `{@debug yield* inspectVars()}`;
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `__ser_markup_value`);
+  assertStringIncludes(result.code, `inspectVars`);
 });

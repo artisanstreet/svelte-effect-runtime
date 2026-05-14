@@ -341,7 +341,7 @@ function collect_replacements(
 
   walk_ast(ast.fragment, by_placeholder, matched, replacements);
 
-  return replacements.sort((a, b) => a.start - b.start);
+  return replacements;
 }
 
 function walk_ast(
@@ -471,8 +471,18 @@ function visit_ast_node(
   }
 }
 
+interface ElementLikeNode {
+  attributes: Array<{
+    type: string;
+    name?: string;
+    value?: unknown;
+    expression?: unknown;
+  }>;
+  fragment: AST.Fragment;
+}
+
 function visit_element_attributes(
-  node: AST.RegularElement,
+  node: ElementLikeNode,
   candidates: Map<string, MarkupCandidate>,
   matched: Set<string>,
   replacements: Replacement[],
@@ -480,6 +490,7 @@ function visit_element_attributes(
   for (const attr of node.attributes) {
     if (
       attr.type === "Attribute" &&
+      attr.name &&
       (attr.name.startsWith("on:") || /^on[a-z]/.test(attr.name))
     ) {
       visit_attribute_value(
@@ -689,7 +700,7 @@ function is_property_access_name(node: ts.Identifier): boolean {
 // ─── Import injection ────────────────────────────────────────
 
 function inject_helpers(magic: MagicString, content: string): void {
-  if (content.includes(HELPERS.value)) return;
+  if (content.includes(`"svelte-effect-runtime/generators"`)) return;
 
   const helper_block = [
     `import { value as ${HELPERS.value} } from "svelte-effect-runtime/generators";`,
