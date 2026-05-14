@@ -4,7 +4,7 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "rootDir": ".",
-    "outDir": "./dist",
+    "outDir": "./.dist",
     "declaration": true,
     "verbatimModuleSyntax": true,
     "strict": true,

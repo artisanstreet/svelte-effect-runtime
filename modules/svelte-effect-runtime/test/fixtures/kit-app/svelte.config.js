@@ -1,6 +1,6 @@
 import adapter from "@sveltejs/adapter-static";
 import { fileURLToPath, URL } from "node:url";
-import { effectPreprocess } from "../../../dist/preprocess.js";
+import { effectPreprocess } from "../../../.dist/preprocess.js";
 
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
 

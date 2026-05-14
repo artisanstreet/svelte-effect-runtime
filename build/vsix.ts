@@ -9,13 +9,13 @@ const package_dir = join(
 );
 const output_dir = join(
   repo_root,
-  "dist",
+  ".dist",
   "svelte-effect-runtime-vscode-extension",
 );
 const staging_dir = await Deno.makeTempDir({
   prefix: "svelte-effect-runtime-vsix-",
 });
-const staging_dist_dir = join(staging_dir, "dist");
+const staging_dist_dir = join(staging_dir, ".dist");
 const required_runtime_dependencies = [
   "svelte-language-server",
 ];

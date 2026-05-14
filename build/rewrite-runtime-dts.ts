@@ -5,7 +5,7 @@ const dist_root = join(
   repo_root,
   "modules",
   "svelte-effect-runtime",
-  "dist",
+  ".dist",
 ).replaceAll("\\", "/");
 
 const alias_patterns = [

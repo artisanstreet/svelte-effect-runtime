@@ -12,64 +12,64 @@
     "access": "public"
   },
   "files": [
-    "dist",
+    ".dist",
     "README.md"
   ],
   "exports": {
     ".": {
-      "types": "./dist/root-node.d.ts",
-      "node": "./dist/root-node.js",
-      "default": "./dist/mod.js"
+      "types": "./.dist/root-node.d.ts",
+      "node": "./.dist/root-node.js",
+      "default": "./.dist/mod.js"
     },
     "./v3": {
-      "types": "./dist/root-node.d.ts",
-      "node": "./dist/root-node.js",
-      "default": "./dist/mod.js"
+      "types": "./.dist/root-node.d.ts",
+      "node": "./.dist/root-node.js",
+      "default": "./.dist/mod.js"
     },
     "./v4": {
-      "types": "./dist/v4/root-node.d.ts",
-      "node": "./dist/v4/root-node.js",
-      "default": "./dist/v4/mod.js"
+      "types": "./.dist/v4/root-node.d.ts",
+      "node": "./.dist/v4/root-node.js",
+      "default": "./.dist/v4/mod.js"
     },
     "./preprocess": {
-      "types": "./dist/preprocess.d.ts",
-      "default": "./dist/preprocess.js"
+      "types": "./.dist/preprocess.d.ts",
+      "default": "./.dist/preprocess.js"
     },
     "./v3/preprocess": {
-      "types": "./dist/preprocess.d.ts",
-      "default": "./dist/preprocess.js"
+      "types": "./.dist/preprocess.d.ts",
+      "default": "./.dist/preprocess.js"
     },
     "./vite": {
-      "types": "./dist/vite.d.ts",
-      "default": "./dist/vite.js"
+      "types": "./.dist/vite.d.ts",
+      "default": "./.dist/vite.js"
     },
     "./v3/vite": {
-      "types": "./dist/vite.d.ts",
-      "default": "./dist/vite.js"
+      "types": "./.dist/vite.d.ts",
+      "default": "./.dist/vite.js"
     },
     "./v4/preprocess": {
-      "types": "./dist/v4/preprocess.d.ts",
-      "default": "./dist/v4/preprocess.js"
+      "types": "./.dist/v4/preprocess.d.ts",
+      "default": "./.dist/v4/preprocess.js"
     },
     "./v4/vite": {
-      "types": "./dist/v4/vite.d.ts",
-      "default": "./dist/v4/vite.js"
+      "types": "./.dist/v4/vite.d.ts",
+      "default": "./.dist/v4/vite.js"
     },
     "./_server": {
-      "types": "./dist/server.d.ts",
-      "default": "./dist/server.js"
+      "types": "./.dist/server.d.ts",
+      "default": "./.dist/server.js"
     },
     "./v3/_server": {
-      "types": "./dist/server.d.ts",
-      "default": "./dist/server.js"
+      "types": "./.dist/server.d.ts",
+      "default": "./.dist/server.js"
     },
     "./v4/_server": {
-      "types": "./dist/v4/server.d.ts",
-      "default": "./dist/v4/server.js"
+      "types": "./.dist/v4/server.d.ts",
+      "default": "./.dist/v4/server.js"
     },
     "./language-server": {
-      "types": "./dist/language-server.d.ts",
-      "default": "./dist/language-server.js"
+      "types": "./.dist/language-server.d.ts",
+      "default": "./.dist/language-server.js"
     }
   },
   "scripts": {

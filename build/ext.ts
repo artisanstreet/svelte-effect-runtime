@@ -11,10 +11,10 @@ const package_dir = fromFileUrl(
 const repo_root = resolve(dirname(fromFileUrl(import.meta.url)), "..");
 const output_dir = join(
   repo_root,
-  "dist",
+  ".dist",
   "svelte-effect-runtime-vscode-extension",
 );
-const package_dist = join(package_dir, "dist");
+const package_dist = join(package_dir, ".dist");
 const package_runtime_dir = join(package_dir, "runtime");
 const output_runtime_dir = join(output_dir, "runtime");
 

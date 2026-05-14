@@ -11,10 +11,10 @@ const package_dir = fromFileUrl(
 const repo_root = resolve(dirname(fromFileUrl(import.meta.url)), "..");
 const output_dir = join(
   repo_root,
-  "dist",
+  ".dist",
   "svelte-effect-runtime-language-server",
 );
-const package_dist = join(package_dir, "dist");
+const package_dist = join(package_dir, ".dist");
 
 await Deno.remove(output_dir, { recursive: true }).catch(() => undefined);
 await Deno.mkdir(output_dir, { recursive: true });

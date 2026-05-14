@@ -23,9 +23,10 @@
   "tasks": {
     "build": "deno task clean && deno run -A ../../build/runtime.ts && tsc -p tsconfig.build.json --emitDeclarationOnly && deno run -A ../../build/rewrite-runtime-dts.ts",
     "check": "deno check --node-modules-dir=auto mod.ts root-node.ts effect.ts client.ts server.ts preprocess.ts vite.ts v4/mod.ts v4/root-node.ts v4/effect.ts v4/preprocess.ts v4/server.ts v4/vite.ts tests/shared/*.ts tests/v3/*.test.ts tests/v4/*.test.ts",
-    "clean": "rm -rf dist ../../dist/svelte-effect-runtime",
+    "clean": "rm -rf .dist ../../.dist/svelte-effect-runtime",
     "smoke:v4": "deno run -A ../../build/v4-package-smoke.ts",
-    "test": "deno test --node-modules-dir=auto -A tests/v3 tests/v4",
+    "test": "deno task test:v2 && deno test --node-modules-dir=auto -A tests/v3 tests/v4",
+    "test:v2": "cd ../../.tests/svelte-effect-runtime && deno test --no-check -A v2",
     "coverage": "deno test --node-modules-dir=auto -A --coverage=.coverage tests/v3 tests/v4 && deno coverage .coverage",
     "fmt": "deno fmt",
     "lint": "deno lint"

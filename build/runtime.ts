@@ -6,8 +6,8 @@ const package_dir = fromFileUrl(
   new URL("../modules/svelte-effect-runtime/", import.meta.url),
 );
 const repo_root = resolve(dirname(fromFileUrl(import.meta.url)), "..");
-const output_dir = join(repo_root, "dist", "svelte-effect-runtime");
-const package_dist = join(package_dir, "dist");
+const output_dir = join(repo_root, ".dist", "svelte-effect-runtime");
+const package_dist = join(package_dir, ".dist");
 
 await Deno.mkdir(output_dir, { recursive: true });
 await Deno.remove(package_dist, { recursive: true }).catch(() => undefined);

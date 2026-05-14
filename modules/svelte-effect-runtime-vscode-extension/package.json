@@ -22,11 +22,11 @@
     "svelte.svelte-vscode"
   ],
   "files": [
-    "dist",
+    ".dist",
     "node_modules",
     "README.md"
   ],
-  "main": "./dist/extension.js",
+  "main": "./.dist/extension.js",
   "contributes": {
     "commands": [
       {

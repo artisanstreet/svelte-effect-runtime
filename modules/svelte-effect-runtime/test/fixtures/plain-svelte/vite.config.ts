@@ -1,6 +1,6 @@
 import { fileURLToPath, URL } from "node:url";
 import { defineConfig } from "vite";
-import { svelteEffectRuntime } from "../../../dist/vite.js";
+import { svelteEffectRuntime } from "../../../.dist/vite.js";
 
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const fixtureRoot = fileURLToPath(new URL(".", import.meta.url));

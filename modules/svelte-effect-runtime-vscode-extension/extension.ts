@@ -7,7 +7,7 @@ const STATE_PREVIOUS_PATH = "svelteEffectRuntime.previousLsPath";
 const STATE_MANAGED_PATH = "svelteEffectRuntime.managedLsPath";
 
 export async function activate(context: vscode.ExtensionContext) {
-  const server_path = context.asAbsolutePath("dist/server.js");
+  const server_path = context.asAbsolutePath(".dist/server.js");
 
   context.subscriptions.push(
     vscode.commands.registerCommand(

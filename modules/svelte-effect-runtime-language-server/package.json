@@ -4,9 +4,9 @@
   "version": "1.6.2",
   "license": "BSD-3-Clause",
   "type": "commonjs",
-  "main": "./dist/server.cjs",
+  "main": "./.dist/server.cjs",
   "bin": {
-    "svelte-effect-runtime-language-server": "./dist/server.cjs"
+    "svelte-effect-runtime-language-server": "./.dist/server.cjs"
   },
   "scripts": {
     "build": "deno task build",

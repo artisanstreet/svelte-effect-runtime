@@ -108,7 +108,7 @@ function resolve_runtime_import_root(package_root: string) {
     "..",
     "svelte-effect-runtime",
   );
-  const workspace_runtime_root = path.join(workspace_source_root, "dist");
+  const workspace_runtime_root = path.join(workspace_source_root, ".dist");
 
   if (
     typeof Deno !== "undefined" &&

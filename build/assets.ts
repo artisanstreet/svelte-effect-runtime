@@ -8,7 +8,7 @@ if (!target) {
 }
 
 const repo_root = resolve(dirname(fromFileUrl(import.meta.url)), "..");
-const runtime_dist = join(repo_root, "dist", "svelte-effect-runtime");
+const runtime_dist = join(repo_root, ".dist", "svelte-effect-runtime");
 const runtime_manifest_path = join(
   repo_root,
   "modules",
@@ -16,14 +16,14 @@ const runtime_manifest_path = join(
   "package.json",
 );
 const package_dir = join(repo_root, "modules", target);
-const target_dist_dir = join(repo_root, "dist", target);
+const target_dist_dir = join(repo_root, ".dist", target);
 const runtime_dir = join(target_dist_dir, "runtime");
 const package_runtime_dir = join(package_dir, "runtime");
 
 try {
   await Deno.stat(runtime_dist);
 } catch {
-  throw new Error(`Runtime dist not found at ${runtime_dist}`);
+  throw new Error(`Runtime .dist not found at ${runtime_dist}`);
 }
 
 await Deno.mkdir(target_dist_dir, { recursive: true });
