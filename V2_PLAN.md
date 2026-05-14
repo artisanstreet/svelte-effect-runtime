@@ -1,5 +1,9 @@
 # V2 Plan — Svelte Effect Runtime
 
+## Status
+
+**Current**: Preprocessor ✅ | Detection ✅ | Dispatcher stubs | Markup transform ❌ | Runtime ❌ | Vite plugin ❌
+
 ## Architecture
 
 A unified **dispatcher** manages the fiber lifecycle of every effect block. The
@@ -14,218 +18,115 @@ Source → Detection → Extraction → Code Generation → Dispatcher
                                        run()                promise()
 ```
 
+## What's done
+
+| Component | File | Status |
+|-----------|------|--------|
+| yield* detection | `src/detect.ts` | ✅ 17 tests |
+| Dispatcher class | `src/dispatcher.ts` | ⚠️ stub — `fork`, `value`, `promise`, `run` all return placeholders |
+| Script preprocessor | `src/preprocess.ts` | ✅ 22 tests — `transform_script_effect` handles all lowering patterns |
+| Markup preprocessor | `src/preprocess.ts` | ❌ `transform_markup_effect` throws "not implemented" |
+| Generators barrel | `src/generators.ts` | ✅ exports `get_dispatcher` only |
+| Lowering helper | `src/lowering.ts` | ⚠️ `extract_yield_stars` throws "not implemented" (not currently used) |
+| Error classes | `src/error.ts` | ✅ `TopLevelAwaitError`, `YieldStarInRuneError`, `PreprocessError` |
+| Public API barrel | `src/mod.ts` | ✅ |
+| Vite plugin | `src/vite.ts` | ❌ not created |
+| Server runtime | `src/server.ts` | ❌ not created |
+| Markup helpers | `src/markup/` | ❌ not created |
+| Remote adapters | `src/remote/` | ❌ not created |
+
 ## Generated code conventions
+
+All as-designed and implemented:
 
 | Convention | Example |
 |-----------|---------|
-| User-visible functions from `generators` | `onMount`, `Effect`, `get_dispatcher`, `value`, `promise`, `run` — clean names, no prefix |
-| Generated temp bindings | `__SER__user`, `__SER__post`, `__SER__0` — `__SER__` prefix + original variable name or index |
+| Generated temp bindings | `__SER__user`, `__SER__post`, `__SER__0` |
 | Generated program | `__SER__program` |
 | Generator imports | `import { get_dispatcher } from "svelte-effect-runtime/generators"` |
-| Effect import | `import { Effect } from "effect"` — Effect is a peer dependency, never re-exported by SER |
+| `onMount` import | emitted directly: `import { onMount } from "svelte"` — NOT re-exported |
+| `Effect` import | emitted directly: `import { Effect } from "effect"` — peer dep, NOT re-exported |
 
-Generated temp names derive from the original binding name where possible:
+## Preprocessor — verified lowering patterns
 
-- `const user = yield* getUser(id)` → `__SER__user`
-- `const post = await getPost(id)` → `__SER__post`
-- `const { a, b } = yield* getPair()` → `__SER__pair` (destructuring temp)
-- `yield* logView(id)` → `__SER__0` (bare statement, no binding name)
+All verified by 22 tests in `preprocess.test.ts`:
 
-## Preprocessor detection rules
-
-The preprocessor asks one question: does a top-level expression contain `yield*`
-outside any function boundary?
-
-### Patterns that are lowered
-
-```svelte
-<script lang="ts" effect>
-  // ─── All of these trigger lowering ───
-
-  let user = $state(yield* getUser(id));
-
-  let count = $state(0);
-  count = yield* getCount();
-
-  const post = yield* getPost(id);
-
-  const { title, body } = yield* getPost(id);
-
-  let msg = $derived(yield* format(user) + "!");
-
-  let stats = $derived.by(() => yield* computeStats(user));
-
-  let raw = $state.raw(yield* getRaw(id));
-
-  $inspect(yield* debugInfo());
-
-  yield* logView(user.id);
-
-  // ─── NOT lowered (no top-level yield*) ───
-
-  $effect(() => { yield* doThing(); });  // yield* inside () => function boundary
-  const name = formatName(user);         // no yield*
-  let x = $state(42);                    // no yield*
-  import { foo } from "./bar";           // not an expression
-</script>
+```
+$state(yield* expr)       ✅  temp + preserved $state() wrapper
+const x = yield* expr     ✅  becomes let x = $state(temp)
+const {a,b} = yield*      ✅  destructuring with individual $state per name
+$derived(yield* x + 1)    ✅  $derived() preserved, yield* swapped
+$state.raw(yield* expr)   ✅  .raw preserved
+$inspect(yield* expr)     ✅  call expression lowered
+count = yield* expr       ✅  assignment expression extracted
+yield* logView(id)        ✅  bare yield* moved to effect body
+yield* inside () =>       ✅  NOT lowered (function boundary)
+yield* in Effect.gen       ✅  NOT lowered (nested generator)
+await top-level            ✅  rejected with TopLevelAwaitError
+No yield* at all           ✅  identity pass-through
 ```
 
-### Lowering rules
+## What's next
 
-For each expression containing `yield*`:
+### Phase 1 — finish the runtime (highest priority)
 
-1. Extract the `yield* expr` sub-expression into a temp `$state` binding
-2. Replace the `yield* expr` span in the original expression with the temp ref
-3. Emit the assignment `__SER__name = yield* expr` in the effect body
+1. **Implement `Dispatcher.fork()`** — actually run effects via `ManagedRuntime`, manage fiber lifecycle, wire up cleanup
+2. **Implement `Dispatcher.value()`** — cache results by `id::depsHash`, return fallback before resolved, wire into `$state`
+3. **Implement `Dispatcher.promise()`** — return a promise that resolves when the effect completes
+4. **Implement `Dispatcher.run()`** — fire-and-forget for event handlers
+5. **Add runtime tests** — verify fibers start, complete, cancel, and fail correctly
 
-The surrounding expression (whether `$state(...)`, `$derived(...)`, `$state.raw(...)`, a plain `const`, etc.) is preserved character-for-character — only the `yield*` span is swapped.
+### Phase 2 — finish the preprocessor
 
-## Generated output examples
+6. **Implement `transform_markup_effect()`** — detect `{yield* expr}` in template braces, emit `value()`/`promise()`/`run()` calls
+7. **Create `src/markup/value.ts`** — runtime helper for value expressions in markup
+8. **Create `src/markup/promise.ts`** — runtime helper for `{#await}` blocks
+9. **Create `src/markup/run.ts`** — runtime helper for event handlers
 
-### Input
+### Phase 3 — server & tooling
 
-```svelte
-<script lang="ts" effect>
-  import { getUser, getPost } from "./api";
+10. **Create `src/server.ts`** — ServerRuntime, Query, Command, Form, Prerender (Effect v4 only)
+11. **Create `src/vite.ts`** — Vite plugin for SvelteKit remote function integration
+12. **Create `src/remote/shared.ts`** — RemoteFailure, FormError, serialization types
+13. **Create `src/remote/server.ts`** — server-side remote handlers
+14. **Create `src/remote/client.ts`** — client-side remote adapters
 
-  let user = $state(yield* getUser(id));
+### Phase 4 — polish
 
-  let count = $state(0);
-  count = yield* getCount();
+15. Remove stubs from `dispatcher.ts` — delete `reset_dispatcher()` or implement it properly
+16. Implement `src/lowering.ts` — `extract_yield_stars()` or remove it
+17. Integration test: full pipeline from `.svelte` file → preprocessor → dispatcher → mounted component
 
-  const { title, body } = yield* getPost(user.id);
-
-  yield* logView(user.id);
-
-  let message = $derived(yield* format(user) + "!");
-
-  let display = $state("loading...");
-
-  $effect(() => {
-    document.title = `${user.name} - ${title}`;
-  });
-</script>
-
-<h1>{display}</h1>
-<p>{title} by {user.name}</p>
-<small>{yield* renderDate()}</small>
-```
-
-### Generated script
-
-```js
-import { onMount } from "svelte";
-import { Effect } from "effect";
-import { get_dispatcher } from "svelte-effect-runtime/generators";
-import { getUser, getPost } from "./api";
-
-let __SER__user = $state(undefined);
-let __SER__count = $state(undefined);
-let __SER__post = $state(undefined);
-let __SER__0 = $state(undefined);
-let __SER__msg = $state(undefined);
-
-let user = $state(__SER__user);
-
-let count = $state(0);
-count = __SER__count;
-
-let title = $state(undefined);
-let body = $state(undefined);
-
-let message = $derived(__SER__msg + "!");
-
-let display = $state("loading...");
-
-$effect(() => {
-  document.title = `${user.name} - ${title}`;
-});
-
-const __SER__program = Effect.gen(function* () {
-  __SER__user = yield* getUser(id);
-  __SER__count = yield* getCount();
-  __SER__post = yield* getPost(user.id);
-  ({ title, body } = __SER__post);
-  yield* logView(user.id);
-  __SER__msg = yield* format(user);
-});
-
-onMount(() => {
-  const dispatcher = get_dispatcher();
-  const cleanup = dispatcher.fork(__SER__program);
-  import.meta.hot?.dispose(cleanup);
-  return cleanup;
-});
-```
-
-### Generated markup
-
-```html
-<h1>{display}</h1>
-<p>{title} by {user.name}</p>
-<small>{value({ id: "m-0", deps: [], fallback: undefined, factory: function* () { return (yield* renderDate()); } })}</small>
-```
-
-Markup helpers (`value`, `promise`, `run`) are also imported from `"svelte-effect-runtime/generators"` and injected into the instance `<script>` tag.
-
-## Runtime API
-
-### `svelte-effect-runtime/generators` (imported by generated code)
-
-```typescript
-// Re-exports for preprocessor-generated code only
-// These are NOT public API — users don't import this module directly
-
-export { onMount } from "svelte";
-export { get_dispatcher } from "./dispatcher";
-export { value } from "./markup/value";
-export { promise } from "./markup/promise";
-export { run } from "./markup/run";
-```
-
-Note: `Effect` is NOT re-exported. The preprocessor emits `import { Effect } from "effect"` directly. Effect is a peerDependency of SER.
-
-### `Dispatcher` (public API)
-
-```typescript
-class Dispatcher {
-  fork<R, E, A>(effect: Effect<R, E, A>): () => void;
-  value<R, E, A>(opts: ValueOptions<R, E, A>): A;
-  promise<R, E, A>(opts: PromiseOptions<R, E, A>): Promise<A>;
-  run<R, E, A>(effect: Effect<R, E, A>): Promise<A>;
-  dispose(): void;
-}
-```
-
-## What the preprocessor does NOT do
+## What the preprocessor does NOT do (by design, not by omission)
 
 | Not done | Why |
 |----------|-----|
 | Scope tracking of effect-bound bindings | User writes `$derived(format(user))` themselves |
 | Statement classification (hoisted vs lowered) | Single rule: does it contain top-level `yield*`? |
-| Helper thunk extraction (`__helper_N = () => expr`) | No longer needed — variables are `$state` signals that re-render |
-| `__Yielded<T>` type inference | Types come from explicit annotations or inference, not SER |
-| Source relocation mapping | V2 minimizes code movement; if needed, use offset tracking not string search |
-| Rune enumeration (`$effect`, `$derived`, etc.) | No special handling — they pass through unless they contain top-level `yield*` |
+| Helper thunk extraction | No longer needed — variables are `$state` signals |
+| `onMount` re-export from generators | Emitted directly from `"svelte"` |
+| `Effect` re-export from generators | Emitted directly from `"effect"` — it's a peer dep |
+| v3/v4/effect-compat compat layers | Deleted — Effect v4 only |
 
-## V2 file structure
+## File structure
 
 ```
-v2/
-├── mod.ts                  # Public API: Dispatcher.make(), ClientDispatcher, etc.
-├── dispatcher.ts           # The core Dispatcher class
-├── generators.ts           # Barrel for preprocessor-generated imports
-├── preprocess.ts           # Svelte preprocessor (script + markup hooks)
-├── detect.ts               # yield* detection (containsTopLevelYieldStar, etc.)
-├── lowering.ts             # Expression lowering (extract yield*, replace with temp)
-├── vite.ts                 # Vite plugin
-├── markup/
-│   ├── value.ts            # value() helper for {yield* expr} in markup
-│   ├── promise.ts          # promise() helper for {#await}
-│   └── run.ts              # run() helper for event handlers
-├── remote/
-│   ├── server.ts           # Query, Command, Form, Prerender (server-side)
-│   ├── client.ts           # Client-side remote adapters
-│   └── shared.ts           # Shared remote types (keep from v3)
-└── error.ts                # Unified error handling
+src/
+├── mod.ts           ✅ Public API
+├── detect.ts        ✅ yield* detection
+├── dispatcher.ts    ⚠️ Dispatcher (stubs)
+├── preprocess.ts    ⚠️ script ✅, markup ❌
+├── generators.ts    ✅ preprocessor imports
+├── lowering.ts      ⚠️ stub
+├── error.ts         ✅ error classes
+├── server.ts        ❌ not yet
+├── vite.ts          ❌ not yet
+├── markup/          ❌ not yet
+│   ├── value.ts
+│   ├── promise.ts
+│   └── run.ts
+├── remote/          ❌ not yet
+│   ├── server.ts
+│   ├── client.ts
+│   └── shared.ts
 ```
