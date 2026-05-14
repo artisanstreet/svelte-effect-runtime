@@ -16,6 +16,22 @@
 
 Write effectful code without any hassle. Seriously!
 
+```svelte
+<script lang="ts" effect>
+  import { Effect } from "effect";
+  import { GetPosts, UpvotePost } from "./posts.remote";
+</script>
+
+<ul>
+  {#each yield* GetPosts() as { title, link }}
+    <li>
+      <a href={link}>{title}</a>
+      <button onclick={yield* UpvotePost()}>Upvote</button>
+    </li>
+  {/each}
+</ul>
+```
+
 ## Packages
 
 | Package | Description |

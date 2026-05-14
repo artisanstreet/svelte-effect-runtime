@@ -1993,7 +1993,7 @@
           ]
         }
       },
-      "modules/svelte-effect-runtime-vscode-extension": {
+      "modules/svelte-effect-runtime-vsix": {
         "packageJson": {
           "dependencies": [
             "npm:@jridgewell/trace-mapping@~0.3.31",

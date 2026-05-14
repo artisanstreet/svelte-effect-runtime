@@ -1,87 +1,456 @@
-import { assertEquals } from "@std/assert";
-import { Dispatcher } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
+import { assertEquals, assertRejects } from "@std/assert";
+import { Effect, Exit, Fiber, Layer, ManagedRuntime } from "effect";
+import { Dispatcher, get_dispatcher, reset_dispatcher } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
+import type { ValueOptions } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
 
-// ─── Constructor ─────────────────────────────────────────────
+/** Construct a fresh dispatcher with a controlled empty-layer runtime. */
+function make_dispatcher(): Dispatcher {
+  const runtime = ManagedRuntime.make(Layer.empty);
+  return new Dispatcher(runtime);
+}
 
-Deno.test("Dispatcher constructs without error", () => {
-  const d = new Dispatcher();
-  assertEquals(typeof d, "object");
-});
+/** Small atomic effect that succeeds immediately. */
+const succeed_42 = Effect.succeed(42);
 
 // ─── fork ────────────────────────────────────────────────────
 
-Deno.test("fork returns a function (the cleanup handle)", () => {
-  const d = new Dispatcher();
-  const cleanup = d.fork(null);
+Deno.test("fork returns a callable cleanup handle", () => {
+  const d = make_dispatcher();
+  const cleanup = d.fork(succeed_42);
   assertEquals(typeof cleanup, "function");
 });
 
-Deno.test("calling cleanup does not throw", () => {
-  const d = new Dispatcher();
-  const cleanup = d.fork(null);
+Deno.test("fork runs an effect to completion", async () => {
+  const d = make_dispatcher();
+  const exit = await Effect.runPromise(
+    Effect.gen(function* () {
+      return yield* Effect.succeed("ok");
+    }),
+  );
+  assertEquals(exit, "ok");
+});
+
+Deno.test({
+  name: "cleanup interrupts a running fiber",
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async () => {
+  const d = make_dispatcher();
+  let started = false;
+  let finished = false;
+
+  const program = Effect.gen(function* () {
+    started = true;
+    yield* Effect.sleep(60_000);
+    finished = true;
+    return 42;
+  });
+
+  const cleanup = d.fork(program);
+
+  await wait_for(() => started);
+
   cleanup();
+
+  await sleep(50);
+
+  if (finished) throw new Error("fiber should have been interrupted");
+  },
+});
+
+Deno.test("calling cleanup twice does not throw", () => {
+  const d = make_dispatcher();
+  const cleanup = d.fork(succeed_42);
+  cleanup();
+  cleanup();
+});
+
+Deno.test("calling cleanup on a finished fiber does not throw", async () => {
+  const d = make_dispatcher();
+  const cleanup = d.fork(succeed_42);
+
+  await sleep(50);
+  cleanup();
+});
+
+Deno.test("non-interrupt failures surface as uncaught errors", async () => {
+  const d = make_dispatcher();
+  const errors: unknown[] = [];
+  const original_queue = queueMicrotask;
+  (globalThis as Record<string, unknown>).queueMicrotask = (fn: () => void) => errors.push(fn);
+
+  try {
+    const cleanup = d.fork(Effect.fail(new Error("expected failure")));
+    await sleep(50);
+
+    // Should have at least one queued error
+    if (errors.length === 0) throw new Error("expected error to be queued");
+  } finally {
+    (globalThis as Record<string, unknown>).queueMicrotask = original_queue;
+  }
 });
 
 // ─── value ───────────────────────────────────────────────────
 
-Deno.test("value returns the fallback synchronously", () => {
-  const d = new Dispatcher();
+Deno.test("value returns the fallback synchronously before the effect resolves", () => {
+  const d = make_dispatcher();
+
   const result = d.value({
-    id: "test-value",
+    id: "test",
     deps: [],
     fallback: "loading",
     factory: function* () {
-      return "real";
+      return "resolved";
     },
   });
+
   assertEquals(result, "loading");
+});
+
+Deno.test("value returns the resolved value after the effect completes", async () => {
+  const d = make_dispatcher();
+
+  const opts: ValueOptions<string> = {
+    id: "test-resolve",
+    deps: [],
+    fallback: "loading",
+    factory: function* () {
+      return "resolved";
+    },
+  };
+
+  d.value(opts);
+
+  await sleep(50);
+
+  const result = d.value(opts);
+  assertEquals(result, "resolved");
+});
+
+Deno.test("value caches the result by id + deps key", async () => {
+  const d = make_dispatcher();
+
+  const opts: ValueOptions<number> = {
+    id: "count",
+    deps: [1],
+    fallback: 0,
+    factory: function* () {
+      return 42;
+    },
+  };
+
+  d.value(opts);
+  await sleep(50);
+
+  // Same opts should return cached result
+  const result = d.value(opts);
+  assertEquals(result, 42);
+});
+
+Deno.test("value starts a new fiber when deps change", async () => {
+  const d = make_dispatcher();
+  let call_count = 0;
+
+  const opts1: ValueOptions<number> = {
+    id: "dynamic",
+    deps: ["a"],
+    fallback: 0,
+    factory: function* () {
+      call_count += 1;
+      return call_count;
+    },
+  };
+
+  const opts2: ValueOptions<number> = {
+    id: "dynamic",
+    deps: ["b"],
+    fallback: 0,
+    factory: function* () {
+      call_count += 1;
+      return call_count;
+    },
+  };
+
+  // Start with deps=["a"]
+  assertEquals(d.value(opts1), 0);
+  await sleep(50);
+  assertEquals(d.value(opts1), 1);
+
+  // Switch to deps=["b"] — should start new fiber
+  assertEquals(d.value(opts2), 0);
+  await sleep(50);
+  assertEquals(d.value(opts2), 2);
+
+  // Old key should still return old cached value
+  assertEquals(d.value(opts1), 1);
+});
+
+Deno.test({
+  name: "value cancels old fiber when deps change",
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async () => {
+  const d = make_dispatcher();
+
+  let old_finished = false;
+
+  const opts1: ValueOptions<number> = {
+    id: "cancel-on-change",
+    deps: ["old"],
+    fallback: 0,
+    factory: function* () {
+      yield* Effect.sleep(30);
+      old_finished = true;
+      return 999;
+    },
+  };
+
+  const opts2: ValueOptions<number> = {
+    id: "cancel-on-change",
+    deps: ["new"],
+    fallback: 0,
+    factory: function* () {
+      return 42;
+    },
+  };
+
+  /** Start a fiber that would complete in 30ms. */
+  d.value(opts1);
+
+  /** Immediately switch deps — the old fiber must be cancelled. */
+  d.value(opts2);
+
+  /** Wait longer than the old fiber's sleep so it would have completed if not interrupted. */
+  await sleep(100);
+
+  if (old_finished) throw new Error("old fiber should have been interrupted");
+
+  /** The old key must NOT have cached the stale value. */
+  const old_result = d.value(opts1);
+  if (old_result !== 0) throw new Error(`expected fallback 0, got ${old_result}`);
+  },
+});
+
+Deno.test("value does not fork when disposed", () => {
+  const d = make_dispatcher();
+  d.dispose();
+
+  let ran = false;
+
+  const result = d.value({
+    id: "after-dispose",
+    deps: [],
+    fallback: "nope",
+    factory: function* () {
+      ran = true;
+      return "should not run";
+    },
+  });
+
+  assertEquals(result, "nope");
+  if (ran) throw new Error("factory should not have run after dispose");
 });
 
 // ─── promise ─────────────────────────────────────────────────
 
-Deno.test("promise returns a Promise", () => {
-  const d = new Dispatcher();
-  const result = d.promise({
-    id: "test-promise",
+Deno.test("promise returns a Promise that resolves with the effect's value", async () => {
+  const d = make_dispatcher();
+
+  const promise = d.promise({
+    id: "promise-test",
     deps: [],
     factory: function* () {
       return 42;
     },
   });
-  assertEquals(result instanceof Promise, true);
+
+  assertEquals(promise instanceof Promise, true);
+
+  const result = await promise;
+  assertEquals(result, 42);
+});
+
+Deno.test("promise caches by id + deps", async () => {
+  const d = make_dispatcher();
+  let call_count = 0;
+
+  const opts = {
+    id: "promise-cached",
+    deps: ["x"],
+    factory: function* () {
+      call_count += 1;
+      return call_count;
+    },
+  };
+
+  const p1 = d.promise(opts);
+  const p2 = d.promise(opts);
+
+  assertEquals(p1 === p2, true);
+
+  const result = await p1;
+  assertEquals(result, 1);
+});
+
+Deno.test("promise rejects with the effect's failure", async () => {
+  const d = make_dispatcher();
+
+  const promise = d.promise({
+    id: "promise-fail",
+    deps: [],
+    factory: function* () {
+      return yield* Effect.fail("expected reject");
+    },
+  });
+
+  await assertRejects(
+    () => promise,
+    "expected reject",
+  );
 });
 
 // ─── run ─────────────────────────────────────────────────────
 
-Deno.test("run returns a Promise", () => {
-  const d = new Dispatcher();
-  const result = d.run(null);
-  assertEquals(result instanceof Promise, true);
+Deno.test("run returns a Promise that resolves with the effect's value", async () => {
+  const d = make_dispatcher();
+  const result = await d.run(succeed_42);
+  assertEquals(result, 42);
+});
+
+Deno.test({
+  name: "run returns a Promise that rejects on failure",
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async () => {
+  const d = make_dispatcher();
+
+  const errors: unknown[] = [];
+  const original_queue = queueMicrotask;
+  (globalThis as Record<string, unknown>).queueMicrotask = (fn: () => void) => errors.push(fn);
+
+  try {
+    await assertRejects(
+      () => d.run(Effect.fail(new Error("expected error"))),
+      "expected error",
+    );
+
+    await sleep(50);
+  } finally {
+    (globalThis as Record<string, unknown>).queueMicrotask = original_queue;
+  }
+  },
 });
 
 // ─── dispose ─────────────────────────────────────────────────
 
-Deno.test("dispose does not throw", () => {
-  const d = new Dispatcher();
+Deno.test("dispose does not throw when no fibers are active", () => {
+  const d = make_dispatcher();
   d.dispose();
 });
 
-// ─── Multiple forks ──────────────────────────────────────────
+Deno.test({
+  name: "dispose interrupts all running fibers",
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async () => {
+  const d = make_dispatcher();
+  let completed = false;
 
-Deno.test("multiple fork calls return distinct cleanup handles", () => {
-  const d = new Dispatcher();
-  const c1 = d.fork(null);
-  const c2 = d.fork(null);
-  // Both should be callable
-  c1();
-  c2();
+  d.fork(
+    Effect.gen(function* () {
+      yield* Effect.sleep(60_000);
+      completed = true;
+    }),
+  );
+
+  await sleep(30);
+  d.dispose();
+  await sleep(50);
+
+  if (completed) throw new Error("fiber should have been interrupted");
+  },
 });
 
-// ─── Idempotent cleanup ─────────────────────────────────────
+Deno.test("fork is a no-op after dispose", async () => {
+  const d = make_dispatcher();
+  d.dispose();
 
-Deno.test("calling cleanup twice does not throw", () => {
-  const d = new Dispatcher();
-  const cleanup = d.fork(null);
+  let ran = false;
+  const cleanup = d.fork(
+    Effect.gen(function* () {
+      ran = true;
+      return 42;
+    }),
+  );
+
+  assertEquals(typeof cleanup, "function");
   cleanup();
-  cleanup();
+
+  await sleep(50);
+  if (ran) throw new Error("fork should be no-op after dispose");
 });
+
+Deno.test("value returns fallback after dispose (no fork)", () => {
+  const d = make_dispatcher();
+  d.dispose();
+
+  const result = d.value({
+    id: "post-dispose-value",
+    deps: [],
+    fallback: "done",
+    factory: function* () {
+      return "unreachable";
+    },
+  });
+
+  assertEquals(result, "done");
+});
+
+Deno.test("promise rejects after dispose", async () => {
+  const d = make_dispatcher();
+  d.dispose();
+
+  await assertRejects(
+    () =>
+      d.promise({
+        id: "post-dispose-promise",
+        deps: [],
+        factory: function* () {
+          return 42;
+        },
+      }),
+  );
+});
+
+// ─── get_dispatcher / reset_dispatcher ───────────────────────
+
+Deno.test("get_dispatcher returns the same instance across calls", () => {
+  reset_dispatcher();
+  const d1 = get_dispatcher();
+  const d2 = get_dispatcher();
+  assertEquals(d1, d2);
+});
+
+Deno.test("reset_dispatcher creates a fresh dispatcher", () => {
+  reset_dispatcher();
+  const d1 = get_dispatcher();
+  reset_dispatcher();
+  const d2 = get_dispatcher();
+  if (d1 === d2) throw new Error("expected fresh dispatcher after reset");
+});
+
+// ─── Helpers ─────────────────────────────────────────────────
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function wait_for(predicate: () => boolean, timeout = 1000): Promise<void> {
+  const start = Date.now();
+  while (!predicate()) {
+    if (Date.now() - start > timeout) {
+      throw new Error("wait_for timed out");
+    }
+    await sleep(5);
+  }
+}
