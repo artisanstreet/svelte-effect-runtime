@@ -122,6 +122,39 @@ export class Dispatcher {
   #next_fiber_id = 0;
 
   /**
+   * Create a Dispatcher with an optional layer and set it as the global
+   * singleton returned by {@link get_dispatcher}. Matches the
+   * {@link ServerRuntime.make} convention.
+   *
+   * @example
+   * ```ts
+   * import { Dispatcher } from "svelte-effect-runtime";
+   * import { Db } from "./db.ts";
+   *
+   * const dispatcher = Dispatcher.make(Db.Live);
+   * // get_dispatcher() now returns this instance
+   * ```
+   *
+   * @since 2.0.0
+   * @param layer - Optional Effect layer to provide to the runtime.
+   * @returns The newly created Dispatcher, also available via
+   *   {@link get_dispatcher}.
+   */
+  static make<R = never>(
+    layer?: Layer.Layer<R>,
+  ): Dispatcher {
+
+    const runtime = ManagedRuntime.make(
+      layer ?? (Layer.empty as unknown as Layer.Layer<R>),
+    );
+
+    const dispatcher = new Dispatcher(runtime as ManagedRuntime<unknown, unknown>);
+    current_dispatcher = dispatcher;
+
+    return dispatcher;
+  }
+
+  /**
    * @since 2.0.0
    * @param runtime - The ManagedRuntime to use. Defaults to a lazy-created
    *   empty-layer runtime on first fork.
