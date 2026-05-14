@@ -7,7 +7,10 @@
     "./preprocess": "./src/preprocess.ts",
     "./vite": "./src/vite.ts",
     "./generators": "./src/generators.ts",
-    "./_server": "./src/server.ts"
+    "./_server": "./src/server.ts",
+    "./remote/shared": "./src/remote/shared.ts",
+    "./remote/client": "./src/remote/client.ts",
+    "./remote/server": "./src/remote/server.ts"
   },
   "compilerOptions": {
     "lib": ["deno.ns", "dom", "dom.iterable", "es2022"]

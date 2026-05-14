@@ -2,7 +2,7 @@
 
 ## Status
 
-**Current**: P1 ✅ | P2 ✅ | P3 ❌ | P4 ❌
+**Current**: P1 ✅ | P2 ✅ | P3 ⚠️ | P4 ❌
 
 ## Architecture
 
@@ -23,19 +23,20 @@ Source → Detection → Extraction → Code Generation → Dispatcher
 | Component | File | Status |
 |-----------|------|--------|
 | yield* detection | `src/detect.ts` | ✅ 17 tests |
-| Dispatcher class | `src/dispatcher.ts` | ✅ 24 tests — real fiber lifecycle with cancel/retry/dispose |
-| Script preprocessor | `src/preprocess.ts` | ✅ 22 tests — all lowering patterns |
-| Markup preprocessor | `src/markup/transform.ts` | ✅ 20 tests — sanitize-before-parse approach |
+| Dispatcher class | `src/dispatcher.ts` | ✅ 24 tests — real fiber lifecycle |
+| Script preprocessor | `src/preprocess.ts` | ✅ 22 tests |
+| Markup preprocessor | `src/markup/transform.ts` | ✅ 24 tests — sanitize-before-parse |
 | Markup helpers | `src/markup/{value,promise,run}.ts` | ✅ |
 | Lowering helper | `src/lowering.ts` | ⚠️ unused stub |
 | Error classes | `src/error.ts` | ✅ |
 | Public API barrel | `src/mod.ts` | ✅ |
-| Vite plugin | `src/vite.ts` | ❌ Phase 3 |
-| Server runtime | `src/server.ts` | ❌ Phase 3 |
-| Markup helpers | `src/markup/` | ⚠️ Phase 2 |
-| Remote adapters | `src/remote/` | ❌ Phase 3 |
+| Remote error types | `src/remote/shared.ts` | ✅ 18 tests |
+| Server handler utils | `src/remote/server.ts` | ✅ 9 tests |
+| Client adapters | `src/remote/client.ts` | ✅ (no tests — needs SvelteKit) |
+| Server runtime | `src/server.ts` | ✅ (tested via remote/server.ts) |
+| Vite plugin | `src/vite.ts` | ✅ (requires Vite for integration) |
 
-**Test suite**: 90 tests, 0 failures, ~1s
+**Test suite**: 117 tests, 0 failures, ~2s
 
 ---
 
@@ -152,11 +153,11 @@ function run(
 
 ## Phase 3 — Server + Vite + Remote
 
-10. Create `src/server.ts` — ServerRuntime, Query, Command, Form, Prerender (Effect v4 only)
-11. Create `src/vite.ts` — Vite plugin for SvelteKit
-12. Create `src/remote/shared.ts` — RemoteFailure, FormError
-13. Create `src/remote/server.ts` — server-side remote handlers
-14. Create `src/remote/client.ts` — client-side remote adapters
+10. ✅ Create `src/server.ts` — ServerRuntime, Query, Command, Form, Prerender (Effect v4 only)
+11. ✅ Create `src/vite.ts` — Vite plugin for SvelteKit
+12. ✅ Create `src/remote/shared.ts` — RemoteFailure, FormError (18 tests)
+13. ✅ Create `src/remote/server.ts` — server-side remote handlers (9 tests)
+14. ✅ Create `src/remote/client.ts` — client-side remote adapters
 
 ## Phase 4 — Polish
 
@@ -164,27 +165,3 @@ function run(
 16. Add `Dispatcher.make()` factory
 17. Integration test: full pipeline
 18. Remove `reset_dispatcher()` after integration tests no longer need it
-
-## File structure
-
-```
-src/
-├── mod.ts           ✅
-├── detect.ts        ✅
-├── dispatcher.ts    ✅
-├── preprocess.ts    ✅
-├── generators.ts    ✅
-├── lowering.ts      ⚠️ unused stub
-├── error.ts         ✅
-├── server.ts        ❌ P3
-├── vite.ts          ❌ P3
-├── markup/          ✅
-│   ├── transform.ts
-│   ├── value.ts
-│   ├── promise.ts
-│   └── run.ts
-├── remote/          ❌ P3
-│   ├── server.ts
-│   ├── client.ts
-│   └── shared.ts
-```
