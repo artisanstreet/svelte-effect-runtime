@@ -5,6 +5,7 @@ import { Cause, Effect, Exit, Fiber, Layer, ManagedRuntime } from "effect";
  * lifecycle hooks. Calling the handle cancels the associated fiber.
  *
  * @since 2.0.0
+ * @internal
  */
 export type Dispose = () => void;
 
@@ -12,6 +13,7 @@ export type Dispose = () => void;
  * Options for {@link Dispatcher.value}.
  *
  * @since 2.0.0
+ * @internal
  */
 export interface ValueOptions<A> {
   /** Stable cache key for this value block. */
@@ -28,6 +30,7 @@ export interface ValueOptions<A> {
  * Options for {@link Dispatcher.promise}.
  *
  * @since 2.0.0
+ * @internal
  */
 export interface PromiseOptions<A> {
   /** Stable cache key for this promise block. */
@@ -105,6 +108,7 @@ function hash_deps(
  * ```
  *
  * @since 2.0.0
+ * @internal
  */
 export class Dispatcher {
 
