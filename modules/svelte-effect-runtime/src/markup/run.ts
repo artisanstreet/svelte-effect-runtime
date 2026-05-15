@@ -1,5 +1,5 @@
-import { Effect } from "effect";
 import { get_dispatcher } from "$/dispatcher.ts";
+import { Effect } from "effect";
 
 /**
  * Runtime helper emitted by the markup preprocessor for inline event

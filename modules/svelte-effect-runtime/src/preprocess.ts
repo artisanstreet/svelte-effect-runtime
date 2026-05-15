@@ -1,7 +1,8 @@
-import MagicString from "magic-string";
-import ts from "typescript";
 import { contains_top_level_yield_star } from "$/detect.ts";
 import { TopLevelAwaitError } from "$/error.ts";
+
+import MagicString from "magic-string";
+import ts from "typescript";
 
 /**
  * Block reference emitted by the preprocessor to track what blocks were

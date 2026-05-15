@@ -126,6 +126,41 @@ All comments use `/** */` JSDoc style. No bare `//` or `/* */` comments anywhere
 #cleanups = new Set<Dispose>();
 ```
 
+### Imports
+
+Imports are grouped and sorted by line length descending:
+
+1. **Named imports** (`{ ... }`) come first.
+2. **Default imports** come next.
+3. **Namespace imports** (`* as`) come last.
+
+    | `Effect.Effect<A, E, R>` | `Effect` |
+    | `_tag` / `issue` / `throw`    | `_tag` / `issue` / `throw`    |
+
+Within each group, longer lines sort above shorter lines. A blank line
+separates each group.
+
+```typescript
+/** Correct — groups separated, sorted by length descending. */
+
+import { Cause, Effect, Exit, Fiber, Layer, ManagedRuntime } from "effect";
+import { type AST, parse } from "svelte/compiler";
+import type { Plugin } from "vite";
+import { stringify } from "devalue";
+
+import MagicString from "magic-string";
+import ts from "typescript";
+```
+
+```typescript
+/** Wrong — unsorted, mixed groups. */
+
+import MagicString from "magic-string";
+import { Cause, Effect } from "effect";
+import ts from "typescript";
+import type { Plugin } from "vite";
+```
+
 ## V2 Focus
 
 The `v2` branch focuses exclusively on the runtime module (`modules/svelte-effect-runtime`). The language server (`modules/svelte-effect-runtime-language-server`) and VS Code extension (`modules/svelte-effect-runtime-vsix`) modules are not being actively developed during V2. All new code, tests, and CI work targets only the runtime package.

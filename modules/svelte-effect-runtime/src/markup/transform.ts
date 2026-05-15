@@ -1,7 +1,8 @@
-import MagicString from "magic-string";
-import { type AST, parse } from "svelte/compiler";
-import ts from "typescript";
 import { contains_top_level_yield_star } from "$/detect.ts";
+import { type AST, parse } from "svelte/compiler";
+
+import MagicString from "magic-string";
+import ts from "typescript";
 
 /**
  * Result of the markup preprocessor pass.

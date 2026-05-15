@@ -1,5 +1,5 @@
-import { Layer, ManagedRuntime } from "effect";
 import { Dispatcher as InternalDispatcher } from "$/dispatcher.ts";
+import { Layer, ManagedRuntime } from "effect";
 
 /**
  * Public API surface for `svelte-effect-runtime`.

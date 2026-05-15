@@ -1,6 +1,6 @@
-import type { Plugin } from "vite";
-import { transform_script_effect } from "$/preprocess.ts";
 import { transform_markup_effect } from "$/markup/transform.ts";
+import { transform_script_effect } from "$/preprocess.ts";
+import type { Plugin } from "vite";
 
 // ─── Option types ──────────────────────────────────────────────
 
