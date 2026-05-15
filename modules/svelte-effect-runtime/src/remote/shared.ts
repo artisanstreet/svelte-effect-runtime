@@ -11,6 +11,7 @@
  * so the client can reliably distinguish runtime errors from domain values.
  *
  * @since 2.0.0
+ * @internal
  */
 export const EFFECT_REMOTE_ERROR_MARKER = "__svelte_effect_remote__";
 
@@ -19,6 +20,7 @@ export const EFFECT_REMOTE_ERROR_MARKER = "__svelte_effect_remote__";
  * so the client's transport layer can decode domain error types.
  *
  * @since 2.0.0
+ * @internal
  */
 export const REMOTE_ERROR_DECODER = Symbol.for(
   "svelte-effect-runtime/remote-error-decoder",
@@ -142,6 +144,7 @@ export interface RemoteTransportError {
  * errors in this envelope before serialising them with devalue.
  *
  * @since 2.0.0
+ * @internal
  */
 export interface SerializedRemoteFailureEnvelope {
   readonly __svelte_effect_remote__: true;
@@ -158,6 +161,7 @@ export interface SerializedRemoteFailureEnvelope {
  * @param body - Optional response body returned alongside the error.
  * @param status - HTTP status code (defaults to 400).
  * @returns A remote-validation error shape.
+ * @internal
  */
 export function create_remote_validation_error(
   issues: readonly FormIssue[],
@@ -176,6 +180,7 @@ export function create_remote_validation_error(
  * @param body - Optional response body.
  * @param cause - Optional underlying cause.
  * @returns A remote HTTP error shape.
+ * @internal
  */
 export function create_remote_http_error(
   status: number,
@@ -193,6 +198,7 @@ export function create_remote_http_error(
  * @param cause - The underlying error that caused the transport failure.
  * @param body - Optional response body if one was received.
  * @returns A remote transport error shape.
+ * @internal
  */
 export function create_remote_transport_error(
   cause: unknown,
@@ -209,6 +215,7 @@ export function create_remote_transport_error(
  * @since 2.0.0
  * @param encoded - The devalue-encoded error value.
  * @returns The wire-format envelope.
+ * @internal
  */
 export function create_serialized_remote_failure_envelope(
   encoded: string,
@@ -225,6 +232,7 @@ export function create_serialized_remote_failure_envelope(
  * @since 2.0.0
  * @param value - The value to check.
  * @returns `true` when the value is a serialised failure envelope.
+ * @internal
  */
 export function is_serialized_remote_failure_envelope(
   value: unknown,

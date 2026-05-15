@@ -40,6 +40,7 @@ function decode_remote_error(
  * use to track in-flight requests.
  *
  * @since 2.0.0
+ * @internal
  */
 export interface Pending {
   /** Current count of in-flight requests. */
@@ -66,6 +67,7 @@ export interface Pending {
  * @param decode_payload - Function to decode the response payload.
  * @param base - The base path for SvelteKit server endpoints.
  * @returns A function returning an Effect of the response.
+ * @internal
  */
 export function create_remote_query_adapter<Input, Output>(
   native_factory: unknown,
@@ -110,6 +112,7 @@ export function create_remote_query_adapter<Input, Output>(
  * @param base - The base path for SvelteKit server endpoints.
  * @param pending - Optional pending counter for tracking in-flight requests.
  * @returns A function returning an Effect of the response.
+ * @internal
  */
 export function create_remote_command_adapter<Input, Output>(
   native_factory: unknown,
@@ -177,6 +180,7 @@ export function create_remote_command_adapter<Input, Output>(
  * @param decode_payload - Function to decode the response payload.
  * @param base - The base path for SvelteKit server endpoints.
  * @returns A callable form function whose properties mirror the native form.
+ * @internal
  */
 export function create_remote_form_adapter<Input, Output>(
   native_factory: unknown,

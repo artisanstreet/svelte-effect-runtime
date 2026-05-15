@@ -112,6 +112,7 @@ let current_server_runtime: ManagedRuntime.ManagedRuntime<unknown> | undefined;
  * ```
  *
  * @since 2.0.0
+ * @internal
  * @returns The current ManagedRuntime instance.
  */
 export function get_server_runtime_or_throw(): ManagedRuntime.ManagedRuntime<unknown> {

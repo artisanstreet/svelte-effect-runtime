@@ -12,6 +12,7 @@ import { type FormIssue } from "$/remote/shared.ts";
  * @param invalid - SvelteKit's `invalid` helper (bound per-request).
  * @param error - SvelteKit's `error` helper.
  * @returns A Promise that resolves with the effect's success value.
+ * @internal
  */
 export async function run_remote_effect<A>(
   effect: Effect.Effect<A, unknown>,
@@ -74,6 +75,7 @@ function handle_failure(
  * @since 2.0.0
  * @param cause - The Effect Cause from a failed execution.
  * @returns A JSON-string representing the serialised failure.
+ * @internal
  */
 export function encode_remote_failure(cause: Cause.Cause<unknown>): string {
 
@@ -110,6 +112,7 @@ export function encode_remote_failure(cause: Cause.Cause<unknown>): string {
  * @since 2.0.0
  * @param issues - The list of form validation issues.
  * @param invalid - SvelteKit's `invalid` helper bound to the current request.
+ * @internal
  */
 export function throw_form_error(
   issues: readonly FormIssue[],
@@ -135,6 +138,7 @@ export function throw_form_error(
  * @param err - The error thrown by SvelteKit's native functions.
  * @param helper_name - Name of the helper that triggered the error.
  * @returns A more descriptive error.
+ * @internal
  */
 export function normalize_remote_helper_error(
   err: unknown,
