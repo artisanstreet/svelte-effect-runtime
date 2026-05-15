@@ -45,16 +45,31 @@ export function effect(
   const effect_preprocess = {
     name: "svelte-effect-runtime",
 
+    /**
+     * Processes the full `.svelte` file in a single pass so both script
+     * and markup transformations share the same `<script>` tag. Running
+     * separate `script()` and `markup()` callbacks would cause the
+     * `script()` output to overwrite the markup-injected imports.
+     */
     markup({ content, filename }: { content: string; filename: string }) {
-      const result = transform_markup_effect(content, filename);
-      return { code: result.code };
-    },
+      /** Phase 1 — transform script-level yield*. */
+      const script_result = transform_script_effect(content, filename);
 
-    script({ content, filename }: { content: string; filename: string }) {
-      const result = transform_script_effect(content, filename);
-      return { code: result.code };
+      /**
+       * Replace the original `<script>` block with the transformed
+       * version so its imports (onMount, Effect, get_dispatcher) are
+       * present when the markup pass injects its own helpers.
+       */
+      let combined = content;
+      if (script_result.code !== content) {
+        combined = replace_script_block(content, script_result.code);
+      }
+
+      /** Phase 2 — transform markup yield*. */
+      const markup_result = transform_markup_effect(combined, filename);
+
+      return { code: markup_result.code };
     },
-  };
 
   return {
     name: "svelte-effect-runtime",
@@ -209,4 +224,36 @@ function generate_remote_client_module(
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+/**
+ * Replaces the content of the first instance (non-module) `<script>` tag
+ * with the given transformed script. Preserves attributes on the opening
+ * tag. If no `<script>` tag exists, wraps the script in one and prepends
+ * it.
+ */
+function replace_script_block(content: string, transformed: string): string {
+  const pattern = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi;
+
+  for (const match of content.matchAll(pattern)) {
+    if (match.index === undefined) continue;
+
+    const attrs = match[1] ?? "";
+
+    /** Skip module context scripts. */
+    if (
+      /\bcontext\s*=\s*["']module["']/.test(attrs) ||
+      /\bmodule\b/.test(attrs)
+    ) {
+      continue;
+    }
+
+    const before = content.slice(0, match.index);
+    const after = content.slice(match.index + match[0].length);
+
+    return `${before}<script${attrs}>\n${transformed}\n</script>${after}`;
+  }
+
+  /** No instance script tag found — prepend one. */
+  return `<script>\n${transformed}\n</script>\n\n${content}`;
 }

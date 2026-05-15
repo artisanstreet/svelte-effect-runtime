@@ -700,7 +700,7 @@ function is_property_access_name(node: ts.Identifier): boolean {
 // ─── Import injection ────────────────────────────────────────
 
 function inject_helpers(magic: MagicString, content: string): void {
-  if (content.includes(`"svelte-effect-runtime/generators"`)) return;
+  if (content.includes(HELPERS.value)) return;
 
   const helper_block = [
     `import { value as ${HELPERS.value} } from "svelte-effect-runtime/generators";`,
