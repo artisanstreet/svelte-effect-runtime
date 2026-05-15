@@ -1,4 +1,6 @@
 import type { Plugin } from "vite";
+import { transform_script_effect } from "$/preprocess.ts";
+import { transform_markup_effect } from "$/markup/transform.ts";
 
 /**
  * Options for the {@link effect} Vite plugin.
@@ -11,18 +13,61 @@ export interface EffectOptions {
 }
 
 /**
- * Vite plugin for `svelte-effect-runtime`. Generates an Effect-aware
- * remote client module for SvelteKit and rewrites imports in server files.
+ * Svelte preprocessor that lowers `yield*` in script and markup. Drop
+ * into `svelte.config.js`:
  *
- * Place the preprocessor in `svelte.config.js` — it needs full access to
- * the Svelte compiler pipeline.
+ * @example
+ * ```js
+ * import { preprocess } from "svelte-effect-runtime/vite";
+ *
+ * export default {
+ *   kit: { adapter: ... },
+ *   preprocess: [preprocess()],
+ * };
+ * ```
+ *
+ * @since 2.0.0
+ * @returns A Svelte preprocessor group with a `markup` hook.
+ */
+export function preprocess() {
+  return {
+    name: "svelte-effect-runtime",
+
+    markup({ content, filename }: { content: string; filename: string }) {
+      const sm = find_script(content);
+
+      let combined = content;
+
+      if (sm) {
+        const r = transform_script_effect(sm.text, filename);
+        if (r.code !== sm.text) {
+          combined =
+            content.slice(0, sm.open_end) +
+            r.code +
+            content.slice(sm.close_start);
+        }
+      }
+
+      const mr = transform_markup_effect(combined, filename);
+      return { code: mr.code };
+    },
+  };
+}
+
+/**
+ * Vite plugin for SvelteKit. Generates the Effect‑aware remote client
+ * module and rewrites `svelte-effect-runtime` imports to `_server` in
+ * `.remote.ts` and `.server.ts` files.
+ *
+ * Pair with {@link preprocess} in `svelte.config.js`.
  *
  * @example
  * ```ts
+ * // vite.config.ts
  * import { effect } from "svelte-effect-runtime/vite";
- * import { defineConfig } from "vite";
+ * import { sveltekit } from "@sveltejs/kit/vite";
  *
- * export default defineConfig({ plugins: [effect()] });
+ * export default defineConfig({ plugins: [effect(), sveltekit()] });
  * ```
  *
  * @since 2.0.0
@@ -37,9 +82,7 @@ export function effect(options?: EffectOptions): Plugin {
     enforce: "pre",
 
     config() {
-      return {
-        optimizeDeps: { exclude: ["svelte-effect-runtime"] },
-      };
+      return { optimizeDeps: { exclude: ["svelte-effect-runtime"] } };
     },
 
     resolveId(id: string) {
@@ -68,6 +111,22 @@ export function effect(options?: EffectOptions): Plugin {
       return undefined;
     },
   };
+}
+
+function find_script(content: string) {
+  const p = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi;
+
+  for (const m of content.matchAll(p)) {
+    if (m.index !== undefined && !/\bmodule\b/.test(m[1] ?? "")) {
+      return {
+        text: m[2],
+        open_end: m.index + m[0].indexOf(">") + 1,
+        close_start: m.index + m[0].lastIndexOf("<"),
+      };
+    }
+  }
+
+  return undefined;
 }
 
 function generate_remote_client_module(options?: EffectOptions): string {
