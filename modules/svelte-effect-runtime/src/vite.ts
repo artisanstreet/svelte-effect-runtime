@@ -5,54 +5,43 @@ import { transform_markup_effect } from "$/markup/transform.ts";
 // ─── Option types ──────────────────────────────────────────────
 
 /**
- * Options for the plain Svelte + Vite plugin.
+ * Options for the {@link effect} Vite plugin.
  *
  * @since 2.0.0
  */
-export interface SvelteEffectRuntimeOptions {
-  /** Passed through to `@sveltejs/vite-plugin-svelte`. */
-  svelteOptions?: Record<string, unknown>;
-}
-
-/**
- * Options for the SvelteKit-specific plugin.
- *
- * @since 2.0.0
- */
-export interface SveltekitEffectRuntimeOptions {
-  /** Whether to enable debug logging. */
+export interface EffectOptions {
+  /** Whether to emit debug logging in the generated remote client module. */
   debug?: boolean;
 }
 
-// ─── Plain Svelte plugin ──────────────────────────────────────
+// ─── Plugin ────────────────────────────────────────────────────
 
 /**
- * Vite plugin for plain Svelte projects (without SvelteKit). Wraps the
- * official Svelte Vite plugin and injects the effect preprocessor so
- * `<script effect>` and `{yield* expr}` in markup are transformed
- * automatically.
+ * Vite plugin for `svelte-effect-runtime`. Injects the effect preprocessor
+ * so `<script effect>` and `{yield* expr}` are transformed automatically.
+ * In SvelteKit projects it also intercepts `__sveltekit/remote` and
+ * generates an Effect-aware client module that wraps query, command, form,
+ * and prerender with `Effect`-returning adapters.
  *
  * @example
  * ```ts
- * import { svelte_effect_runtime } from "svelte-effect-runtime/vite";
+ * import { effect } from "svelte-effect-runtime/vite";
  *
- * export default {
- *   plugins: [svelte_effect_runtime()],
- * };
+ * export default defineConfig({
+ *   plugins: [effect()],
+ * });
  * ```
  *
  * @since 2.0.0
- * @param options - Optional plugin configuration.
- * @returns An array of Vite plugins.
+ * @param options - Optional configuration.
+ * @returns A Vite plugin.
  */
-export function svelte_effect_runtime(
-  options?: SvelteEffectRuntimeOptions,
-): Plugin[] {
+export function effect(
+  options?: EffectOptions,
+): Plugin {
 
-  /**
-   * The preprocessor that the Vite plugin passes to the Svelte compiler.
-   * Uses the name expected by the svelte-hmr convention so HMR works.
-   */
+  const resolved_id = "\0@svelte-effect-runtime/remote";
+
   const effect_preprocess = {
     name: "svelte-effect-runtime",
 
@@ -67,58 +56,8 @@ export function svelte_effect_runtime(
     },
   };
 
-  return [
-    {
-      name: "svelte-effect-runtime",
-      enforce: "pre",
-
-      async config() {
-        return {
-          optimizeDeps: {
-            exclude: ["svelte-effect-runtime"],
-          },
-        };
-      },
-    },
-    {
-      name: "svelte-effect-runtime-preprocess",
-      enforce: "pre",
-      api: {
-        sveltePreprocess: effect_preprocess,
-      },
-    },
-  ];
-}
-
-// ─── SvelteKit plugin ──────────────────────────────────────────
-
-/**
- * Vite plugin for SvelteKit projects. Intercepts the
- * `__sveltekit/remote` virtual module and generates an Effect-aware
- * client module that wraps SvelteKit's native query, command, form,
- * and prerender with `Effect`-returning adapters.
- *
- * @example
- * ```ts
- * import { sveltekit_effect_runtime } from "svelte-effect-runtime/vite";
- *
- * export default defineConfig({
- *   plugins: [sveltekit_effect_runtime()],
- * });
- * ```
- *
- * @since 2.0.0
- * @param options - Optional configuration.
- * @returns A Vite plugin.
- */
-export function sveltekit_effect_runtime(
-  options?: SveltekitEffectRuntimeOptions,
-): Plugin {
-
-  const resolved_id = "\0@svelte-effect-runtime/remote";
-
   return {
-    name: "sveltekit-effect-runtime",
+    name: "svelte-effect-runtime",
     enforce: "pre",
 
     resolveId(id: string) {
@@ -167,6 +106,10 @@ export function sveltekit_effect_runtime(
         },
       };
     },
+
+    api: {
+      sveltePreprocess: effect_preprocess,
+    },
   };
 }
 
@@ -177,7 +120,7 @@ export function sveltekit_effect_runtime(
  * from `svelte-effect-runtime/remote/client`.
  */
 function generate_remote_client_module(
-  options?: SveltekitEffectRuntimeOptions,
+  options?: EffectOptions,
 ): string {
 
   const debug = options?.debug ?? false;
