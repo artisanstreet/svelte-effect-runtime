@@ -70,6 +70,7 @@ export function effect(
 
       return { code: markup_result.code };
     },
+  };
 
   return {
     name: "svelte-effect-runtime",

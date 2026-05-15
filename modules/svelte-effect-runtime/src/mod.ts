@@ -52,3 +52,6 @@ export {
   is_remote_transport_error,
   is_remote_validation_error,
 } from "$/remote/shared.ts";
+
+/** Re-export Vite plugin so users can import everything from root. */
+export { effect, type EffectOptions } from "$/vite.ts";
