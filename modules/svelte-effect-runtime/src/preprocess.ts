@@ -140,6 +140,20 @@ export function transform_script_effect(
       stmt.moduleSpecifier.text === "effect",
   );
 
+  const has_onmount_import = source_file.statements.some(
+    (stmt) =>
+      ts.isImportDeclaration(stmt) &&
+      ts.isStringLiteral(stmt.moduleSpecifier) &&
+      stmt.moduleSpecifier.text === "svelte",
+  );
+
+  const has_dispatcher_import = source_file.statements.some(
+    (stmt) =>
+      ts.isImportDeclaration(stmt) &&
+      ts.isStringLiteral(stmt.moduleSpecifier) &&
+      stmt.moduleSpecifier.text === "svelte-effect-runtime/generators",
+  );
+
   /**
    * Phase 2 — scan every statement. Statements containing top-level
    * `yield*` are lowered; everything else passes through unchanged.
@@ -185,7 +199,7 @@ export function transform_script_effect(
    * Phase 3 — inject runtime imports after the last user import.
    * If there are no existing imports, prepend to the file.
    */
-  const imports = make_imports(has_effect_import);
+  const imports = make_imports(has_effect_import, has_onmount_import, has_dispatcher_import);
 
   const last_import = [...source_file.statements]
     .reverse()
@@ -221,11 +235,15 @@ export function transform_script_effect(
  * @param has_effect_import - Whether the user already imports `Effect`.
  * @returns A string of newline-separated import statements.
  */
-function make_imports(has_effect_import: boolean): string {
+function make_imports(
+  has_effect_import: boolean,
+  has_onmount_import: boolean,
+  has_dispatcher_import: boolean,
+): string {
   return [
-    `import { onMount } from "svelte";`,
+    !has_onmount_import && `import { onMount } from "svelte";`,
     !has_effect_import && `import { Effect } from "effect";`,
-    `import { get_dispatcher } from "svelte-effect-runtime/generators";`,
+    !has_dispatcher_import && `import { get_dispatcher } from "svelte-effect-runtime/generators";`,
   ]
     .filter(Boolean)
     .join("\n");

@@ -72,8 +72,10 @@ export function transform_markup_effect(
     return { code: content, has_yield: false };
   }
 
-  /** Parse the sanitized markup with Svelte's AST. */
-  const ast = parse(work.code, { filename, modern: true });
+  /** Parse the sanitized markup with Svelte's AST. Strip <script> blocks
+   *  first so TypeScript syntax (import type, etc.) doesn't break the parser. */
+  const clean = blank_script_blocks(work.code);
+  const ast = parse(clean, { filename, modern: true });
 
   /** Match placeholders to their AST context and build replacements. */
   const replacements = collect_replacements(
@@ -425,6 +427,32 @@ function visit_ast_node(
       );
       return;
 
+    case "HtmlTag":
+      emit_for_expression(
+        node.expression,
+        "plain",
+        candidates,
+        matched,
+        replacements,
+      );
+      return;
+
+    case "DebugTag": {
+      const idents = node.identifiers;
+      if (idents && idents.length > 0) {
+        for (const ident of idents) {
+          emit_for_expression(
+            ident,
+            "plain",
+            candidates,
+            matched,
+            replacements,
+          );
+        }
+      }
+      return;
+    }
+
     case "ConstTag": {
       const decl = node.declaration.declarations[0];
       if (decl?.init) {
@@ -699,6 +727,22 @@ function is_property_access_name(node: ts.Identifier): boolean {
 }
 
 // ─── Import injection ────────────────────────────────────────
+
+/**
+ * Replaces the content of all `<script>` blocks with whitespace so
+ * that TypeScript syntax (e.g. `import type`) doesn't break Svelte's
+ * `parse()` function. Only the template structure matters for the AST
+ * walk — the script content is irrelevant.
+ */
+function blank_script_blocks(content: string): string {
+  return content.replace(
+    /<script\b[^>]*>[\s\S]*?<\/script\s*>/gi,
+    (match) => {
+      const lines = match.split("\n");
+      return lines.map((l) => " ".repeat(l.length)).join("\n");
+    },
+  );
+}
 
 function inject_helpers(magic: MagicString, content: string): void {
   if (content.includes(HELPERS.value)) return;

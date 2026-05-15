@@ -1,8 +1,4 @@
-import { transform_markup_effect } from "$/markup/transform.ts";
-import { transform_script_effect } from "$/preprocess.ts";
 import type { Plugin } from "vite";
-
-// ─── Option types ──────────────────────────────────────────────
 
 /**
  * Options for the {@link effect} Vite plugin.
@@ -14,67 +10,38 @@ export interface EffectOptions {
   debug?: boolean;
 }
 
-// ─── Plugin ────────────────────────────────────────────────────
-
 /**
- * Vite plugin for `svelte-effect-runtime`. Injects the effect preprocessor
- * so `<script effect>` and `{yield* expr}` are transformed automatically.
- * In SvelteKit projects it also intercepts `__sveltekit/remote` and
- * generates an Effect-aware client module that wraps query, command, form,
- * and prerender with `Effect`-returning adapters.
+ * Vite plugin for `svelte-effect-runtime`. Generates an Effect-aware
+ * remote client module for SvelteKit and rewrites imports in server files.
+ *
+ * Place the preprocessor in `svelte.config.js` — it needs full access to
+ * the Svelte compiler pipeline.
  *
  * @example
  * ```ts
  * import { effect } from "svelte-effect-runtime/vite";
+ * import { defineConfig } from "vite";
  *
- * export default defineConfig({
- *   plugins: [effect()],
- * });
+ * export default defineConfig({ plugins: [effect()] });
  * ```
  *
  * @since 2.0.0
  * @param options - Optional configuration.
  * @returns A Vite plugin.
  */
-export function effect(
-  options?: EffectOptions,
-): Plugin {
-
+export function effect(options?: EffectOptions): Plugin {
   const resolved_id = "\0@svelte-effect-runtime/remote";
-
-  const effect_preprocess = {
-    name: "svelte-effect-runtime",
-
-    /**
-     * Processes the full `.svelte` file in a single pass so both script
-     * and markup transformations share the same `<script>` tag. Running
-     * separate `script()` and `markup()` callbacks would cause the
-     * `script()` output to overwrite the markup-injected imports.
-     */
-    markup({ content, filename }: { content: string; filename: string }) {
-      /** Phase 1 — transform script-level yield*. */
-      const script_result = transform_script_effect(content, filename);
-
-      /**
-       * Replace the original `<script>` block with the transformed
-       * version so its imports (onMount, Effect, get_dispatcher) are
-       * present when the markup pass injects its own helpers.
-       */
-      let combined = content;
-      if (script_result.code !== content) {
-        combined = replace_script_block(content, script_result.code);
-      }
-
-      /** Phase 2 — transform markup yield*. */
-      const markup_result = transform_markup_effect(combined, filename);
-
-      return { code: markup_result.code };
-    },
-  };
 
   return {
     name: "svelte-effect-runtime",
     enforce: "pre",
+
+    config() {
+      return {
+        optimizeDeps: { exclude: ["svelte-effect-runtime"] },
+        ssr: { noExternal: ["svelte-effect-runtime"] },
+      };
+    },
 
     resolveId(id: string) {
       if (id === "__sveltekit/remote") return resolved_id;
@@ -83,178 +50,60 @@ export function effect(
 
     load(id: string) {
       if (id !== resolved_id) return undefined;
-
       return generate_remote_client_module(options);
     },
 
     transform(code: string, id: string) {
-      /** Rewrite imports so .remote.ts files use the server runtime. */
       if (
         id.endsWith(".server.ts") ||
         id.endsWith(".remote.ts") ||
         id.includes("hooks.server.")
       ) {
         const rewritten = code
-          .replace(
-            /from\s+["']svelte-effect-runtime["']/g,
-            `from "svelte-effect-runtime/_server"`,
-          )
-          .replace(
-            /from\s+["']svelte-effect-runtime\/generators["']/g,
-            `from "svelte-effect-runtime/_server"`,
-          );
+          .replace(/from\s+["']svelte-effect-runtime["']/g, `from "svelte-effect-runtime/_server"`)
+          .replace(/from\s+["']svelte-effect-runtime\/generators["']/g, `from "svelte-effect-runtime/_server"`);
 
-        if (rewritten !== code) {
-          return { code: rewritten, map: null };
-        }
+        if (rewritten !== code) return { code: rewritten, map: null };
       }
 
       return undefined;
     },
-
-    config() {
-      return {
-        optimizeDeps: {
-          exclude: ["svelte-effect-runtime"],
-        },
-        ssr: {
-          noExternal: ["svelte-effect-runtime"],
-        },
-      };
-    },
-
-    api: {
-      sveltePreprocess: effect_preprocess,
-    },
   };
 }
 
-/**
- * Generates the inline module code that replaces `__sveltekit/remote`.
- * The generated module imports SvelteKit's internal client remote
- * function modules and wraps each one with the Effect-aware adapter
- * from `svelte-effect-runtime/remote/client`.
- */
-function generate_remote_client_module(
-  options?: EffectOptions,
-): string {
-
+function generate_remote_client_module(options?: EffectOptions): string {
   const debug = options?.debug ?? false;
 
   return [
-    `/**`,
-    ` * Auto-generated by svelte-effect-runtime. Do not edit.`,
-    ` * Wraps SvelteKit client remote functions with Effect-aware adapters.`,
-    ` * @generated`,
-    ` */`,
-    ``,
-    `import {`,
-    `  create_remote_query_adapter,`,
-    `  create_remote_command_adapter,`,
-    `  create_remote_form_adapter,`,
-    `} from "svelte-effect-runtime/remote/client";`,
-    ``,
+    `/** Auto-generated by svelte-effect-runtime. Do not edit. */`,
+    `import { create_remote_query_adapter, create_remote_command_adapter, create_remote_form_adapter } from "svelte-effect-runtime/remote/client";`,
     `const base = "__sveltekit";`,
-    ``,
-    `/** Shared payload decoder. */`,
-    `function decode_payload(value) {`,
-    `  return value;`,
-    `}`,
-    ``,
-    `/**`,
-    ` * Loads a native SvelteKit remote module lazily. The module path is`,
-    ` * resolved by Vite's run-time module loader.`,
-    ` */`,
-    `async function load_native(module_name) {`,
-    `  const resolved = await import(module_name);`,
-    `  return resolved.default ?? resolved;`,
-    `}`,
-    ``,
+    `function decode_payload(value) { return value; }`,
+    `async function load_native(name) { const m = await import(name); return m.default ?? m; }`,
     `export const query_fns = new Map();`,
     `export const command_fns = new Map();`,
     `export const form_fns = new Map();`,
-    ``,
     `export async function get_query_fn(id, input) {`,
     `  if (!query_fns.has(id)) {`,
-    `    const native = await load_native(`,
-    `      "/src/routes/" + id.replace(/\\\\./g, "/") + ".server",`,
-    `    );`,
-    `    const adapter = create_remote_query_adapter(`,
-    `      native,`,
-    `      decode_payload,`,
-    `      base,`,
-    `    );`,
-    `    query_fns.set(id, adapter);`,
+    `    const n = await load_native("/src/routes/" + id.replace(/\\\\./g, "/") + ".server");`,
+    `    query_fns.set(id, create_remote_query_adapter(n, decode_payload, base));`,
     `  }`,
     `  return query_fns.get(id)(input);`,
     `}`,
-    ``,
     `export async function get_command_fn(id, input) {`,
     `  if (!command_fns.has(id)) {`,
-    `    const native = await load_native(`,
-    `      "/src/routes/" + id.replace(/\\\\./g, "/") + ".server",`,
-    `    );`,
-    `    const adapter = create_remote_command_adapter(`,
-    `      native,`,
-    `      decode_payload,`,
-    `      base,`,
-    `    );`,
-    `    command_fns.set(id, adapter);`,
+    `    const n = await load_native("/src/routes/" + id.replace(/\\\\./g, "/") + ".server");`,
+    `    command_fns.set(id, create_remote_command_adapter(n, decode_payload, base));`,
     `  }`,
     `  return command_fns.get(id)(input);`,
     `}`,
-    ``,
     `export async function get_form_fn(id, input) {`,
     `  if (!form_fns.has(id)) {`,
-    `    const native = await load_native(`,
-    `      "/src/routes/" + id.replace(/\\\\./g, "/") + ".server",`,
-    `    );`,
-    `    const adapter = create_remote_form_adapter(`,
-    `      native,`,
-    `      decode_payload,`,
-    `      base,`,
-    `    );`,
-    `    form_fns.set(id, adapter);`,
+    `    const n = await load_native("/src/routes/" + id.replace(/\\\\./g, "/") + ".server");`,
+    `    form_fns.set(id, create_remote_form_adapter(n, decode_payload, base));`,
     `  }`,
     `  return form_fns.get(id)(input);`,
     `}`,
-    ``,
-    debug
-      ? `console.log("[ser] remote client module loaded");`
-      : ``,
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-/**
- * Replaces the content of the first instance (non-module) `<script>` tag
- * with the given transformed script. Preserves attributes on the opening
- * tag. If no `<script>` tag exists, wraps the script in one and prepends
- * it.
- */
-function replace_script_block(content: string, transformed: string): string {
-  const pattern = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi;
-
-  for (const match of content.matchAll(pattern)) {
-    if (match.index === undefined) continue;
-
-    const attrs = match[1] ?? "";
-
-    /** Skip module context scripts. */
-    if (
-      /\bcontext\s*=\s*["']module["']/.test(attrs) ||
-      /\bmodule\b/.test(attrs)
-    ) {
-      continue;
-    }
-
-    const before = content.slice(0, match.index);
-    const after = content.slice(match.index + match[0].length);
-
-    return `${before}<script${attrs}>\n${transformed}\n</script>${after}`;
-  }
-
-  /** No instance script tag found — prepend one. */
-  return `<script>\n${transformed}\n</script>\n\n${content}`;
+    debug ? `console.log("[ser] remote client module loaded");` : "",
+  ].filter(Boolean).join("\n");
 }

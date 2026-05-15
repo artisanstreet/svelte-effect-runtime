@@ -38,7 +38,7 @@ await Deno.writeTextFile(
   `${JSON.stringify(runtime_package_json, null, 2)}\n`,
 );
 
-for (const filename of ["preprocess.js", "mod.js", "generators.js", "dispatcher.js", "detect.js", "lowering.js"]) {
+for (const filename of ["preprocess.js", "mod.js", "generators.js", "dispatcher.js", "detect.js"]) {
   try {
     await Deno.copyFile(join(runtime_dist, filename), join(runtime_dir, filename));
   } catch { /* optional file */ }
