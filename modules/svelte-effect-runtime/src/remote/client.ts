@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import * as devalue from "devalue";
+import { parse } from "devalue";
 import {
   type RemoteFailure,
   type FormIssue,
@@ -23,7 +23,7 @@ function decode_remote_error(
 ): RemoteFailure<unknown> | unknown {
   if (is_serialized_remote_failure_envelope(raw)) {
     try {
-      const decoded = decode ? decode(raw.encoded) : devalue.parse(raw.encoded);
+      const decoded = decode ? decode(raw.encoded) : parse(raw.encoded);
       return decoded as RemoteFailure<unknown>;
     } catch {
       return create_remote_transport_error(

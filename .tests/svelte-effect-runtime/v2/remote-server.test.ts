@@ -1,6 +1,6 @@
 import { assert, assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { Effect } from "effect";
-import * as devalue from "devalue";
+import { parse } from "devalue";
 import {
   normalize_remote_helper_error,
   throw_form_error,
@@ -70,7 +70,7 @@ Deno.test("encode_remote_failure serialises a tagged error from a Cause", () => 
     const ex = exit as { _tag: string; cause: unknown };
     if (ex._tag === "Failure") {
       const encoded = encode_remote_failure(ex.cause);
-      const parsed = devalue.parse(encoded);
+      const parsed = parse(encoded);
 
       assertEquals(parsed._tag, "MyError");
       assertEquals(parsed.code, 42);
@@ -82,7 +82,7 @@ Deno.test("encode_remote_failure handles cause with no failures gracefully", () 
   /** A v4-style Cause with empty reasons array. */
   const cause = { reasons: [] };
   const encoded = encode_remote_failure(cause);
-  const parsed = devalue.parse(encoded);
+  const parsed = parse(encoded);
 
   assertEquals(parsed.message, "Unknown error");
 });
@@ -161,6 +161,6 @@ Deno.test("run_remote_effect throws error on non-FormError failure", async () =>
   });
 
   assertEquals(captured_status, 500);
-  const body = devalue.parse(captured_body as string);
+  const body = parse(captured_body as string);
   assertEquals(body._tag, "DbError");
 });

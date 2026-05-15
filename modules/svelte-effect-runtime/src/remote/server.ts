@@ -1,5 +1,5 @@
 import { Effect, Exit, Cause } from "effect";
-import * as devalue from "devalue";
+import { stringify } from "devalue";
 import { type FormIssue } from "$/remote/shared.ts";
 
 /**
@@ -87,7 +87,7 @@ export function encode_remote_failure(cause: Cause.Cause<unknown>): string {
       const failure = reason.error;
       if (typeof failure === "object" && failure !== null) {
         try {
-          return devalue.stringify(failure);
+          return stringify(failure);
         } catch {
           continue;
         }
@@ -95,7 +95,7 @@ export function encode_remote_failure(cause: Cause.Cause<unknown>): string {
     }
   }
 
-  return devalue.stringify({ message: "Unknown error" });
+  return stringify({ message: "Unknown error" });
 }
 
 /**
