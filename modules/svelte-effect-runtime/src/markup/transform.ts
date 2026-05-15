@@ -593,7 +593,8 @@ function emit_for_expression(
   } else if (kind === "each") {
     replacement_text = `${HELPERS.value}("${id}", ${deps_text}, [], function* () { return (${candidate.expr_text}); })`;
   } else if (kind === "event") {
-    replacement_text = `() => { void ${HELPERS.run}(function* () { return (${candidate.expr_text}); }); }`;
+    const body = strip_arrow_function(candidate.expr_text);
+    replacement_text = `() => { void ${HELPERS.run}(function* () { ${body}; }); }`;
   } else {
     replacement_text = `${HELPERS.value}("${id}", ${deps_text}, undefined, function* () { return (${candidate.expr_text}); })`;
   }
@@ -627,6 +628,29 @@ function find_candidate(
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
+
+/**
+ * Strips the arrow function wrapper from an event handler expression,
+ * returning just the body. For `() => yield* expr()` returns
+ * `yield* expr()`. For `() => { yield* expr(); }` returns
+ * `yield* expr();`.
+ */
+function strip_arrow_function(expr: string): string {
+  const arrow_idx = expr.indexOf("=>");
+  if (arrow_idx === -1) return expr;
+
+  let body = expr.slice(arrow_idx + 2).trim();
+
+  if (body.startsWith("{") && body.endsWith("}")) {
+    body = body.slice(1, -1).trim();
+  }
+
+  if (body.endsWith(";")) {
+    body = body.slice(0, -1);
+  }
+
+  return body;
+}
 
 function contains_yield_star_in_text(text: string): boolean {
   if (!/\byield\s*\*/.test(text)) return false;

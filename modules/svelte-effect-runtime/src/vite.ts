@@ -39,7 +39,6 @@ export function effect(options?: EffectOptions): Plugin {
     config() {
       return {
         optimizeDeps: { exclude: ["svelte-effect-runtime"] },
-        ssr: { noExternal: ["svelte-effect-runtime"] },
       };
     },
 
