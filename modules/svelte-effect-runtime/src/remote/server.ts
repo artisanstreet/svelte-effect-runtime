@@ -1,4 +1,5 @@
 import { Effect, Exit, Cause } from "effect";
+import * as devalue from "devalue";
 import { type FormIssue } from "$/remote/shared.ts";
 
 /**
@@ -74,7 +75,7 @@ function handle_failure(
  *
  * @since 2.0.0
  * @param cause - The Effect Cause from a failed execution.
- * @returns A JSON-string representing the serialised failure.
+ * @returns A devalue-encoded string representing the serialised failure.
  * @internal
  */
 export function encode_remote_failure(cause: Cause.Cause<unknown>): string {
@@ -86,7 +87,7 @@ export function encode_remote_failure(cause: Cause.Cause<unknown>): string {
       const failure = reason.error;
       if (typeof failure === "object" && failure !== null) {
         try {
-          return JSON.stringify(failure);
+          return devalue.stringify(failure);
         } catch {
           continue;
         }
@@ -94,7 +95,7 @@ export function encode_remote_failure(cause: Cause.Cause<unknown>): string {
     }
   }
 
-  return JSON.stringify({ message: "Unknown error" });
+  return devalue.stringify({ message: "Unknown error" });
 }
 
 /**
