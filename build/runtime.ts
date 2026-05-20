@@ -1,4 +1,3 @@
-import { copy } from "@std/fs/copy";
 import { build } from "rolldown";
 import { dirname, fromFileUrl, join, resolve } from "@std/path";
 
@@ -7,11 +6,9 @@ const package_dir = fromFileUrl(
 );
 const repo_root = resolve(dirname(fromFileUrl(import.meta.url)), "..");
 const output_dir = join(repo_root, ".dist", "svelte-effect-runtime");
-const package_dist = join(package_dir, ".dist");
 const src_dir = join(package_dir, "src");
 
 await Deno.mkdir(output_dir, { recursive: true });
-await Deno.remove(package_dist, { recursive: true }).catch(() => undefined);
 await Deno.remove(output_dir, { recursive: true }).catch(() => undefined);
 await Deno.mkdir(output_dir, { recursive: true });
 
@@ -65,5 +62,3 @@ await build({
   ],
   external,
 });
-
-await copy(output_dir, package_dist, { overwrite: true });

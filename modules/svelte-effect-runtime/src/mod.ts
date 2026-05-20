@@ -1,5 +1,5 @@
 import { Dispatcher as InternalDispatcher } from "$/dispatcher.ts";
-import { type Layer } from "effect";
+import type { Layer } from "effect";
 
 /**
  * Public API surface for `svelte-effect-runtime`.
@@ -30,7 +30,6 @@ import { type Layer } from "effect";
  * @since 2.0.0
  */
 export class ClientRuntime {
-
   /**
    * Build and cache the client-side dispatcher runtime.
    *

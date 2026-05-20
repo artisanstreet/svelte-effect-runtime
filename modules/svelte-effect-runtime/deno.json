@@ -17,7 +17,7 @@
   },
   "tasks": {
     "build": "deno task clean && deno run -A ../../build/runtime.ts && tsc -p tsconfig.build.json --emitDeclarationOnly && deno run -A ../../build/rewrite-runtime-dts.ts",
-    "check": "deno check --node-modules-dir=auto src/mod.ts src/detect.ts src/dispatcher.ts src/generators.ts src/lowering.ts src/preprocess.ts",
+    "check": "deno check --node-modules-dir=auto src/mod.ts src/detect.ts src/dispatcher.ts src/generators.ts src/lowering.ts src/preprocess.ts src/vite.ts src/remote/shared.ts src/remote/server.ts src/remote/client.ts src/markup/transform.ts src/markup/value.ts src/markup/promise.ts src/markup/run.ts",
     "clean": "rm -rf ../../.dist/svelte-effect-runtime",
     "test": "cd ../../.tests/svelte-effect-runtime && deno test --no-check -A v2",
     "fmt": "deno fmt",

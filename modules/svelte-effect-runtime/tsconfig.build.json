@@ -25,6 +25,15 @@
     "./src/dispatcher.ts",
     "./src/generators.ts",
     "./src/lowering.ts",
-    "./src/preprocess.ts"
+    "./src/preprocess.ts",
+    "./src/server.ts",
+    "./src/vite.ts",
+    "./src/remote/shared.ts",
+    "./src/remote/server.ts",
+    "./src/remote/client.ts",
+    "./src/markup/transform.ts",
+    "./src/markup/value.ts",
+    "./src/markup/promise.ts",
+    "./src/markup/run.ts"
   ]
 }

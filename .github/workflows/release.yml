@@ -203,8 +203,8 @@ jobs:
         working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-language-server
         shell: bash
         run: |
-          mkdir -p "${{ github.workspace }}/..dist/svelte-effect-runtime-language-server"
-          npm pack --pack-destination "${{ github.workspace }}/..dist/svelte-effect-runtime-language-server"
+          mkdir -p "${{ github.workspace }}/.dist/svelte-effect-runtime-language-server"
+          npm pack --pack-destination "${{ github.workspace }}/.dist/svelte-effect-runtime-language-server"
 
       - name: azure_login_for_marketplace
         uses: azure/login@v2
@@ -226,7 +226,7 @@ jobs:
             exit 0
           fi
 
-          VSIX_PATH="${{ github.workspace }}/..dist/svelte-effect-runtime-vsix/svelte-effect-runtime-vscode-${RELEASE_VERSION}.vsix"
+          VSIX_PATH="${{ github.workspace }}/.dist/svelte-effect-runtime-vsix/svelte-effect-runtime-vscode-${RELEASE_VERSION}.vsix"
           if [ ! -f "$VSIX_PATH" ]; then
             echo "Expected VSIX package not found at $VSIX_PATH" >&2
             exit 1
@@ -242,7 +242,7 @@ jobs:
             exit 1
           fi
 
-          VSIX_PATH="$(find "${{ github.workspace }}/..dist/svelte-effect-runtime-vsix" -maxdepth 1 -name '*.vsix' -print -quit)"
+          VSIX_PATH="$(find "${{ github.workspace }}/.dist/svelte-effect-runtime-vsix" -maxdepth 1 -name '*.vsix' -print -quit)"
           if [ -z "$VSIX_PATH" ]; then
             echo "No VSIX package found." >&2
             exit 1
@@ -329,8 +329,8 @@ jobs:
         shell: bash
         run: |
           RUNTIME_TGZ="$(find .dist/svelte-effect-runtime -maxdepth 1 -name '*.tgz' -print -quit)"
-          LSP_TGZ="$(find ..dist/svelte-effect-runtime-language-server -maxdepth 1 -name '*.tgz' -print -quit)"
-          VSIX_PATH="$(find ..dist/svelte-effect-runtime-vsix -maxdepth 1 -name '*.vsix' -print -quit)"
+          LSP_TGZ="$(find .dist/svelte-effect-runtime-language-server -maxdepth 1 -name '*.tgz' -print -quit)"
+          VSIX_PATH="$(find .dist/svelte-effect-runtime-vsix -maxdepth 1 -name '*.vsix' -print -quit)"
 
           if [ -z "$RUNTIME_TGZ" ] || [ -z "$LSP_TGZ" ] || [ -z "$VSIX_PATH" ]; then
             echo "Missing one or more release artifacts." >&2
