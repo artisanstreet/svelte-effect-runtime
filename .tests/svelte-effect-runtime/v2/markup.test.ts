@@ -1,4 +1,4 @@
-import { assertMatch, assertNotMatch, assertStringIncludes } from "@std/assert";
+import { assertEquals, assertStringIncludes } from "@std/assert";
 import { transform_markup_effect } from "../../../modules/svelte-effect-runtime/src/markup/transform.ts";
 
 // ─── Identity / pass-through ─────────────────────────────────
@@ -48,6 +48,7 @@ Deno.test("rewrites {yield* expr} with free identifier deps", () => {
   assertStringIncludes(result.code, `__ser_markup_value`);
   assertStringIncludes(result.code, `format`);
   assertStringIncludes(result.code, `user`);
+  assertStringIncludes(result.code, `[format, user]`);
 });
 
 // ─── Block expressions ───────────────────────────────────────
@@ -83,7 +84,8 @@ Deno.test("rewrites {#each yield* expr as item} in list", () => {
 });
 
 Deno.test("rewrites {#await yield* expr} as promise() call", () => {
-  const source = `{#await yield* loadData()}<p>loading</p>{:then val}<p>{val}</p>{/await}`;
+  const source =
+    `{#await yield* loadData()}<p>loading</p>{:then val}<p>{val}</p>{/await}`;
   const result = transform_markup_effect(source, "Test.svelte");
 
   assertStringIncludes(result.code, `__ser_markup_promise`);
@@ -92,7 +94,8 @@ Deno.test("rewrites {#await yield* expr} as promise() call", () => {
 });
 
 Deno.test("rewrites {#await yield* expr} with :catch clause", () => {
-  const source = `{#await yield* fetchUser()}<p>loading</p>{:then u}<p>{u.name}</p>{:catch err}<p>Error: {err.message}</p>{/await}`;
+  const source =
+    `{#await yield* fetchUser()}<p>loading</p>{:then u}<p>{u.name}</p>{:catch err}<p>Error: {err.message}</p>{/await}`;
   const result = transform_markup_effect(source, "Test.svelte");
 
   assertStringIncludes(result.code, `__ser_markup_promise`);
@@ -148,6 +151,49 @@ Deno.test("rewrites onclick event with yield* as run() wrapper", () => {
   assertStringIncludes(result.code, `trackEvent`);
 });
 
+Deno.test("preserves event handler parameters when lowering yield*", () => {
+  const source =
+    `<button onclick={(event) => yield* save(event.currentTarget)}>save</button>`;
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `(event) =>`);
+  assertStringIncludes(result.code, `event.currentTarget`);
+  assertStringIncludes(result.code, `__ser_markup_run`);
+});
+
+Deno.test("preserves unparenthesized event handler parameters", () => {
+  const source =
+    `<button onclick={event => yield* save(event.currentTarget)}>save</button>`;
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `event =>`);
+  assertStringIncludes(result.code, `event.currentTarget`);
+  assertStringIncludes(result.code, `__ser_markup_run`);
+});
+
+Deno.test("rewrites native-style form validation handlers only when marked with yield*", () => {
+  const source =
+    `<form {...createPost} oninput={() => yield* createPost.validate()}></form>`;
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `oninput={() =>`);
+  assertStringIncludes(
+    result.code,
+    `void __ser_markup_run(function* () { yield* createPost.validate(); });`,
+  );
+  assertStringIncludes(result.code, `from "svelte-effect-runtime/generators"`);
+  if (!result.has_yield) throw new Error("has_yield should be true");
+});
+
+Deno.test("leaves non-Effect event handlers untouched", () => {
+  const source =
+    `<form {...formSnap} oninput={() => formSnap.validate()}></form>`;
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertEquals(result.code, source);
+  if (result.has_yield) throw new Error("has_yield should be false");
+});
+
 // ─── Multiple yield* in one file ─────────────────────────────
 
 Deno.test("handles multiple yield* expressions in markup", () => {
@@ -159,8 +205,11 @@ Deno.test("handles multiple yield* expressions in markup", () => {
   const result = transform_markup_effect(source, "Test.svelte");
 
   /** Count actual helper call sites (not import aliases). */
-  const value_calls = [...result.code.matchAll(/\b__ser_markup_value\(/g)].length;
-  if (value_calls !== 2) throw new Error(`expected 2 value calls, got ${value_calls}`);
+  const value_calls =
+    [...result.code.matchAll(/\b__ser_markup_value\(/g)].length;
+  if (value_calls !== 2) {
+    throw new Error(`expected 2 value calls, got ${value_calls}`);
+  }
 });
 
 // ─── Script tag injection ────────────────────────────────────

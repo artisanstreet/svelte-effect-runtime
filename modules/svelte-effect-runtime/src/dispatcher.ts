@@ -1,4 +1,6 @@
 import { Cause, Effect, Exit, Fiber, Layer, ManagedRuntime } from "effect";
+import type { Fiber as FiberType } from "effect/Fiber";
+import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime";
 
 /**
  * Minimal clean-up handle returned by {@link Dispatcher.fork} and related
@@ -23,7 +25,7 @@ export interface ValueOptions<A> {
   /** Value returned synchronously while the effect is running or during SSR. */
   fallback: A;
   /** Generator function that yields the effect to run. The resolved value is cached under `(id, deps)`. */
-  factory: () => Generator<unknown, A, unknown>;
+  factory: () => Effect.gen.Return<A, unknown, unknown>;
 }
 
 /**
@@ -38,8 +40,12 @@ export interface PromiseOptions<A> {
   /** Reactive dependency array. */
   deps: readonly unknown[];
   /** Generator function that yields the effect to run. */
-  factory: () => Generator<unknown, A, unknown>;
+  factory: () => Effect.gen.Return<A, unknown, unknown>;
 }
+
+const object_dep_ids = new WeakMap<object, number>();
+
+let next_object_dep_id = 0;
 
 /**
  * Builds a deterministic cache key from a dependency array. Primitives are
@@ -53,11 +59,7 @@ export interface PromiseOptions<A> {
  *   Callers should omit this parameter.
  * @returns A pipe-separated string key suitable for Map lookups.
  */
-function hash_deps(
-  deps: readonly unknown[],
-  seen: WeakMap<object, number> = new WeakMap(),
-): string {
-
+function hash_deps(deps: readonly unknown[]): string {
   return deps
     .map((dep) => {
       if (dep === null) return "null";
@@ -67,7 +69,9 @@ function hash_deps(
 
       if (type === "string") return `s:${dep}`;
 
-      if (type === "number") return `n:${Object.is(dep, -0) ? "-0" : String(dep)}`;
+      if (type === "number") {
+        return `n:${Object.is(dep, -0) ? "-0" : String(dep)}`;
+      }
 
       if (type === "bigint") return `b:${dep}`;
 
@@ -76,10 +80,11 @@ function hash_deps(
       if (type === "symbol") return `y:${String(dep)}`;
 
       /** Object — assign a stable numeric id within this call. */
-      let id = seen.get(dep as object);
+      let id = object_dep_ids.get(dep as object);
       if (id === undefined) {
-        id = seen.size + 1;
-        seen.set(dep as object, id);
+        next_object_dep_id += 1;
+        id = next_object_dep_id;
+        object_dep_ids.set(dep as object, id);
       }
       return `o:${id}`;
     })
@@ -111,11 +116,10 @@ function hash_deps(
  * @internal
  */
 export class Dispatcher {
-
   /** The underlying Effect runtime that executes forked programs. */
-  #runtime: ManagedRuntime<unknown, unknown>;
+  #runtime: ManagedRuntimeType<unknown, unknown>;
   /** Active fibers keyed by their cache id (for value blocks) or a generated key. */
-  #fibers = new Map<string, Fiber.RuntimeFiber<unknown, unknown>>();
+  #fibers = new Map<string, FiberType<unknown, unknown>>();
   /** Resolved value cache, keyed by `"id::depsHash"`. */
   #values = new Map<string, unknown>();
   /** Tracks the currently-active cache key per value block id, so old fibers can be cancelled when deps change. */
@@ -147,12 +151,13 @@ export class Dispatcher {
   static make<R = never>(
     layer?: Layer.Layer<R>,
   ): Dispatcher {
-
     const runtime = ManagedRuntime.make(
       layer ?? (Layer.empty as unknown as Layer.Layer<R>),
     );
 
-    const dispatcher = new Dispatcher(runtime as ManagedRuntime<unknown, unknown>);
+    const dispatcher = new Dispatcher(
+      runtime as ManagedRuntimeType<unknown, unknown>,
+    );
     current_dispatcher = dispatcher;
 
     return dispatcher;
@@ -163,8 +168,12 @@ export class Dispatcher {
    * @param runtime - The ManagedRuntime to use. Defaults to a lazy-created
    *   empty-layer runtime on first fork.
    */
-  constructor(runtime?: ManagedRuntime<unknown, unknown>) {
-    this.#runtime = runtime ?? ManagedRuntime.make(Layer.empty);
+  constructor(runtime?: ManagedRuntimeType<unknown, unknown>) {
+    this.#runtime = runtime ??
+      ManagedRuntime.make(Layer.empty) as unknown as ManagedRuntimeType<
+        unknown,
+        unknown
+      >;
   }
 
   /**
@@ -177,7 +186,6 @@ export class Dispatcher {
    * @returns A function that interrupts the fiber.
    */
   fork<A, E, R>(effect: Effect.Effect<A, E, R>): Dispose {
-
     if (this.#disposed) {
       return () => {};
     }
@@ -190,21 +198,18 @@ export class Dispatcher {
     this.#next_fiber_id += 1;
     this.#fibers.set(key, fiber);
 
-    const self = this;
-
     /** Watch the fiber and surface unhandled failures. */
     this.#runtime.runFork(
-      Effect.gen(function* () {
-        const exit = yield* Fiber.await(fiber);
+      Effect.flatMap(Fiber.await(fiber), (exit) =>
+        Effect.sync(() => {
+          this.#fibers.delete(key);
 
-        self.#fibers.delete(key);
-
-        if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) {
-          queueMicrotask(() => {
-            throw Cause.squash(exit.cause);
-          });
-        }
-      }),
+          if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) {
+            queueMicrotask(() => {
+              throw Cause.squash(exit.cause);
+            });
+          }
+        })),
     );
 
     let disposed = false;
@@ -234,7 +239,6 @@ export class Dispatcher {
    * @returns The cached value if resolved, or the fallback.
    */
   value<A>(options: ValueOptions<A>): A {
-
     const cache_key = `${options.id}::${hash_deps(options.deps)}`;
 
     /**
@@ -248,7 +252,11 @@ export class Dispatcher {
 
       if (old_fiber) {
         this.#runtime.runFork(
-          Fiber.interrupt(old_fiber) as Effect.Effect<unknown, unknown, unknown>,
+          Fiber.interrupt(old_fiber) as Effect.Effect<
+            unknown,
+            unknown,
+            unknown
+          >,
         );
         this.#fibers.delete(old_key);
       }
@@ -262,7 +270,6 @@ export class Dispatcher {
       !this.#fibers.has(cache_key) &&
       !this.#values.has(cache_key)
     ) {
-
       const program = Effect.gen(function* () {
         const result = yield* Effect.gen(options.factory);
         return result;
@@ -274,28 +281,28 @@ export class Dispatcher {
 
       this.#fibers.set(cache_key, fiber);
 
-      const self = this;
-
       /** Watch the fiber and cache the result on success. */
       this.#runtime.runFork(
-        Effect.gen(function* () {
-          const exit = yield* Fiber.await(fiber);
+        Effect.flatMap(Fiber.await(fiber), (exit) =>
+          Effect.sync(() => {
+            this.#fibers.delete(cache_key);
 
-          self.#fibers.delete(cache_key);
-
-          if (Exit.isSuccess(exit)) {
-            self.#values.set(cache_key, exit.value);
-          } else if (!Cause.hasInterruptsOnly(exit.cause)) {
-            queueMicrotask(() => {
-              throw Cause.squash(exit.cause);
-            });
-          }
-        }),
+            if (Exit.isSuccess(exit)) {
+              this.#values.set(cache_key, exit.value);
+            } else if (!Cause.hasInterruptsOnly(exit.cause)) {
+              queueMicrotask(() => {
+                throw Cause.squash(exit.cause);
+              });
+            }
+          })),
       );
-
     }
 
-    return (this.#values.get(cache_key) as A) ?? options.fallback;
+    if (this.#values.has(cache_key)) {
+      return this.#values.get(cache_key) as A;
+    }
+
+    return options.fallback;
   }
 
   /**
@@ -310,7 +317,6 @@ export class Dispatcher {
    * @returns A Promise that resolves with the effect's result.
    */
   promise<A>(options: PromiseOptions<A>): Promise<A> {
-
     if (this.#disposed) {
       return Promise.reject(new Error("Dispatcher has been disposed"));
     }
@@ -354,6 +360,9 @@ export class Dispatcher {
    * @returns A Promise that resolves or rejects when the effect completes.
    */
   run<A, E, R>(effect: Effect.Effect<A, E, R>): Promise<A> {
+    if (this.#disposed) {
+      return Promise.reject(new Error("Dispatcher has been disposed"));
+    }
 
     return this.#runtime
       .runPromise(effect as Effect.Effect<unknown, unknown, unknown>)

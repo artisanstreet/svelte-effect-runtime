@@ -60,7 +60,6 @@ export function transform_markup_effect(
   content: string,
   filename: string,
 ): MarkupTransformResult {
-
   if (!/\byield\s*\*/.test(content)) {
     return { code: content, has_yield: false };
   }
@@ -144,10 +143,9 @@ function sanitize_markup(content: string): SanitizeResult {
     const is_event = is_event_expression(inner);
 
     /** Determine if this brace contains yield* that needs lowering. */
-    const has_yield =
-      is_event
-        ? /\byield\s*\*/.test(inner)
-        : contains_yield_star_in_text(expr_body);
+    const has_yield = is_event
+      ? /\byield\s*\*/.test(inner)
+      : contains_yield_star_in_text(expr_body);
 
     if (!has_yield) {
       cursor = close + 1;
@@ -163,7 +161,8 @@ function sanitize_markup(content: string): SanitizeResult {
       extra_prefix = equal_idx + 1 + (after_eq_raw.length - expr_body.length);
     }
 
-    const expr_start = open + 1 + leading_ws + tag_info.prefix_length + extra_prefix;
+    const expr_start = open + 1 + leading_ws + tag_info.prefix_length +
+      extra_prefix;
 
     /** For each/await, the expression ends before ` as ` or ` then `/` catch `. */
     let expr_end = close;
@@ -204,7 +203,11 @@ function sanitize_markup(content: string): SanitizeResult {
       key,
     });
 
-    magic.overwrite(expr_start, expr_end, key === "render" ? `${placeholder}()` : placeholder);
+    magic.overwrite(
+      expr_start,
+      expr_end,
+      key === "render" ? `${placeholder}()` : placeholder,
+    );
 
     cursor = close + 1;
   }
@@ -227,7 +230,6 @@ function find_tag_end(
   tag: string,
   after_pos: number,
 ): { start: number; end: number } | undefined {
-
   const pattern = new RegExp(
     `<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}\\s*>`,
     "gi",
@@ -302,24 +304,43 @@ interface TagInfo {
 }
 
 function get_tag_info(trimmed: string): TagInfo {
-  if (trimmed.startsWith("#each ")) return { kind: "each", prefix_length: "#each ".length };
-  if (trimmed.startsWith("#await ")) return { kind: "await", prefix_length: "#await ".length };
-  if (trimmed.startsWith("@render ")) return { kind: "render", prefix_length: "@render ".length };
+  if (trimmed.startsWith("#each ")) {
+    return { kind: "each", prefix_length: "#each ".length };
+  }
+  if (trimmed.startsWith("#await ")) {
+    return { kind: "await", prefix_length: "#await ".length };
+  }
+  if (trimmed.startsWith("@render ")) {
+    return { kind: "render", prefix_length: "@render ".length };
+  }
 
   /** Strip prefix-only tags — the expression starts after the tag keyword. */
-  if (trimmed.startsWith("#if ")) return { kind: "plain", prefix_length: "#if ".length };
-  if (trimmed.startsWith(":else if ")) return { kind: "plain", prefix_length: ":else if ".length };
-  if (trimmed.startsWith("#key ")) return { kind: "plain", prefix_length: "#key ".length };
-  if (trimmed.startsWith("@const ")) return { kind: "plain", prefix_length: "@const ".length };
-  if (trimmed.startsWith("@html ")) return { kind: "plain", prefix_length: "@html ".length };
-  if (trimmed.startsWith("@debug ")) return { kind: "plain", prefix_length: "@debug ".length };
+  if (trimmed.startsWith("#if ")) {
+    return { kind: "plain", prefix_length: "#if ".length };
+  }
+  if (trimmed.startsWith(":else if ")) {
+    return { kind: "plain", prefix_length: ":else if ".length };
+  }
+  if (trimmed.startsWith("#key ")) {
+    return { kind: "plain", prefix_length: "#key ".length };
+  }
+  if (trimmed.startsWith("@const ")) {
+    return { kind: "plain", prefix_length: "@const ".length };
+  }
+  if (trimmed.startsWith("@html ")) {
+    return { kind: "plain", prefix_length: "@html ".length };
+  }
+  if (trimmed.startsWith("@debug ")) {
+    return { kind: "plain", prefix_length: "@debug ".length };
+  }
 
   return { kind: "plain", prefix_length: 0 };
 }
 
 function is_event_expression(inner: string): boolean {
   const trimmed = inner.trimStart();
-  return trimmed.startsWith("(") && /\)\s*=>/.test(trimmed);
+
+  return /^(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/.test(trimmed);
 }
 
 // ─── AST replacement collection ──────────────────────────────
@@ -334,7 +355,6 @@ function collect_replacements(
   ast: AST.Root,
   candidates: MarkupCandidate[],
 ): Replacement[] {
-
   const by_placeholder = new Map(
     candidates.map((c) => [c.placeholder, c]),
   );
@@ -364,7 +384,6 @@ function visit_ast_node(
   matched: Set<string>,
   replacements: Replacement[],
 ): void {
-
   switch (node.type) {
     case "ExpressionTag":
       emit_for_expression(
@@ -412,7 +431,9 @@ function visit_ast_node(
         matched,
         replacements,
       );
-      if (node.pending) walk_ast(node.pending, candidates, matched, replacements);
+      if (node.pending) {
+        walk_ast(node.pending, candidates, matched, replacements);
+      }
       if (node.then) walk_ast(node.then, candidates, matched, replacements);
       if (node.catch) walk_ast(node.catch, candidates, matched, replacements);
       return;
@@ -523,7 +544,10 @@ function visit_element_attributes(
       (attr.name.startsWith("on:") || /^on[a-z]/.test(attr.name))
     ) {
       visit_attribute_value(
-        attr.value,
+        attr.value as
+          | true
+          | AST.ExpressionTag
+          | Array<AST.Text | AST.ExpressionTag>,
         "event",
         candidates,
         matched,
@@ -534,7 +558,11 @@ function visit_element_attributes(
 
     if (attr.type === "OnDirective" && attr.expression) {
       emit_for_expression(
-        attr.expression,
+        attr.expression as {
+          type: string;
+          name?: string;
+          callee?: { type: string; name?: string };
+        },
         "event",
         candidates,
         matched,
@@ -557,17 +585,32 @@ function visit_attribute_value(
   if (Array.isArray(value)) {
     for (const part of value) {
       if (part.type === "ExpressionTag") {
-        emit_for_expression(part.expression, kind, candidates, matched, replacements);
+        emit_for_expression(
+          part.expression,
+          kind,
+          candidates,
+          matched,
+          replacements,
+        );
       }
     }
     return;
   }
 
-  emit_for_expression(value.expression, kind, candidates, matched, replacements);
+  emit_for_expression(
+    value.expression,
+    kind,
+    candidates,
+    matched,
+    replacements,
+  );
 }
 
 function emit_for_expression(
-  expression: { type: string; name?: string; callee?: { type: string; name?: string } } | null | undefined,
+  expression:
+    | { type: string; name?: string; callee?: { type: string; name?: string } }
+    | null
+    | undefined,
   kind: TagKind,
   candidates: Map<string, MarkupCandidate>,
   matched: Set<string>,
@@ -587,16 +630,21 @@ function emit_for_expression(
   let replacement_text: string;
 
   if (kind === "await") {
-    replacement_text = `${HELPERS.promise}("${id}", ${deps_text}, function* () { return (${candidate.expr_text}); })`;
+    replacement_text =
+      `${HELPERS.promise}("${id}", ${deps_text}, function* () { return (${candidate.expr_text}); })`;
   } else if (kind === "render") {
-    replacement_text = `(${HELPERS.value}("${id}", ${deps_text}, function () {}, function* () { return (${candidate.expr_text}); }))()`;
+    replacement_text =
+      `(${HELPERS.value}("${id}", ${deps_text}, function () {}, function* () { return (${candidate.expr_text}); }))()`;
   } else if (kind === "each") {
-    replacement_text = `${HELPERS.value}("${id}", ${deps_text}, [], function* () { return (${candidate.expr_text}); })`;
+    replacement_text =
+      `${HELPERS.value}("${id}", ${deps_text}, [], function* () { return (${candidate.expr_text}); })`;
   } else if (kind === "event") {
-    const body = strip_arrow_function(candidate.expr_text);
-    replacement_text = `() => { void ${HELPERS.run}(function* () { ${body}; }); }`;
+    const event = strip_arrow_function(candidate.expr_text);
+    replacement_text =
+      `${event.params} => { void ${HELPERS.run}(function* () { ${event.body}; }); }`;
   } else {
-    replacement_text = `${HELPERS.value}("${id}", ${deps_text}, undefined, function* () { return (${candidate.expr_text}); })`;
+    replacement_text =
+      `${HELPERS.value}("${id}", ${deps_text}, undefined, function* () { return (${candidate.expr_text}); })`;
   }
 
   replacements.push({
@@ -635,10 +683,13 @@ function find_candidate(
  * `yield* expr()`. For `() => { yield* expr(); }` returns
  * `yield* expr();`.
  */
-function strip_arrow_function(expr: string): string {
+function strip_arrow_function(expr: string): { params: string; body: string } {
   const arrow_idx = expr.indexOf("=>");
-  if (arrow_idx === -1) return expr;
+  if (arrow_idx === -1) {
+    return { params: "()", body: expr };
+  }
 
+  const params = expr.slice(0, arrow_idx).trim();
   let body = expr.slice(arrow_idx + 2).trim();
 
   if (body.startsWith("{") && body.endsWith("}")) {
@@ -649,7 +700,7 @@ function strip_arrow_function(expr: string): string {
     body = body.slice(0, -1);
   }
 
-  return body;
+  return { params, body };
 }
 
 function contains_yield_star_in_text(text: string): boolean {
@@ -697,7 +748,7 @@ function collect_free_identifiers(expr_text: string): string[] {
   const ids: string[] = [];
   const seen = new Set<string>();
 
-  visit_ids(fn, seen, ids);
+  visit_ids(fn.body, seen, ids);
 
   return ids;
 }

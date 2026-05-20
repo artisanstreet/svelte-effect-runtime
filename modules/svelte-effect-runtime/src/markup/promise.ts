@@ -1,4 +1,5 @@
 import { get_dispatcher } from "$/dispatcher.ts";
+import type { Effect } from "effect";
 
 /**
  * Runtime helper emitted by the markup preprocessor for
@@ -16,7 +17,7 @@ import { get_dispatcher } from "$/dispatcher.ts";
 export function promise(
   id: string,
   deps: readonly unknown[],
-  factory: () => Generator<unknown, unknown, unknown>,
+  factory: () => Effect.gen.Return<unknown, unknown, unknown>,
 ): Promise<unknown> {
   return get_dispatcher().promise({ id, deps, factory });
 }

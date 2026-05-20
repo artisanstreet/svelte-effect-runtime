@@ -53,6 +53,12 @@ interface LoweredStatement {
   range: { start: number; end: number };
 }
 
+interface LoweredExpression {
+  temps: TempBinding[];
+  rewritten_expr: string;
+  effect_assignments: string[];
+}
+
 /** Monotonically increasing counter for generating unique temp names. */
 let temp_counter = 0;
 
@@ -66,7 +72,8 @@ let temp_counter = 0;
  * @returns A unique `__SER__` prefixed identifier.
  */
 function next_temp_name(hint?: string): string {
-  const name = hint ? `__SER__${hint}` : `__SER__${temp_counter}`;
+  const suffix = temp_counter === 0 ? "" : `_${temp_counter}`;
+  const name = hint ? `__SER__${hint}${suffix}` : `__SER__${temp_counter}`;
 
   temp_counter += 1;
 
@@ -80,12 +87,12 @@ function next_temp_name(hint?: string): string {
  *
  * The lowering rules are:
  *
- * 1. `$state(yield* expr)` — extract `yield* expr` to a temp, keep the
- *    `$state()` wrapper: `let __SER__x = $state(undefined);` +
- *    `let user = $state(__SER__x);` + `__SER__x = yield* expr;`
+ * 1. `$state(yield* expr)` — extract `yield* expr` to a temp and expose the
+ *    result through `$derived`: `let __SER__x = $state(undefined);` +
+ *    `let user = $derived(__SER__x);` + `__SER__x = yield* expr;`
  *
- * 2. `const x = yield* expr` (bare sugar) — same but wraps in `$state()`:
- *    `let x = $state(__SER__x);`
+ * 2. `const x = yield* expr` (bare sugar) — same derived view:
+ *    `let x = $derived(__SER__x);`
  *
  * 3. `const {a, b} = yield* expr` — temp for the destructuring + individual
  *    `$state` per name + destructuring assignment in the effect body.
@@ -133,25 +140,22 @@ export function transform_script_effect(
    * Phase 1 — detect whether the user already imports `Effect` so we
    * avoid emitting a duplicate `import { Effect } from "effect"`.
    */
-  const has_effect_import = source_file.statements.some(
-    (stmt) =>
-      ts.isImportDeclaration(stmt) &&
-      ts.isStringLiteral(stmt.moduleSpecifier) &&
-      stmt.moduleSpecifier.text === "effect",
+  const has_effect_import = has_local_import_binding(
+    source_file,
+    "effect",
+    "Effect",
   );
 
-  const has_onmount_import = source_file.statements.some(
-    (stmt) =>
-      ts.isImportDeclaration(stmt) &&
-      ts.isStringLiteral(stmt.moduleSpecifier) &&
-      stmt.moduleSpecifier.text === "svelte",
+  const has_onmount_import = has_local_import_binding(
+    source_file,
+    "svelte",
+    "onMount",
   );
 
-  const has_dispatcher_import = source_file.statements.some(
-    (stmt) =>
-      ts.isImportDeclaration(stmt) &&
-      ts.isStringLiteral(stmt.moduleSpecifier) &&
-      stmt.moduleSpecifier.text === "svelte-effect-runtime/generators",
+  const has_dispatcher_import = has_local_import_binding(
+    source_file,
+    "svelte-effect-runtime/generators",
+    "get_dispatcher",
   );
 
   /**
@@ -160,7 +164,6 @@ export function transform_script_effect(
    * Top-level `await` is rejected with a clear error.
    */
   for (const stmt of source_file.statements) {
-
     if (contains_top_level_await(stmt)) {
       const text = slice(content, stmt);
       throw new TopLevelAwaitError(filename, text);
@@ -171,7 +174,7 @@ export function transform_script_effect(
     }
 
     has_effect = true;
-    const lowered = lower_statement(stmt, content, filename);
+    const lowered = lower_statement(stmt, content);
 
     magic.overwrite(
       lowered.range.start,
@@ -199,7 +202,11 @@ export function transform_script_effect(
    * Phase 3 — inject runtime imports after the last user import.
    * If there are no existing imports, prepend to the file.
    */
-  const imports = make_imports(has_effect_import, has_onmount_import, has_dispatcher_import);
+  const imports = make_imports(
+    has_effect_import,
+    has_onmount_import,
+    has_dispatcher_import,
+  );
 
   const last_import = [...source_file.statements]
     .reverse()
@@ -243,10 +250,51 @@ function make_imports(
   return [
     !has_onmount_import && `import { onMount } from "svelte";`,
     !has_effect_import && `import { Effect } from "effect";`,
-    !has_dispatcher_import && `import { get_dispatcher } from "svelte-effect-runtime/generators";`,
+    !has_dispatcher_import &&
+    `import { get_dispatcher } from "svelte-effect-runtime/generators";`,
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function has_local_import_binding(
+  source_file: ts.SourceFile,
+  module_name: string,
+  local_name: string,
+): boolean {
+  return source_file.statements.some((stmt) => {
+    if (
+      !ts.isImportDeclaration(stmt) ||
+      !ts.isStringLiteral(stmt.moduleSpecifier) ||
+      stmt.moduleSpecifier.text !== module_name
+    ) {
+      return false;
+    }
+
+    const clause = stmt.importClause;
+
+    if (!clause) {
+      return false;
+    }
+
+    if (clause.name?.text === local_name) {
+      return true;
+    }
+
+    const named_bindings = clause.namedBindings;
+
+    if (!named_bindings) {
+      return false;
+    }
+
+    if (ts.isNamespaceImport(named_bindings)) {
+      return named_bindings.name.text === local_name;
+    }
+
+    return named_bindings.elements.some(
+      (element) => element.name.text === local_name,
+    );
+  });
 }
 
 /**
@@ -296,15 +344,12 @@ function make_runtime_block(assignments: string[]): string {
  * @since 2.0.0
  * @param stmt - The statement to lower.
  * @param content - The original source text.
- * @param filename - Source filename for error messages.
  * @returns The lowered statement descriptor.
  */
 function lower_statement(
   stmt: ts.Statement,
   content: string,
-  filename: string,
 ): LoweredStatement {
-
   if (ts.isExpressionStatement(stmt)) {
     return lower_expression_statement(stmt, content);
   }
@@ -329,11 +374,11 @@ function lower_statement(
  * For each declaration in the declaration list:
  *
  * - **Simple identifier, bare yield*** (`const x = yield* expr`):
- *   emits a `$state` temp, rewrites to `let x = $state(temp)`, emits
+ *   emits a `$state` temp, rewrites to `let x = $derived(temp)`, emits
  *   `temp = yield* expr` in the effect body.
  *
  * - **Simple identifier, wrapped** (`let x = $state(yield* expr)`):
- *   emits a temp, keeps the `$state(temp)` wrapper, emits the yield
+ *   emits a temp, rewrites the wrapper to `$derived(temp)`, emits the yield
  *   assignment.
  *
  * - **Destructuring** (`const {a, b} = yield* expr`):
@@ -354,7 +399,6 @@ function lower_variable_statement(
   stmt: ts.VariableStatement,
   content: string,
 ): LoweredStatement {
-
   const temps: TempBinding[] = [];
   const rewritten_decls: string[] = [];
   const assignments: string[] = [];
@@ -364,7 +408,6 @@ function lower_variable_statement(
   let has_bare_yield = false;
 
   for (const decl of decl_list.declarations) {
-
     /**
      * Declarations without a `yield*` initializer keep their original
      * text and are hoisted to component scope unchanged.
@@ -383,44 +426,49 @@ function lower_variable_statement(
        *   const user = yield* getUser(id)
        *   let user = $state(yield* getUser(id))
        *
-       * Both produce a temp `$state` binding. The difference is whether
-       * we add our own `$state()` wrapper (bare case) or keep the user's
-       * existing wrapper.
+       * Both produce a temp `$state` binding and a `$derived` view of the
+       * current temp value.
        */
 
       const original_name = binding_text;
-      const temp_name = next_temp_name(original_name);
-
-      temps.push({ name: temp_name });
-
       if (is_yield_star_expression(decl.initializer)) {
         /**
-         * Bare `yield*` as the initializer — we must wrap the result in
-         * `$state()` ourselves so the binding stays reactive.
+         * Bare `yield*` as the initializer — expose the resolved temp
+         * through `$derived` so the binding stays reactive.
          */
+        const temp_name = next_temp_name(original_name);
+
+        temps.push({ name: temp_name });
         has_bare_yield = true;
-        rewritten_decls.push(`${original_name} = $state(${temp_name})`);
-      } else {
-        /**
-         * Wrapped `yield*` — the user already placed `$state(yield* expr)`
-         * or some other rune. Swap in the temp reference and keep
-         * everything else intact.
-         */
-        const rewritten_expr = rewrite_expression_swapping_yield_star(
+        rewritten_decls.push(`${original_name} = $derived(${temp_name})`);
+
+        const yield_text = extract_yield_star_full_text(
           decl.initializer,
           content,
-          temp_name,
         );
+
+        assignments.push(`${temp_name} = ${yield_text};`);
+      } else {
+        /**
+         * Wrapped `yield*` — the user placed `yield*` inside a rune or
+         * expression. Swap in temp references, then convert state runes to
+         * derived views of those temps.
+         */
+        const lowered = lower_expression_yields(
+          decl.initializer,
+          content,
+          original_name,
+        );
+
+        temps.push(...lowered.temps);
+        assignments.push(...lowered.effect_assignments);
+
+        const rewritten_expr = rewrite_state_rune_as_derived(
+          lowered.rewritten_expr,
+        );
+
         rewritten_decls.push(`${original_name} = ${rewritten_expr}`);
       }
-
-      const yield_text = extract_yield_star_full_text(
-        decl.initializer,
-        content,
-      );
-
-      assignments.push(`${temp_name} = ${yield_text};`);
-
     } else {
       /**
        * Destructuring binding.
@@ -435,19 +483,11 @@ function lower_variable_statement(
       has_bare_yield = true;
 
       const temp_name = next_temp_name("destructure");
-      temps.push({ name: temp_name });
 
       const names = extract_binding_names(decl.name);
 
       temps.push({ name: temp_name });
       temps.push(...names.map((n) => ({ name: n })));
-
-      const rewritten_expr = rewrite_expression_swapping_yield_star(
-        decl.initializer,
-        content,
-        temp_name,
-      );
-      rewritten_decls.push(`${binding_text} = ${rewritten_expr};`);
 
       const yield_text = extract_yield_star_full_text(
         decl.initializer,
@@ -490,7 +530,6 @@ function lower_expression_statement(
   stmt: ts.ExpressionStatement,
   content: string,
 ): LoweredStatement {
-
   const expr = stmt.expression;
 
   /** No yield* in this expression — pass through unchanged. */
@@ -534,54 +573,53 @@ function lower_expression_statement(
   }
 
   /** Call expression wrapping `yield*` (e.g. `$inspect(yield* expr)`). */
-  const temp_name = next_temp_name("call");
-
-  const rewritten = rewrite_expression_swapping_yield_star(
+  const lowered = lower_expression_yields(
     expr,
     content,
-    temp_name,
+    "call",
   );
 
-  const yield_text = extract_yield_star_full_text(expr, content);
-
   return {
-    temps: [{ name: temp_name }],
-    rewritten_text: rewritten + ";",
-    effect_assignments: [`${temp_name} = ${yield_text};`],
+    temps: lowered.temps,
+    rewritten_text: lowered.rewritten_expr + ";",
+    effect_assignments: lowered.effect_assignments,
     range: { start: stmt.getStart(), end: stmt.end },
   };
 }
 
-/**
- * Replaces every top-level `yield*` sub-expression inside the given
- * expression with a reference to `temp_name`. Returns the rewritten
- * expression text.
- *
- * Replacements are applied from right to left so that earlier source
- * offsets remain valid after each swap.
- *
- * @since 2.0.0
- * @param expr - The expression whose `yield*` spans should be swapped.
- * @param content - The original source text.
- * @param temp_name - The `$state` temp variable name to swap in.
- * @returns The rewritten expression text.
- */
-function rewrite_expression_swapping_yield_star(
+function lower_expression_yields(
   expr: ts.Expression,
   content: string,
-  temp_name: string,
-): string {
-
+  hint: string,
+): LoweredExpression {
   const replacements: Array<{
     start: number;
     end: number;
     text: string;
   }> = [];
 
-  collect_yield_star_replacements(expr, content, temp_name, replacements);
+  const temps: TempBinding[] = [];
+  const effect_assignments: string[] = [];
+
+  collect_yield_star_nodes(expr, (node) => {
+    const temp_name = next_temp_name(hint);
+    const yield_text = slice_start(content, node).trim();
+
+    temps.push({ name: temp_name });
+    effect_assignments.push(`${temp_name} = ${yield_text};`);
+    replacements.push({
+      start: node.getStart(),
+      end: node.end,
+      text: temp_name,
+    });
+  });
 
   if (replacements.length === 0) {
-    return slice(content, expr).trim();
+    return {
+      temps,
+      rewritten_expr: slice(content, expr).trim(),
+      effect_assignments,
+    };
   }
 
   replacements.sort((a, b) => b.start - a.start);
@@ -591,48 +629,43 @@ function rewrite_expression_swapping_yield_star(
   const offset_in_expr = expr.getFullStart();
 
   for (const r of replacements) {
-    text =
-      text.slice(0, r.start - offset_in_expr) +
+    text = text.slice(0, r.start - offset_in_expr) +
       r.text +
       text.slice(r.end - offset_in_expr);
   }
 
-  return text.trim();
+  return {
+    temps,
+    rewritten_expr: text.trim(),
+    effect_assignments,
+  };
 }
 
-/**
- * Recursively walks the AST of an expression, collecting every top-level
- * `yield*` expression (skipping function boundaries) and recording its
- * source range so it can be replaced.
- *
- * @since 2.0.0
- * @param node - The AST node to walk.
- * @param content - The original source text.
- * @param temp_name - The temp name to use in replacements.
- * @param replacements - Accumulator array for replacement descriptors.
- */
-function collect_yield_star_replacements(
-  node: ts.Node,
-  _content: string,
-  temp_name: string,
-  replacements: Array<{ start: number; end: number; text: string }>,
-): void {
+function rewrite_state_rune_as_derived(expression: string): string {
+  const state_call = expression.match(/^\$state(?:\.raw)?\(([\s\S]*)\)$/);
 
+  if (!state_call) {
+    return expression;
+  }
+
+  return `$derived(${state_call[1]})`;
+}
+
+function collect_yield_star_nodes(
+  node: ts.Node,
+  on_found: (node: ts.Node) => void,
+): void {
   if (is_function_boundary_node(node)) {
     return;
   }
 
   if (is_yield_star_expression(node)) {
-    replacements.push({
-      start: node.getStart(),
-      end: node.end,
-      text: temp_name,
-    });
+    on_found(node);
     return;
   }
 
   node.forEachChild((child) => {
-    collect_yield_star_replacements(child, _content, temp_name, replacements);
+    collect_yield_star_nodes(child, on_found);
   });
 }
 
@@ -652,7 +685,6 @@ function extract_yield_star_full_text(
   expr: ts.Expression,
   content: string,
 ): string {
-
   let found: string | undefined;
 
   find_yield_star_node(expr, (node) => {
@@ -674,7 +706,6 @@ function find_yield_star_node(
   node: ts.Node,
   on_found: (node: ts.Node) => void,
 ): void {
-
   if (is_function_boundary_node(node)) {
     return;
   }
@@ -797,4 +828,7 @@ function slice_start(content: string, node: ts.Node): string {
   return content.slice(node.getStart(), node.end);
 }
 
-export { type MarkupTransformResult, transform_markup_effect } from "./markup/transform.ts";
+export {
+  type MarkupTransformResult,
+  transform_markup_effect,
+} from "./markup/transform.ts";

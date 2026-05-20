@@ -1,6 +1,10 @@
 import { assertEquals, assertRejects } from "@std/assert";
-import { Effect, Exit, Fiber, Layer, ManagedRuntime } from "effect";
-import { Dispatcher, get_dispatcher, reset_dispatcher } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
+import { Effect, Layer, ManagedRuntime } from "effect";
+import {
+  Dispatcher,
+  get_dispatcher,
+  reset_dispatcher,
+} from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
 import type { ValueOptions } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
 
 /** Construct a fresh dispatcher with a controlled empty-layer runtime. */
@@ -21,7 +25,6 @@ Deno.test("fork returns a callable cleanup handle", () => {
 });
 
 Deno.test("fork runs an effect to completion", async () => {
-  const d = make_dispatcher();
   const exit = await Effect.runPromise(
     Effect.gen(function* () {
       return yield* Effect.succeed("ok");
@@ -35,26 +38,26 @@ Deno.test({
   sanitizeResources: false,
   sanitizeOps: false,
   fn: async () => {
-  const d = make_dispatcher();
-  let started = false;
-  let finished = false;
+    const d = make_dispatcher();
+    let started = false;
+    let finished = false;
 
-  const program = Effect.gen(function* () {
-    started = true;
-    yield* Effect.sleep(60_000);
-    finished = true;
-    return 42;
-  });
+    const program = Effect.gen(function* () {
+      started = true;
+      yield* Effect.sleep(60_000);
+      finished = true;
+      return 42;
+    });
 
-  const cleanup = d.fork(program);
+    const cleanup = d.fork(program);
 
-  await wait_for(() => started);
+    await wait_for(() => started);
 
-  cleanup();
+    cleanup();
 
-  await sleep(50);
+    await sleep(50);
 
-  if (finished) throw new Error("fiber should have been interrupted");
+    if (finished) throw new Error("fiber should have been interrupted");
   },
 });
 
@@ -77,10 +80,11 @@ Deno.test("non-interrupt failures surface as uncaught errors", async () => {
   const d = make_dispatcher();
   const errors: unknown[] = [];
   const original_queue = queueMicrotask;
-  (globalThis as Record<string, unknown>).queueMicrotask = (fn: () => void) => errors.push(fn);
+  (globalThis as Record<string, unknown>).queueMicrotask = (fn: () => void) =>
+    errors.push(fn);
 
   try {
-    const cleanup = d.fork(Effect.fail(new Error("expected failure")));
+    const _cleanup = d.fork(Effect.fail(new Error("expected failure")));
     await sleep(50);
 
     // Should have at least one queued error
@@ -95,7 +99,9 @@ Deno.test("non-interrupt failures surface as uncaught errors", async () => {
 Deno.test("value returns the fallback synchronously before the effect resolves", () => {
   const d = make_dispatcher();
   let resolve: ((v: string) => void) | undefined;
-  const deferred = new Promise<string>((r) => { resolve = r; });
+  const deferred = new Promise<string>((r) => {
+    resolve = r;
+  });
 
   const result = d.value({
     id: "test",
@@ -120,7 +126,7 @@ Deno.test("value returns the resolved value after the effect completes", () => {
     deps: [],
     fallback: "loading",
     factory: function* () {
-      return "resolved";
+      return yield* Effect.succeed("resolved");
     },
   };
 
@@ -128,6 +134,26 @@ Deno.test("value returns the resolved value after the effect completes", () => {
 
   const result = d.value(opts);
   assertEquals(result, "resolved");
+
+  d.dispose();
+});
+
+Deno.test("value treats null as a resolved cached value", () => {
+  const d = make_dispatcher();
+
+  const opts: ValueOptions<string | null> = {
+    id: "test-null",
+    deps: [],
+    fallback: "loading",
+    factory: function* () {
+      return yield* Effect.succeed(null);
+    },
+  };
+
+  d.value(opts);
+
+  const result = d.value(opts);
+  assertEquals(result, null);
 
   d.dispose();
 });
@@ -140,7 +166,7 @@ Deno.test("value caches the result by id + deps key", () => {
     deps: [1],
     fallback: 0,
     factory: function* () {
-      return 42;
+      return yield* Effect.succeed(42);
     },
   };
 
@@ -196,44 +222,46 @@ Deno.test({
   sanitizeResources: false,
   sanitizeOps: false,
   fn: async () => {
-  const d = make_dispatcher();
+    const d = make_dispatcher();
 
-  let old_finished = false;
+    let old_finished = false;
 
-  const opts1: ValueOptions<number> = {
-    id: "cancel-on-change",
-    deps: ["old"],
-    fallback: 0,
-    factory: function* () {
-      yield* Effect.sleep(30);
-      old_finished = true;
-      return 999;
-    },
-  };
+    const opts1: ValueOptions<number> = {
+      id: "cancel-on-change",
+      deps: ["old"],
+      fallback: 0,
+      factory: function* () {
+        yield* Effect.sleep(30);
+        old_finished = true;
+        return 999;
+      },
+    };
 
-  const opts2: ValueOptions<number> = {
-    id: "cancel-on-change",
-    deps: ["new"],
-    fallback: 0,
-    factory: function* () {
-      return 42;
-    },
-  };
+    const opts2: ValueOptions<number> = {
+      id: "cancel-on-change",
+      deps: ["new"],
+      fallback: 0,
+      factory: function* () {
+        return yield* Effect.succeed(42);
+      },
+    };
 
-  /** Start a fiber that would complete in 30ms. */
-  d.value(opts1);
+    /** Start a fiber that would complete in 30ms. */
+    d.value(opts1);
 
-  /** Immediately switch deps — the old fiber must be cancelled. */
-  d.value(opts2);
+    /** Immediately switch deps — the old fiber must be cancelled. */
+    d.value(opts2);
 
-  /** Wait longer than the old fiber's sleep so it would have completed if not interrupted. */
-  await sleep(100);
+    /** Wait longer than the old fiber's sleep so it would have completed if not interrupted. */
+    await sleep(100);
 
-  if (old_finished) throw new Error("old fiber should have been interrupted");
+    if (old_finished) throw new Error("old fiber should have been interrupted");
 
-  /** The old key must NOT have cached the stale value. */
-  const old_result = d.value(opts1);
-  if (old_result !== 0) throw new Error(`expected fallback 0, got ${old_result}`);
+    /** The old key must NOT have cached the stale value. */
+    const old_result = d.value(opts1);
+    if (old_result !== 0) {
+      throw new Error(`expected fallback 0, got ${old_result}`);
+    }
   },
 });
 
@@ -249,7 +277,7 @@ Deno.test("value does not fork when disposed", () => {
     fallback: "nope",
     factory: function* () {
       ran = true;
-      return "should not run";
+      return yield* Effect.succeed("should not run");
     },
   });
 
@@ -266,7 +294,7 @@ Deno.test("promise returns a Promise that resolves with the effect's value", asy
     id: "promise-test",
     deps: [],
     factory: function* () {
-      return 42;
+      return yield* Effect.succeed(42);
     },
   });
 
@@ -285,7 +313,7 @@ Deno.test("promise caches by id + deps", async () => {
     deps: ["x"],
     factory: function* () {
       call_count += 1;
-      return call_count;
+      return yield* Effect.succeed(call_count);
     },
   };
 
@@ -328,23 +356,45 @@ Deno.test({
   sanitizeResources: false,
   sanitizeOps: false,
   fn: async () => {
-  const d = make_dispatcher();
+    const d = make_dispatcher();
 
-  const errors: unknown[] = [];
-  const original_queue = queueMicrotask;
-  (globalThis as Record<string, unknown>).queueMicrotask = (fn: () => void) => errors.push(fn);
+    const errors: unknown[] = [];
+    const original_queue = queueMicrotask;
+    (globalThis as Record<string, unknown>).queueMicrotask = (fn: () => void) =>
+      errors.push(fn);
 
-  try {
-    await assertRejects(
-      () => d.run(Effect.fail(new Error("expected error"))),
-      "expected error",
-    );
+    try {
+      await assertRejects(
+        () => d.run(Effect.fail(new Error("expected error"))),
+        "expected error",
+      );
 
-    await sleep(50);
-  } finally {
-    (globalThis as Record<string, unknown>).queueMicrotask = original_queue;
-  }
+      await sleep(50);
+    } finally {
+      (globalThis as Record<string, unknown>).queueMicrotask = original_queue;
+    }
   },
+});
+
+Deno.test("run rejects without executing after dispose", async () => {
+  const d = make_dispatcher();
+  d.dispose();
+
+  let ran = false;
+
+  await assertRejects(
+    () =>
+      d.run(
+        Effect.gen(function* () {
+          ran = true;
+
+          return yield* Effect.succeed(42);
+        }),
+      ),
+    "Dispatcher has been disposed",
+  );
+
+  if (ran) throw new Error("run should not execute after dispose");
 });
 
 // ─── dispose ─────────────────────────────────────────────────
@@ -359,21 +409,21 @@ Deno.test({
   sanitizeResources: false,
   sanitizeOps: false,
   fn: async () => {
-  const d = make_dispatcher();
-  let completed = false;
+    const d = make_dispatcher();
+    let completed = false;
 
-  d.fork(
-    Effect.gen(function* () {
-      yield* Effect.sleep(60_000);
-      completed = true;
-    }),
-  );
+    d.fork(
+      Effect.gen(function* () {
+        yield* Effect.sleep(60_000);
+        completed = true;
+      }),
+    );
 
-  await sleep(30);
-  d.dispose();
-  await sleep(50);
+    await sleep(30);
+    d.dispose();
+    await sleep(50);
 
-  if (completed) throw new Error("fiber should have been interrupted");
+    if (completed) throw new Error("fiber should have been interrupted");
   },
 });
 
@@ -385,7 +435,7 @@ Deno.test("fork is a no-op after dispose", async () => {
   const cleanup = d.fork(
     Effect.gen(function* () {
       ran = true;
-      return 42;
+      return yield* Effect.succeed(42);
     }),
   );
 
@@ -405,7 +455,7 @@ Deno.test("value returns fallback after dispose (no fork)", () => {
     deps: [],
     fallback: "done",
     factory: function* () {
-      return "unreachable";
+      return yield* Effect.succeed("unreachable");
     },
   });
 
@@ -422,7 +472,7 @@ Deno.test("promise rejects after dispose", async () => {
         id: "post-dispose-promise",
         deps: [],
         factory: function* () {
-          return 42;
+          return yield* Effect.succeed(42);
         },
       }),
   );
@@ -447,11 +497,14 @@ Deno.test("reset_dispatcher creates a fresh dispatcher", () => {
 
 // ─── Helpers ─────────────────────────────────────────────────
 
-async function sleep(ms: number): Promise<void> {
+function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function wait_for(predicate: () => boolean, timeout = 1000): Promise<void> {
+async function wait_for(
+  predicate: () => boolean,
+  timeout = 1000,
+): Promise<void> {
   const start = Date.now();
   while (!predicate()) {
     if (Date.now() - start > timeout) {

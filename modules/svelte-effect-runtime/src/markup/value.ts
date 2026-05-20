@@ -1,4 +1,5 @@
 import { get_dispatcher } from "$/dispatcher.ts";
+import type { Effect } from "effect";
 
 /**
  * Runtime helper emitted by the markup preprocessor for `{yield* expr}`
@@ -21,7 +22,7 @@ export function value(
   id: string,
   deps: readonly unknown[],
   fallback: unknown,
-  factory: () => Generator<unknown, unknown, unknown>,
+  factory: () => Effect.gen.Return<unknown, unknown, unknown>,
 ): unknown {
   return get_dispatcher().value({ id, deps, fallback, factory });
 }

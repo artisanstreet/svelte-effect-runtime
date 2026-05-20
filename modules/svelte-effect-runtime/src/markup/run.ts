@@ -12,7 +12,7 @@ import { Effect } from "effect";
  * @returns A Promise that resolves or rejects when the effect completes.
  */
 export function run(
-  factory: () => Generator<unknown, unknown, unknown>,
+  factory: () => Effect.gen.Return<unknown, unknown, unknown>,
 ): Promise<unknown> {
   const effect = Effect.gen(factory);
 

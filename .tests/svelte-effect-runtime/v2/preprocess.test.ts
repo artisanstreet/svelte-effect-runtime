@@ -1,4 +1,9 @@
-import { assertMatch, assertNotMatch, assertStringIncludes, assertThrows } from "@std/assert";
+import {
+  assertMatch,
+  assertNotMatch,
+  assertStringIncludes,
+  assertThrows,
+} from "@std/assert";
 import { transform_script_effect } from "../../../modules/svelte-effect-runtime/src/preprocess.ts";
 import type { ScriptTransformResult } from "../../../modules/svelte-effect-runtime/src/preprocess.ts";
 
@@ -12,7 +17,10 @@ function assert_transform(
     assertStringIncludes(result.code, fragment);
   }
   for (const fragment of must_not_contain) {
-    assertNotMatch(result.code, new RegExp(fragment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assertNotMatch(
+      result.code,
+      new RegExp(fragment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    );
   }
   return result;
 }
@@ -55,17 +63,20 @@ Deno.test("passes through types, interfaces, enums, classes untouched", () => {
   assertStringIncludes(result.code, `type User = { name: string };`);
   assertStringIncludes(result.code, `interface Post { title: string }`);
   assertStringIncludes(result.code, `enum Kind { A, B }`);
-  assertStringIncludes(result.code, `class Helper { greet() { return "hi"; } }`);
+  assertStringIncludes(
+    result.code,
+    `class Helper { greet() { return "hi"; } }`,
+  );
 });
 
 // ─── $state(yield* expr) lowering ────────────────────────────
 
 Deno.test("extracts $state(yield* expr) into a temp $state binding", () => {
   const source = `let user = $state(yield* getUser(id));`;
-  const result = assert_transform(source, [
+  assert_transform(source, [
     `let __SER__`,
     `= $state(undefined);`,
-    `let user = $state(__SER__`,
+    `let user = $derived(__SER__`,
     `= yield* getUser(id);`,
     `import { onMount } from "svelte"`,
     `import { Effect } from "effect"`,
@@ -88,10 +99,10 @@ Deno.test("wraps lowered assignments in Effect.gen + onMount", () => {
 
 Deno.test("extracts const x = yield* expr (bare const sugar)", () => {
   const source = `const user = yield* getUser(id);`;
-  const result = assert_transform(source, [
+  assert_transform(source, [
     `let __SER__`,
     `= $state(undefined);`,
-    `let user = $state(__SER__`,
+    `let user = $derived(__SER__`,
     `= yield* getUser(id);`,
   ]);
 });
@@ -108,6 +119,11 @@ Deno.test("extracts destructuring yield* into temp binding", () => {
   assertStringIncludes(result.code, `let body = $state(undefined);`);
   assertStringIncludes(result.code, `= yield* getPost(id);`);
   assertStringIncludes(result.code, `({ title, body }`);
+  assertNotMatch(
+    result.code,
+    /let __SER__destructure = \$state\(undefined\);\s*let __SER__destructure = \$state\(undefined\);/,
+  );
+  assertNotMatch(result.code, /let \{ title, body \}/);
 });
 
 // ─── $derived(yield* expr) lowering ──────────────────────────
@@ -131,7 +147,7 @@ Deno.test("extracts $state.raw(yield* expr) into a temp binding", () => {
 
   assertStringIncludes(result.code, `let __SER__`);
   assertStringIncludes(result.code, `= $state(undefined);`);
-  assertStringIncludes(result.code, `let raw = $state.raw(__SER__`);
+  assertStringIncludes(result.code, `let raw = $derived(__SER__`);
 });
 
 Deno.test("extracts $inspect(yield* expr) into a temp binding", () => {
@@ -185,7 +201,10 @@ Deno.test("does NOT lower yield* in Effect.gen inside a const declaration", () =
   const source = `const program = Effect.gen(function* () { yield* foo(); });`;
   const result = transform_script_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `const program = Effect.gen(function* () { yield* foo(); });`);
+  assertStringIncludes(
+    result.code,
+    `const program = Effect.gen(function* () { yield* foo(); });`,
+  );
   assertNotMatch(result.code, /__SER__/);
 });
 
@@ -199,10 +218,15 @@ Deno.test("handles multiple yield* expressions in one script", () => {
   ].join("\n");
   const result = transform_script_effect(source, "Test.svelte");
 
-  const gen_count = (result.code.match(/Effect\.gen\(function\*/g) ?? []).length;
+  const gen_count =
+    (result.code.match(/Effect\.gen\(function\*/g) ?? []).length;
   const mount_count = (result.code.match(/onMount\(/g) ?? []).length;
-  if (gen_count !== 1) throw new Error(`Expected 1 Effect.gen, got ${gen_count}`);
-  if (mount_count !== 1) throw new Error(`Expected 1 onMount, got ${mount_count}`);
+  if (gen_count !== 1) {
+    throw new Error(`Expected 1 Effect.gen, got ${gen_count}`);
+  }
+  if (mount_count !== 1) {
+    throw new Error(`Expected 1 onMount, got ${mount_count}`);
+  }
 });
 
 // ─── Import handling ─────────────────────────────────────────
@@ -219,8 +243,49 @@ Deno.test("reuses existing Effect import when already present", () => {
     `let x = $state(yield* f());`,
   ].join("\n");
   const result = transform_script_effect(source, "Test.svelte");
-  const import_count = [...result.code.matchAll(/import.*Effect.*from.*"effect"/g)].length;
-  if (import_count !== 1) throw new Error(`Expected 1 Effect import, got ${import_count}`);
+  const import_count =
+    [...result.code.matchAll(/import.*Effect.*from.*"effect"/g)].length;
+  if (import_count !== 1) {
+    throw new Error(`Expected 1 Effect import, got ${import_count}`);
+  }
+});
+
+Deno.test("injects Effect when effect module import lacks Effect binding", () => {
+  const source = [
+    `import { pipe } from "effect";`,
+    `let x = $state(yield* f());`,
+  ].join("\n");
+  const result = transform_script_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `import { pipe } from "effect";`);
+  assertStringIncludes(result.code, `import { Effect } from "effect";`);
+  assertStringIncludes(result.code, `Effect.gen(function* () {`);
+});
+
+Deno.test("injects onMount when svelte import lacks onMount binding", () => {
+  const source = [
+    `import { tick } from "svelte";`,
+    `let x = $state(yield* f());`,
+  ].join("\n");
+  const result = transform_script_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `import { tick } from "svelte";`);
+  assertStringIncludes(result.code, `import { onMount } from "svelte";`);
+  assertStringIncludes(result.code, `onMount(() => {`);
+});
+
+Deno.test("injects dispatcher when generators import lacks get_dispatcher binding", () => {
+  const source = [
+    `import { value } from "svelte-effect-runtime/generators";`,
+    `let x = $state(yield* f());`,
+  ].join("\n");
+  const result = transform_script_effect(source, "Test.svelte");
+
+  assertStringIncludes(
+    result.code,
+    `import { get_dispatcher } from "svelte-effect-runtime/generators";`,
+  );
+  assertStringIncludes(result.code, `get_dispatcher();`);
 });
 
 // ─── Error cases ─────────────────────────────────────────────
@@ -258,12 +323,21 @@ Deno.test("preserves surrounding expression syntax character-for-character", () 
   assertStringIncludes(result.code, `$derived(__SER__`);
 });
 
+Deno.test("extracts every yield* expression in a compound initializer", () => {
+  const source = `let result = $derived((yield* first()) + (yield* second()));`;
+  const result = transform_script_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `yield* first()`);
+  assertStringIncludes(result.code, `yield* second()`);
+  assertMatch(result.code, /\$derived\(\(__SER__\w+\) \+ \(__SER__\w+\)\)/);
+});
+
 Deno.test("handles ternary with yield* in condition position", () => {
   const source = `let flag = $state(yield* check() ? "a" : "b");`;
   const result = transform_script_effect(source, "Test.svelte");
 
   assertStringIncludes(result.code, `? "a" : "b"`);
-  assertStringIncludes(result.code, `$state(__SER__`);
+  assertStringIncludes(result.code, `$derived(__SER__`);
 });
 
 Deno.test("does not choke on $props() or $bindable declarations", () => {
