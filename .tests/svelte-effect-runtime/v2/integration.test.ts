@@ -1,5 +1,12 @@
 import { assertStringIncludes } from "@std/assert";
-import { transform_script_effect, transform_markup_effect } from "../../../modules/svelte-effect-runtime/src/preprocess.ts";
+import {
+  transform_markup_effect,
+  transform_script_effect,
+} from "../../../modules/svelte-effect-runtime/src/preprocess.ts";
+import {
+  preprocess,
+  rewrite_remote_client_exports,
+} from "../../../modules/svelte-effect-runtime/src/vite.ts";
 
 // ─── Full pipeline ─────────────────────────────────────────────
 
@@ -49,7 +56,8 @@ Deno.test("full pipeline: both preprocessors agree on has_yield", () => {
   const script_result = transform_script_effect(script, "Test.svelte");
   assertStringIncludes(script_result.code, `__SER__`);
 
-  const full = `<script>\n${script_result.code}\n</script>\n\n<p>{yield* getValue()}</p>`;
+  const full =
+    `<script>\n${script_result.code}\n</script>\n\n<p>{yield* getValue()}</p>`;
 
   const markup_result = transform_markup_effect(full, "Test.svelte");
   if (!markup_result.has_yield) throw new Error("markup pass failed");
@@ -71,7 +79,9 @@ Deno.test("full pipeline: script-only content passes through markup unchanged", 
 
   const markup_result = transform_markup_effect(full, "Test.svelte");
   if (markup_result.code !== full) throw new Error("expected identity output");
-  if (markup_result.has_yield) throw new Error("markup should not detect script yield*");
+  if (markup_result.has_yield) {
+    throw new Error("markup should not detect script yield*");
+  }
 });
 
 Deno.test("full pipeline: markup-only passes through script unchanged", () => {
@@ -79,4 +89,51 @@ Deno.test("full pipeline: markup-only passes through script unchanged", () => {
 
   const result = transform_script_effect(markup, "Test.svelte");
   if (result.code !== markup) throw new Error("expected identity output");
+});
+
+Deno.test("preprocess hook only lowers script effect and removes effect attribute", () => {
+  const group = preprocess();
+  const source = [
+    `<script lang="ts" effect>`,
+    `  let value = $state(yield* loadValue());`,
+    `</script>`,
+    `<p>{value}</p>`,
+  ].join("\n");
+
+  const result = group.markup({ content: source, filename: "Test.svelte" });
+
+  assertStringIncludes(result.code, `<script lang="ts">`);
+  assertStringIncludes(result.code, `__SER__program`);
+  if (result.code.includes(` effect>`)) {
+    throw new Error("effect attribute should be removed before Svelte parses");
+  }
+});
+
+Deno.test("vite remote client wrapper preserves native SvelteKit remote module", () => {
+  const source = [
+    `import * as __remote from '__sveltekit/remote';`,
+    ``,
+    `export const get_post = __remote.query('abc/get_post');`,
+    `export const save_post = __remote.command('abc/save_post');`,
+    `export const create_post = __remote.form('abc/create_post');`,
+  ].join("\n");
+
+  const result = rewrite_remote_client_exports(source);
+
+  assertStringIncludes(result, `from '__sveltekit/remote';`);
+  assertStringIncludes(result, `create_remote_query_adapter`);
+  assertStringIncludes(result, `create_remote_command_adapter`);
+  assertStringIncludes(result, `create_remote_form_adapter`);
+  assertStringIncludes(
+    result,
+    `export const get_post = create_remote_query_adapter(__remote.query('abc/get_post'), __ser_decode_payload);`,
+  );
+  assertStringIncludes(
+    result,
+    `export const save_post = create_remote_command_adapter(__remote.command('abc/save_post'), __ser_decode_payload);`,
+  );
+  assertStringIncludes(
+    result,
+    `export const create_post = create_remote_form_adapter(__remote.form('abc/create_post'), __ser_decode_payload, __ser_remote_base);`,
+  );
 });

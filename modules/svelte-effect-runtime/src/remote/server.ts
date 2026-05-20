@@ -1,6 +1,7 @@
-import { type FormIssue } from "$/remote/shared.ts";
-import { Effect, Exit, Cause } from "effect";
+import { create_serialized_remote_failure_envelope } from "$/remote/shared.ts";
+import { Cause, Effect, Exit } from "effect";
 import { stringify } from "devalue";
+import type { FormIssue } from "$/remote/shared.ts";
 
 /**
  * Runs a user-supplied Effect program through a ManagedRuntime, maps its
@@ -16,7 +17,7 @@ import { stringify } from "devalue";
  * @internal
  */
 export async function run_remote_effect<A>(
-  effect: Effect.Effect<A, unknown>,
+  effect: Effect.Effect<A, unknown, unknown>,
   runtime: {
     runPromise: (
       e: Effect.Effect<unknown, unknown, unknown>,
@@ -25,7 +26,6 @@ export async function run_remote_effect<A>(
   invalid: (status: number, body: unknown) => never,
   error: (status: number, body: unknown) => never,
 ): Promise<A> {
-
   const exit: Exit.Exit<A, unknown> = await runtime.runPromise(
     Effect.exit(effect) as Effect.Effect<unknown, unknown, unknown>,
   ) as Exit.Exit<A, unknown>;
@@ -47,26 +47,29 @@ function handle_failure(
   invalid: (status: number, body: unknown) => never,
   error: (status: number, body: unknown) => never,
 ): never {
-
-  const reasons = (cause as unknown as { reasons: Array<{ _tag: string; error?: unknown }> }).reasons;
+  const reasons =
+    (cause as unknown as { reasons: Array<{ _tag: string; error?: unknown }> })
+      .reasons;
 
   for (const reason of reasons) {
-    if (Cause.isFailReason(reason)) {
+    if (Cause.isFailReason(reason as never)) {
       const failure = reason.error;
       if (
         typeof failure === "object" &&
         failure !== null &&
         (failure as Record<string, unknown>)._tag === "FormError"
       ) {
-        const issues = (failure as { issues?: readonly FormIssue[] }).issues ?? [];
+        const issues = (failure as { issues?: readonly FormIssue[] }).issues ??
+          [];
         invalid(400, { issues });
       }
     }
   }
 
-  /** Encode domain errors for the client adapter to decode. */
   const encoded = encode_remote_failure(cause);
-  error(500, encoded);
+  const envelope = create_serialized_remote_failure_envelope(encoded);
+
+  error(500, envelope);
 }
 
 /**
@@ -79,11 +82,12 @@ function handle_failure(
  * @internal
  */
 export function encode_remote_failure(cause: Cause.Cause<unknown>): string {
-
-  const reasons = (cause as unknown as { reasons: Array<{ _tag: string; error?: unknown }> }).reasons;
+  const reasons =
+    (cause as unknown as { reasons: Array<{ _tag: string; error?: unknown }> })
+      .reasons;
 
   for (const reason of reasons) {
-    if (Cause.isFailReason(reason)) {
+    if (Cause.isFailReason(reason as never)) {
       const failure = reason.error;
       if (typeof failure === "object" && failure !== null) {
         try {

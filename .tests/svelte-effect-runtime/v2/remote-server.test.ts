@@ -1,11 +1,16 @@
-import { assert, assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
+import {
+  assert,
+  assertEquals,
+  assertRejects,
+  assertStringIncludes,
+} from "@std/assert";
 import { Effect } from "effect";
 import { parse } from "devalue";
 import {
-  normalize_remote_helper_error,
-  throw_form_error,
   encode_remote_failure,
+  normalize_remote_helper_error,
   run_remote_effect,
+  throw_form_error,
 } from "../../../modules/svelte-effect-runtime/src/remote/server.ts";
 import { create_form_error } from "../../../modules/svelte-effect-runtime/src/remote/shared.ts";
 
@@ -15,7 +20,10 @@ Deno.test("normalize_remote_helper_error wraps outside-a-route message", () => {
   const err = new Error("Cannot use query outside a route");
   const result = normalize_remote_helper_error(err, "Query");
 
-  assertStringIncludes(result.message, "Query was called outside a .remote.ts file");
+  assertStringIncludes(
+    result.message,
+    "Query was called outside a .remote.ts file",
+  );
 });
 
 Deno.test("normalize_remote_helper_error preserves other error messages", () => {
@@ -60,22 +68,23 @@ Deno.test("throw_form_error calls invalid with issues and 400 status", () => {
 
 // ─── encode_remote_failure ─────────────────────────────────────
 
-Deno.test("encode_remote_failure serialises a tagged error from a Cause", () => {
+Deno.test("encode_remote_failure serialises a tagged error from a Cause", async () => {
   const program = Effect.gen(function* () {
     return yield* Effect.fail({ _tag: "MyError", code: 42 });
   });
 
-  const exitPromise = Effect.runPromise(Effect.exit(program));
-  exitPromise.then((exit: unknown) => {
-    const ex = exit as { _tag: string; cause: unknown };
-    if (ex._tag === "Failure") {
-      const encoded = encode_remote_failure(ex.cause);
-      const parsed = parse(encoded);
+  const exit = await Effect.runPromise(Effect.exit(program));
+  const failure = exit as { _tag: string; cause: unknown };
 
-      assertEquals(parsed._tag, "MyError");
-      assertEquals(parsed.code, 42);
-    }
-  });
+  if (failure._tag !== "Failure") {
+    throw new Error("expected failed exit");
+  }
+
+  const encoded = encode_remote_failure(failure.cause);
+  const parsed = parse(encoded);
+
+  assertEquals(parsed._tag, "MyError");
+  assertEquals(parsed.code, 42);
 });
 
 Deno.test("encode_remote_failure handles cause with no failures gracefully", () => {
@@ -91,7 +100,9 @@ Deno.test("encode_remote_failure handles cause with no failures gracefully", () 
 
 Deno.test("run_remote_effect returns the success value", async () => {
   class TestRuntime {
-    runPromise(effect: Effect.Effect<unknown, unknown, unknown>): Promise<unknown> {
+    runPromise(
+      effect: Effect.Effect<unknown, unknown, unknown>,
+    ): Promise<unknown> {
       return Effect.runPromise(effect);
     }
   }
@@ -103,8 +114,14 @@ Deno.test("run_remote_effect returns the success value", async () => {
   const result = await run_remote_effect(
     Effect.succeed(42),
     runtime,
-    () => { invalid_called = true; throw new Error("invalid"); },
-    () => { error_called = true; throw new Error("error"); },
+    () => {
+      invalid_called = true;
+      throw new Error("invalid");
+    },
+    () => {
+      error_called = true;
+      throw new Error("error");
+    },
   );
 
   assertEquals(result, 42);
@@ -114,7 +131,9 @@ Deno.test("run_remote_effect returns the success value", async () => {
 
 Deno.test("run_remote_effect throws invalid on FormError failure", async () => {
   class TestRuntime {
-    runPromise(effect: Effect.Effect<unknown, unknown, unknown>): Promise<unknown> {
+    runPromise(
+      effect: Effect.Effect<unknown, unknown, unknown>,
+    ): Promise<unknown> {
       return Effect.runPromise(effect);
     }
   }
@@ -130,8 +149,14 @@ Deno.test("run_remote_effect throws invalid on FormError failure", async () => {
     await run_remote_effect(
       Effect.fail(form_error) as Effect.Effect<number, unknown>,
       runtime,
-      (status, body) => { captured_status = status; captured_body = body; throw new Error("invalid"); },
-      () => { throw new Error("error"); },
+      (status, body) => {
+        captured_status = status;
+        captured_body = body;
+        throw new Error("invalid");
+      },
+      () => {
+        throw new Error("error");
+      },
     );
   });
 
@@ -141,7 +166,9 @@ Deno.test("run_remote_effect throws invalid on FormError failure", async () => {
 
 Deno.test("run_remote_effect throws error on non-FormError failure", async () => {
   class TestRuntime {
-    runPromise(effect: Effect.Effect<unknown, unknown, unknown>): Promise<unknown> {
+    runPromise(
+      effect: Effect.Effect<unknown, unknown, unknown>,
+    ): Promise<unknown> {
       return Effect.runPromise(effect);
     }
   }
@@ -155,12 +182,24 @@ Deno.test("run_remote_effect throws error on non-FormError failure", async () =>
     await run_remote_effect(
       Effect.fail({ _tag: "DbError", detail: "connection lost" }),
       runtime,
-      () => { throw new Error("invalid"); },
-      (status, body) => { captured_status = status; captured_body = body; throw new Error("error"); },
+      () => {
+        throw new Error("invalid");
+      },
+      (status, body) => {
+        captured_status = status;
+        captured_body = body;
+        throw new Error("error");
+      },
     );
   });
 
   assertEquals(captured_status, 500);
-  const body = parse(captured_body as string);
-  assertEquals(body._tag, "DbError");
+  const body = captured_body as {
+    __svelte_effect_remote__: true;
+    encoded: string;
+  };
+  const parsed = parse(body.encoded);
+
+  assertEquals(body.__svelte_effect_remote__, true);
+  assertEquals(parsed._tag, "DbError");
 });
