@@ -26,6 +26,8 @@ interface MarkupCandidate {
   end: number;
   /** The expression text (without surrounding braces). */
   expr_text: string;
+  /** Source filename used to keep generated cache ids component-scoped. */
+  filename: string;
   /** Whether this expression is a key context (each/promise/render key). */
   key: string;
 }
@@ -65,7 +67,7 @@ export function transform_markup_effect(
   }
 
   /** Find all brace expressions containing yield* and replace with placeholders. */
-  const work = sanitize_markup(content);
+  const work = sanitize_markup(content, filename);
 
   if (work.candidates.length === 0) {
     return { code: content, has_yield: false };
@@ -102,7 +104,7 @@ interface SanitizeResult {
   candidates: MarkupCandidate[];
 }
 
-function sanitize_markup(content: string): SanitizeResult {
+function sanitize_markup(content: string, filename: string): SanitizeResult {
   helper_index = 0;
   const candidates: MarkupCandidate[] = [];
   const magic = new MagicString(content);
@@ -200,6 +202,7 @@ function sanitize_markup(content: string): SanitizeResult {
       start: expr_start,
       end: expr_end,
       expr_text,
+      filename,
       key,
     });
 
@@ -623,7 +626,8 @@ function emit_for_expression(
 
   matched.add(candidate.placeholder);
 
-  const id = candidate.placeholder;
+  const id = make_cache_id(candidate);
+  const id_text = JSON.stringify(id);
   const deps = collect_free_identifiers(candidate.expr_text);
   const deps_text = deps.length === 0 ? "[]" : `[${deps.join(", ")}]`;
 
@@ -631,20 +635,20 @@ function emit_for_expression(
 
   if (kind === "await") {
     replacement_text =
-      `${HELPERS.promise}("${id}", ${deps_text}, function* () { return (${candidate.expr_text}); })`;
+      `${HELPERS.promise}(${id_text}, ${deps_text}, function* () { return (${candidate.expr_text}); })`;
   } else if (kind === "render") {
     replacement_text =
-      `(${HELPERS.value}("${id}", ${deps_text}, function () {}, function* () { return (${candidate.expr_text}); }))()`;
+      `(${HELPERS.value}(${id_text}, ${deps_text}, function () {}, function* () { return (${candidate.expr_text}); }))()`;
   } else if (kind === "each") {
     replacement_text =
-      `${HELPERS.value}("${id}", ${deps_text}, [], function* () { return (${candidate.expr_text}); })`;
+      `${HELPERS.value}(${id_text}, ${deps_text}, [], function* () { return (${candidate.expr_text}); })`;
   } else if (kind === "event") {
     const event = strip_arrow_function(candidate.expr_text);
     replacement_text =
       `${event.params} => { void ${HELPERS.run}(function* () { ${event.body}; }); }`;
   } else {
     replacement_text =
-      `${HELPERS.value}("${id}", ${deps_text}, undefined, function* () { return (${candidate.expr_text}); })`;
+      `${HELPERS.value}(${id_text}, ${deps_text}, undefined, function* () { return (${candidate.expr_text}); })`;
   }
 
   replacements.push({
@@ -652,6 +656,10 @@ function emit_for_expression(
     end: candidate.end,
     text: replacement_text,
   });
+}
+
+function make_cache_id(candidate: MarkupCandidate): string {
+  return `${candidate.filename}:${candidate.start}:${candidate.end}`;
 }
 
 function find_candidate(

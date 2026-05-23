@@ -214,6 +214,24 @@ Deno.test("handles multiple yield* expressions in markup", () => {
 
 // ─── Script tag injection ────────────────────────────────────
 
+Deno.test("generates distinct markup cache ids for different files", () => {
+  const first = transform_markup_effect(
+    `<p>{yield* getUser()}</p>`,
+    "User.svelte",
+  );
+
+  const second = transform_markup_effect(
+    `<p>{yield* getPost()}</p>`,
+    "Post.svelte",
+  );
+
+  const pattern = /__ser_markup_value\((".*?"),/;
+  const first_id = first.code.match(pattern)?.[1];
+  const second_id = second.code.match(pattern)?.[1];
+
+  assertEquals(first_id === second_id, false);
+});
+
 Deno.test("injects helper imports into existing instance script tag", () => {
   const source = [
     `<script>let x = 1;</script>`,
