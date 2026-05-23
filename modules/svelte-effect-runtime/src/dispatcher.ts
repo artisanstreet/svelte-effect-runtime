@@ -44,51 +44,64 @@ export interface PromiseOptions<A> {
 }
 
 const object_dep_ids = new WeakMap<object, number>();
+const symbol_dep_ids = new Map<symbol, number>();
 
 let next_object_dep_id = 0;
+let next_symbol_dep_id = 0;
 
 /**
- * Builds a deterministic cache key from a dependency array. Primitives are
- * stringified directly; objects receive a WeakMap-backed numeric id so that
- * repeated references to the same object within a single call produce the
- * same segment.
+ * Builds a deterministic cache key from a dependency array. Primitive values
+ * are encoded as tagged JSON parts; objects and symbols receive stable ids
+ * for the lifetime of the module.
  *
  * @since 2.0.0
  * @param deps - The dependency array to hash.
- * @param seen - Internal WeakMap tracking object→id within a single call.
- *   Callers should omit this parameter.
- * @returns A pipe-separated string key suitable for Map lookups.
+ * @returns A structured string key suitable for Map lookups.
  */
 function hash_deps(deps: readonly unknown[]): string {
-  return deps
-    .map((dep) => {
-      if (dep === null) return "null";
-      if (dep === undefined) return "undefined";
+  const parts = deps.map((dep) => {
+    if (dep === null) return "l:null";
+    if (dep === undefined) return "u:undefined";
 
-      const type = typeof dep;
+    const type = typeof dep;
 
-      if (type === "string") return `s:${dep}`;
+    if (type === "string") {
+      return ["s", dep];
+    }
 
-      if (type === "number") {
-        return `n:${Object.is(dep, -0) ? "-0" : String(dep)}`;
-      }
+    if (type === "number") {
+      return `n:${Object.is(dep, -0) ? "-0" : String(dep)}`;
+    }
 
-      if (type === "bigint") return `b:${dep}`;
+    if (type === "bigint") return `b:${dep}`;
 
-      if (type === "boolean") return dep ? "true" : "false";
+    if (type === "boolean") return dep ? "t:true" : "f:false";
 
-      if (type === "symbol") return `y:${String(dep)}`;
+    if (type === "symbol") {
+      let id = symbol_dep_ids.get(dep as symbol);
 
-      /** Object — assign a stable numeric id within this call. */
-      let id = object_dep_ids.get(dep as object);
       if (id === undefined) {
-        next_object_dep_id += 1;
-        id = next_object_dep_id;
-        object_dep_ids.set(dep as object, id);
+        next_symbol_dep_id += 1;
+        id = next_symbol_dep_id;
+        symbol_dep_ids.set(dep as symbol, id);
       }
-      return `o:${id}`;
-    })
-    .join("|");
+
+      return `y:${id}`;
+    }
+
+    /** Object - assign a stable numeric id for this reference. */
+    let id = object_dep_ids.get(dep as object);
+
+    if (id === undefined) {
+      next_object_dep_id += 1;
+      id = next_object_dep_id;
+      object_dep_ids.set(dep as object, id);
+    }
+
+    return `o:${id}`;
+  });
+
+  return JSON.stringify(parts);
 }
 
 /**

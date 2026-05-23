@@ -178,6 +178,72 @@ Deno.test("value caches the result by id + deps key", () => {
   d.dispose();
 });
 
+Deno.test("value keeps distinct dependency arrays separate", () => {
+  const d = make_dispatcher();
+  let call_count = 0;
+
+  const first: ValueOptions<string> = {
+    id: "collision",
+    deps: ["a|s:b"],
+    fallback: "loading",
+    factory: function* () {
+      call_count += 1;
+      return yield* Effect.succeed("first");
+    },
+  };
+
+  const second: ValueOptions<string> = {
+    id: "collision",
+    deps: ["a", "b"],
+    fallback: "loading",
+    factory: function* () {
+      call_count += 1;
+      return yield* Effect.succeed("second");
+    },
+  };
+
+  d.value(first);
+  assertEquals(d.value(first), "first");
+
+  d.value(second);
+  assertEquals(d.value(second), "second");
+  assertEquals(call_count, 2);
+
+  d.dispose();
+});
+
+Deno.test("value keeps symbols with the same description separate", () => {
+  const d = make_dispatcher();
+  const symbol_a = Symbol("same");
+  const symbol_b = Symbol("same");
+
+  const first: ValueOptions<string> = {
+    id: "symbol-collision",
+    deps: [symbol_a],
+    fallback: "loading",
+    factory: function* () {
+      return yield* Effect.succeed("first");
+    },
+  };
+
+  const second: ValueOptions<string> = {
+    id: "symbol-collision",
+    deps: [symbol_b],
+    fallback: "loading",
+    factory: function* () {
+      return yield* Effect.succeed("second");
+    },
+  };
+
+  d.value(first);
+  assertEquals(d.value(first), "first");
+
+  d.value(second);
+  assertEquals(d.value(second), "second");
+
+  d.dispose();
+});
+
 Deno.test("value starts a new fiber when deps change", async () => {
   const d = make_dispatcher();
   let call_count = 0;
