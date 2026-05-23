@@ -80,6 +80,30 @@ Deno.test("remote query adapter maps plain http failures to http errors", async 
   assertEquals((error as { status?: number }).status, 404);
 });
 
+Deno.test("remote query adapter exposes http failures on the Effect error channel", async () => {
+  const native = {
+    load: () =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({ message: "not found" }),
+          { status: 404 },
+        ),
+      ),
+  };
+
+  const query = create_remote_query_adapter(native, (value) => value, "");
+  const result = await Effect.runPromise(
+    query(undefined).pipe(
+      Effect.catchTag(
+        "RemoteHttpError",
+        (error) => Effect.succeed(error.status),
+      ),
+    ),
+  );
+
+  assertEquals(result, 404);
+});
+
 Deno.test("remote form adapter preserves descriptors and wraps validate in an Effect", async () => {
   const attach = Symbol("attach");
   let validate_called = false;

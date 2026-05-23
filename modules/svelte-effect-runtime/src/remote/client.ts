@@ -285,16 +285,15 @@ async function resolve_query_result<Output>(
 function make_effect_from_promise<Output>(
   run: () => Promise<Output>,
 ): Effect.Effect<Output, RemoteFailure<unknown>> {
-  return Effect.promise<Output>(async () => {
-    try {
-      return await run();
-    } catch (error: unknown) {
+  return Effect.tryPromise({
+    try: run,
+    catch: (error: unknown) => {
       if (is_decoded_remote_failure(error)) {
-        throw error;
+        return error;
       }
 
-      throw normalize_native_error(error);
-    }
+      return normalize_native_error(error);
+    },
   }) as Effect.Effect<Output, RemoteFailure<unknown>>;
 }
 
