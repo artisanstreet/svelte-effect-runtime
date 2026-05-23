@@ -4,10 +4,11 @@ import {
   create_remote_validation_error,
   is_serialized_remote_failure_envelope,
 } from "$/remote/shared.ts";
+import type { RemoteForm, RemoteFormInput } from "@sveltejs/kit";
+import type { FormIssue, RemoteFailure } from "$/remote/shared.ts";
 import { get_dispatcher } from "$/dispatcher.ts";
 import { Effect } from "effect";
 import { parse } from "devalue";
-import type { FormIssue, RemoteFailure } from "$/remote/shared.ts";
 
 /**
  * Represents a pending operation counter that remote command adapters
@@ -24,6 +25,106 @@ export interface Pending {
 type NativeMethod = (...args: unknown[]) => unknown;
 
 type NativeFormRecord = Record<PropertyKey, unknown>;
+
+/**
+ * Represents the form submit handle passed into an Effect-aware enhanced
+ * remote form callback.
+ *
+ * @example
+ * ```ts
+ * form.enhance(({ submit }) =>
+ *   Effect.gen(function* () {
+ *     yield* submit().updates();
+ *   })
+ * );
+ * ```
+ *
+ * @since 2.0.0
+ * @returns An Effect value with an `updates` method that remains Effect-based.
+ */
+export type EffectRemoteFormSubmit =
+  & Effect.Effect<unknown, RemoteFailure<unknown>>
+  & {
+    updates: (
+      ...updates: unknown[]
+    ) => Effect.Effect<unknown, RemoteFailure<unknown>>;
+  };
+
+/**
+ * Represents the callback payload passed to an Effect-aware remote form
+ * enhancement callback.
+ *
+ * @example
+ * ```ts
+ * form.enhance(({ data, submit }) =>
+ *   Effect.gen(function* () {
+ *     console.log(data);
+ *     yield* submit();
+ *   })
+ * );
+ * ```
+ *
+ * @since 2.0.0
+ * @typeParam Input - SvelteKit remote form input shape used to type the
+ *   enhanced callback data.
+ * @returns The callback options passed to `enhance`, with `submit` replaced
+ *   by an Effect-returning submit handle.
+ */
+export type EffectRemoteFormEnhanceOptions<
+  Input extends RemoteFormInput | void,
+> =
+  & Omit<
+    Parameters<RemoteForm<Input, unknown>["enhance"]>[0] extends (
+      options: infer Options,
+    ) => unknown ? Options
+      : never,
+    "submit"
+  >
+  & {
+    submit: () => EffectRemoteFormSubmit;
+  };
+
+/**
+ * Represents a SvelteKit remote form whose submission, validation, and
+ * enhancement hooks expose Effect-returning APIs.
+ *
+ * @example
+ * ```ts
+ * const form = create_remote_form_adapter(nativeForm, (value) => value);
+ *
+ * yield* form.preflight(schema).validate();
+ * ```
+ *
+ * @since 2.0.0
+ * @typeParam Input - SvelteKit remote form input shape accepted by the
+ *   adapted form.
+ * @typeParam Output - SvelteKit remote form output value produced by a
+ *   successful submission.
+ * @returns A callable remote form whose form helpers preserve Effect-returning
+ *   APIs across `preflight`, `for`, `validate`, and `enhance`.
+ */
+export type EffectRemoteForm<Input extends RemoteFormInput | void, Output> =
+  & ((input: Input) => Effect.Effect<Output, RemoteFailure<unknown>>)
+  & Omit<
+    RemoteForm<Input, Output>,
+    "enhance" | "for" | "preflight" | "submit" | "validate"
+  >
+  & {
+    enhance(
+      callback?: (
+        options: EffectRemoteFormEnhanceOptions<Input>,
+      ) => void | Promise<void> | Effect.Effect<void, unknown, unknown>,
+    ): ReturnType<RemoteForm<Input, Output>["enhance"]>;
+    for(id: Parameters<RemoteForm<Input, Output>["for"]>[0]): Omit<
+      EffectRemoteForm<Input, Output>,
+      "for"
+    >;
+    preflight(schema: unknown): EffectRemoteForm<Input, Output>;
+    submit(input: Input): Effect.Effect<Output, RemoteFailure<unknown>>;
+    validate(
+      options?: Parameters<RemoteForm<Input, Output>["validate"]>[0],
+    ): Effect.Effect<void, RemoteFailure<unknown>>;
+  };
 
 /**
  * Decodes a raw value received over the wire into either the domain
@@ -311,18 +412,22 @@ export function create_remote_command_adapter<Input, Output>(
  * @returns A callable form function whose properties mirror the native form.
  * @internal
  */
-export function create_remote_form_adapter<Input, Output>(
+export function create_remote_form_adapter<
+  Input extends RemoteFormInput | void,
+  Output,
+>(
   native_factory: unknown,
   decode_payload: (value: unknown) => unknown,
   remote_base = "",
-):
-  & ((input: Input) => Effect.Effect<Output, RemoteFailure<unknown>>)
-  & Record<PropertyKey, unknown> {
+): EffectRemoteForm<Input, Output> {
   const form_obj = native_factory as NativeFormRecord;
 
   const submit_effect = (input: Input) =>
     make_effect_from_promise(async () => {
-      if (has_method(form_obj, "submit")) {
+      const can_use_remote_endpoint = remote_base.length > 0 &&
+        get_remote_action_id(form_obj) !== undefined;
+
+      if (has_method(form_obj, "submit") && !can_use_remote_endpoint) {
         const result = await form_obj.submit(input);
 
         return await decode_response_or_value<Output>(result, decode_payload);
@@ -336,9 +441,10 @@ export function create_remote_form_adapter<Input, Output>(
       );
     });
 
-  const callable = ((input: Input) => submit_effect(input)) as
-    & ((input: Input) => Effect.Effect<Output, RemoteFailure<unknown>>)
-    & Record<PropertyKey, unknown>;
+  const callable = ((input: Input) => submit_effect(input)) as EffectRemoteForm<
+    Input,
+    Output
+  >;
 
   copy_property_descriptors(
     form_obj,
@@ -460,11 +566,20 @@ function wrap_submit_callback(event: unknown): unknown {
   }
 
   const original_submit = event.submit;
+  const { submit: _submit, ...descriptors } = Object.getOwnPropertyDescriptors(
+    event,
+  );
 
-  return {
-    ...event,
-    submit: () => make_submit_effect(original_submit),
-  };
+  void _submit;
+
+  return Object.defineProperties({}, {
+    ...descriptors,
+    submit: {
+      configurable: true,
+      enumerable: false,
+      value: () => make_submit_effect(original_submit),
+    },
+  });
 }
 
 function make_submit_effect(
@@ -480,8 +595,9 @@ function make_submit_effect(
     }
 
     return await Promise.resolve(result);
-  }) as Effect.Effect<unknown, RemoteFailure<unknown>> &
-    Record<string, unknown>;
+  }) as
+    & Effect.Effect<unknown, RemoteFailure<unknown>>
+    & Record<string, unknown>;
 
   Object.defineProperty(effect, "updates", {
     configurable: true,

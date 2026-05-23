@@ -117,6 +117,103 @@ Deno.test("remote form adapter preserves descriptors and wraps validate in an Ef
   assertEquals(validate_called, true);
 });
 
+Deno.test("remote form adapter posts explicit input when native submit is form-bound", async () => {
+  const original_fetch = globalThis.fetch;
+
+  let native_submit_called = false;
+  let requested_url = "";
+  let posted_title: FormDataEntryValue | null = null;
+
+  const native = {
+    method: "POST",
+    action: "?/remote=abc%2Fcreate",
+    submit() {
+      native_submit_called = true;
+      throw new Error("Cannot call submit() before the form is attached");
+    },
+  };
+
+  globalThis.fetch = ((url: string | URL | Request, init?: RequestInit) => {
+    requested_url = String(url);
+    posted_title = (init?.body as FormData).get("title");
+
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          type: "result",
+          result: stringify({ result: { ok: true } }),
+        }),
+      ),
+    );
+  }) as typeof fetch;
+
+  try {
+    const form = create_remote_form_adapter<
+      { title: string },
+      { ok: boolean }
+    >(native, (value) => value, "/_app/remote");
+
+    const result = await Effect.runPromise(form({ title: "hello" }));
+
+    assertEquals(result, { ok: true });
+    assertEquals(native_submit_called, false);
+    assertEquals(requested_url, "/_app/remote/abc/create");
+    assertEquals(posted_title, "hello");
+  } finally {
+    globalThis.fetch = original_fetch;
+  }
+});
+
+Deno.test("remote form adapter preserves SvelteKit 2.61 enhance instance descriptors", () => {
+  const fields = { title: { value: () => "draft" } };
+
+  let callback_fields: unknown;
+  let callback_pending: unknown;
+  let callback_submit_is_effect = false;
+
+  const native = {
+    method: "POST",
+    action: "?/remote=abc%2Fcreate",
+    enhance(callback: (event: unknown) => unknown) {
+      const event = {};
+
+      Object.defineProperties(event, {
+        fields: {
+          get: () => fields,
+        },
+        pending: {
+          get: () => 1,
+        },
+        submit: {
+          value: () => Promise.resolve(true),
+        },
+      });
+
+      callback(event);
+
+      return native;
+    },
+  };
+
+  const form = create_remote_form_adapter(native, (value) => value, "");
+
+  form.enhance((event: unknown) => {
+    const wrapped = event as {
+      fields: unknown;
+      pending: number;
+      submit: () => unknown;
+    };
+
+    callback_fields = wrapped.fields;
+    callback_pending = wrapped.pending;
+    callback_submit_is_effect = Effect.isEffect(wrapped.submit());
+  });
+
+  assertEquals(callback_fields, fields);
+  assertEquals(callback_pending, 1);
+  assertEquals(callback_submit_is_effect, true);
+});
+
 Deno.test("remote form adapter wraps enhance submit callbacks as Effects", () => {
   let callback_submit_is_effect = false;
 
