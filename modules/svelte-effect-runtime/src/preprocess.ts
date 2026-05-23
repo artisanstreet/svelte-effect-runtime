@@ -560,14 +560,12 @@ function lower_expression_statement(
     expr.operatorToken.kind === ts.SyntaxKind.EqualsToken
   ) {
     const target = slice(content, expr.left).trim();
-    const temp_name = next_temp_name("assign");
-
     const yield_text = extract_yield_star_full_text(expr, content);
 
     return {
-      temps: [{ name: temp_name }],
-      rewritten_text: `${target} = ${temp_name};`,
-      effect_assignments: [`${temp_name} = ${yield_text};`],
+      temps: [],
+      rewritten_text: "",
+      effect_assignments: [`${target} = ${yield_text};`],
       range: { start: stmt.getStart(), end: stmt.end },
     };
   }

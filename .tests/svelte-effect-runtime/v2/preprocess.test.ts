@@ -162,18 +162,16 @@ Deno.test("extracts $inspect(yield* expr) into a temp binding", () => {
 
 // ─── Assignment expressions with yield* ──────────────────────
 
-Deno.test("extracts count = yield* expr (assignment expression statement)", () => {
+Deno.test("moves count = yield* expr into the effect body", () => {
   const source = [
     `let count = $state(0);`,
     `count = yield* getCount();`,
   ].join("\n");
   const result = transform_script_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `let __SER__`);
-  assertStringIncludes(result.code, `= $state(undefined);`);
   assertStringIncludes(result.code, `let count = $state(0);`);
-  assertStringIncludes(result.code, `count = __SER__`);
-  assertStringIncludes(result.code, `= yield* getCount();`);
+  assertStringIncludes(result.code, `count = yield* getCount();`);
+  assertNotMatch(result.code, /count = __SER__/);
 });
 
 // ─── Bare yield* statement (fire and forget) ─────────────────
