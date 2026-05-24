@@ -1,96 +1,76 @@
-# V2 Plan — Svelte Effect Runtime
+# V2 Plan - Svelte Effect Runtime
 
 ## Status
 
-**Current**: P1 ✅ | P2 ✅ | P3 ✅ | P4 ❌
+Current: runtime core implemented, docs migrated to Fumadocs, and a current
+package browser smoke exists. V2 is not yet declared complete because the live
+smoke matrix still needs remote-function coverage and a final thermonuclear
+self-review.
 
-**Effect dependency**: `npm:effect@beta` (4.0.0-beta.66)
+Effect dependency: `npm:effect@beta` (`4.0.0-beta.66` at last verification).
 
 ## Architecture
 
-```
-Source → Detection → Extraction → Code Generation → Dispatcher
-                                                      │
-                                            ┌─────────┴─────────┐
-                                            ▼                   ▼
-                                       fork()               value()
-                                       run()                promise()
+```text
+Source -> Detection -> Script lowering -> Markup lowering -> Dispatcher
+                                                        |
+                                              fork() value()
+                                              run()  promise()
 
 Server-side:
-  .remote.ts → server.ts → run_remote_effect() → ManagedRuntime
-                          Query / Command / Form / Prerender
+  .remote.ts -> server.ts -> run_remote_effect() -> ManagedRuntime
+                          -> Query / Command / Form / Prerender
 
 Client-side:
-  vite.ts → generates __sveltekit/remote → remote/client.ts
-          → query/command/form adapters → Effect.promise
+  vite.ts -> generated __sveltekit/remote facade
+          -> remote/client.ts adapters
+          -> Effect-returning query / command / form APIs
 ```
 
-## What's done
+## What's Done
 
-| Component | File | Status |
-|-----------|------|--------|
-| yield* detection | `src/detect.ts` | ✅ 17 tests |
-| Dispatcher class | `src/dispatcher.ts` | ✅ 24 tests |
-| Script preprocessor | `src/preprocess.ts` | ✅ 22 tests |
-| Markup preprocessor | `src/markup/transform.ts` | ✅ 24 tests |
-| Markup helpers | `src/markup/{value,promise,run}.ts` | ✅ |
-| Error classes | `src/error.ts` | ✅ |
-| Public API barrel | `src/mod.ts` | ✅ |
-| Generators barrel | `src/generators.ts` | ✅ 3 tests |
-| Remote error types | `src/remote/shared.ts` | ✅ 18 tests |
-| Server handler utils | `src/remote/server.ts` | ✅ 9 tests |
-| Client adapters | `src/remote/client.ts` | ✅ |
-| Server runtime | `src/server.ts` | ✅ |
-| Vite plugin | `src/vite.ts` | ✅ |
-| Lowering helper | `src/lowering.ts` | ⚠️ unused stub |
+| Component | File | Evidence |
+| --- | --- | --- |
+| `yield*` detection | `src/detect.ts` | Unit coverage in `v2/detect.test.ts` |
+| Dispatcher lifecycle | `src/dispatcher.ts` | Unit coverage in `v2/dispatcher.test.ts` |
+| Script effect lowering | `src/preprocess.ts` | Unit and integration coverage |
+| Markup effect lowering | `src/markup/transform.ts` | Unit and integration coverage |
+| Markup helpers | `src/markup/{value,promise,run}.ts` | Covered through markup and smoke tests |
+| Remote shared errors | `src/remote/shared.ts` | Unit coverage in `v2/remote-shared.test.ts` |
+| Remote server helpers | `src/remote/server.ts` | Unit coverage in `v2/remote-server.test.ts` |
+| Remote client adapters | `src/remote/client.ts` | Runtime and type-level coverage |
+| Runtime package build | `build/runtime.ts` | `deno task build:runtime` |
+| Current package browser smoke | `build/smoke-current-runtime.ts` | `deno task smoke:runtime` |
+| Docs app | `modules/docs` | Fumadocs/Next build via `npm run build` |
 
-**Test suite**: 117 tests, 0 failures, ~1s
+Current runtime test suite: 148 tests under `.tests/svelte-effect-runtime/v2/`.
 
-## File structure
+## Verification Commands
 
-```
-src/
-├── mod.ts
-├── detect.ts
-├── dispatcher.ts
-├── preprocess.ts
-├── generators.ts
-├── lowering.ts          (stub)
-├── error.ts
-├── server.ts
-├── vite.ts
-├── markup/
-│   ├── transform.ts
-│   ├── value.ts
-│   ├── promise.ts
-│   └── run.ts
-└── remote/
-    ├── shared.ts
-    ├── server.ts
-    └── client.ts
+```sh
+deno lint
+deno task check:runtime
+deno task test:runtime
+deno task build:runtime
+deno task smoke:runtime
+cd modules/docs && npm.cmd run build
 ```
 
-## Effect v4 migration
+## Remaining Before 100%
 
-Upgraded from `effect@^3.21.0` to `effect@4.0.0-beta.66`. Key API changes:
+- Add a live smoke that exercises current-package remote query, command, form,
+  and prerender behavior in a SvelteKit app.
+- Decide whether the existing `reset_dispatcher()` internal test utility should
+  stay internal or move behind a test-only entrypoint.
+- Run the full completion audit against the original objective.
+- Run `$thermo-nuclear-code-quality-review` against the finished branch and fix
+  any findings before calling V2 complete.
 
-| Old (v3) | New (v4 beta) |
-|----------|---------------|
-| `Cause.isInterruptedOnly(c)` | `Cause.hasInterruptsOnly(c)` |
-| `fiber.await` (property) | `Fiber.await(fiber)` (module fn) |
-| `Cause.failures(cause)` | `cause.reasons` + `Cause.isFailReason(r)` |
-| `Effect.async(resume => {})` | `Effect.promise(async () => {})` |
-| `Context.GenericTag<T>(k)` | `Context.Reference<T>(k)` |
-| `Context.provide(e, tag, svc)` | `Effect.provideService(e, tag, svc)` |
+## Notes
 
-Notable behavioral change: `ManagedRuntime.runFork` runs synchronously for
-resolved effects in v4 (e.g. `Effect.succeed(42)` completes before `runFork()`
-returns). This is actually better — the fallback remains a safety net for
-truly async effects.
-
-## Phase 4 — Polish
-
-- Remove `lowering.ts` stub or implement it
-- Add `Dispatcher.make()` factory
-- Integration test: full pipeline
-- Remove `reset_dispatcher()` after no longer needed
+- The old `lowering.ts` placeholder has been removed. Lowering logic lives in
+  `preprocess.ts` and `markup/transform.ts`.
+- The old VitePress docs and custom Vercel fallback API have been removed.
+- Existing legacy smoke apps under `Code/smokes/ser-v2*` may still reference an
+  old `1.6.2` tarball. The repeatable current-package smoke is
+  `deno task smoke:runtime`, which recreates `Code/smokes/ser-v2-current`.
