@@ -2,10 +2,9 @@
 
 ## Status
 
-Current: runtime core implemented, docs migrated to Fumadocs, and a current
-package browser smoke exists with remote-function coverage. V2 is not yet
-declared complete because the final completion audit and thermonuclear
-self-review still need to be run from the finished tree.
+Current: V2 runtime readiness is complete as of 2026-05-24. Runtime core,
+remote functions, Fumadocs docs, package build, and live current-package smoke
+have all been verified from the finished tree.
 
 Effect dependency: `npm:effect@beta` (`4.0.0-beta.66` at last verification).
 
@@ -56,11 +55,22 @@ deno task smoke:runtime
 cd modules/docs && npm.cmd run build
 ```
 
-## Remaining Before 100%
+## Final Readiness Gates
 
-- Run the full completion audit against the original objective.
-- Run `$thermo-nuclear-code-quality-review` against the finished branch and fix
-  any findings before calling V2 complete.
+All gates below passed on 2026-05-24 from the finished tree:
+
+```sh
+deno lint
+deno task check:runtime
+deno task test:runtime
+deno task build:runtime
+deno task smoke:runtime
+cd modules/docs && npm.cmd run build
+```
+
+The required `$thermo-nuclear-code-quality-review` self-review was run against
+the branch. It found no structural blockers, no file-size threshold crossings,
+and no required follow-up refactor before declaring V2 ready.
 
 ## Notes
 
