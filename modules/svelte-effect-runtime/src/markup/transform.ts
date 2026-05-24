@@ -97,7 +97,7 @@ export function transform_markup_effect(
   return { code: magic.toString(), has_yield: true };
 }
 
-// ─── Sanitization ────────────────────────────────────────────
+/** Sanitization helpers for source snippets that are parsed out of markup. */
 
 interface SanitizeResult {
   code: string;
@@ -249,7 +249,7 @@ function find_tag_end(
   return undefined;
 }
 
-// ─── Brace matching ──────────────────────────────────────────
+/** Brace matching helpers for extracting complete markup expressions. */
 
 function find_closing_brace(content: string, start: number): number {
   let depth = 0;
@@ -346,7 +346,7 @@ function is_event_expression(inner: string): boolean {
   return /^(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/.test(trimmed);
 }
 
-// ─── AST replacement collection ──────────────────────────────
+/** AST traversal helpers that collect markup replacements. */
 
 interface Replacement {
   start: number;
@@ -683,7 +683,7 @@ function find_candidate(
   return undefined;
 }
 
-// ─── Helpers ─────────────────────────────────────────────────
+/** General transform helpers. */
 
 /**
  * Strips the arrow function wrapper from an event handler expression,
@@ -732,7 +732,7 @@ function contains_yield_star_in_text(text: string): boolean {
   }
 }
 
-// ─── Free identifier collection ──────────────────────────────
+/** Free identifier collection helpers for generated closures. */
 
 function collect_free_identifiers(expr_text: string): string[] {
   const wrapped = `function* __w() { return (${expr_text}); }`;
@@ -809,7 +809,7 @@ function is_property_access_name(node: ts.Identifier): boolean {
   );
 }
 
-// ─── Import injection ────────────────────────────────────────
+/** Import injection helpers for generated markup runtime calls. */
 
 /**
  * Replaces the content of all `<script>` blocks with whitespace so

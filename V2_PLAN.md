@@ -3,9 +3,9 @@
 ## Status
 
 Current: runtime core implemented, docs migrated to Fumadocs, and a current
-package browser smoke exists. V2 is not yet declared complete because the live
-smoke matrix still needs remote-function coverage and a final thermonuclear
-self-review.
+package browser smoke exists with remote-function coverage. V2 is not yet
+declared complete because the final completion audit and thermonuclear
+self-review still need to be run from the finished tree.
 
 Effect dependency: `npm:effect@beta` (`4.0.0-beta.66` at last verification).
 
@@ -58,8 +58,6 @@ cd modules/docs && npm.cmd run build
 
 ## Remaining Before 100%
 
-- Decide whether the existing `reset_dispatcher()` internal test utility should
-  stay internal or move behind a test-only entrypoint.
 - Run the full completion audit against the original objective.
 - Run `$thermo-nuclear-code-quality-review` against the finished branch and fix
   any findings before calling V2 complete.
@@ -72,3 +70,6 @@ cd modules/docs && npm.cmd run build
 - Existing legacy smoke apps under `Code/smokes/ser-v2*` may still reference an
   old `1.6.2` tarball. The repeatable current-package smoke is
   `deno task smoke:runtime`, which recreates `Code/smokes/ser-v2-current`.
+- `reset_dispatcher()` stays source-internal for V2. It is not re-exported by
+  the root module or package export map; source-level tests import it directly
+  to isolate the dispatcher singleton without creating a public test API.

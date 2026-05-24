@@ -427,11 +427,23 @@ export function get_dispatcher(): Dispatcher {
 }
 
 /**
- * Reset the global dispatcher (for testing). Disposes the current
- * dispatcher if one exists and clears the singleton reference.
+ * Resets the internal singleton dispatcher used by source-level tests.
+ *
+ * This is intentionally not re-exported from the package entrypoints. Tests
+ * that need singleton isolation import the source module directly, while the
+ * published runtime API remains limited to `ClientRuntime.make()`.
+ *
+ * @example
+ * ```ts
+ * import { reset_dispatcher } from "../../modules/svelte-effect-runtime/src/dispatcher.ts";
+ *
+ * reset_dispatcher();
+ * ```
  *
  * @since 2.0.0
  * @internal
+ * @returns Nothing. Any active singleton dispatcher is disposed before the
+ *   singleton reference is cleared.
  */
 export function reset_dispatcher(): void {
   current_dispatcher?.dispose();
