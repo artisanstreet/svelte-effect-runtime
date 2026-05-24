@@ -37,6 +37,7 @@
     "docs:dev": "cd modules/docs && deno task dev",
     "lint": "deno lint",
     "package:extension": "cd modules/svelte-effect-runtime-vsix && deno task package",
+    "smoke:docs": "deno run -A build/smoke-docs.ts",
     "smoke:runtime": "deno run -A build/smoke-current-runtime.ts",
     "test": "deno task test:runtime",
     "test:runtime": "cd modules/svelte-effect-runtime && deno task test"
