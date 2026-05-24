@@ -14,9 +14,7 @@ most once per redeploy — content pages, static config, version banners.
 
 ## Minimal example
 
-::: code-group
-
-```ts [src/lib/topics.remote.ts]
+```ts tab="src/lib/topics.remote.ts"
 import { Data, Effect, Schema } from "effect";
 import { Prerender } from "svelte-effect-runtime";
 
@@ -46,7 +44,7 @@ export const get_topic = Prerender(
 );
 ```
 
-```svelte [src/routes/topics/[slug]/+page.svelte]
+```svelte tab="src/routes/topics/[slug]/+page.svelte"
 <script lang="ts" effect>
   import { page } from "$app/state";
   import { get_topic } from "$lib/topics.remote";
@@ -60,11 +58,10 @@ export const get_topic = Prerender(
 </article>
 ```
 
-```ts [src/routes/topics/[slug]/+page.ts]
+```ts tab="src/routes/topics/[slug]/+page.ts"
 export const prerender = true;
 ```
 
-:::
 
 ::: warning
 In `npm run dev`, non-dynamic prerender results aren't populated —

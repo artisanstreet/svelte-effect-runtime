@@ -17,9 +17,7 @@ For static or build-time data, use [Prerender](./prerender) instead.
 
 ## Minimal example
 
-::: code-group
-
-```ts [src/lib/posts.remote.ts]
+```ts tab="src/lib/posts.remote.ts"
 import { Data, Effect, Schema } from "effect";
 import { Query } from "svelte-effect-runtime";
 
@@ -45,7 +43,7 @@ export const get_post = Query(Schema.String, (slug) =>
 );
 ```
 
-```svelte [src/routes/+page.svelte]
+```svelte tab="src/routes/+page.svelte"
 <script lang="ts" effect>
   import { get_all_posts } from "$lib/posts.remote";
 
@@ -61,7 +59,6 @@ export const get_post = Query(Schema.String, (slug) =>
 </ul>
 ```
 
-:::
 
 ::: warning
 `yield*` works at the **top level** of a `<script effect>` block,

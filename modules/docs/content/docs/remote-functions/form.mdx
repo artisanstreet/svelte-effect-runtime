@@ -26,9 +26,7 @@ kit: { experimental: { remoteFunctions: true } }
 
 ## Minimal example
 
-::: code-group
-
-```ts [src/lib/posts.remote.ts]
+```ts tab="src/lib/posts.remote.ts"
 import { Data, Effect, Schema } from "effect";
 import { Form } from "svelte-effect-runtime";
 
@@ -58,7 +56,7 @@ export const create_post = Form(PostSchema, ({ data, invalid }) =>
 );
 ```
 
-```svelte [src/routes/+page.svelte]
+```svelte tab="src/routes/+page.svelte"
 <script lang="ts" effect>
   import { create_post } from "$lib/posts.remote";
 </script>
@@ -83,7 +81,6 @@ export const create_post = Form(PostSchema, ({ data, invalid }) =>
 {/if}
 ```
 
-:::
 
 The handler receives:
 

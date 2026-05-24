@@ -20,9 +20,7 @@ directly.
 > module keeps tags consistent across remotes. The client's type
 > inference works either way.
 
-::: code-group
-
-```ts [src/lib/errors.ts]
+```ts tab="src/lib/errors.ts"
 import { Data } from "effect";
 
 export class PostNotFound extends Data.TaggedError("PostNotFound")<{
@@ -30,7 +28,7 @@ export class PostNotFound extends Data.TaggedError("PostNotFound")<{
 }> {}
 ```
 
-```ts [src/lib/posts.remote.ts]
+```ts tab="src/lib/posts.remote.ts"
 import { Effect, Schema } from "effect";
 import { Query } from "svelte-effect-runtime";
 import { Database } from "$lib/server/database";
@@ -51,7 +49,7 @@ export const get_post_by_slug = Query(Schema.String, (slug) =>
 );
 ```
 
-```svelte [src/routes/blog/[slug]/+page.svelte]
+```svelte tab="src/routes/blog/[slug]/+page.svelte"
 <script lang="ts" effect>
   import { Effect } from "effect";
   import { page } from "$app/state";
@@ -69,7 +67,6 @@ export const get_post_by_slug = Query(Schema.String, (slug) =>
 {/if}
 ```
 
-:::
 
 ## `yield*`, not `await`
 

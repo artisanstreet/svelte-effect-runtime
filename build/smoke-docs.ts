@@ -23,6 +23,7 @@ async function main(): Promise<void> {
     await wait_for_docs(base_url);
     await assert_root_route(base_url);
     await assert_docs_css(base_url);
+    await assert_code_blocks(base_url);
   } finally {
     server.kill("SIGTERM");
     await server.status.catch(() => undefined);
@@ -134,5 +135,18 @@ async function assert_docs_css(base_url: string): Promise<void> {
     !css.includes(".bg-fd-background")
   ) {
     throw new Error("Docs CSS does not include Fumadocs layout styles.");
+  }
+}
+
+async function assert_code_blocks(base_url: string): Promise<void> {
+  const response = await fetch(`${base_url}/docs/remote-functions/query`);
+  const html = await response.text();
+
+  if (html.includes("code-group")) {
+    throw new Error("Docs page rendered a raw code-group directive.");
+  }
+
+  if (!html.includes("<figure") || !html.includes('role="region"')) {
+    throw new Error("Docs page did not render Fumadocs code blocks.");
   }
 }

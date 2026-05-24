@@ -18,9 +18,7 @@ return value is `Effect<Output, RemoteFailure<Error>, never>`.
 
 ## Minimal example
 
-::: code-group
-
-```ts [src/lib/counter.remote.ts]
+```ts tab="src/lib/counter.remote.ts"
 import { Data, Effect, Schema } from "effect";
 import { Command } from "svelte-effect-runtime";
 
@@ -48,7 +46,7 @@ export const reset = Command(() =>
 );
 ```
 
-```svelte [src/routes/+page.svelte]
+```svelte tab="src/routes/+page.svelte"
 <script lang="ts" effect>
   import { increment, reset } from "$lib/counter.remote";
 
@@ -76,7 +74,6 @@ export const reset = Command(() =>
 {/if}
 ```
 
-:::
 
 `yield*` works inside the **inline arrow** passed to `onclick` because
 the preprocessor rewrites it. It does **not** work inside a separately

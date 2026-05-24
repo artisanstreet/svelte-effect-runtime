@@ -6,6 +6,7 @@ import {
 } from "fumadocs-ui/layouts/docs/page";
 import { notFound } from "next/navigation";
 
+import { mdx_components } from "@/mdx-components.tsx";
 import { source } from "@/lib/source.ts";
 
 type PageProps = {
@@ -49,7 +50,7 @@ export default async function Page({ params }: PageProps) {
         <DocsDescription>{page.data.description}</DocsDescription>
       ) : null}
       <DocsBody>
-        <MDX />
+        <MDX components={mdx_components} />
       </DocsBody>
     </DocsPage>
   );
