@@ -40,7 +40,7 @@ Client-side:
 | Remote server helpers | `src/remote/server.ts` | Unit coverage in `v2/remote-server.test.ts` |
 | Remote client adapters | `src/remote/client.ts` | Runtime and type-level coverage |
 | Runtime package build | `build/runtime.ts` | `deno task build:runtime` |
-| Current package browser smoke | `build/smoke-current-runtime.ts` | `deno task smoke:runtime` |
+| Current package browser smoke | `build/smoke-current-runtime.ts` | `deno task smoke:runtime`, including query, command, form, and dynamic prerender |
 | Docs app | `modules/docs` | Fumadocs/Next build via `npm run build` |
 
 Current runtime test suite: 148 tests under `.tests/svelte-effect-runtime/v2/`.
@@ -58,8 +58,6 @@ cd modules/docs && npm.cmd run build
 
 ## Remaining Before 100%
 
-- Add a live smoke that exercises current-package remote query, command, form,
-  and prerender behavior in a SvelteKit app.
 - Decide whether the existing `reset_dispatcher()` internal test utility should
   stay internal or move behind a test-only entrypoint.
 - Run the full completion audit against the original objective.
