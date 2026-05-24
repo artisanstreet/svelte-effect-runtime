@@ -3,25 +3,26 @@ import { dirname, fromFileUrl, join, resolve } from "@std/path";
 const repo_root = resolve(dirname(fromFileUrl(import.meta.url)), "..");
 const docs_dir = join(repo_root, "modules", "docs");
 const npm = Deno.build.os === "windows" ? "npm.cmd" : "npm";
-const port = 3011;
-const base_url = `http://localhost:${port}`;
 
 await main();
 
 async function main(): Promise<void> {
+  const port = get_available_port();
+  const base_url = `http://localhost:${port}`;
+
   await run_command(npm, ["run", "build"], docs_dir);
 
-  const server = new Deno.Command(npm, {
-    args: ["run", "preview", "--", "--port", String(port)],
+  const server = new Deno.Command("node", {
+    args: ["node_modules/next/dist/bin/next", "start", "--port", String(port)],
     cwd: docs_dir,
     stdout: "piped",
     stderr: "piped",
   }).spawn();
 
   try {
-    await wait_for_docs();
-    await assert_root_route();
-    await assert_docs_css();
+    await wait_for_docs(base_url);
+    await assert_root_route(base_url);
+    await assert_docs_css(base_url);
   } finally {
     server.kill("SIGTERM");
     await server.status.catch(() => undefined);
@@ -30,6 +31,18 @@ async function main(): Promise<void> {
   console.log("[svelte-effect-runtime]", "docs smoke passed", {
     url: `${base_url}/docs`,
   });
+}
+
+function get_available_port(): number {
+  const listener = Deno.listen({
+    hostname: "127.0.0.1",
+    port: 0,
+  });
+  const port = (listener.addr as Deno.NetAddr).port;
+
+  listener.close();
+
+  return port;
 }
 
 async function run_command(
@@ -60,7 +73,7 @@ async function run_command(
   );
 }
 
-async function wait_for_docs(): Promise<void> {
+async function wait_for_docs(base_url: string): Promise<void> {
   const deadline = Date.now() + 30_000;
 
   while (Date.now() < deadline) {
@@ -76,7 +89,7 @@ async function wait_for_docs(): Promise<void> {
   throw new Error("Docs preview server did not become ready.");
 }
 
-async function assert_root_route(): Promise<void> {
+async function assert_root_route(base_url: string): Promise<void> {
   const response = await fetch(base_url, { redirect: "manual" });
 
   if (response.status !== 307 && response.status !== 308) {
@@ -90,7 +103,7 @@ async function assert_root_route(): Promise<void> {
   }
 }
 
-async function assert_docs_css(): Promise<void> {
+async function assert_docs_css(base_url: string): Promise<void> {
   const response = await fetch(`${base_url}/docs`);
   const html = await response.text();
   const css_paths = [...html.matchAll(/href="([^"]+\.css[^"]*)"/g)]
@@ -115,7 +128,11 @@ async function assert_docs_css(): Promise<void> {
 
   const css = stylesheets.join("\n");
 
-  if (!css.includes("nd-docs-layout") || !css.includes("fd-background")) {
+  if (
+    !css.includes(".flex") ||
+    !css.includes(".min-h-screen") ||
+    !css.includes(".bg-fd-background")
+  ) {
     throw new Error("Docs CSS does not include Fumadocs layout styles.");
   }
 }
