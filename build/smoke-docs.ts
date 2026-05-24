@@ -142,8 +142,8 @@ async function assert_code_blocks(base_url: string): Promise<void> {
   const response = await fetch(`${base_url}/docs/remote-functions/query`);
   const html = await response.text();
 
-  if (html.includes("code-group")) {
-    throw new Error("Docs page rendered a raw code-group directive.");
+  if (html.includes("code-group") || html.includes(":::")) {
+    throw new Error("Docs page rendered raw directive syntax.");
   }
 
   if (!html.includes("<figure") || !html.includes('role="region"')) {

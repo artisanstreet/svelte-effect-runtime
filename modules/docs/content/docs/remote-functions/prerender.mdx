@@ -63,12 +63,14 @@ export const prerender = true;
 ```
 
 
-::: warning
+<Callout type="warn">
+
 In `npm run dev`, non-dynamic prerender results aren't populated —
 they're build artefacts. Run `npm run build && npm run preview` to see
 the cached results, or set `{ dynamic: true }` on the prerender
 declaration to evaluate at runtime instead.
-:::
+
+</Callout>
 
 ## Dynamic prerender
 

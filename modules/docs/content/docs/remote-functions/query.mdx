@@ -60,12 +60,14 @@ export const get_post = Query(Schema.String, (slug) =>
 ```
 
 
-::: warning
+<Callout type="warn">
+
 `yield*` works at the **top level** of a `<script effect>` block,
 inside `Effect.gen`, and inside inline-arrow event handlers. It does
 **not** work inside regular `function` declarations or `async function`
 bodies — those are not rewritten by the preprocessor.
-:::
+
+</Callout>
 
 ## Recovering from tagged failures
 
