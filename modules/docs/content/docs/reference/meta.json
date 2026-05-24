@@ -1,0 +1,19 @@
+{
+  "title": "Reference",
+  "pages": [
+    "index",
+    "effect",
+    "client-runtime",
+    "server-runtime",
+    "query",
+    "command",
+    "form",
+    "prerender",
+    "errors",
+    "transport",
+    "preprocess",
+    "script-effect",
+    "markup",
+    "tooling"
+  ]
+}

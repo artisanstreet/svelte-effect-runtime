@@ -1,7 +1,7 @@
 {
   "tasks": {
-    "dev": "npm exec vitepress dev .",
-    "build": "npm exec vitepress build .",
-    "preview": "npm exec vitepress preview ."
+    "dev": "npm exec next dev",
+    "build": "npm exec next build",
+    "preview": "npm exec next start"
   }
 }
