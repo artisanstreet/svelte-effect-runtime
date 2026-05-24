@@ -247,11 +247,17 @@ export function rewrite_remote_client_exports(
   ].join("\n");
 
   const debug_line = options?.debug
-    ? `\nconsole.log("[ser] remote client wrappers loaded");`
+    ? `console.log("[ser] remote client wrappers loaded");`
     : "";
 
-  return body.replace(import_match[0], `${import_match[0]}\n${imports}`) +
-    `\n${helpers}${debug_line}\n`;
+  const injected = [
+    import_match[0],
+    imports,
+    helpers,
+    debug_line,
+  ].filter(Boolean).join("\n");
+
+  return body.replace(import_match[0], injected);
 }
 
 function make_remote_export(

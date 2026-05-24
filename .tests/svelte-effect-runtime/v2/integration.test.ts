@@ -136,4 +136,11 @@ Deno.test("vite remote client wrapper preserves native SvelteKit remote module",
     result,
     `export const create_post = create_remote_form_adapter(__remote.form('abc/create_post'), __ser_decode_payload, __ser_remote_base);`,
   );
+
+  if (
+    result.indexOf(`const __ser_remote_base`) >
+      result.indexOf(`export const create_post`)
+  ) {
+    throw new Error("remote helpers must be declared before wrapped exports");
+  }
 });
