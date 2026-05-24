@@ -92,26 +92,15 @@ On the server, `svelte-effect-runtime` gives you wrappers around
 [Command](/docs/remote-functions/command), and
 [Prerender](/docs/remote-functions/prerender) functions.
 
-## Effect version 3 and 4
+## Effect version
 
-`svelte-effect-runtime` currently defaults to Effect v3.
-
-If you want to use Effect v4, import from the `/v4` entrypoint instead:
-
-```ts
-import { ... } from "svelte-effect-runtime/v4";
-```
-
-Effect v4 is fully supported while it remains in beta.
-
-Once Effect v4 becomes the default, `svelte-effect-runtime` will resolve to v4,
-and the current v3 entrypoint will remain available at:
+`svelte-effect-runtime` V2 targets Effect v4 beta. Import runtime APIs from the
+package root and import Effect APIs directly from `effect`:
 
 ```ts
-import { ... } from "svelte-effect-runtime/v3";
+import { ClientRuntime } from "svelte-effect-runtime";
+import { Effect } from "effect";
 ```
-
-You can also use the `/v3` suffix today.
 
 ## Runtime
 
