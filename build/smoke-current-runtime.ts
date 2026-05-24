@@ -5,6 +5,7 @@ const code_root = resolve(repo_root, "..");
 const smokes_root = join(code_root, "smokes");
 const smoke_dir = join(smokes_root, "ser-v2-current");
 const package_dir = join(repo_root, "modules", "svelte-effect-runtime");
+const deno = Deno.execPath();
 const npm = Deno.build.os === "windows" ? "npm.cmd" : "npm";
 const npx = Deno.build.os === "windows" ? "npx.cmd" : "npx";
 
@@ -65,12 +66,26 @@ const layout_svelte = `<slot />
 
 const page_svelte = `<script lang="ts" effect>
   import { Effect } from "effect";
+  import {
+    add_one,
+    create_item,
+    get_message,
+    get_snapshot,
+  } from "$lib/demo.remote";
 
   let script_value = $state("pending");
   let count = $state(yield* Effect.succeed(41));
+  let query_value = $state("pending");
+  let command_value = $state("pending");
+  let form_value = $state("pending");
+  let prerender_value = $state("pending");
 
   script_value = yield* Effect.succeed("script effect ready");
   count = yield* Effect.succeed(count + 1);
+  query_value = yield* get_message();
+  command_value = yield* add_one();
+  form_value = yield* create_item.submit({ title: "draft" });
+  prerender_value = yield* get_snapshot();
 
   function click_effect() {
     return Effect.sync(() => {
@@ -83,6 +98,10 @@ const page_svelte = `<script lang="ts" effect>
   <h1>ser-v2 current smoke</h1>
   <p data-testid="script">{script_value}</p>
   <p data-testid="count">{count}</p>
+  <p data-testid="query">{query_value}</p>
+  <p data-testid="command">{command_value}</p>
+  <p data-testid="form">{form_value}</p>
+  <p data-testid="prerender">{prerender_value}</p>
   <p data-testid="markup">{yield* Effect.succeed("markup ready")}</p>
 
   {#await yield* Effect.succeed("await ready")}
@@ -103,12 +122,52 @@ const page_svelte = `<script lang="ts" effect>
 </main>
 `;
 
+const demo_remote_ts = `import {
+  Command,
+  Form,
+  Prerender,
+  Query,
+} from "svelte-effect-runtime";
+import { Effect } from "effect";
+
+let count = 0;
+
+export const get_message = Query(() =>
+  Effect.succeed("query ready")
+);
+
+export const add_one = Command(() =>
+  Effect.sync(() => {
+    count += 1;
+
+    return \`command ready \${count}\`;
+  })
+);
+
+export const create_item = Form("unchecked", ({ data }) =>
+  Effect.succeed(\`form ready \${data.title}\`)
+);
+
+export const get_snapshot = Prerender(
+  () => Effect.succeed("prerender ready"),
+  { dynamic: true },
+);
+`;
+
 const svelte_config = `import adapter from "@sveltejs/adapter-node";
 import { preprocess } from "svelte-effect-runtime/vite";
 
 const config = {
+  compilerOptions: {
+    experimental: {
+      async: true,
+    },
+  },
   kit: {
     adapter: adapter(),
+    experimental: {
+      remoteFunctions: true,
+    },
   },
   preprocess: [preprocess()],
 };
@@ -130,13 +189,13 @@ const playwright_config = `import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "tests",
   webServer: {
-    command: "npm run preview -- --port 4184",
-    port: 4184,
+    command: "npm run preview -- --port 49621 --strictPort",
+    port: 49621,
     reuseExistingServer: false,
     timeout: 30000,
   },
   use: {
-    baseURL: "http://127.0.0.1:4184",
+    baseURL: "http://127.0.0.1:49621",
   },
 });
 `;
@@ -148,6 +207,10 @@ test("current package drives script and markup effects", async ({ page }) => {
 
   await expect(page.getByTestId("script")).toHaveText("script effect ready");
   await expect(page.getByTestId("count")).toHaveText("42");
+  await expect(page.getByTestId("query")).toHaveText("query ready");
+  await expect(page.getByTestId("command")).toHaveText("command ready 1");
+  await expect(page.getByTestId("form")).toHaveText("form ready draft");
+  await expect(page.getByTestId("prerender")).toHaveText("prerender ready");
   await expect(page.getByTestId("markup")).toHaveText("markup ready");
   await expect(page.getByTestId("await")).toHaveText("await ready");
   await expect(page.getByTestId("each").locator("li")).toHaveText([
@@ -169,6 +232,7 @@ async function main(): Promise<void> {
   }
 
   await Deno.remove(smoke_dir, { recursive: true }).catch(() => undefined);
+  await Deno.mkdir(join(smoke_dir, "src", "lib"), { recursive: true });
   await Deno.mkdir(join(smoke_dir, "src", "routes"), { recursive: true });
   await Deno.mkdir(join(smoke_dir, "tests"), { recursive: true });
 
@@ -195,6 +259,7 @@ async function main(): Promise<void> {
   });
 
   await write_text("src/app.html", app_html);
+  await write_text("src/lib/demo.remote.ts", demo_remote_ts);
   await write_text("src/routes/+layout.svelte", layout_svelte);
   await write_text("src/routes/+page.svelte", page_svelte);
   await write_text("svelte.config.js", svelte_config);
@@ -203,6 +268,7 @@ async function main(): Promise<void> {
   await write_text("tests/runtime.spec.ts", runtime_spec);
 
   await run_command(npm, ["install"], smoke_dir);
+  await run_command(deno, ["task", "build"], package_dir);
   await run_command(npm, ["pack", package_dir, "--json"], smoke_dir);
 
   const tarballs = [];
