@@ -13,11 +13,15 @@ Use forms for sign in, profile editing, settings, creation flows, and anything t
 
 ```ts
 import { Form } from "svelte-effect-runtime/server";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
+
+const ProfileInput = Schema.Struct({
+  name: Schema.String,
+});
 
 export const update_name = Form(
-  "unchecked",
-  ({ data }: { data: { name: string } }) =>
+  ProfileInput,
+  ({ data }) =>
     Effect.succeed({ name: data.name }),
 );
 ```
@@ -39,11 +43,15 @@ Validate before committing the mutation:
 
 ```ts
 import { Form } from "svelte-effect-runtime/server";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
+
+const ProfileInput = Schema.Struct({
+  name: Schema.String,
+});
 
 export const update_name = Form(
-  "unchecked",
-  ({ data, invalid }: { data: { name: string }; invalid: any }) =>
+  ProfileInput,
+  ({ data, invalid }) =>
     Effect.gen(function* () {
       if (data.name.trim().length === 0) {
         return yield* invalid.name("Name is required");

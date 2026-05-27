@@ -28,9 +28,9 @@ Server work lives in a remote function:
 
 ```ts
 import { Query } from "svelte-effect-runtime/server";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 
-export const get_user = Query("unchecked", ({ id }: { id: string }) =>
+export const get_user = Query(Schema.Struct({ id: Schema.String }), ({ id }) =>
   Effect.succeed({ id, name: "Ada" }),
 );
 ```

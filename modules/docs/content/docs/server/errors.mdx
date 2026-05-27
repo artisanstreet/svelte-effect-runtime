@@ -31,11 +31,15 @@ Return field-level validation from a form through the form handler's `invalid` p
 
 ```ts
 import { Form } from "svelte-effect-runtime/server";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
+
+const ProfileInput = Schema.Struct({
+  name: Schema.String,
+});
 
 export const update_name = Form(
-  "unchecked",
-  ({ data, invalid }: { data: { name: string }; invalid: any }) =>
+  ProfileInput,
+  ({ data, invalid }) =>
     Effect.gen(function* () {
       if (data.name.trim().length === 0) {
         return yield* invalid.name("Name is required");

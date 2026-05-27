@@ -13,9 +13,9 @@ Use a remote function when the work needs a database, secret, cookie, session, s
 
 ```ts
 import { Query } from "svelte-effect-runtime/server";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 
-export const get_count = Query("unchecked", ({ key }: { key: string }) =>
+export const get_count = Query(Schema.Struct({ key: Schema.String }), ({ key }) =>
   Effect.succeed({ key, value: 1 }),
 );
 ```

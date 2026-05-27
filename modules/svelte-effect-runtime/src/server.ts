@@ -320,7 +320,7 @@ function normalize_validator(value: unknown): unknown {
  * ```ts
  * import { Query } from "svelte-effect-runtime/server";
  *
- * export const getUser = Query("unchecked", (input: { id: string }) =>
+ * export const getUser = Query(Schema.Struct({ id: Schema.String }), (input) =>
  *   Effect.gen(function* () {
  *     const event = yield* RequestEvent;
  *     return { id: input.id, path: event.url.pathname };

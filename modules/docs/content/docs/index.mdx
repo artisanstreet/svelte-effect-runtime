@@ -70,9 +70,13 @@ Use a remote `Query` when the value belongs on the server:
 
 ```ts
 import { Query } from "svelte-effect-runtime/server";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 
-export const get_profile = Query("unchecked", ({ user_id }: { user_id: string }) =>
+const ProfileInput = Schema.Struct({
+  user_id: Schema.String,
+});
+
+export const get_profile = Query(ProfileInput, ({ user_id }) =>
     Effect.succeed({ user_id, name: "Ada Lovelace" }),
 );
 ```

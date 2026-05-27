@@ -13,11 +13,15 @@ Use a command from a button, menu item, or explicit client action. Prefer `Form`
 
 ```ts
 import { Command } from "svelte-effect-runtime/server";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
+
+const ArchiveProjectInput = Schema.Struct({
+  project_id: Schema.String,
+});
 
 export const archive_project = Command(
-  "unchecked",
-  ({ project_id }: { project_id: string }) =>
+  ArchiveProjectInput,
+  ({ project_id }) =>
     Effect.succeed({ archived: true, project_id }),
 );
 ```

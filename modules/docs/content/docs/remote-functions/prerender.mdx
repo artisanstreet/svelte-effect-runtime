@@ -13,11 +13,15 @@ Use it for docs indexes, product catalogs, marketing content, generated navigati
 
 ```ts
 import { Prerender } from "svelte-effect-runtime/server";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
+
+const DocsIndexInput = Schema.Struct({
+  section: Schema.String,
+});
 
 export const get_docs_index = Prerender(
-  "unchecked",
-  ({ section }: { section: string }) =>
+  DocsIndexInput,
+  ({ section }) =>
     Effect.succeed([
       { section, title: "Install" },
       { section, title: "Mental model" },
@@ -31,8 +35,8 @@ Allow dynamic fallback only when the data can safely be computed at request time
 
 ```ts
 export const get_product = Prerender(
-  "unchecked",
-  ({ slug }: { slug: string }) =>
+  Schema.Struct({ slug: Schema.String }),
+  ({ slug }) =>
     Effect.succeed({ slug, name: "Starter Kit" }),
   { dynamic: true },
 );
