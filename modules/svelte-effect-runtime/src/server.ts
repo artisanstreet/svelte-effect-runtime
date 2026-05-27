@@ -10,7 +10,7 @@ import {
   run_remote_effect,
 } from "$/remote/server.ts";
 import { create_form_error } from "$/remote/shared.ts";
-import { Context, Effect, Layer, ManagedRuntime } from "effect";
+import { Context, Effect, Layer, ManagedRuntime, Schema } from "effect";
 import { error as svelte_error, invalid } from "@sveltejs/kit";
 import type { FormIssue } from "$/remote/shared.ts";
 
@@ -177,6 +177,12 @@ type PrerenderOptions = {
   readonly dynamic?: boolean;
 };
 
+type StandardSchema = {
+  readonly "~standard": {
+    readonly validate: (input: unknown) => unknown;
+  };
+};
+
 function is_generator_result<A>(
   value: unknown,
 ): value is Effect.gen.Return<A, unknown, unknown> {
@@ -281,6 +287,31 @@ function is_handler(value: unknown): value is RemoteHandler {
   return typeof value === "function";
 }
 
+function is_standard_schema(value: unknown): value is StandardSchema {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "~standard" in value
+  );
+}
+
+function is_effect_schema(value: unknown): value is Schema.Schema<unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "ast" in value &&
+    "make" in value
+  );
+}
+
+function normalize_validator(value: unknown): unknown {
+  if (is_standard_schema(value) || !is_effect_schema(value)) {
+    return value;
+  }
+
+  return Schema.toStandardSchemaV1(value as never);
+}
+
 /**
  * Factory for a read-only remote query function. Supports SvelteKit's
  * no-arg, `"unchecked"`, and schema-validated overloads.
@@ -309,7 +340,7 @@ export function Query(
   try {
     if (maybe_handler) {
       return native_query(
-        validate_or_handler as never,
+        normalize_validator(validate_or_handler) as never,
         make_remote_wrapper(maybe_handler, "Query") as never,
       );
     }
@@ -345,7 +376,7 @@ export function Command(
   try {
     if (maybe_handler) {
       return native_command(
-        validate_or_handler as never,
+        normalize_validator(validate_or_handler) as never,
         make_remote_wrapper(maybe_handler, "Command") as never,
       );
     }
@@ -381,7 +412,7 @@ export function Form(
   try {
     if (maybe_handler) {
       return native_form(
-        validate_or_handler as never,
+        normalize_validator(validate_or_handler) as never,
         make_remote_form_wrapper(maybe_handler, "Form") as never,
       );
     }
@@ -424,7 +455,7 @@ export function Prerender(
   try {
     if (is_handler(maybe_handler_or_options)) {
       return native_prerender(
-        validate_or_handler as never,
+        normalize_validator(validate_or_handler) as never,
         make_remote_wrapper(maybe_handler_or_options, "Prerender") as never,
         maybe_options as never,
       );
