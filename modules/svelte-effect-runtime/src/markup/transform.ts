@@ -831,9 +831,9 @@ function inject_helpers(magic: MagicString, content: string): void {
   if (content.includes(HELPERS.value)) return;
 
   const helper_block = [
-    `import { value as ${HELPERS.value} } from "svelte-effect-runtime/generators";`,
-    `import { promise as ${HELPERS.promise} } from "svelte-effect-runtime/generators";`,
-    `import { run as ${HELPERS.run} } from "svelte-effect-runtime/generators";`,
+    `import { value as ${HELPERS.value} } from "svelte-effect-runtime/internal/generators";`,
+    `import { promise as ${HELPERS.promise} } from "svelte-effect-runtime/internal/generators";`,
+    `import { run as ${HELPERS.run} } from "svelte-effect-runtime/internal/generators";`,
   ].join("\n");
 
   const script_tag = find_instance_script_tag(content);

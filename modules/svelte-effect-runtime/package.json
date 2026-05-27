@@ -20,33 +20,25 @@
       "types": "./.dist/mod.d.ts",
       "default": "./.dist/mod.js"
     },
-    "./preprocess": {
-      "types": "./.dist/preprocess.d.ts",
-      "default": "./.dist/preprocess.js"
-    },
-    "./generators": {
-      "types": "./.dist/generators.d.ts",
-      "default": "./.dist/generators.js"
-    },
-    "./vite": {
-      "types": "./.dist/vite.d.ts",
-      "default": "./.dist/vite.js"
-    },
-    "./_server": {
+    "./server": {
       "types": "./.dist/server.d.ts",
       "default": "./.dist/server.js"
     },
-    "./remote/shared": {
-      "types": "./.dist/remote/shared.d.ts",
-      "default": "./.dist/remote/shared.js"
+    "./runtime/preprocess": {
+      "types": "./.dist/runtime/preprocess.d.ts",
+      "default": "./.dist/runtime/preprocess.js"
     },
-    "./remote/client": {
-      "types": "./.dist/remote/client.d.ts",
-      "default": "./.dist/remote/client.js"
+    "./internal/generators": {
+      "types": "./.dist/internal/generators.d.ts",
+      "default": "./.dist/internal/generators.js"
     },
-    "./remote/server": {
-      "types": "./.dist/remote/server.d.ts",
-      "default": "./.dist/remote/server.js"
+    "./internal/remote-client": {
+      "types": "./.dist/internal/remote-client.d.ts",
+      "default": "./.dist/internal/remote-client.js"
+    },
+    "./internal/remote-server": {
+      "types": "./.dist/internal/remote-server.d.ts",
+      "default": "./.dist/internal/remote-server.js"
     }
   },
   "scripts": {

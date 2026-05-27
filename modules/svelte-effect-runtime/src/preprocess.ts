@@ -154,7 +154,7 @@ export function transform_script_effect(
 
   const has_dispatcher_import = has_local_import_binding(
     source_file,
-    "svelte-effect-runtime/generators",
+    "svelte-effect-runtime/internal/generators",
     "get_dispatcher",
   );
 
@@ -251,7 +251,7 @@ function make_imports(
     !has_onmount_import && `import { onMount } from "svelte";`,
     !has_effect_import && `import { Effect } from "effect";`,
     !has_dispatcher_import &&
-    `import { get_dispatcher } from "svelte-effect-runtime/generators";`,
+    `import { get_dispatcher } from "svelte-effect-runtime/internal/generators";`,
   ]
     .filter(Boolean)
     .join("\n");

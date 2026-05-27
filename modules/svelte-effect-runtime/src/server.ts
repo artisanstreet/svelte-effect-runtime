@@ -72,7 +72,7 @@ export interface RequestEvent {
  *
  * @example
  * ```ts
- * import { ServerRuntime } from "svelte-effect-runtime/_server";
+ * import { ServerRuntime } from "svelte-effect-runtime/server";
  * import { Db } from "./db.ts";
  *
  * ServerRuntime.make(Db.Live);
@@ -287,7 +287,7 @@ function is_handler(value: unknown): value is RemoteHandler {
  *
  * @example
  * ```ts
- * import { Query } from "svelte-effect-runtime/_server";
+ * import { Query } from "svelte-effect-runtime/server";
  *
  * export const getUser = Query("unchecked", (input: { id: string }) =>
  *   Effect.gen(function* () {

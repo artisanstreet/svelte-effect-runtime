@@ -4,20 +4,18 @@
   "license": "BSD-3-Clause",
   "exports": {
     ".": "./src/mod.ts",
-    "./preprocess": "./src/preprocess.ts",
-    "./vite": "./src/vite.ts",
-    "./generators": "./src/generators.ts",
-    "./_server": "./src/server.ts",
-    "./remote/shared": "./src/remote/shared.ts",
-    "./remote/client": "./src/remote/client.ts",
-    "./remote/server": "./src/remote/server.ts"
+    "./server": "./src/server.ts",
+    "./runtime/preprocess": "./src/runtime/preprocess.ts",
+    "./internal/generators": "./src/internal/generators.ts",
+    "./internal/remote-client": "./src/internal/remote-client.ts",
+    "./internal/remote-server": "./src/internal/remote-server.ts"
   },
   "compilerOptions": {
     "lib": ["deno.ns", "dom", "dom.iterable", "es2022"]
   },
   "tasks": {
     "build": "deno task clean && deno run -A ../../build/runtime.ts && tsc -p tsconfig.build.json --emitDeclarationOnly && deno run -A ../../build/rewrite-runtime-dts.ts",
-    "check": "deno check --node-modules-dir=auto src/mod.ts src/detect.ts src/dispatcher.ts src/generators.ts src/preprocess.ts src/vite.ts src/remote/shared.ts src/remote/server.ts src/remote/client.ts src/markup/transform.ts src/markup/value.ts src/markup/promise.ts src/markup/run.ts",
+    "check": "deno check --node-modules-dir=auto src/mod.ts src/runtime/preprocess.ts src/internal/generators.ts src/internal/remote-client.ts src/internal/remote-server.ts src/detect.ts src/dispatcher.ts src/generators.ts src/preprocess.ts src/vite.ts src/remote/shared.ts src/remote/server.ts src/remote/client.ts src/markup/transform.ts src/markup/value.ts src/markup/promise.ts src/markup/run.ts",
     "clean": "rm -rf ../../.dist/svelte-effect-runtime",
     "test": "cd ../../.tests/svelte-effect-runtime && deno test --no-check -A v2",
     "fmt": "deno fmt",

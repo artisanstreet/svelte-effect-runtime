@@ -1,5 +1,3 @@
-import { transform_markup_effect } from "$/markup/transform.ts";
-import { transform_script_effect } from "$/preprocess.ts";
 import type { Plugin } from "vite";
 
 /**
@@ -12,57 +10,6 @@ export interface EffectOptions {
   debug?: boolean;
 }
 
-interface MarkupResult {
-  code: string;
-}
-
-interface PreprocessGroup {
-  name: string;
-  markup(options: { content: string; filename: string }): MarkupResult;
-}
-
-/**
- * Svelte preprocessor that lowers `yield*` in script and markup. Drop
- * into `svelte.config.js`:
- *
- * @example
- * ```js
- * import { preprocess } from "svelte-effect-runtime/vite";
- *
- * export default {
- *   kit: { adapter: ... },
- *   preprocess: [preprocess()],
- * };
- * ```
- *
- * @since 2.0.0
- * @returns A Svelte preprocessor group with a `markup` hook.
- */
-export function preprocess(): PreprocessGroup {
-  return {
-    name: "svelte-effect-runtime",
-
-    markup({ content, filename }: { content: string; filename: string }) {
-      const script = find_script(content);
-
-      let combined = content;
-
-      if (script?.has_effect) {
-        const result = transform_script_effect(script.text, filename);
-
-        combined = content.slice(0, script.effect_attr_start) +
-          content.slice(script.effect_attr_end, script.open_end) +
-          result.code +
-          content.slice(script.close_start);
-      }
-
-      const result = transform_markup_effect(combined, filename);
-
-      return { code: result.code };
-    },
-  };
-}
-
 /**
  * Vite plugin for SvelteKit. The pre plugin rewrites server-side imports
  * to the server entrypoint; the post plugin wraps SvelteKit's generated
@@ -70,7 +17,7 @@ export function preprocess(): PreprocessGroup {
  *
  * @example
  * ```ts
- * import { effect } from "svelte-effect-runtime/vite";
+ * import { effect } from "svelte-effect-runtime";
  * import { sveltekit } from "@sveltejs/kit/vite";
  *
  * export default defineConfig({ plugins: [effect(), sveltekit()] });
@@ -104,11 +51,11 @@ function make_server_rewrite_plugin(): Plugin {
       const rewritten = code
         .replace(
           /from\s+["']svelte-effect-runtime["']/g,
-          `from "svelte-effect-runtime/_server"`,
+          `from "svelte-effect-runtime/server"`,
         )
         .replace(
-          /from\s+["']svelte-effect-runtime\/generators["']/g,
-          `from "svelte-effect-runtime/_server"`,
+          /from\s+["']svelte-effect-runtime\/internal\/generators["']/g,
+          `from "svelte-effect-runtime/server"`,
         );
 
       if (rewritten === code) {
@@ -152,43 +99,6 @@ function is_server_runtime_module(id: string): boolean {
 function is_remote_module(id: string): boolean {
   return /\.(remote|remote\.[cm]?)\.[jt]s(?:\?.*)?$/.test(id) ||
     id.includes(".remote.");
-}
-
-function find_script(content: string):
-  | {
-    text: string;
-    open_end: number;
-    close_start: number;
-    has_effect: boolean;
-    effect_attr_start: number;
-    effect_attr_end: number;
-  }
-  | undefined {
-  const pattern = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi;
-
-  for (const match of content.matchAll(pattern)) {
-    if (match.index === undefined || /\bmodule\b/.test(match[1] ?? "")) {
-      continue;
-    }
-
-    const attrs = match[1] ?? "";
-    const effect_match = /\s+effect(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?/
-      .exec(attrs);
-    const open_end = match.index + match[0].indexOf(">") + 1;
-    const attr_start = effect_match?.index ?? attrs.length;
-    const attr_end = attr_start + (effect_match?.[0].length ?? 0);
-
-    return {
-      text: match[2],
-      open_end,
-      close_start: match.index + match[0].lastIndexOf("<"),
-      has_effect: effect_match !== null,
-      effect_attr_start: match.index + "<script".length + attr_start,
-      effect_attr_end: match.index + "<script".length + attr_end,
-    };
-  }
-
-  return undefined;
 }
 
 /**
@@ -238,7 +148,7 @@ export function rewrite_remote_client_exports(
 
   const imports = [
     `import { app_dir, base } from "$app/paths/internal/client";`,
-    `import { create_remote_query_adapter, create_remote_command_adapter, create_remote_form_adapter } from "svelte-effect-runtime/remote/client";`,
+    `import { create_remote_query_adapter, create_remote_command_adapter, create_remote_form_adapter } from "svelte-effect-runtime/internal/remote-client";`,
   ].join("\n");
 
   const helpers = [

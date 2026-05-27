@@ -4,9 +4,9 @@ import type { Layer } from "effect";
 /**
  * Public API surface for `svelte-effect-runtime`.
  *
- * Call {@link ClientRuntime.make} in `hooks.client.ts` and
- * {@link ServerRuntime} (from `_server`) in `hooks.server.ts`. The Vite
- * plugin handles everything else automatically.
+ * Call {@link ClientRuntime.make} in `hooks.client.ts`, import server helpers
+ * from `svelte-effect-runtime/server`, and let the Vite plugin handle the
+ * rest automatically.
  *
  * @module
  */
@@ -58,5 +58,6 @@ export {
   is_remote_validation_error,
 } from "$/remote/shared.ts";
 
-/** Re-export Vite plugin so users can import everything from root. */
+/** Re-export app setup helpers so users can import them from root. */
 export { effect, type EffectOptions } from "$/vite.ts";
+export { preprocess } from "$/runtime/preprocess.ts";
