@@ -24,5 +24,9 @@ export function value(
   fallback: unknown,
   factory: () => Effect.gen.Return<unknown, unknown, unknown>,
 ): unknown {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return fallback;
+  }
+
   return get_dispatcher().value({ id, deps, fallback, factory });
 }
