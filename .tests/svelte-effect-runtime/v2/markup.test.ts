@@ -181,7 +181,10 @@ Deno.test("rewrites native-style form validation handlers only when marked with 
     result.code,
     `void __ser_markup_run(function* () { yield* createPost.validate(); });`,
   );
-  assertStringIncludes(result.code, `from "svelte-effect-runtime/generators"`);
+  assertStringIncludes(
+    result.code,
+    `from "svelte-effect-runtime/internal/generators"`,
+  );
   if (!result.has_yield) throw new Error("has_yield should be true");
 });
 
@@ -240,7 +243,10 @@ Deno.test("injects helper imports into existing instance script tag", () => {
 
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `from "svelte-effect-runtime/generators"`);
+  assertStringIncludes(
+    result.code,
+    `from "svelte-effect-runtime/internal/generators"`,
+  );
   assertStringIncludes(result.code, `let x = 1;`);
   // The original content must be preserved
   assertStringIncludes(result.code, `<p>`);
@@ -252,7 +258,10 @@ Deno.test("creates a script tag when none exists", () => {
 
   assertStringIncludes(result.code, `<script>`);
   assertStringIncludes(result.code, `</script>`);
-  assertStringIncludes(result.code, `from "svelte-effect-runtime/generators"`);
+  assertStringIncludes(
+    result.code,
+    `from "svelte-effect-runtime/internal/generators"`,
+  );
 });
 
 Deno.test("skips module context script tags", () => {

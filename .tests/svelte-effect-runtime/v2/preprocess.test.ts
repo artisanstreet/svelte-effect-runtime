@@ -80,7 +80,7 @@ Deno.test("extracts $state(yield* expr) into a temp $state binding", () => {
     `= yield* getUser(id);`,
     `import { onMount } from "svelte"`,
     `import { Effect } from "effect"`,
-    `import { get_dispatcher } from "svelte-effect-runtime/generators"`,
+    `import { get_dispatcher } from "svelte-effect-runtime/internal/generators"`,
   ]);
 });
 
@@ -274,14 +274,14 @@ Deno.test("injects onMount when svelte import lacks onMount binding", () => {
 
 Deno.test("injects dispatcher when generators import lacks get_dispatcher binding", () => {
   const source = [
-    `import { value } from "svelte-effect-runtime/generators";`,
+    `import { value } from "svelte-effect-runtime/internal/generators";`,
     `let x = $state(yield* f());`,
   ].join("\n");
   const result = transform_script_effect(source, "Test.svelte");
 
   assertStringIncludes(
     result.code,
-    `import { get_dispatcher } from "svelte-effect-runtime/generators";`,
+    `import { get_dispatcher } from "svelte-effect-runtime/internal/generators";`,
   );
   assertStringIncludes(result.code, `get_dispatcher();`);
 });

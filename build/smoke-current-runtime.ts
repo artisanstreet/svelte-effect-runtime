@@ -155,7 +155,7 @@ export const get_snapshot = Prerender(
 `;
 
 const svelte_config = `import adapter from "@sveltejs/adapter-node";
-import { preprocess } from "svelte-effect-runtime/vite";
+import { preprocess } from "svelte-effect-runtime";
 
 const config = {
   compilerOptions: {
@@ -175,7 +175,7 @@ const config = {
 export default config;
 `;
 
-const vite_config = `import { effect } from "svelte-effect-runtime/vite";
+const vite_config = `import { effect } from "svelte-effect-runtime";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig } from "vite";
 

@@ -1,12 +1,10 @@
 import { assertStringIncludes } from "@std/assert";
 import {
+  preprocess,
   transform_markup_effect,
   transform_script_effect,
-} from "../../../modules/svelte-effect-runtime/src/preprocess.ts";
-import {
-  preprocess,
-  rewrite_remote_client_exports,
-} from "../../../modules/svelte-effect-runtime/src/vite.ts";
+} from "../../../modules/svelte-effect-runtime/src/runtime/preprocess.ts";
+import { rewrite_remote_client_exports } from "../../../modules/svelte-effect-runtime/src/vite.ts";
 
 // ─── Full pipeline ─────────────────────────────────────────────
 
