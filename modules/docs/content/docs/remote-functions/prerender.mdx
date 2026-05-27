@@ -1,111 +1,56 @@
 ---
 title: Prerender
+description: Resolve static or build-time data with optional dynamic fallback.
 ---
 
-# Prerender
+Use `Prerender` for data that can be known at build time or generated as static output. It keeps static pages fast while still letting the code use Effect services.
+
+## When To Use This
+
+Use it for docs indexes, product catalogs, marketing content, generated navigation, and other data that changes through deploys rather than per request.
+
+## Minimal Working Example
 
 ```ts
-import { Prerender } from "svelte-effect-runtime";
-```
+import { Prerender } from "svelte-effect-runtime/server";
+import { Effect } from "effect";
 
-`Prerender(...)` is like `Query`, but the result is captured at build
-time and replayed on subsequent reads. Use it for data that changes at
-most once per redeploy — content pages, static config, version banners.
-
-## Minimal example
-
-```ts tab="src/lib/topics.remote.ts"
-import { Data, Effect, Schema } from "effect";
-import { Prerender } from "svelte-effect-runtime";
-
-class MissingTopic extends Data.TaggedError("MissingTopic")<{
-  readonly slug: string;
-}> {}
-
-const TOPICS = [
-  { slug: "intro", title: "Intro", body: "Hello." },
-  { slug: "guide", title: "Guide", body: "Read this next." }
-];
-
-export const get_topic = Prerender(
-  Schema.String,
-  (slug) =>
-    Effect.gen(function* () {
-      const topic = TOPICS.find((t) => t.slug === slug);
-      if (!topic) return yield* new MissingTopic({ slug });
-      return topic;
-    }),
-  {
-    // SvelteKit needs to know which slugs to evaluate at build time.
-    inputs: function* () {
-      for (const t of TOPICS) yield t.slug;
-    }
-  }
+export const get_docs_index = Prerender(
+  "unchecked",
+  ({ section }: { section: string }) =>
+    Effect.succeed([
+      { section, title: "Install" },
+      { section, title: "Mental model" },
+    ]),
 );
 ```
 
-```svelte tab="src/routes/topics/[slug]/+page.svelte"
-<script lang="ts" effect>
-  import { page } from "$app/state";
-  import { get_topic } from "$lib/topics.remote";
+## Realistic Variant
 
-  const topic = yield* get_topic(page.params.slug);
-</script>
-
-<article>
-  <h1>{topic.title}</h1>
-  <p>{topic.body}</p>
-</article>
-```
-
-```ts tab="src/routes/topics/[slug]/+page.ts"
-export const prerender = true;
-```
-
-
-<Callout type="warn">
-
-In `npm run dev`, non-dynamic prerender results aren't populated —
-they're build artefacts. Run `npm run build && npm run preview` to see
-the cached results, or set `{ dynamic: true }` on the prerender
-declaration to evaluate at runtime instead.
-
-</Callout>
-
-## Dynamic prerender
-
-`{ dynamic: true }` keeps the function evaluating at runtime rather
-than locking the build-time snapshot in place:
+Allow dynamic fallback only when the data can safely be computed at request time:
 
 ```ts
-export const get_topic = Prerender(
-  Schema.String,
-  (slug) =>
-    Effect.gen(function* () {
-      const topic = TOPICS.find((t) => t.slug === slug);
-      if (!topic) return yield* new MissingTopic({ slug });
-      return { ...topic, snapshot_at: Date.now() };
-    }),
-  { dynamic: true }
+export const get_product = Prerender(
+  "unchecked",
+  ({ slug }: { slug: string }) =>
+    Effect.succeed({ slug, name: "Starter Kit" }),
+  { dynamic: true },
 );
 ```
 
-## Validation variants
+## When Not To Use It
 
-```ts
-// Schema-validated.
-Prerender(Schema.String, (slug) => ..., { inputs: ... });
+Do not use `Prerender` for authenticated data, cookies, rapidly changing records, or mutations. Use `Query` for request-time reads and `Command` or `Form` for writes.
 
-// Unchecked.
-Prerender("unchecked", (slug: string) => ..., { inputs: ... });
+## Common Mistakes
 
-// No-arg.
-Prerender(() => ...);
-```
+- Reading request-only values while expecting static output.
+- Turning on `dynamic: true` to hide that data should really be a query.
+- Using prerendered data for permissions or account-specific UI.
+- Forgetting that build-time failures can break deployment.
 
-## See also
+## Related Pages
 
-- [Prerender examples in the gallery](https://github.com/usebarekey/svelte-effect-runtime/tree/master/examples/sveltekit/src/routes/prerender)
-  — static `inputs` generator vs. `dynamic: true` refresh.
-- [Server runtime](../runtimes/server) — prerender runs through the
-  same server runtime model as `Query`, `Command`, and `Form`.
+- [Query](/docs/remote-functions/query)
+- [Server runtime](/docs/server/runtime)
+- [Remote function overview](/docs/remote-functions)

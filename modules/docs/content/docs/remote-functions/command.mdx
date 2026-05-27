@@ -1,125 +1,82 @@
 ---
 title: Command
+description: Run server mutations from client events with pending state.
 ---
 
-# Command
+Use `Command` for server work that changes state: saving settings, deleting records, sending invitations, or starting jobs. Commands make mutation intent visible in both server and client code.
+
+## When To Use This
+
+Use a command from a button, menu item, or explicit client action. Prefer `Form` when the mutation starts from an HTML form and should work with progressive enhancement.
+
+## Minimal Working Example
 
 ```ts
-import { Command } from "svelte-effect-runtime";
-```
+import { Command } from "svelte-effect-runtime/server";
+import { Effect } from "effect";
 
-`Command(...)` wraps SvelteKit's native `command()`. Like `Form`,
-commands write data to the server; unlike `Form`, they're not bound to
-a `<form>` element and can be called from anywhere. The client-side
-return value is `Effect<Output, RemoteFailure<Error>, never>`.
-
-> Prefer [`Form`](./form) where possible — it gracefully degrades when
-> JavaScript is disabled.
-
-## Minimal example
-
-```ts tab="src/lib/counter.remote.ts"
-import { Data, Effect, Schema } from "effect";
-import { Command } from "svelte-effect-runtime";
-
-class CounterOverflow extends Data.TaggedError("CounterOverflow")<{
-  readonly attempted: number;
-}> {}
-
-let counter = 0;
-
-export const increment = Command(Schema.Number, (by) =>
-  Effect.gen(function* () {
-    if (by > 1_000_000) {
-      return yield* new CounterOverflow({ attempted: by });
-    }
-    counter += by;
-    return counter;
-  })
-);
-
-export const reset = Command(() =>
-  Effect.sync(() => {
-    counter = 0;
-    return counter;
-  })
+export const archive_project = Command(
+  "unchecked",
+  ({ project_id }: { project_id: string }) =>
+    Effect.succeed({ archived: true, project_id }),
 );
 ```
-
-```svelte tab="src/routes/+page.svelte"
-<script lang="ts" effect>
-  import { increment, reset } from "$lib/counter.remote";
-
-  let value = $state<number | null>(null);
-</script>
-
-<button
-  onclick={() => {
-    value = yield* increment(1);
-  }}
->
-  +1
-</button>
-
-<button
-  onclick={() => {
-    value = yield* reset();
-  }}
->
-  Reset
-</button>
-
-{#if value !== null}
-  <p>counter: {value}</p>
-{/if}
-```
-
-
-`yield*` works inside the **inline arrow** passed to `onclick` because
-the preprocessor rewrites it. It does **not** work inside a separately
-declared `function` — call the Effect directly in the arrow handler.
-
-## Pending state
-
-The wrapped command exposes a non-enumerable `pending` getter that
-aggregates SvelteKit's native pending count plus any in-flight Effect
-calls:
 
 ```svelte
-<button disabled={increment.pending > 0} onclick={() => yield* increment(1)}>
-  {increment.pending > 0 ? "saving…" : "+1"}
-</button>
+<script lang="ts">
+  import { archive_project } from "./project.remote";
+
+  let pending = $state(false);
+
+  async function archive() {
+    pending = true;
+
+    try {
+      await archive_project({ project_id: "p_123" });
+    } finally {
+      pending = false;
+    }
+  }
+</script>
+
+<button disabled={pending} onclick={archive}>Archive</button>
 ```
 
-## Recovering from tagged failures
+## Realistic Variant
+
+Use commands inside Effect-aware handlers when you want typed error recovery:
 
 ```svelte
 <script lang="ts" effect>
   import { Effect } from "effect";
-  import { increment } from "$lib/counter.remote";
+  import { archive_project } from "./project.remote";
 
-  const value = yield* increment(2_000_000).pipe(
-    Effect.catchTag("CounterOverflow", (err) =>
-      Effect.succeed(`refusing to add ${err.attempted}`)
-    )
-  );
+  let message = $state("");
+
+  const archive = () =>
+    Effect.gen(function* () {
+      yield* archive_project({ project_id: "p_123" });
+      message = "Archived";
+    }).pipe(
+      Effect.catchAll(() => Effect.sync(() => {
+        message = "Archive failed";
+      })),
+    );
 </script>
+
+<button onclick={archive}>Archive</button>
+<p>{message}</p>
 ```
 
-## Validation variants
+## Common Mistakes
 
-```ts
-// Schema-validated (recommended).
-Command(Schema.Number, (by) => ...);
+- Using command results as if they were long-lived query state.
+- Forgetting to disable duplicate-trigger controls while the command is pending.
+- Swallowing server failures without giving the user a recovery path.
+- Using `Command` for forms that need field-level validation errors.
 
-// Unchecked — input type is whatever you pass at the call site.
-Command("unchecked", (payload: unknown) => ...);
+## Related Pages
 
-// No-arg.
-Command(() => ...);
-```
-
-## See also
-
-- [Command examples in the gallery](https://github.com/usebarekey/svelte-effect-runtime/tree/master/examples/sveltekit/src/routes/command)
-  — schema-validated, void, pending, tagged-error recovery.
+- [Form](/docs/remote-functions/form)
+- [Remote errors](/docs/server/errors)
+- [Remote client API](/docs/reference/remote-client-api)

@@ -1,38 +1,28 @@
 ---
-title: preprocess
+title: Preprocess
+description: Reference for lower-level transform and preprocess usage.
 ---
 
-# preprocess
+The Svelte preprocessor is required for V2 component syntax. It removes the `effect` attribute before Svelte parses the file, lowers top-level script `yield*`, and rewrites markup `yield*` into runtime helper calls.
 
-`effectPreprocess(...)` is the low-level `.svelte` preprocessor entry used by
-the plugin.
-
-```ts
-import { effectPreprocess } from "svelte-effect-runtime/preprocess";
-```
-
-Most apps should use `effect()` from `"svelte-effect-runtime"` instead. Reach
-for `effectPreprocess(...)` only when you need to compose the transform
-manually.
-
-## Signature
+## Example
 
 ```ts
-export interface EffectPreprocessOptions {
-  runtimeModuleId?: string;
-  effectModuleId?: string;
-  svelteModuleId?: string;
-}
+import { preprocess } from "svelte-effect-runtime";
 
-export function effectPreprocess(
-  options?: EffectPreprocessOptions,
-): PreprocessorGroup;
+export default {
+  preprocess: [preprocess()],
+};
 ```
 
-## Semantics
+## Notes
 
-- Rewrites `<script effect>` blocks.
-- Rewrites supported markup `yield*` expressions.
-- Injects runtime imports using `runtimeModuleId`.
-- Injects `Effect` imports using `effectModuleId`.
-- Uses `svelteModuleId` for Svelte runtime helpers.
+- Use this alongside the Vite plugin, not instead of it.
+- The root entry exports `preprocess()` for app setup.
+- The `svelte-effect-runtime` entry also exports lower-level transform functions for tooling and tests.
+
+## Related Pages
+
+- [Vite plugin](/docs/reference/vite-plugin)
+- [Script effect](/docs/client/script-effect)
+- [Markup effect](/docs/client/markup-effect)

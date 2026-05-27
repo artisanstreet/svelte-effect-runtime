@@ -1,0 +1,31 @@
+---
+title: Vite Plugin
+description: Reference for the effect Vite plugin.
+---
+
+The `effect()` Vite plugin handles runtime integration around SvelteKit: server-side import rewrites and generated remote-client wrappers. Component syntax is lowered by the Svelte preprocessor, so real setup uses both.
+
+## Example
+
+```ts
+import { sveltekit } from "@sveltejs/kit/vite";
+import { defineConfig } from "vite";
+import { effect } from "svelte-effect-runtime";
+
+export default defineConfig({
+  plugins: [effect(), sveltekit()],
+});
+```
+
+## Notes
+
+- The plugin is required for remote client wrappers and server runtime import rewrites.
+- The Svelte preprocessor is required for `<script effect>` and markup `yield*`.
+- Remote functions also require SvelteKit's `kit.experimental.remoteFunctions` flag.
+- Keep plugin configuration close to the default unless you are debugging transform behavior.
+
+## Related Pages
+
+- [Install](/docs/install)
+- [Preprocess](/docs/reference/preprocess)
+- [Troubleshooting](/docs/reference/troubleshooting)

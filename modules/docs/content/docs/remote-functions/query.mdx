@@ -1,110 +1,71 @@
 ---
 title: Query
+description: Read server data with schemas, typed failures, and client usage.
 ---
 
-# Query
+Use `Query` when the client needs server data and the operation should not mutate anything. A query is easiest to reason about when identical input can safely return cached or repeated output.
+
+## When To Use This
+
+Use `Query` for dashboards, profile data, search results, permissions, and detail pages. Reach for `Command` or `Form` when a user action changes state.
+
+## Minimal Working Example
 
 ```ts
-import { Query } from "svelte-effect-runtime";
-```
+import { Query } from "svelte-effect-runtime/server";
+import { Effect } from "effect";
 
-`Query(...)` wraps SvelteKit's native `query()` for read-only data
-fetches. The handler always runs on the server. On the client, calling
-the query returns an `Effect<Output, RemoteFailure<Error>, never>` —
-compose it like any other Effect.
-
-For static or build-time data, use [Prerender](./prerender) instead.
-
-## Minimal example
-
-```ts tab="src/lib/posts.remote.ts"
-import { Data, Effect, Schema } from "effect";
-import { Query } from "svelte-effect-runtime";
-
-class PostNotFound extends Data.TaggedError("PostNotFound")<{
-  readonly slug: string;
-}> {}
-
-const POSTS = [
-  { slug: "alpha", title: "Alpha post", body: "First!" },
-  { slug: "beta", title: "Beta post", body: "Second!" }
-];
-
-// No-arg query.
-export const get_all_posts = Query(() => Effect.succeed(POSTS));
-
-// Schema-validated query.
-export const get_post = Query(Schema.String, (slug) =>
-  Effect.gen(function* () {
-    const post = POSTS.find((p) => p.slug === slug);
-    if (!post) return yield* new PostNotFound({ slug });
-    return post;
-  })
+export const get_user = Query("unchecked", ({ id }: { id: string }) =>
+  Effect.succeed({
+    id,
+    name: "Ada Lovelace",
+  }),
 );
 ```
 
-```svelte tab="src/routes/+page.svelte"
-<script lang="ts" effect>
-  import { get_all_posts } from "$lib/posts.remote";
-
-  const posts = yield* get_all_posts();
-</script>
-
-<ul>
-  {#each posts as post (post.slug)}
-    <li>
-      <a href="/blog/{post.slug}">{post.title}</a>
-    </li>
-  {/each}
-</ul>
-```
-
-
-<Callout type="warn">
-
-`yield*` works at the **top level** of a `<script effect>` block,
-inside `Effect.gen`, and inside inline-arrow event handlers. It does
-**not** work inside regular `function` declarations or `async function`
-bodies — those are not rewritten by the preprocessor.
-
-</Callout>
-
-## Recovering from tagged failures
-
-Server-side `Effect.fail(new PostNotFound(...))` arrives on the client
-as the raw tagged error, ready for `Effect.catchTag`:
-
 ```svelte
 <script lang="ts" effect>
-  import { Effect } from "effect";
-  import { get_post } from "$lib/posts.remote";
+  import { get_user } from "./user.remote";
 
-  const post = yield* get_post("missing-slug").pipe(
-    Effect.catchTag("PostNotFound", (err) =>
-      Effect.succeed({ slug: err.slug, title: "(not found)", body: "" })
-    )
-  );
+  const user = get_user({ id: "42" });
 </script>
+
+{#await yield* user}
+  <p>Loading user...</p>
+{:then value}
+  <h2>{value.name}</h2>
+{/await}
 ```
 
-`RemoteFailure<E>` is the union of your tagged error and SvelteKit's
-transport failures (`RemoteValidationError`, `RemoteHttpError`,
-`RemoteTransportError`); see the [errors reference](./errors).
+## Realistic Variant
 
-## Validation variants
+Model expected failures as data:
 
 ```ts
-// Schema-validated (recommended).
-Query(Schema.String, (slug) => ...);
+import { Query } from "svelte-effect-runtime/server";
+import { Effect } from "effect";
 
-// Unchecked — input type is whatever you pass at the call site.
-Query("unchecked", (slug: string) => ...);
+type UserNotFound = {
+  readonly _tag: "UserNotFound";
+  id: string;
+};
 
-// No-arg.
-Query(() => ...);
+export const get_user = Query("unchecked", ({ id }: { id: string }) =>
+  Effect.fail({ _tag: "UserNotFound", id } satisfies UserNotFound),
+);
 ```
 
-## See also
+The client can handle the failure in an await block or inside an Effect pipeline.
 
-- [Query examples in the gallery](https://github.com/usebarekey/svelte-effect-runtime/tree/master/examples/sveltekit/src/routes/query)
-  — basic, schema-validated, unchecked, and tagged-error recovery.
+## Common Mistakes
+
+- Mutating data in a query handler.
+- Accepting unvalidated input because TypeScript already knows the caller.
+- Throwing plain `Error` for expected business failures.
+- Calling a query repeatedly with unstable object inputs created from noisy state.
+
+## Related Pages
+
+- [Remote function overview](/docs/remote-functions)
+- [Server errors](/docs/server/errors)
+- [Loading and errors](/docs/recipes/loading-and-errors)

@@ -1,0 +1,32 @@
+---
+title: Server API
+description: Reference for server runtime and request helpers.
+---
+
+Server APIs configure how remote functions run Effect programs on the server.
+
+## ServerRuntime.make
+
+```ts
+import { ServerRuntime } from "svelte-effect-runtime/server";
+
+ServerRuntime.make(layer);
+```
+
+Registers the layer used by remote function handlers. Call it once from `src/hooks.server.ts`. The Vite plugin also rewrites server-side package-root imports to `_server`, but explicit `_server` imports make server-only examples clear.
+
+## RequestEvent
+
+```ts
+import { RequestEvent } from "svelte-effect-runtime/server";
+
+const event = yield* RequestEvent;
+```
+
+Reads the active SvelteKit request context inside a remote handler.
+
+## Related Pages
+
+- [Server runtime](/docs/server/runtime)
+- [RequestEvent](/docs/server/request-event)
+- [Server errors](/docs/server/errors)

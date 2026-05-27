@@ -1,180 +1,70 @@
 ---
 title: Form
+description: Build progressive forms with submit, validate, enhance, and field errors.
 ---
 
-# Form
+Use `Form` when the browser should submit user input with normal form semantics while your server handler stays inside Effect. It is the best fit for validation, field errors, and progressive enhancement.
+
+## When To Use This
+
+Use forms for sign in, profile editing, settings, creation flows, and anything that should still have a clear HTML shape. Use `Command` for non-form mutations.
+
+## Minimal Working Example
 
 ```ts
-import { Form } from "svelte-effect-runtime";
-```
+import { Form } from "svelte-effect-runtime/server";
+import { Effect } from "effect";
 
-`Form(...)` wraps SvelteKit's native `form()`. The returned object is
-**spreadable** onto a `<form>` element exactly like SvelteKit's, and
-additionally exposes every I/O surface as an `Effect`:
-
-- `submit(data)` — runs the form program as an Effect.
-- `validate(options?)` — programmatic validation as an Effect.
-- `enhance(callback)` — the callback receives an Effect-returning `submit`
-  and may itself return an Effect.
-- `for(id)` — recursively returns an `EffectForm`.
-
-Enable remote functions in `svelte.config.js`:
-
-```js
-kit: { experimental: { remoteFunctions: true } }
-```
-
-## Minimal example
-
-```ts tab="src/lib/posts.remote.ts"
-import { Data, Effect, Schema } from "effect";
-import { Form } from "svelte-effect-runtime";
-
-class TitleTooShort extends Data.TaggedError("TitleTooShort")<{
-  readonly minimum: number;
-}> {}
-
-const PostSchema = Schema.Struct({
-  title: Schema.String,
-  body: Schema.String
-});
-
-export const create_post = Form(PostSchema, ({ data, invalid }) =>
-  Effect.gen(function* () {
-    if (data.title.trim().length === 0) {
-      return yield* invalid.title("Please enter a title.");
-    }
-    if (data.title.length < 3) {
-      return yield* new TitleTooShort({ minimum: 3 });
-    }
-    return {
-      slug: data.title.toLowerCase().replace(/\s+/g, "-"),
-      title: data.title,
-      body: data.body
-    };
-  })
+export const update_name = Form(
+  "unchecked",
+  ({ data }: { data: { name: string } }) =>
+    Effect.succeed({ name: data.name }),
 );
 ```
 
-```svelte tab="src/routes/+page.svelte"
-<script lang="ts" effect>
-  import { create_post } from "$lib/posts.remote";
+```svelte
+<script lang="ts">
+  import { update_name } from "./profile.remote";
 </script>
 
-<form {...create_post}>
-  <label>
-    Title
-    <input {...create_post.fields.title.as("text")} />
-  </label>
-  <label>
-    Body
-    <textarea {...create_post.fields.body.as("text")}></textarea>
-  </label>
-  <button type="submit">Publish</button>
+<form {...update_name}>
+  <input name="name" />
+  <button>Save</button>
 </form>
-
-{#if create_post.fields.title.issues()?.[0]}
-  <p class="error">{create_post.fields.title.issues()?.[0].message}</p>
-{/if}
-{#if create_post.result}
-  <pre>{JSON.stringify(create_post.result, null, 2)}</pre>
-{/if}
 ```
 
+## Realistic Variant
 
-The handler receives:
+Validate before committing the mutation:
 
-- `data` — the submitted payload, already decoded into a plain object
-  matching the schema's output type.
-- `invalid` — helpers for producing validation failures. Yield
-  `invalid.<field>(message)` to attach an issue to a specific field, or
-  `invalid.form(message)` for a top-level one.
+```ts
+import { Form } from "svelte-effect-runtime/server";
+import { Effect } from "effect";
 
-Domain errors (`new TitleTooShort(...)`, etc.) are
-[`Data.TaggedError`](https://effect.website/docs/error-management/expected-errors/#tagged-errors)
-classes; the tag survives the wire so the client can
-[`Effect.catchTag("TitleTooShort", ...)`](./errors).
-
-## Submit as an Effect
-
-`create_post.submit(data)` returns
-`Effect<Output, RemoteFailure<Error>, never>` — every Effect operator
-works on it. Use this when there is no `<form>` element on the page, or
-when you want to compose post-submission logic without `await`/`try`:
-
-```svelte
-<button
-  onclick={() => {
-    const post = yield* create_post.submit({ title, body }).pipe(
-      Effect.catchTag("TitleTooShort", (err) =>
-        Effect.succeed({ slug: `draft-${err.minimum}`, title, body })
-      )
-    );
-    last_slug = post.slug;
-  }}
->
-  Submit
-</button>
-```
-
-## `.enhance(callback)`
-
-`enhance` lets you intercept submission with custom logic. As of 1.6.0
-the callback is Effect-shaped — `submit` is a thunk returning an
-Effect, and the callback may itself return an Effect:
-
-```svelte
-<form
-  {...create_post.enhance(({ data, submit }) =>
+export const update_name = Form(
+  "unchecked",
+  ({ data, invalid }: { data: { name: string }; invalid: any }) =>
     Effect.gen(function* () {
-      if (!confirm("Publish this post?")) return;
-      yield* submit();
-      // post-submit logic — toast, analytics, etc.
-    })
-  )}
->
-  …
-</form>
+      if (data.name.trim().length === 0) {
+        return yield* invalid.name("Name is required");
+      }
+
+      return { name: data.name.trim() };
+    }),
+);
 ```
 
-## `.validate(options?)`
+On the client, the generated form object keeps SvelteKit's form descriptors. Programmatic helpers such as `validate`, `submit`, and `enhance` are wrapped so they can be yielded from Effect-aware code.
 
-Returns `Effect<void, RemoteFailure<Error>, never>`. Useful for live
-"is this valid?" checks while the user types:
+## Common Mistakes
 
-```svelte
-<button
-  onclick={() => {
-    yield* create_post.validate({ includeUntouched: true });
-  }}
->
-  Validate now
-</button>
-```
+- Using a command for complex form validation and then rebuilding form behavior manually.
+- Trusting client-side validation without validating again in the server handler.
+- Returning one generic message when users need field-specific errors.
+- Forgetting that `enhance` is progressive; the server handler should still be correct without JavaScript.
 
-## `.for(id)`
+## Related Pages
 
-Mint a per-row form instance with its own action URL. Useful inside
-`{#each}` loops where every row submits independently:
-
-```svelte
-{#each todos as todo (todo.id)}
-  {@const remove = delete_todo.for(todo.id)}
-  <form {...remove}>
-    <button type="submit">Delete #{todo.id}</button>
-  </form>
-{/each}
-```
-
-The key passed to `.for()` is merged into the submitted data as the
-`id` field, so the schema should declare `id` with a type matching the
-JS value you pass (`Schema.Number` for numeric ids,
-`Schema.String` for string ids).
-
-## See also
-
-- [Form examples in the gallery](https://github.com/usebarekey/svelte-effect-runtime/tree/master/examples/sveltekit/src/routes/form)
-  — basic spread, programmatic submit, `.for(id)`, `.enhance`,
-  `.validate`, validation issues, descriptor diagnostics.
-- [Errors reference](./errors) — `RemoteFailure<E>` variants and how
-  `Data.TaggedError` survives the wire.
+- [Forms with validation](/docs/recipes/forms-with-validation)
+- [Remote errors](/docs/server/errors)
+- [RequestEvent](/docs/server/request-event)

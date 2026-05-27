@@ -1,0 +1,74 @@
+---
+title: Remote Functions
+description: Choose Query, Command, Form, or Prerender for server work.
+---
+
+Remote functions are SvelteKit server entry points wrapped in Effect. They keep server code on the server while giving clients typed inputs, typed failures, and predictable pending states.
+
+## When To Use This
+
+Use a remote function when the work needs a database, secret, cookie, session, server service, or build-time data source. Keep purely local UI behavior in component effects.
+
+## Minimal Working Example
+
+```ts
+import { Query } from "svelte-effect-runtime/server";
+import { Effect } from "effect";
+
+export const get_count = Query("unchecked", ({ key }: { key: string }) =>
+  Effect.succeed({ key, value: 1 }),
+);
+```
+
+```svelte
+<script lang="ts" effect>
+  import { get_count } from "./counter.remote";
+
+  const count = get_count({ key: "visits" });
+</script>
+
+{#await yield* count}
+  <p>Loading...</p>
+{:then result}
+  <p>{result.value}</p>
+{/await}
+```
+
+## Realistic Variant
+
+Pick the shape that matches the user intent:
+
+<Cards>
+  <Card title="Query" href="/docs/remote-functions/query">
+    Read server data without changing it.
+  </Card>
+  <Card title="Command" href="/docs/remote-functions/command">
+    Run a mutation from a button, menu item, or effect.
+  </Card>
+  <Card title="Form" href="/docs/remote-functions/form">
+    Submit progressive forms with validation and field errors.
+  </Card>
+  <Card title="Prerender" href="/docs/remote-functions/prerender">
+    Read build-time or static data with optional dynamic fallback.
+  </Card>
+</Cards>
+
+## Decision Guide
+
+- Use `Query` when the UI needs server data without changing it.
+- Use `Command` when the user does something that changes server state.
+- Use `Form` when HTML form semantics, validation, and progressive enhancement matter.
+- Use `Prerender` when data can be resolved at build time or cached as static output.
+
+## Common Mistakes
+
+- Using `Query` for writes because it is convenient to call.
+- Returning unstructured thrown errors instead of typed failures.
+- Reading cookies or locals from component code instead of the server request context.
+- Forgetting to enable SvelteKit's remote function flag.
+
+## Related Pages
+
+- [RequestEvent](/docs/server/request-event)
+- [Remote errors](/docs/server/errors)
+- [Remote client API](/docs/reference/remote-client-api)
