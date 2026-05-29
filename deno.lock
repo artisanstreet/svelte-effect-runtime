@@ -38,6 +38,7 @@
     "npm:typescript@^5.9.2": "5.9.3",
     "npm:typescript@^5.9.3": "5.9.3",
     "npm:vite@^7.3.1": "7.3.1_@types+node@24.12.2_picomatch@4.0.4",
+    "npm:vscode-languageclient@9.0.1": "9.0.1",
     "npm:vscode-languageserver@9.0.1": "9.0.1"
   },
   "jsr": {
@@ -1779,9 +1780,18 @@
     "bail@2.0.2": {
       "integrity": "sha512-0xO6mYd7JB2YesxDKplafRpsiOzPt9V02ddPCLbY1xYGPOX24NTyN50qnUxgCPcSoYMhKpAuBTjQoRZCAkUDRw=="
     },
+    "balanced-match@1.0.2": {
+      "integrity": "sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw=="
+    },
     "baseline-browser-mapping@2.10.32": {
       "integrity": "sha512-wbPvpyjJPC0zdfdKXxqEL3Ea+bOMD/87X4lftiJkkaBiuG6ALQy1SLmEd7BSmVCuwCQsBrCamgBoLyfFDD1EPg==",
       "bin": true
+    },
+    "brace-expansion@2.1.1": {
+      "integrity": "sha512-WR1cURNjuvBLMZBMbqM0UoE+WAfdUcEV1ccD8PVBVOI+Z3ND4+SZbN8RsfT2bMuG1qwz5RFvPukSZm5fF2D5eA==",
+      "dependencies": [
+        "balanced-match"
+      ]
     },
     "caniuse-lite@1.0.30001793": {
       "integrity": "sha512-iwSsYWaCOoh26cV8NwNRViHlrfUvYsHDfRVcbtmw0Kg6PJIZZXwMkj1442FYLBGkeUf1juAsU3DTfxW579mrPA=="
@@ -3056,6 +3066,12 @@
         "micromark-util-types"
       ]
     },
+    "minimatch@5.1.9": {
+      "integrity": "sha512-7o1wEA2RyMP7Iu7GNba9vc0RWWGACJOCZBJX2GJWip0ikV+wcOsgVuY9uE8CPiyQhkGFSlhuSkZPavN7u1c2Fw==",
+      "dependencies": [
+        "brace-expansion"
+      ]
+    },
     "motion-dom@12.40.0": {
       "integrity": "sha512-HxU3ZaBwNPVQUBQf1xxgq+7JrPNZvjLVxgbpEZL7RrWJnsxOf0/OM+yrHG9ogLQ31Do/r57Oz2gQWPK+6q62mg==",
       "dependencies": [
@@ -3857,6 +3873,14 @@
     "vscode-jsonrpc@8.2.0": {
       "integrity": "sha512-C+r0eKJUIfiDIfwJhria30+TYWPtuHJXHtI7J0YlOmKAo7ogxP20T0zxB7HZQIFhIyvoBPwWskjxrvAtfjyZfA=="
     },
+    "vscode-languageclient@9.0.1": {
+      "integrity": "sha512-JZiimVdvimEuHh5olxhxkht09m3JzUGwggb5eRUkzzJhZ2KjCN0nh55VfiED9oez9DyF8/fz1g1iBV3h+0Z2EA==",
+      "dependencies": [
+        "minimatch",
+        "semver",
+        "vscode-languageserver-protocol"
+      ]
+    },
     "vscode-languageserver-protocol@3.17.5": {
       "integrity": "sha512-mb1bvRJN8SVznADSGWM9u/b07H7Ecg0I3OgXDuLdn307rl/J3A9YD6/eYOssqhecL27hK1IPZAsaqh00i/Jljg==",
       "dependencies": [
@@ -4052,7 +4076,9 @@
             "npm:magic-string@~0.30.21",
             "npm:svelte-language-server@~0.17.30",
             "npm:svelte@^5.55.1",
-            "npm:typescript@^5.9.2"
+            "npm:typescript@^5.9.2",
+            "npm:vscode-languageclient@9.0.1",
+            "npm:vscode-languageserver@9.0.1"
           ]
         }
       }

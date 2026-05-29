@@ -14,37 +14,73 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished",
-    "onCommand:svelte-effect-runtime.enableLanguageServer",
-    "onCommand:svelte-effect-runtime.disableLanguageServer"
-  ],
-  "extensionDependencies": [
-    "svelte.svelte-vscode"
+    "onLanguage:svelte",
+    "workspaceContains:**/*.svelte",
+    "onCommand:svelte-effect-runtime.startLanguageServer",
+    "onCommand:svelte-effect-runtime.stopLanguageServer",
+    "onCommand:svelte-effect-runtime.restartLanguageServer",
+    "onCommand:svelte-effect-runtime.showOutput"
   ],
   "files": [
     ".dist",
     "node_modules",
+    "runtime",
     "README.md"
   ],
   "main": "./.dist/extension.js",
   "contributes": {
+    "languages": [
+      {
+        "id": "svelte",
+        "aliases": [
+          "Svelte",
+          "svelte"
+        ],
+        "extensions": [
+          ".svelte"
+        ]
+      }
+    ],
     "commands": [
       {
-        "command": "svelte-effect-runtime.enableLanguageServer",
-        "title": "Svelte Effect Runtime: Enable Language Server"
+        "command": "svelte-effect-runtime.startLanguageServer",
+        "title": "Svelte Effect Runtime: Start Language Server"
       },
       {
-        "command": "svelte-effect-runtime.disableLanguageServer",
-        "title": "Svelte Effect Runtime: Disable Language Server"
+        "command": "svelte-effect-runtime.stopLanguageServer",
+        "title": "Svelte Effect Runtime: Stop Language Server"
+      },
+      {
+        "command": "svelte-effect-runtime.restartLanguageServer",
+        "title": "Svelte Effect Runtime: Restart Language Server"
+      },
+      {
+        "command": "svelte-effect-runtime.showOutput",
+        "title": "Svelte Effect Runtime: Show Output"
       }
     ],
     "configuration": {
       "title": "Svelte Effect Runtime",
       "properties": {
-        "svelte-effect-runtime.languageServer.autoConfigure": {
+        "svelte-effect-runtime.languageServer.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Automatically point the Svelte extension at the bundled svelte-effect-runtime language server when the current path is unset or already managed by this extension."
+          "description": "Start the bundled Svelte Effect Runtime language server automatically for Svelte files."
+        },
+        "svelte-effect-runtime.languageServer.client": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "direct",
+            "svelteExtension"
+          ],
+          "default": "auto",
+          "description": "Language-client strategy. Auto uses the official Svelte extension client when installed to avoid duplicate Svelte language servers, otherwise it starts the bundled VS Code client directly."
+        },
+        "svelte-effect-runtime.languageServer.path": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to a custom svelte-effect-runtime-language-server script. Leave empty to use the bundled server."
         }
       }
     }
@@ -54,6 +90,8 @@
     "magic-string": "^0.30.21",
     "svelte": "^5.55.1",
     "svelte-language-server": "^0.17.30",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "vscode-languageclient": "9.0.1",
+    "vscode-languageserver": "9.0.1"
   }
 }

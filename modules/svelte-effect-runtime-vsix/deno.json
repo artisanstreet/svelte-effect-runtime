@@ -1,8 +1,8 @@
 {
   "tasks": {
-    "build": "deno task clean && deno task prepare:runtime && deno run -A ../../build/ext.ts",
+    "build": "deno task clean && deno task prepare:language-server && deno run -A ../../build/ext.ts",
     "clean": "rm -rf .dist runtime ../../.dist/svelte-effect-runtime-vsix",
     "package": "deno task build && deno run -A ../../build/vsix.ts",
-    "prepare:runtime": "cd ../svelte-effect-runtime && deno task build && cd ../svelte-effect-runtime-vsix && deno run -A ../../build/assets.ts svelte-effect-runtime-vsix"
+    "prepare:language-server": "cd ../svelte-effect-runtime-language-server && deno task build && cd ../svelte-effect-runtime-vsix && deno run -A ../../build/assets.ts svelte-effect-runtime-vsix"
   }
 }

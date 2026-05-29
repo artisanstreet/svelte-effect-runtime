@@ -17,7 +17,13 @@ const staging_dir = await Deno.makeTempDir({
 });
 const staging_dist_dir = join(staging_dir, ".dist");
 const required_runtime_dependencies = [
+  "@jridgewell/trace-mapping",
+  "magic-string",
+  "svelte",
   "svelte-language-server",
+  "typescript",
+  "vscode-languageclient",
+  "vscode-languageserver",
 ];
 
 await Deno.mkdir(staging_dist_dir, { recursive: true });
@@ -34,16 +40,21 @@ for (
   const filename of [
     "extension.js",
     "extension.js.map",
-    "server.js",
-    "server.js.map",
+    "server.cjs",
+    "server.cjs.map",
   ]
 ) {
   await Deno.copyFile(
     join(output_dir, filename),
     join(staging_dist_dir, filename),
-  );
+  )
+    .catch((error) => {
+      if (!(error instanceof Deno.errors.NotFound)) {
+        throw error;
+      }
+    });
 }
-await copy(join(output_dir, "runtime"), join(staging_dist_dir, "runtime"), {
+await copy(join(output_dir, "runtime"), join(staging_dir, "runtime"), {
   overwrite: true,
 });
 await Deno.copyFile(
