@@ -1,15 +1,17 @@
 import {
+  type Connection,
   createConnection,
   IPCMessageReader,
   IPCMessageWriter,
 } from "vscode-languageserver/node";
+import { bootstrap_language_server } from "./patch-language-server/index.ts";
 import { DocumentDiagnosticRequest } from "vscode-languageserver";
+import { startServer } from "svelte-language-server";
 import { fileURLToPath } from "node:url";
 import { realpathSync } from "node:fs";
-import path from "node:path";
+
 import process from "node:process";
-import { startServer } from "svelte-language-server";
-import { bootstrap_language_server } from "./patch-language-server.ts";
+import path from "node:path";
 
 const current_module_path = realpathSync.native(fileURLToPath(import.meta.url));
 const invoked_module_path = process.argv[1] === undefined
@@ -28,28 +30,33 @@ if (is_main_module) {
     });
 }
 
-function create_zed_compatible_connection() {
+function create_zed_compatible_connection(): Connection {
   if (process.argv.includes("--stdio")) {
     console.log = (...args) => {
       console.warn(...args);
     };
 
-    return patch_pull_diagnostics_connection(
-      createConnection(process.stdin, process.stdout),
-    );
+    const connection = createConnection(
+      process.stdin,
+      process.stdout,
+    ) as Connection;
+
+    return patch_pull_diagnostics_connection(connection);
   }
 
+  const connection = createConnection(
+    new IPCMessageReader(process),
+    new IPCMessageWriter(process),
+  ) as Connection;
+
   return patch_pull_diagnostics_connection(
-    createConnection(
-      new IPCMessageReader(process),
-      new IPCMessageWriter(process),
-    ),
+    connection,
   );
 }
 
 function patch_pull_diagnostics_connection(
-  connection: ReturnType<typeof createConnection>,
-) {
+  connection: Connection,
+): Connection {
   const original_on_request = connection.onRequest.bind(connection);
 
   connection.onRequest = ((type_or_method: unknown, handler: unknown) => {

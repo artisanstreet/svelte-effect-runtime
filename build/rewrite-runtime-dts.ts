@@ -1,5 +1,5 @@
-import { copy } from "@std/fs/copy";
 import { dirname, fromFileUrl, join, relative, resolve } from "@std/path";
+import { copy } from "@std/fs/copy";
 
 const repo_root = resolve(dirname(fromFileUrl(import.meta.url)), "..");
 const package_dist = join(
@@ -49,6 +49,13 @@ function rewrite_alias_specifiers(file_path: string, content: string): string {
   });
 }
 
+function rewrite_relative_specifiers(content: string): string {
+  return content.replace(
+    /((?:from|import)\s*["'])(\.{1,2}\/[^"']+)\.ts(["'])/g,
+    "$1$2.js$3",
+  );
+}
+
 for await (const entry of Deno.readDir(dist_root)) {
   await visit(entry.name);
 }
@@ -67,7 +74,9 @@ async function visit(relative_path: string): Promise<void> {
   if (!file_path.endsWith(".d.ts")) return;
 
   const content = await Deno.readTextFile(file_path);
-  const rewritten = rewrite_alias_specifiers(file_path, content);
+  const rewritten = rewrite_relative_specifiers(
+    rewrite_alias_specifiers(file_path, content),
+  );
 
   if (rewritten !== content) {
     await Deno.writeTextFile(file_path, rewritten);
