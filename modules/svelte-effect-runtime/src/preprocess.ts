@@ -27,6 +27,8 @@ export interface ScriptTransformResult {
   code: string;
   /** Block references emitted during transformation. */
   blocks: BlockRef[];
+  /** Source map from transformed code back to the original script block. */
+  map?: Record<string, unknown>;
 }
 
 /**
@@ -228,7 +230,24 @@ export function transform_script_effect(
 
   block_refs.push({ id: filename, kind: "script" });
 
-  return { code: magic.toString(), blocks: block_refs };
+  return {
+    code: magic.toString(),
+    blocks: block_refs,
+    map: create_source_map(magic, filename),
+  };
+}
+
+function create_source_map(
+  magic: MagicString,
+  filename: string,
+): Record<string, unknown> {
+  const map = magic.generateMap({
+    hires: true,
+    includeContent: true,
+    source: filename,
+  });
+
+  return map as unknown as Record<string, unknown>;
 }
 
 /**

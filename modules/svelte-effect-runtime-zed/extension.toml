@@ -1,0 +1,11 @@
+id = "svelte-effect-runtime"
+name = "Svelte Effect Runtime"
+description = "Svelte Effect Runtime language-server support for Zed."
+version = "0.1.0"
+schema_version = 1
+authors = ["Barekey"]
+repository = "https://github.com/usebarekey/svelte-effect-runtime"
+
+[language_servers.svelte-effect-runtime-language-server]
+name = "Svelte Effect Runtime Language Server"
+language = "Svelte"

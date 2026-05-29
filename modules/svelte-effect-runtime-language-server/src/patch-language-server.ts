@@ -9,7 +9,9 @@ import { TraceMap } from "@jridgewell/trace-mapping";
 const require = createRequire(import.meta.url);
 const ts = require("typescript") as typeof import("typescript");
 const patch_marker = Symbol.for("svelte-effect-runtime.language-server.patch");
-const package_root = path.dirname(fileURLToPath(import.meta.url));
+const package_root = resolve_package_root(
+  path.dirname(fileURLToPath(import.meta.url)),
+);
 const runtime_import_root = resolve_runtime_import_root(package_root);
 const language_server_root = path.join(
   path.dirname(require.resolve("svelte-language-server/package.json")),
@@ -83,62 +85,111 @@ export async function bootstrap_language_server() {
     return;
   }
 
-  const [
-    preprocessModule,
-    markupModule,
-    transformModule,
-  ] = await Promise.all([
-    import_runtime_module("preprocess.js"),
-    import_runtime_module("internal/markup.js"),
-    import_runtime_module("internal/transform.js"),
-  ]);
+  const runtime_module = await import_runtime_module("runtime/preprocess.js");
 
-  patch_svelte_compiler_path(preprocessModule.effect_preprocess);
+  patch_svelte_compiler_path(runtime_module.preprocess);
   patch_typescript_snapshot_path({
-    transformEffectMarkup: markupModule.transformEffectMarkup,
-    transformEffectScript: transformModule.transformEffectScript,
+    transformEffectMarkup: (code, options) =>
+      normalize_transform_result(
+        runtime_module.transform_markup_effect(code, options.filename),
+        code,
+        options.filename,
+      ),
+    transformEffectScript: (code, options) =>
+      normalize_transform_result(
+        runtime_module.transform_script_effect(code, options.filename),
+        code,
+        options.filename,
+      ),
   });
   patch_typescript_code_actions();
 }
 
+function resolve_package_root(module_dir: string) {
+  if (
+    path.basename(module_dir) === ".dist" ||
+    path.basename(module_dir) === "src"
+  ) {
+    return path.dirname(module_dir);
+  }
+
+  return module_dir;
+}
+
 function resolve_runtime_import_root(package_root: string) {
-  const bundled_runtime_root = path.join(package_root, "runtime");
   const workspace_source_root = path.resolve(
     package_root,
     "..",
     "svelte-effect-runtime",
   );
   const workspace_runtime_root = path.join(workspace_source_root, ".dist");
+  const workspace_runtime_source_root = path.join(workspace_source_root, "src");
 
   if (
     typeof Deno !== "undefined" &&
-    existsSync(path.join(workspace_source_root, "src", "preprocess.ts"))
+    existsSync(
+      path.join(workspace_runtime_source_root, "runtime", "preprocess.ts"),
+    )
   ) {
-    return workspace_source_root;
+    return workspace_runtime_source_root;
   }
 
   if (existsSync(workspace_runtime_root)) {
     return workspace_runtime_root;
   }
 
-  return bundled_runtime_root;
+  return package_root;
 }
 
-function import_runtime_module(relativePath: string) {
+function import_runtime_module(relative_path: string) {
+  const source_relative_path = relative_path.replace(/\.js$/, ".ts");
+  const is_source_root = existsSync(path.join(
+    runtime_import_root,
+    source_relative_path,
+  ));
   const resolvedPath = path.join(
     runtime_import_root,
-    runtime_import_root.endsWith(path.join("svelte-effect-runtime"))
-      ? relativePath.replace(/\.js$/, ".ts")
-      : relativePath,
+    is_source_root ? source_relative_path : relative_path,
   );
 
   return import(pathToFileURL(resolvedPath).href);
 }
 
+function normalize_transform_result(
+  result: {
+    code: string;
+    map?: Record<string, unknown>;
+    relocations?: Array<Relocation>;
+  },
+  original_code: string,
+  filename: string,
+) {
+  return {
+    ...result,
+    map: result.map ?? create_identity_source_map(original_code, filename),
+  };
+}
+
+function create_identity_source_map(
+  code: string,
+  filename: string,
+): Record<string, unknown> {
+  const magic = new MagicString(code);
+
+  return magic.generateMap({
+    hires: true,
+    includeContent: true,
+    source: filename,
+  }) as unknown as Record<string, unknown>;
+}
+
 function patch_svelte_compiler_path(effectPreprocess: () => any) {
   patch_static_factory(TranspiledSvelteDocument, (originalCreate: any) => {
     return function create(this: unknown, document: unknown, config: any) {
-      const preprocess = merge_preprocessors(config?.preprocess, effectPreprocess);
+      const preprocess = merge_preprocessors(
+        config?.preprocess,
+        effectPreprocess,
+      );
       return originalCreate.call(this, document, {
         ...config,
         preprocess,
@@ -146,19 +197,22 @@ function patch_svelte_compiler_path(effectPreprocess: () => any) {
     };
   });
 
-  patch_static_factory(FallbackTranspiledSvelteDocument, (originalCreate: any) => {
-    return function create(
-      this: unknown,
-      document: unknown,
-      preprocessors: any[] = [],
-    ) {
-      return originalCreate.call(
-        this,
-        document,
-        merge_preprocessors(preprocessors, effectPreprocess),
-      );
-    };
-  });
+  patch_static_factory(
+    FallbackTranspiledSvelteDocument,
+    (originalCreate: any) => {
+      return function create(
+        this: unknown,
+        document: unknown,
+        preprocessors: any[] = [],
+      ) {
+        return originalCreate.call(
+          this,
+          document,
+          merge_preprocessors(preprocessors, effectPreprocess),
+        );
+      };
+    },
+  );
 }
 
 function patch_typescript_snapshot_path(
@@ -187,7 +241,11 @@ function patch_typescript_snapshot_path(
       return original_from_document.call(this, document, options);
     }
 
-    const snapshot = original_from_document.call(this, prepared.document, options);
+    const snapshot = original_from_document.call(
+      this,
+      prepared.document,
+      options,
+    );
     return rebind_snapshot_to_original_document(snapshot, document, prepared);
   };
   DocumentSnapshot.fromDocument[patch_marker] = true;
@@ -225,40 +283,42 @@ function patch_typescript_code_actions() {
     return;
   }
 
-  const original_apply_quickfix = CodeActionsProviderImpl.prototype.applyQuickfix;
+  const original_apply_quickfix =
+    CodeActionsProviderImpl.prototype.applyQuickfix;
 
-  CodeActionsProviderImpl.prototype.applyQuickfix = async function applyQuickfix(
-    document: any,
-    range: { start: any; end: any },
-    context: any,
-    cancellationToken: any,
-  ) {
-    const { tsDoc } = await this.getLSAndTSDoc(document);
-    const generatedStart = tsDoc.getGeneratedPosition(range.start);
-    const generatedEnd = tsDoc.getGeneratedPosition(range.end);
-
-    if (
-      is_invalid_position(generatedStart) ||
-      is_invalid_position(generatedEnd)
+  CodeActionsProviderImpl.prototype.applyQuickfix =
+    async function applyQuickfix(
+      document: any,
+      range: { start: any; end: any },
+      context: any,
+      cancellationToken: any,
     ) {
-      return [];
-    }
+      const { tsDoc } = await this.getLSAndTSDoc(document);
+      const generatedStart = tsDoc.getGeneratedPosition(range.start);
+      const generatedEnd = tsDoc.getGeneratedPosition(range.end);
 
-    const start = tsDoc.offsetAt(generatedStart);
-    const end = tsDoc.offsetAt(generatedEnd);
+      if (
+        is_invalid_position(generatedStart) ||
+        is_invalid_position(generatedEnd)
+      ) {
+        return [];
+      }
 
-    if (end < start) {
-      return [];
-    }
+      const start = tsDoc.offsetAt(generatedStart);
+      const end = tsDoc.offsetAt(generatedEnd);
 
-    return original_apply_quickfix.call(
-      this,
-      document,
-      range,
-      context,
-      cancellationToken,
-    );
-  };
+      if (end < start) {
+        return [];
+      }
+
+      return original_apply_quickfix.call(
+        this,
+        document,
+        range,
+        context,
+        cancellationToken,
+      );
+    };
   CodeActionsProviderImpl.prototype.applyQuickfix[patch_marker] = true;
 }
 
@@ -323,7 +383,9 @@ function contains_effect_preprocessor(preprocessors: any) {
   }
 
   const list = Array.isArray(preprocessors) ? preprocessors : [preprocessors];
-  return list.some((preprocessor) => preprocessor?.name === "svelte-effect-runtime");
+  return list.some((preprocessor) =>
+    preprocessor?.name === "svelte-effect-runtime"
+  );
 }
 
 function prepare_virtual_document(
@@ -408,7 +470,8 @@ function prepare_virtual_document(
   virtualDocument.openedByClient = originalDocument.openedByClient;
   virtualDocument.config = originalDocument.config;
   virtualDocument.configPromise = originalDocument.configPromise;
-  virtualDocument._compiler = originalDocument._compiler ?? originalDocument.compiler;
+  virtualDocument._compiler = originalDocument._compiler ??
+    originalDocument.compiler;
   virtualDocument.svelteVersion = originalDocument.svelteVersion;
 
   return {
@@ -470,21 +533,24 @@ function create_script_content_mapper(
         return fullDocumentMapper.getOriginalPosition(generatedPosition);
       }
 
-      const positionInTransformedFragment =
-        transformedFragmentMapper.getGeneratedPosition(generatedPosition);
+      const positionInTransformedFragment = transformedFragmentMapper
+        .getGeneratedPosition(generatedPosition);
 
       if (is_invalid_position(positionInTransformedFragment)) {
         return positionInTransformedFragment;
       }
 
-      const relocatedOriginalPosition =
-        relocationMapper?.getOriginalPosition(positionInTransformedFragment);
+      const relocatedOriginalPosition = relocationMapper?.getOriginalPosition(
+        positionInTransformedFragment,
+      );
 
       if (
         relocatedOriginalPosition &&
         !is_invalid_position(relocatedOriginalPosition)
       ) {
-        return originalFragmentMapper.getOriginalPosition(relocatedOriginalPosition);
+        return originalFragmentMapper.getOriginalPosition(
+          relocatedOriginalPosition,
+        );
       }
 
       const positionInOriginalFragment = sourceMapper.getOriginalPosition(
@@ -495,22 +561,25 @@ function create_script_content_mapper(
         return positionInOriginalFragment;
       }
 
-      return originalFragmentMapper.getOriginalPosition(positionInOriginalFragment);
+      return originalFragmentMapper.getOriginalPosition(
+        positionInOriginalFragment,
+      );
     },
     getGeneratedPosition(originalPosition: any) {
       if (!originalFragmentMapper.isInGenerated(originalPosition)) {
         return fullDocumentMapper.getGeneratedPosition(originalPosition);
       }
 
-      const positionInOriginalFragment =
-        originalFragmentMapper.getGeneratedPosition(originalPosition);
+      const positionInOriginalFragment = originalFragmentMapper
+        .getGeneratedPosition(originalPosition);
 
       if (is_invalid_position(positionInOriginalFragment)) {
         return positionInOriginalFragment;
       }
 
-      const relocatedGeneratedPosition =
-        relocationMapper?.getGeneratedPosition(positionInOriginalFragment);
+      const relocatedGeneratedPosition = relocationMapper?.getGeneratedPosition(
+        positionInOriginalFragment,
+      );
 
       if (
         relocatedGeneratedPosition &&
@@ -687,7 +756,8 @@ class OffsetTable {
     while (low <= high) {
       const middle = Math.floor((low + high) / 2);
       const lineStart = this.lineStarts[middle];
-      const nextLineStart = this.lineStarts[middle + 1] ?? Number.POSITIVE_INFINITY;
+      const nextLineStart = this.lineStarts[middle + 1] ??
+        Number.POSITIVE_INFINITY;
 
       if (offset < lineStart) {
         high = middle - 1;
@@ -874,8 +944,9 @@ class SnapshotDocumentMapper {
   }
 
   getGeneratedPosition(originalPosition: any) {
-    const preprocessedPosition =
-      this.preprocessMapper.getGeneratedPosition(originalPosition);
+    const preprocessedPosition = this.preprocessMapper.getGeneratedPosition(
+      originalPosition,
+    );
 
     if (is_invalid_position(preprocessedPosition)) {
       return preprocessedPosition;
@@ -885,8 +956,9 @@ class SnapshotDocumentMapper {
   }
 
   isInGenerated(originalPosition: any) {
-    const preprocessedPosition =
-      this.preprocessMapper.getGeneratedPosition(originalPosition);
+    const preprocessedPosition = this.preprocessMapper.getGeneratedPosition(
+      originalPosition,
+    );
 
     if (is_invalid_position(preprocessedPosition)) {
       return false;

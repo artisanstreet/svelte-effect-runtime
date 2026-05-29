@@ -14,6 +14,8 @@ export interface MarkupTransformResult {
   code: string;
   /** Whether any yield* expressions were found and lowered. */
   has_yield: boolean;
+  /** Source map from transformed markup back to the original component. */
+  map?: Record<string, unknown>;
 }
 
 /** Describes a brace expression that contains yield* and needs lowering. */
@@ -94,7 +96,24 @@ export function transform_markup_effect(
 
   inject_helpers(magic, content);
 
-  return { code: magic.toString(), has_yield: true };
+  return {
+    code: magic.toString(),
+    has_yield: true,
+    map: create_source_map(magic, filename),
+  };
+}
+
+function create_source_map(
+  magic: MagicString,
+  filename: string,
+): Record<string, unknown> {
+  const map = magic.generateMap({
+    hires: true,
+    includeContent: true,
+    source: filename,
+  });
+
+  return map as unknown as Record<string, unknown>;
 }
 
 /** Sanitization helpers for source snippets that are parsed out of markup. */
