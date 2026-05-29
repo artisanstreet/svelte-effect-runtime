@@ -14,10 +14,10 @@ import type { Effect } from "effect";
  * @param factory - Generator function that yields the effect to run.
  * @returns A Promise that resolves with the effect's result.
  */
-export function promise(
+export function promise<A, E, R>(
   id: string,
   deps: readonly unknown[],
-  factory: () => Effect.gen.Return<unknown, unknown, unknown>,
-): Promise<unknown> {
+  factory: () => Effect.gen.Return<A, E, R>,
+): Promise<A> {
   return get_dispatcher().promise({ id, deps, factory });
 }

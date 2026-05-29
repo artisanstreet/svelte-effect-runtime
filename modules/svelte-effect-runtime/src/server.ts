@@ -12,7 +12,7 @@ import {
 import { create_form_error } from "$/remote/shared.ts";
 import { Context, Effect, Layer, ManagedRuntime, Schema } from "effect";
 import { error as svelte_error, invalid } from "@sveltejs/kit";
-import type { FormIssue } from "$/remote/shared.ts";
+import type { FormIssue, RemoteFailure } from "$/remote/shared.ts";
 
 /**
  * SvelteKit's `RequestEvent` exposed as an Effect {@link Context.Tag} so
@@ -149,7 +149,7 @@ export function get_server_runtime_or_throw(): ManagedRuntime.ManagedRuntime<
 }
 
 type EffectLike<A = unknown> =
-  | Effect.Effect<A, unknown>
+  | Effect.Effect<A, unknown, unknown>
   | Effect.gen.Return<A, unknown, unknown>;
 
 type RemoteHandler<Input = unknown, A = unknown> = (
@@ -182,6 +182,20 @@ type StandardSchema = {
     readonly validate: (input: unknown) => unknown;
   };
 };
+
+type SchemaInput<S> = S extends Schema.Schema<infer Input>
+  ? Input
+  : unknown;
+
+type EffectRemoteFunction<Input, A> = undefined extends Input
+  ? (input?: Input) => Effect.Effect<A, RemoteFailure<unknown>, unknown>
+  : (input: Input) => Effect.Effect<A, RemoteFailure<unknown>, unknown>;
+
+type EffectRemoteCommand<Input, A> =
+  & EffectRemoteFunction<Input, A>
+  & {
+    readonly pending: number;
+  };
 
 function is_generator_result<A>(
   value: unknown,
@@ -373,10 +387,21 @@ function normalize_validator(value: unknown): unknown {
  * @param maybe_handler - Handler used when a validator is supplied.
  * @returns A SvelteKit query function.
  */
+export function Query<A>(
+  validate_or_handler: EffectLike<A>,
+): EffectRemoteFunction<void, A>;
+export function Query<Input, A>(
+  validate_or_handler: "unchecked",
+  maybe_handler: RemoteHandler<Input, A>,
+): EffectRemoteFunction<Input, A>;
+export function Query<S extends Schema.Schema<unknown>, A>(
+  validate_or_handler: S,
+  maybe_handler: RemoteHandler<SchemaInput<S>, A>,
+): EffectRemoteFunction<SchemaInput<S>, A>;
 export function Query(
   validate_or_handler: unknown,
   maybe_handler?: RemoteHandler,
-): ReturnType<typeof native_query> {
+): unknown {
   try {
     if (maybe_handler) {
       return to_effect_query(native_query(
@@ -409,10 +434,21 @@ export function Query(
  * @param maybe_handler - Handler used when a validator is supplied.
  * @returns A SvelteKit command function.
  */
+export function Command<A>(
+  validate_or_handler: EffectLike<A>,
+): EffectRemoteCommand<void, A>;
+export function Command<Input, A>(
+  validate_or_handler: "unchecked",
+  maybe_handler: RemoteHandler<Input, A>,
+): EffectRemoteCommand<Input, A>;
+export function Command<S extends Schema.Schema<unknown>, A>(
+  validate_or_handler: S,
+  maybe_handler: RemoteHandler<SchemaInput<S>, A>,
+): EffectRemoteCommand<SchemaInput<S>, A>;
 export function Command(
   validate_or_handler: unknown,
   maybe_handler?: RemoteHandler,
-): ReturnType<typeof native_command> {
+): unknown {
   try {
     if (maybe_handler) {
       return native_command(
