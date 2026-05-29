@@ -323,16 +323,17 @@ export function create_remote_query_adapter<Input, Output>(
   const load = has_method(native_factory, "load")
     ? native_factory.load
     : undefined;
+  const query = typeof native_factory === "function"
+    ? native_factory as NativeMethod
+    : undefined;
 
-  if (typeof native_factory !== "function" && !load) {
+  if (!query && !load) {
     throw new Error("Invalid query factory: expected a function");
   }
 
   return (input: Input) =>
     make_effect_from_promise(async () => {
-      const result = load
-        ? await load(input)
-        : (native_factory as NativeMethod)(input);
+      const result = query ? query(input) : await load?.(input);
 
       return await resolve_query_result<Output>(result, decode_payload);
     });

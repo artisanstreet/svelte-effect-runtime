@@ -40,6 +40,37 @@ Deno.test("remote query adapter wraps network failures as transport errors", asy
   assertEquals((error as { _tag?: string })._tag, "RemoteTransportError");
 });
 
+Deno.test("remote query adapter prefers callable query over hydratable load", async () => {
+  let called_query = false;
+  let called_load = false;
+
+  const native = Object.assign(
+    (_input: undefined) => {
+      called_query = true;
+
+      return Promise.resolve({ source: "query" });
+    },
+    {
+      load: () => {
+        called_load = true;
+
+        throw new Error("missing hydratable");
+      },
+    },
+  );
+
+  const query = create_remote_query_adapter<
+    undefined,
+    { source: string }
+  >(native, (value) => value, "");
+
+  const result = await Effect.runPromise(query(undefined));
+
+  assertEquals(result, { source: "query" });
+  assertEquals(called_query, true);
+  assertEquals(called_load, false);
+});
+
 Deno.test("remote query adapter maps validation responses to validation errors", async () => {
   const native = {
     load: () =>
