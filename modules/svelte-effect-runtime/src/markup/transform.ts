@@ -16,6 +16,20 @@ export interface MarkupTransformResult {
   has_yield: boolean;
   /** Source map from transformed markup back to the original component. */
   map?: Record<string, unknown>;
+  /** Offset ranges that preserve hoverable source spans inside lowered code. */
+  relocations?: MarkupRelocation[];
+}
+
+/** Offset mapping between original markup and generated helper code. */
+interface MarkupRelocation {
+  /** Start offset in the original source. */
+  originalStart: number;
+  /** End offset in the original source. */
+  originalEnd: number;
+  /** Start offset in the transformed source. */
+  generatedStart: number;
+  /** End offset in the transformed source. */
+  generatedEnd: number;
 }
 
 /** Describes a brace expression that contains yield* and needs lowering. */
@@ -94,12 +108,14 @@ export function transform_markup_effect(
     magic.overwrite(r.start, r.end, r.text);
   }
 
-  inject_helpers(magic, content);
+  const helper_insertion = inject_helpers(magic, content);
+  const relocations = create_relocations(replacements, helper_insertion);
 
   return {
     code: magic.toString(),
     has_yield: true,
     map: create_source_map(magic, filename),
+    relocations,
   };
 }
 
@@ -370,6 +386,19 @@ function is_event_expression(inner: string): boolean {
 interface Replacement {
   start: number;
   end: number;
+  text: string;
+  relocation?: PendingRelocation;
+}
+
+interface PendingRelocation {
+  originalStart: number;
+  originalEnd: number;
+  generatedStartInReplacement: number;
+  generatedEndInReplacement: number;
+}
+
+interface Insertion {
+  start: number;
   text: string;
 }
 
@@ -651,6 +680,7 @@ function emit_for_expression(
   const deps_text = deps.length === 0 ? "[]" : `[${deps.join(", ")}]`;
 
   let replacement_text: string;
+  let relocation: PendingRelocation | undefined;
 
   if (kind === "await") {
     replacement_text =
@@ -665,16 +695,51 @@ function emit_for_expression(
     const event = strip_arrow_function(candidate.expr_text);
     replacement_text =
       `${event.params} => { void ${HELPERS.run}(function* () { ${event.body}; }); }`;
+    relocation = make_relocation(candidate, replacement_text, {
+      originalStart: event.body_start,
+      originalEnd: event.body_end,
+      generatedText: event.body,
+    });
   } else {
     replacement_text =
       `await ${HELPERS.promise}(${id_text}, ${deps_text}, function* () { return (${candidate.expr_text}); })`;
   }
 
+  relocation ??= make_relocation(candidate, replacement_text, {
+    originalStart: 0,
+    originalEnd: candidate.expr_text.length,
+    generatedText: candidate.expr_text,
+  });
+
   replacements.push({
     start: candidate.start,
     end: candidate.end,
     text: replacement_text,
+    relocation,
   });
+}
+
+function make_relocation(
+  candidate: MarkupCandidate,
+  replacement_text: string,
+  inner: {
+    originalStart: number;
+    originalEnd: number;
+    generatedText: string;
+  },
+): PendingRelocation | undefined {
+  const generated_start = replacement_text.indexOf(inner.generatedText);
+
+  if (generated_start === -1) {
+    return undefined;
+  }
+
+  return {
+    originalStart: candidate.start + inner.originalStart,
+    originalEnd: candidate.start + inner.originalEnd,
+    generatedStartInReplacement: generated_start,
+    generatedEndInReplacement: generated_start + inner.generatedText.length,
+  };
 }
 
 function make_cache_id(candidate: MarkupCandidate): string {
@@ -710,24 +775,40 @@ function find_candidate(
  * `yield* expr()`. For `() => { yield* expr(); }` returns
  * `yield* expr();`.
  */
-function strip_arrow_function(expr: string): { params: string; body: string } {
+function strip_arrow_function(
+  expr: string,
+): { params: string; body: string; body_start: number; body_end: number } {
   const arrow_idx = expr.indexOf("=>");
   if (arrow_idx === -1) {
-    return { params: "()", body: expr };
+    return { params: "()", body: expr, body_start: 0, body_end: expr.length };
   }
 
   const params = expr.slice(0, arrow_idx).trim();
-  let body = expr.slice(arrow_idx + 2).trim();
+  const raw_body = expr.slice(arrow_idx + 2);
+  const leading_ws = raw_body.length - raw_body.trimStart().length;
+  let body_start = arrow_idx + 2 + leading_ws;
+  let body_end = expr.length - (raw_body.length - raw_body.trimEnd().length);
+  let body = expr.slice(body_start, body_end);
 
   if (body.startsWith("{") && body.endsWith("}")) {
-    body = body.slice(1, -1).trim();
+    body_start += 1;
+    body_end -= 1;
+    body = body.slice(1, -1);
   }
+
+  const body_leading_ws = body.length - body.trimStart().length;
+  const body_trailing_ws = body.length - body.trimEnd().length;
+
+  body_start += body_leading_ws;
+  body_end -= body_trailing_ws;
+  body = body.trim();
 
   if (body.endsWith(";")) {
     body = body.slice(0, -1);
+    body_end -= 1;
   }
 
-  return { params, body };
+  return { params, body, body_start, body_end };
 }
 
 function contains_yield_star_in_text(text: string): boolean {
@@ -846,8 +927,11 @@ function blank_script_blocks(content: string): string {
   );
 }
 
-function inject_helpers(magic: MagicString, content: string): void {
-  if (content.includes(HELPERS.value)) return;
+function inject_helpers(
+  magic: MagicString,
+  content: string,
+): Insertion | undefined {
+  if (content.includes(HELPERS.value)) return undefined;
 
   const helper_block = [
     `import { value as ${HELPERS.value} } from "svelte-effect-runtime/internal/generators";`,
@@ -858,10 +942,63 @@ function inject_helpers(magic: MagicString, content: string): void {
   const script_tag = find_instance_script_tag(content);
 
   if (script_tag) {
-    magic.appendLeft(script_tag.end, `\n${helper_block}\n`);
+    const text = `\n${helper_block}\n`;
+
+    magic.appendLeft(script_tag.end, text);
+
+    return { start: script_tag.end, text };
   } else {
-    magic.prepend(`<script>\n${helper_block}\n</script>\n\n`);
+    const text = `<script>\n${helper_block}\n</script>\n\n`;
+
+    magic.prepend(text);
+
+    return { start: 0, text };
   }
+}
+
+function create_relocations(
+  replacements: Replacement[],
+  helper_insertion: Insertion | undefined,
+): MarkupRelocation[] {
+  const edits = [
+    helper_insertion && {
+      start: helper_insertion.start,
+      removedLength: 0,
+      insertedLength: helper_insertion.text.length,
+    },
+    ...replacements.map((replacement) => ({
+      start: replacement.start,
+      removedLength: replacement.end - replacement.start,
+      insertedLength: replacement.text.length,
+    })),
+  ].filter(Boolean) as Array<{
+    start: number;
+    removedLength: number;
+    insertedLength: number;
+  }>;
+
+  return replacements.flatMap((replacement) => {
+    if (!replacement.relocation) {
+      return [];
+    }
+
+    const delta_before = edits
+      .filter((edit) => edit.start < replacement.start)
+      .reduce(
+        (total, edit) => total + edit.insertedLength - edit.removedLength,
+        0,
+      );
+    const generated_start = replacement.start + delta_before;
+
+    return [{
+      originalStart: replacement.relocation.originalStart,
+      originalEnd: replacement.relocation.originalEnd,
+      generatedStart: generated_start +
+        replacement.relocation.generatedStartInReplacement,
+      generatedEnd: generated_start +
+        replacement.relocation.generatedEndInReplacement,
+    }];
+  });
 }
 
 function find_instance_script_tag(

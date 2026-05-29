@@ -220,6 +220,7 @@ function patch_typescript_snapshot_path(
     transformEffectMarkup: (code: string, options: { filename: string }) => {
       code: string;
       map: Record<string, unknown>;
+      relocations?: Array<Relocation>;
     };
     transformEffectScript: (code: string, options: { filename: string }) => {
       code: string;
@@ -394,6 +395,7 @@ function prepare_virtual_document(
     transformEffectMarkup: (code: string, options: { filename: string }) => {
       code: string;
       map: Record<string, unknown>;
+      relocations?: Array<Relocation>;
     };
     transformEffectScript: (code: string, options: { filename: string }) => {
       code: string;
@@ -411,6 +413,7 @@ function prepare_virtual_document(
   });
 
   let currentCode = markupResult.code;
+  const markupCode = currentCode;
   let scriptMapper: Mapper | null = null;
   const scripts = extractScriptTags(currentCode);
 
@@ -459,7 +462,13 @@ function prepare_virtual_document(
 
   const markupMapper = markupResult.code === originalText
     ? null
-    : create_source_map_mapper(markupResult.map, sourceUri);
+    : create_relocated_source_mapper(
+      originalText,
+      markupCode,
+      markupResult.map,
+      markupResult.relocations ?? [],
+      sourceUri,
+    );
 
   if (!scriptMapper && !markupMapper) {
     return null;
@@ -498,6 +507,54 @@ function create_source_map_mapper(
     } as any),
     sourceUri,
   ) as Mapper;
+}
+
+function create_relocated_source_mapper(
+  originalCode: string,
+  transformedCode: string,
+  rawMap: Record<string, unknown>,
+  relocations: Array<Relocation>,
+  sourceUri: string,
+): Mapper {
+  const sourceMapper = create_source_map_mapper(rawMap, sourceUri);
+  const relocationMapper = create_relocation_mapper(
+    originalCode,
+    transformedCode,
+    relocations,
+  );
+
+  if (!relocationMapper) {
+    return sourceMapper;
+  }
+
+  return {
+    getOriginalPosition(generatedPosition: any) {
+      const relocatedPosition = relocationMapper.getOriginalPosition(
+        generatedPosition,
+      );
+
+      if (!is_invalid_position(relocatedPosition)) {
+        return relocatedPosition;
+      }
+
+      return sourceMapper.getOriginalPosition(generatedPosition);
+    },
+    getGeneratedPosition(originalPosition: any) {
+      const relocatedPosition = relocationMapper.getGeneratedPosition(
+        originalPosition,
+      );
+
+      if (!is_invalid_position(relocatedPosition)) {
+        return relocatedPosition;
+      }
+
+      return sourceMapper.getGeneratedPosition(originalPosition);
+    },
+    isInGenerated(originalPosition: any) {
+      const generatedPosition = this.getGeneratedPosition(originalPosition);
+      return !is_invalid_position(generatedPosition);
+    },
+  };
 }
 
 function create_script_content_mapper(

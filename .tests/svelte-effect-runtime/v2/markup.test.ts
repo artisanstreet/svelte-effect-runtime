@@ -219,6 +219,66 @@ Deno.test("handles multiple yield* expressions in markup", () => {
 
 // ─── Script tag injection ────────────────────────────────────
 
+Deno.test("records source relocations for lowered markup hover spans", () => {
+  const source = [
+    `<script lang="ts" effect>`,
+    `  import { GetPosts, UpvotePost } from "./posts.remote";`,
+    `</script>`,
+    ``,
+    `<ul>`,
+    `  {#each yield* GetPosts() as { id, name, likes }}`,
+    `    <li>`,
+    `      <button onclick={() => yield* UpvotePost(id)}>{name}</button>`,
+    `    </li>`,
+    `  {/each}`,
+    `</ul>`,
+  ].join("\n");
+
+  const result = transform_markup_effect(source, "Test.svelte");
+  const relocations = result.relocations ?? [];
+
+  const each_original_start = source.indexOf("yield* GetPosts()");
+  const event_original_start = source.indexOf("yield* UpvotePost(id)");
+
+  const each_relocation = relocations.find((relocation) =>
+    relocation.originalStart === each_original_start
+  );
+  const event_relocation = relocations.find((relocation) =>
+    relocation.originalStart === event_original_start
+  );
+
+  if (!each_relocation) {
+    throw new Error("expected relocation for each expression");
+  }
+
+  if (!event_relocation) {
+    throw new Error("expected relocation for event handler expression");
+  }
+
+  assertEquals(
+    source.slice(each_relocation.originalStart, each_relocation.originalEnd),
+    "yield* GetPosts()",
+  );
+  assertEquals(
+    result.code.slice(
+      each_relocation.generatedStart,
+      each_relocation.generatedEnd,
+    ),
+    "yield* GetPosts()",
+  );
+  assertEquals(
+    source.slice(event_relocation.originalStart, event_relocation.originalEnd),
+    "yield* UpvotePost(id)",
+  );
+  assertEquals(
+    result.code.slice(
+      event_relocation.generatedStart,
+      event_relocation.generatedEnd,
+    ),
+    "yield* UpvotePost(id)",
+  );
+});
+
 Deno.test("generates distinct markup cache ids for different files", () => {
   const first = transform_markup_effect(
     `<p>{yield* getUser()}</p>`,
