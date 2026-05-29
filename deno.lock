@@ -37,7 +37,8 @@
     "npm:typescript@^5.8.0": "5.9.3",
     "npm:typescript@^5.9.2": "5.9.3",
     "npm:typescript@^5.9.3": "5.9.3",
-    "npm:vite@^7.3.1": "7.3.1_@types+node@24.12.2_picomatch@4.0.4"
+    "npm:vite@^7.3.1": "7.3.1_@types+node@24.12.2_picomatch@4.0.4",
+    "npm:vscode-languageserver@9.0.1": "9.0.1"
   },
   "jsr": {
     "@std/assert@1.0.19": {
@@ -4039,7 +4040,8 @@
             "npm:@jridgewell/trace-mapping@~0.3.31",
             "npm:magic-string@~0.30.21",
             "npm:rolldown@^1.0.0-rc.13",
-            "npm:svelte-language-server@~0.17.30"
+            "npm:svelte-language-server@~0.17.30",
+            "npm:vscode-languageserver@9.0.1"
           ]
         }
       },

@@ -15,6 +15,10 @@ const LOCAL_LANGUAGE_SERVER_SCRIPT_PATH: &str =
     "../svelte-effect-runtime-language-server/.dist/server.cjs";
 const MANAGED_LANGUAGE_SERVER_SCRIPT_PATH: &str =
     "node_modules/svelte-effect-runtime-language-server/.dist/server.cjs";
+const INSTALLED_LANGUAGE_SERVER_SCRIPT_PATH: &str =
+    "../../work/svelte-effect-runtime/node_modules/svelte-effect-runtime-language-server/.dist/server.cjs";
+const WORKTREE_LANGUAGE_SERVER_SCRIPT_PATH: &str =
+    "node_modules/svelte-effect-runtime-language-server/.dist/server.cjs";
 const TS_PLUGIN_PACKAGE_NAME: &str = "typescript-svelte-plugin";
 
 fn package_path(package_name: &str) -> Result<PathBuf> {
@@ -87,6 +91,13 @@ impl SvelteEffectRuntimeExtension {
         })
     }
 
+    fn worktree_server_script_path(&self, worktree: &zed::Worktree) -> Option<String> {
+        let path = PathBuf::from(worktree.root_path())
+            .join(WORKTREE_LANGUAGE_SERVER_SCRIPT_PATH);
+
+        Some(path.to_string_lossy().to_string())
+    }
+
     fn repository_server_script_path(&self) -> Result<Option<String>> {
         let path = extension_path(LOCAL_LANGUAGE_SERVER_SCRIPT_PATH)?;
 
@@ -98,6 +109,17 @@ impl SvelteEffectRuntimeExtension {
     }
 
     fn managed_server_script_path(&mut self, id: &zed::LanguageServerId) -> Result<String> {
+        for relative_path in [
+            MANAGED_LANGUAGE_SERVER_SCRIPT_PATH,
+            INSTALLED_LANGUAGE_SERVER_SCRIPT_PATH,
+        ] {
+            let path = extension_path(relative_path)?;
+
+            if is_file(&path) {
+                return Ok(path.to_string_lossy().to_string());
+            }
+        }
+
         self.install_package_if_needed(id, LANGUAGE_SERVER_PACKAGE_NAME)?;
 
         let path = extension_path(MANAGED_LANGUAGE_SERVER_SCRIPT_PATH)?;
@@ -130,6 +152,14 @@ impl zed::Extension for SvelteEffectRuntimeExtension {
 
         if let Some(command) = self.local_server_command(worktree) {
             return Ok(command);
+        }
+
+        if let Some(script_path) = self.worktree_server_script_path(worktree) {
+            return Ok(zed::Command {
+                command: zed::node_binary_path()?,
+                args: vec![script_path, "--stdio".to_string()],
+                env: Default::default(),
+            });
         }
 
         let script_path = match self.repository_server_script_path()? {

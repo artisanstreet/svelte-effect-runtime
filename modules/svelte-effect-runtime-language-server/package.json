@@ -18,7 +18,8 @@
   "dependencies": {
     "@jridgewell/trace-mapping": "^0.3.31",
     "magic-string": "^0.30.21",
-    "svelte-language-server": "^0.17.30"
+    "svelte-language-server": "^0.17.30",
+    "vscode-languageserver": "9.0.1"
   },
   "devDependencies": {
     "rolldown": "^1.0.0-rc.13"

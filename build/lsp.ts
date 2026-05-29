@@ -33,6 +33,7 @@ await build({
     /^magic-string$/,
     /^@jridgewell\/trace-mapping$/,
     /^svelte-language-server$/,
+    /^vscode-languageserver(\/.*)?$/,
   ],
 });
 

@@ -1,21 +1,84 @@
+import {
+  createConnection,
+  IPCMessageReader,
+  IPCMessageWriter,
+} from "vscode-languageserver/node";
+import { DocumentDiagnosticRequest } from "vscode-languageserver";
+import { fileURLToPath } from "node:url";
+import { realpathSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
 import { startServer } from "svelte-language-server";
 import { bootstrap_language_server } from "./patch-language-server.ts";
 
-const is_main_module = process.argv[1] !== undefined &&
-  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const current_module_path = realpathSync.native(fileURLToPath(import.meta.url));
+const invoked_module_path = process.argv[1] === undefined
+  ? undefined
+  : realpathSync.native(path.resolve(process.argv[1]));
+const is_main_module = invoked_module_path === current_module_path;
 
 if (is_main_module) {
   void bootstrap_language_server()
     .then(() => {
-      startServer();
+      startServer({ connection: create_zed_compatible_connection() });
     })
     .catch((error) => {
       console.error(error);
       process.exitCode = 1;
     });
+}
+
+function create_zed_compatible_connection() {
+  if (process.argv.includes("--stdio")) {
+    console.log = (...args) => {
+      console.warn(...args);
+    };
+
+    return patch_pull_diagnostics_connection(
+      createConnection(process.stdin, process.stdout),
+    );
+  }
+
+  return patch_pull_diagnostics_connection(
+    createConnection(
+      new IPCMessageReader(process),
+      new IPCMessageWriter(process),
+    ),
+  );
+}
+
+function patch_pull_diagnostics_connection(
+  connection: ReturnType<typeof createConnection>,
+) {
+  const original_on_request = connection.onRequest.bind(connection);
+
+  connection.onRequest = ((type_or_method: unknown, handler: unknown) => {
+    const method = typeof type_or_method === "string"
+      ? type_or_method
+      : (type_or_method as { method?: string })?.method;
+
+    if (
+      method !== DocumentDiagnosticRequest.method ||
+      typeof handler !== "function"
+    ) {
+      return original_on_request(type_or_method as never, handler as never);
+    }
+
+    const wrapped_handler = async (...args: unknown[]) => {
+      const result = await (handler as (...args: unknown[]) => unknown)(
+        ...args,
+      );
+
+      return result ?? { kind: "full", items: [] };
+    };
+
+    return original_on_request(
+      type_or_method as never,
+      wrapped_handler as never,
+    );
+  }) as typeof connection.onRequest;
+
+  return connection;
 }
 
 export { bootstrap_language_server };
