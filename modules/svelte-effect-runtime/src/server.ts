@@ -203,6 +203,46 @@ function to_effect<A>(
   return value;
 }
 
+function copy_remote_descriptors(source: unknown, target: object): void {
+  if (typeof source !== "object" && typeof source !== "function") {
+    return;
+  }
+
+  if (source === null) {
+    return;
+  }
+
+  for (const key of Reflect.ownKeys(source)) {
+    if (key === "length" || key === "name" || key === "prototype") {
+      continue;
+    }
+
+    const descriptor = Object.getOwnPropertyDescriptor(source, key);
+
+    if (!descriptor) {
+      continue;
+    }
+
+    Object.defineProperty(target, key, descriptor);
+  }
+}
+
+function to_effect_query<Input, Output>(
+  native: ReturnType<typeof native_query>,
+): ReturnType<typeof native_query> {
+  const wrapped = ((input: Input) =>
+    Effect.tryPromise({
+      try: () => Promise.resolve((native as (input: Input) => unknown)(input)),
+      catch: (error: unknown) => error,
+    }) as Effect.Effect<Output, unknown>) as unknown as ReturnType<
+      typeof native_query
+    >;
+
+  copy_remote_descriptors(native, wrapped);
+
+  return wrapped;
+}
+
 function run_handler_effect<A>(
   value: EffectLike<A>,
   event: RequestEvent,
@@ -228,13 +268,13 @@ function run_handler_effect<A>(
  * SvelteKit's request store and provides it to the Effect environment.
  */
 function make_remote_wrapper(
-  handler: RemoteHandler,
+  handler: RemoteHandler | EffectLike,
   helper_name: string,
 ): (input: unknown) => Promise<unknown> {
   return async (input: unknown) => {
     try {
       const event = get_native_request_event() as unknown as RequestEvent;
-      const result = handler(input);
+      const result = is_handler(handler) ? handler(input) : handler;
 
       return await run_handler_effect(result, event);
     } catch (error: unknown) {
@@ -339,22 +379,22 @@ export function Query(
 ): ReturnType<typeof native_query> {
   try {
     if (maybe_handler) {
-      return native_query(
+      return to_effect_query(native_query(
         normalize_validator(validate_or_handler) as never,
         make_remote_wrapper(maybe_handler, "Query") as never,
-      );
+      ) as ReturnType<typeof native_query>);
     }
 
     if (is_unchecked(validate_or_handler)) {
       throw new Error("Query('unchecked', handler) requires a handler");
     }
 
-    return native_query(
+    return to_effect_query(native_query(
       make_remote_wrapper(
         validate_or_handler as RemoteHandler,
         "Query",
       ) as never,
-    ) as ReturnType<typeof native_query>;
+    ) as ReturnType<typeof native_query>);
   } catch (error: unknown) {
     throw normalize_remote_helper_error(error, "Query");
   }

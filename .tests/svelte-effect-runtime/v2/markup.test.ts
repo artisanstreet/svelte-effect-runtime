@@ -1,4 +1,7 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
+import { Effect } from "effect";
+import { reset_dispatcher } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
+import { value } from "../../../modules/svelte-effect-runtime/src/markup/value.ts";
 import { transform_markup_effect } from "../../../modules/svelte-effect-runtime/src/markup/transform.ts";
 
 // ─── Identity / pass-through ─────────────────────────────────
@@ -323,4 +326,25 @@ Deno.test("rewrites {@debug yield* expr} in debug expression", () => {
 
   assertStringIncludes(result.code, `__ser_markup_value`);
   assertStringIncludes(result.code, `inspectVars`);
+});
+
+Deno.test("markup value starts effects during SSR to register hydratables", async () => {
+  reset_dispatcher();
+
+  let called = false;
+
+  const result = value("ssr-hydratable", [], "fallback", function* () {
+    return yield* Effect.sync(() => {
+      called = true;
+
+      return "resolved";
+    });
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assertEquals(["fallback", "resolved"].includes(result as string), true);
+  assertEquals(called, true);
+
+  reset_dispatcher();
 });
