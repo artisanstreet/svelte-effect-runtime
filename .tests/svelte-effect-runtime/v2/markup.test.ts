@@ -34,11 +34,11 @@ Deno.test("fast-path returns identity for files with no yield* text", () => {
 
 // ─── Plain expressions ───────────────────────────────────────
 
-Deno.test("rewrites {yield* expr} as value() call", () => {
+Deno.test("rewrites {yield* expr} as async promise expression", () => {
   const source = `<span>{yield* renderDate()}</span>`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `__ser_markup_value`);
+  assertStringIncludes(result.code, `await __ser_markup_promise`);
   assertStringIncludes(result.code, `renderDate()`);
   assertStringIncludes(result.code, `function* ()`);
   if (!result.has_yield) throw new Error("has_yield should be true");
@@ -48,7 +48,7 @@ Deno.test("rewrites {yield* expr} with free identifier deps", () => {
   const source = `<span>{yield* format(user)}</span>`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `__ser_markup_value`);
+  assertStringIncludes(result.code, `await __ser_markup_promise`);
   assertStringIncludes(result.code, `format`);
   assertStringIncludes(result.code, `user`);
   assertStringIncludes(result.code, `[format, user]`);
@@ -60,7 +60,7 @@ Deno.test("rewrites {#if yield* expr} in condition", () => {
   const source = `{#if yield* hasAccess()}<p>yes</p>{/if}`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `__ser_markup_value`);
+  assertStringIncludes(result.code, `await __ser_markup_promise`);
   assertStringIncludes(result.code, `hasAccess`);
   assertStringIncludes(result.code, `{#if`);
   if (!result.has_yield) throw new Error("has_yield should be true");
@@ -70,7 +70,7 @@ Deno.test("rewrites {:else if yield* expr} in alternate condition", () => {
   const source = `{#if a}{:else if yield* checkFlag()}<p>flag</p>{/if}`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `__ser_markup_value`);
+  assertStringIncludes(result.code, `await __ser_markup_promise`);
   assertStringIncludes(result.code, `checkFlag`);
   assertStringIncludes(result.code, `:else if`);
   if (!result.has_yield) throw new Error("has_yield should be true");
@@ -80,7 +80,7 @@ Deno.test("rewrites {#each yield* expr as item} in list", () => {
   const source = `{#each yield* getItems() as item}<li>{item}</li>{/each}`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `__ser_markup_value`);
+  assertStringIncludes(result.code, `await __ser_markup_promise`);
   assertStringIncludes(result.code, `getItems`);
   assertStringIncludes(result.code, `{#each`);
   if (!result.has_yield) throw new Error("has_yield should be true");
@@ -106,12 +106,11 @@ Deno.test("rewrites {#await yield* expr} with :catch clause", () => {
   if (!result.has_yield) throw new Error("has_yield should be true");
 });
 
-Deno.test("rewrites {@render yield* fn()} as IIFE value()", () => {
+Deno.test("rewrites {@render yield* fn()} as awaited snippet call", () => {
   const source = `{@render yield* getSnippet()}`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `__ser_markup_value`);
-  // Render tags wrap in IIFE: (value(...))()
+  assertStringIncludes(result.code, `await __ser_markup_promise`);
   assertStringIncludes(result.code, `(`);
   assertStringIncludes(result.code, `)()`);
   if (!result.has_yield) throw new Error("has_yield should be true");
@@ -121,7 +120,7 @@ Deno.test("rewrites {@const x = yield* expr} in const initializer", () => {
   const source = `{@const x = yield* compute()}{x}`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `__ser_markup_value`);
+  assertStringIncludes(result.code, `await __ser_markup_promise`);
   assertStringIncludes(result.code, `compute`);
   if (!result.has_yield) throw new Error("has_yield should be true");
 });
@@ -130,7 +129,7 @@ Deno.test("rewrites {#key yield* expr} in key expression", () => {
   const source = `{#key yield* getKey()}<p>content</p>{/key}`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `__ser_markup_value`);
+  assertStringIncludes(result.code, `await __ser_markup_promise`);
   assertStringIncludes(result.code, `getKey`);
   if (!result.has_yield) throw new Error("has_yield should be true");
 });
@@ -211,10 +210,10 @@ Deno.test("handles multiple yield* expressions in markup", () => {
   const result = transform_markup_effect(source, "Test.svelte");
 
   /** Count actual helper call sites (not import aliases). */
-  const value_calls =
-    [...result.code.matchAll(/\b__ser_markup_value\(/g)].length;
-  if (value_calls !== 2) {
-    throw new Error(`expected 2 value calls, got ${value_calls}`);
+  const promise_calls =
+    [...result.code.matchAll(/\b__ser_markup_promise\(/g)].length;
+  if (promise_calls !== 2) {
+    throw new Error(`expected 2 promise calls, got ${promise_calls}`);
   }
 });
 
@@ -231,7 +230,7 @@ Deno.test("generates distinct markup cache ids for different files", () => {
     "Post.svelte",
   );
 
-  const pattern = /__ser_markup_value\((".*?"),/;
+  const pattern = /__ser_markup_promise\((".*?"),/;
   const first_id = first.code.match(pattern)?.[1];
   const second_id = second.code.match(pattern)?.[1];
 
@@ -301,7 +300,7 @@ Deno.test("does not choke on empty yield* brace contents", () => {
   // Regex match on yield* passes, but TS parser fails — should not crash
   if (result.has_yield) {
     // If it detected yield*, the output should still be valid
-    assertStringIncludes(result.code, `__ser_markup_value`);
+    assertStringIncludes(result.code, `__ser_markup_promise`);
   }
 });
 
@@ -309,14 +308,14 @@ Deno.test("does not choke on template literal expressions", () => {
   const source = `<span>{yield* \`prefix-\${id}\`}</span>`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `__ser_markup_value`);
+  assertStringIncludes(result.code, `__ser_markup_promise`);
 });
 
 Deno.test("rewrites {@html yield* expr} in raw HTML insertion", () => {
   const source = `{@html yield* renderMarkup()}`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `__ser_markup_value`);
+  assertStringIncludes(result.code, `__ser_markup_promise`);
   assertStringIncludes(result.code, `renderMarkup`);
 });
 
@@ -324,7 +323,7 @@ Deno.test("rewrites {@debug yield* expr} in debug expression", () => {
   const source = `{@debug yield* inspectVars()}`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `__ser_markup_value`);
+  assertStringIncludes(result.code, `__ser_markup_promise`);
   assertStringIncludes(result.code, `inspectVars`);
 });
 

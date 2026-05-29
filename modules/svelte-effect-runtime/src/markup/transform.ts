@@ -638,17 +638,17 @@ function emit_for_expression(
       `${HELPERS.promise}(${id_text}, ${deps_text}, function* () { return (${candidate.expr_text}); })`;
   } else if (kind === "render") {
     replacement_text =
-      `(${HELPERS.value}(${id_text}, ${deps_text}, function () {}, function* () { return (${candidate.expr_text}); }))()`;
+      `(await ${HELPERS.promise}(${id_text}, ${deps_text}, function* () { return (${candidate.expr_text}); }))()`;
   } else if (kind === "each") {
     replacement_text =
-      `${HELPERS.value}(${id_text}, ${deps_text}, [], function* () { return (${candidate.expr_text}); })`;
+      `await ${HELPERS.promise}(${id_text}, ${deps_text}, function* () { return (${candidate.expr_text}); })`;
   } else if (kind === "event") {
     const event = strip_arrow_function(candidate.expr_text);
     replacement_text =
       `${event.params} => { void ${HELPERS.run}(function* () { ${event.body}; }); }`;
   } else {
     replacement_text =
-      `${HELPERS.value}(${id_text}, ${deps_text}, undefined, function* () { return (${candidate.expr_text}); })`;
+      `await ${HELPERS.promise}(${id_text}, ${deps_text}, function* () { return (${candidate.expr_text}); })`;
   }
 
   replacements.push({
