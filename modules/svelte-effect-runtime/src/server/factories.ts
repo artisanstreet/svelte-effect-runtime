@@ -21,12 +21,6 @@ import type {
   SchemaInput,
 } from "./types.ts";
 
-const query_resource_keys = new Set<PropertyKey>([
-  "refresh",
-  "set",
-  "withOverride",
-]);
-
 function to_effect_query<Input, Output>(
   native: ReturnType<typeof native_query>,
 ): ReturnType<typeof native_query> {
@@ -37,7 +31,7 @@ function to_effect_query<Input, Output>(
       catch: (error: unknown) => error,
     }) as unknown as EffectRemoteQuery<Output>;
 
-    copy_query_resource_descriptors(resource, effect);
+    attach_query_resource_methods(resource, effect);
 
     return effect;
   }) as unknown as ReturnType<
@@ -49,26 +43,60 @@ function to_effect_query<Input, Output>(
   return wrapped;
 }
 
-function copy_query_resource_descriptors(
+type NativeQueryResource<Output> = {
+  readonly refresh?: () => Promise<void>;
+  readonly set?: (value: Output) => void;
+  readonly withOverride?: (update: (current: Output) => Output) => unknown;
+};
+
+function is_query_resource<Output>(
   resource: unknown,
-  effect: object,
+): resource is NativeQueryResource<Output> {
+  const resource_type = typeof resource;
+
+  return (
+    (resource_type === "object" && resource !== null) ||
+    resource_type === "function"
+  );
+}
+
+function attach_query_resource_methods<Output>(
+  resource: unknown,
+  effect: EffectRemoteQuery<Output>,
 ): void {
-  if (typeof resource !== "object" && typeof resource !== "function") {
+  const methods = is_query_resource<Output>(resource) ? resource : undefined;
+  const refresh = methods?.refresh;
+  const set = methods?.set;
+  const with_override = methods?.withOverride;
+
+  if (!methods) {
     return;
   }
 
-  if (resource === null) {
-    return;
+  if (typeof refresh === "function") {
+    Object.defineProperty(effect, "refresh", {
+      configurable: true,
+      value: () =>
+        Effect.tryPromise({
+          try: () => Promise.resolve(refresh.call(resource)),
+          catch: (error: unknown) => error,
+        }),
+    });
   }
 
-  for (const key of query_resource_keys) {
-    const descriptor = Object.getOwnPropertyDescriptor(resource, key);
+  if (typeof set === "function") {
+    Object.defineProperty(effect, "set", {
+      configurable: true,
+      value: (value: Output) => set.call(resource, value),
+    });
+  }
 
-    if (!descriptor) {
-      continue;
-    }
-
-    Object.defineProperty(effect, key, descriptor);
+  if (typeof with_override === "function") {
+    Object.defineProperty(effect, "withOverride", {
+      configurable: true,
+      value: (update: (current: Output) => Output) =>
+        with_override.call(resource, update),
+    });
   }
 }
 

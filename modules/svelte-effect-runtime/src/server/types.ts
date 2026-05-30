@@ -101,15 +101,16 @@ export type EffectRemoteFunction<Input, A> = [Input] extends [void]
  * @example
  * ```ts
  * const posts = GetPosts();
- * yield* Effect.promise(() => posts.refresh());
+ * yield* posts.refresh();
  * ```
  *
  * @since 2.0.0
  */
 export type EffectRemoteQuery<A> =
   & Effect.Effect<A, RemoteFailure<unknown>, unknown>
-  & Pick<RemoteQuery<A>, "refresh" | "set">
+  & Pick<RemoteQuery<A>, "set">
   & {
+    readonly refresh: () => Effect.Effect<void, unknown, never>;
     readonly withOverride: (
       update: (current: A) => A,
     ) => RemoteQueryOverride;
@@ -123,7 +124,7 @@ export type EffectRemoteQuery<A> =
  * ```ts
  * const posts = GetPosts();
  * yield* posts;
- * yield* Effect.promise(() => posts.refresh());
+ * yield* posts.refresh();
  * ```
  *
  * @since 2.0.0

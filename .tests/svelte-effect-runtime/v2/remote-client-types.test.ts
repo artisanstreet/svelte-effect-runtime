@@ -75,7 +75,7 @@ const GetPosts = Query(Effect.gen(function* () {
 
 const UpvotePost = Command(Schema.String, (id) =>
   Effect.gen(function* () {
-    yield* Effect.promise(() => GetPosts().refresh());
+    yield* GetPosts().refresh();
 
     return id.length;
   })
@@ -90,11 +90,14 @@ type UpvotePostStillRequiresInput = Assert<
 
 async function check_generated_markup_helpers() {
   const posts_query = GetPosts();
+  const refresh_effect: Effect.Effect<void, unknown, never> =
+    posts_query.refresh();
+
   posts_query.set(posts);
   const release_override = posts_query.withOverride((current) => current);
 
   release_override();
-  await Effect.runPromise(Effect.promise(() => posts_query.refresh()));
+  await Effect.runPromise(refresh_effect);
 
   const loaded = await promise("posts", [], function* () {
     return yield* GetPosts();
