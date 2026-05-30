@@ -78,14 +78,32 @@ export type SchemaInput<S> = S extends Schema.Schema<infer Input> ? Input
 /**
  * Effect-returning remote function type exposed by query and prerender.
  *
+ * @example
+ * ```ts
+ * type Post = { id: string };
+ * const posts: Post[] = [];
+ * const getPosts: EffectRemoteFunction<void, Post[]> = () =>
+ *   Effect.succeed(posts);
+ * ```
+ *
  * @since 2.0.0
  */
-export type EffectRemoteFunction<Input, A> = undefined extends Input
-  ? (input?: Input) => Effect.Effect<A, RemoteFailure<unknown>, unknown>
+export type EffectRemoteFunction<Input, A> = [Input] extends [void]
+  ? () => Effect.Effect<A, RemoteFailure<unknown>, unknown>
+  : undefined extends Input
+    ? (input?: Input) => Effect.Effect<A, RemoteFailure<unknown>, unknown>
   : (input: Input) => Effect.Effect<A, RemoteFailure<unknown>, unknown>;
 
 /**
  * Effect-returning command type with SvelteKit's pending counter preserved.
+ *
+ * @example
+ * ```ts
+ * const upvote: EffectRemoteCommand<string, number> = Object.assign(
+ *   (id: string) => Effect.succeed(id.length),
+ *   { pending: 0 },
+ * );
+ * ```
  *
  * @since 2.0.0
  */

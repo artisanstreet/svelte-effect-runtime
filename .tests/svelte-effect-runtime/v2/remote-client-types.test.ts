@@ -58,6 +58,11 @@ import { Command, Query } from "__RUNTIME__/modules/svelte-effect-runtime/src/se
 import { promise } from "__RUNTIME__/modules/svelte-effect-runtime/src/markup/promise.ts";
 import { run } from "__RUNTIME__/modules/svelte-effect-runtime/src/markup/run.ts";
 
+type Equal<Left, Right> =
+  (<Type>() => Type extends Left ? 1 : 2) extends
+  (<Type>() => Type extends Right ? 1 : 2) ? true : false;
+type Assert<Type extends true> = Type;
+
 const posts = [{
   id: "one",
   name: "post",
@@ -73,6 +78,13 @@ const UpvotePost = Command(Schema.String, (id) =>
     return id.length;
   })
 );
+
+type GetPostsParameters = Parameters<typeof GetPosts>;
+type UpvotePostParameters = Parameters<typeof UpvotePost>;
+type GetPostsHasNoInputParameter = Assert<Equal<GetPostsParameters, []>>;
+type UpvotePostStillRequiresInput = Assert<
+  Equal<UpvotePostParameters, [input: string]>
+>;
 
 async function check_generated_markup_helpers() {
   const loaded = await promise("posts", [], function* () {
