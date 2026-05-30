@@ -39,15 +39,19 @@ export function make_remote_wrapper(
  * @param helper_name - Remote helper name for error normalization.
  * @returns Native SvelteKit form handler wrapper.
  */
-export function make_remote_form_wrapper(
-  handler: RemoteFormHandler,
+export function make_remote_form_wrapper<Input, A>(
+  handler: RemoteFormHandler<Input, A>,
   helper_name: string,
 ): (data: unknown, issue: unknown) => Promise<unknown> {
   return async (data: unknown, issue: unknown) => {
     try {
       const event = get_native_request_event() as unknown as RequestEvent;
       const invalid_proxy = make_invalid_proxy();
-      const result = handler({ data, invalid: invalid_proxy, issue });
+      const result = handler({
+        data: data as Input,
+        invalid: invalid_proxy,
+        issue,
+      });
 
       return await run_handler_effect(result, event);
     } catch (error: unknown) {

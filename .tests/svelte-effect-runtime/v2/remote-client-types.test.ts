@@ -54,7 +54,7 @@ Deno.test("server remote helpers stay Effect-yieldable in markup helpers", async
     "server-remote-markup.ts",
     `
 import { Effect, Schema } from "effect";
-import { Command, Query } from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
+import { Command, Form, Query } from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
 import { promise } from "__RUNTIME__/modules/svelte-effect-runtime/src/markup/promise.ts";
 import { run } from "__RUNTIME__/modules/svelte-effect-runtime/src/markup/run.ts";
 
@@ -81,23 +81,52 @@ const UpvotePost = Command(Schema.String, (id) =>
   })
 );
 
+const SignIn = Form(
+  Schema.Struct({
+    email: Schema.NonEmptyString,
+    password: Schema.NonEmptyString,
+  }),
+  ({ data, invalid }) =>
+    Effect.gen(function* () {
+      const email: string = data.email;
+      const password: string = data.password;
+
+      if (password.length === 0) {
+        return yield* invalid.password("Password is required");
+      }
+
+      return { email };
+    }),
+);
+
+const SignOut = Form(Effect.succeed({ signedOut: true }));
+
 type GetPostsParameters = Parameters<typeof GetPosts>;
 type UpvotePostParameters = Parameters<typeof UpvotePost>;
+type SignInParameters = Parameters<typeof SignIn>;
+type SignInInput = SignInParameters[0];
 type GetPostsHasNoInputParameter = Assert<Equal<GetPostsParameters, []>>;
 type UpvotePostStillRequiresInput = Assert<
   Equal<UpvotePostParameters, [input: string]>
+>;
+type SignInKeepsEmailField = Assert<Equal<SignInInput["email"], string>>;
+type SignInKeepsPasswordField = Assert<
+  Equal<SignInInput["password"], string>
 >;
 
 async function check_generated_markup_helpers() {
   const posts_query = GetPosts();
   const refresh_effect: Effect.Effect<void, unknown, never> =
     posts_query.refresh();
+  const sign_out_effect = SignOut();
 
   posts_query.set(posts);
   const release_override = posts_query.withOverride((current) => current);
 
   release_override();
   await Effect.runPromise(refresh_effect);
+  const sign_out_result = await Effect.runPromise(sign_out_effect);
+  const signed_out: boolean = sign_out_result.signedOut;
 
   const loaded = await promise("posts", [], function* () {
     return yield* GetPosts();

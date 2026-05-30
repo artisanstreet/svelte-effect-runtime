@@ -1,5 +1,10 @@
-import type { RemoteQuery, RemoteQueryOverride } from "@sveltejs/kit";
 import type { create_form_error, RemoteFailure } from "$/remote/shared.ts";
+import type {
+  RemoteFormInput,
+  RemoteQuery,
+  RemoteQueryOverride,
+} from "@sveltejs/kit";
+import type { EffectRemoteForm as ClientEffectRemoteForm } from "$/remote/client.ts";
 import type { Effect, Schema } from "effect";
 
 /**
@@ -152,3 +157,21 @@ export type EffectRemoteCommand<Input, A> =
   & {
     readonly pending: number;
   };
+
+/**
+ * Effect-returning form type with SvelteKit form helpers preserved.
+ *
+ * @example
+ * ```ts
+ * const signIn: EffectRemoteForm<{ email: string }, { ok: true }> =
+ *   Form(Schema.Struct({ email: Schema.String }), ({ data }) =>
+ *     Effect.succeed({ ok: data.email.length > 0 })
+ *   );
+ * ```
+ *
+ * @since 2.0.0
+ * @template Input - Data shape submitted by the remote form.
+ * @template A - Successful value produced by the form handler.
+ */
+export type EffectRemoteForm<Input extends RemoteFormInput | void, A> =
+  ClientEffectRemoteForm<Input, A>;

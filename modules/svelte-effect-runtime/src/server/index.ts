@@ -8,6 +8,7 @@ export {
 export type {
   EffectLike,
   EffectRemoteCommand,
+  EffectRemoteForm,
   EffectRemoteFunction,
   EffectRemoteQuery,
   EffectRemoteQueryFunction,
