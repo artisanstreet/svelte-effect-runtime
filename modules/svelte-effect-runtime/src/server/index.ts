@@ -1,12 +1,9 @@
+export { Command, Form, Prerender, Query } from "./factories.ts";
 export {
-  Command,
-  Form,
   get_server_runtime_or_throw,
-  Prerender,
-  Query,
   RequestEvent,
   ServerRuntime,
-} from "./server/index.ts";
+} from "./runtime.ts";
 
 export type {
   EffectLike,
@@ -18,4 +15,4 @@ export type {
   RemoteHandler,
   SchemaInput,
   StandardSchema,
-} from "./server/index.ts";
+} from "./types.ts";
