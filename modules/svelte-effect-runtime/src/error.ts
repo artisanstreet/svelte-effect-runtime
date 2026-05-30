@@ -92,3 +92,47 @@ export class YieldStarInRuneError extends PreprocessError {
     this.expression_text = expression_text;
   }
 }
+
+/**
+ * Thrown when an event handler contains `yield*` inside a nested callback that
+ * is not itself a generator function.
+ *
+ * @example
+ * ```ts
+ * throw new NestedYieldStarInEventHandlerError(
+ *   "Component.svelte",
+ *   "Effect.try(() => yield* save())",
+ * );
+ * ```
+ *
+ * @since 2.0.0
+ */
+export class NestedYieldStarInEventHandlerError extends PreprocessError {
+  /**
+   * The full text of the problematic event handler body.
+   *
+   * @since 2.0.0
+   */
+  readonly expression_text: string;
+
+  constructor(filename: string, expression_text: string) {
+    super(
+      [
+        `${filename}: yield* cannot be used inside a nested non-generator callback in a markup event handler.`,
+        `Move the yield* to the event handler body, or use an Effect combinator on the Effect value instead.`,
+        "",
+        `Use this shape for remote calls:`,
+        `  onclick={() => yield* UpvotePost(id)}`,
+        "",
+        `Use this shape for synchronous try/catch work:`,
+        `  onclick={() => yield* Effect.try(() => riskySyncWork())}`,
+        "",
+        `Problematic expression:`,
+        expression_text,
+      ].join("\n"),
+      filename,
+    );
+    this.name = "NestedYieldStarInEventHandlerError";
+    this.expression_text = expression_text;
+  }
+}

@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
 import { Effect } from "effect";
 import { reset_dispatcher } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
 import { value } from "../../../modules/svelte-effect-runtime/src/markup/value.ts";
@@ -197,6 +197,42 @@ Deno.test("leaves non-Effect event handlers untouched", () => {
 
   assertEquals(result.code, source);
   if (result.has_yield) throw new Error("has_yield should be false");
+});
+
+Deno.test("leaves nested generator yield* in event handlers untouched", () => {
+  const source =
+    `<button onclick={() => Effect.gen(function* () { yield* save(); })}>save</button>`;
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertEquals(result.code, source);
+  if (result.has_yield) throw new Error("has_yield should be false");
+});
+
+Deno.test("rejects yield* inside nested non-generator event callbacks", () => {
+  const source =
+    `<button onclick={() => Effect.try(() => yield* save())}>save</button>`;
+  const error = assertThrows(
+    () => transform_markup_effect(source, "Test.svelte"),
+  );
+
+  assertStringIncludes(
+    error.message,
+    "yield* cannot be used inside a nested non-generator callback",
+  );
+  assertStringIncludes(error.message, `onclick={() => yield* UpvotePost(id)}`);
+});
+
+Deno.test("rejects nested callback yield* even with an outer yield*", () => {
+  const source =
+    `<button onclick={() => yield* Effect.try(() => yield* save())}>save</button>`;
+  const error = assertThrows(
+    () => transform_markup_effect(source, "Test.svelte"),
+  );
+
+  assertStringIncludes(
+    error.message,
+    "yield* cannot be used inside a nested non-generator callback",
+  );
 });
 
 // ─── Multiple yield* in one file ─────────────────────────────

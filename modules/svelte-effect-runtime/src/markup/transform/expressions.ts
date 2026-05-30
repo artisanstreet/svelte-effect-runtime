@@ -45,6 +45,51 @@ export function strip_arrow_function(
 }
 
 /**
+ * Classifies `yield*` placement inside an event handler body.
+ *
+ * @example
+ * ```ts
+ * analyze_event_body_yield_star("yield* save()");
+ * ```
+ *
+ * @since 2.0.0
+ * @param body - Event handler body text after the outer arrow has been
+ *   stripped.
+ * @returns Whether the body has top-level yield* expressions and whether any
+ *   yield* appears inside a nested non-generator callback.
+ */
+export function analyze_event_body_yield_star(body: string): {
+  has_top_level_yield_star: boolean;
+  has_nested_invalid_yield_star: boolean;
+} {
+  const wrapped = `function* __ser_event() { ${body}; }`;
+  const sf = ts.createSourceFile(
+    "event.ts",
+    wrapped,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const stmt = sf.statements[0];
+
+  if (!ts.isFunctionDeclaration(stmt) || !stmt.body) {
+    return {
+      has_top_level_yield_star: false,
+      has_nested_invalid_yield_star: /\byield\s*\*/.test(body),
+    };
+  }
+
+  const result = {
+    has_top_level_yield_star: false,
+    has_nested_invalid_yield_star: false,
+  };
+
+  visit_event_body(stmt.body, "top_level", result);
+
+  return result;
+}
+
+/**
  * Collects free identifiers that must be captured as reactive dependencies.
  *
  * @since 2.0.0
@@ -118,6 +163,73 @@ function visit_ids(
   }
 
   node.forEachChild((child) => visit_ids(child, seen, ids));
+}
+
+type EventYieldContext = "top_level" | "nested_generator" | "nested_invalid";
+
+interface EventYieldAnalysis {
+  has_top_level_yield_star: boolean;
+  has_nested_invalid_yield_star: boolean;
+}
+
+function visit_event_body(
+  node: ts.Node,
+  context: EventYieldContext,
+  result: EventYieldAnalysis,
+): void {
+  if (is_yield_star_expression(node)) {
+    if (context === "top_level") {
+      result.has_top_level_yield_star = true;
+    } else if (context === "nested_invalid") {
+      result.has_nested_invalid_yield_star = true;
+    }
+
+    node.forEachChild((child) => visit_event_body(child, context, result));
+    return;
+  }
+
+  if (is_nested_function_boundary(node)) {
+    const next_context = is_generator_function_boundary(node)
+      ? "nested_generator"
+      : "nested_invalid";
+
+    node.forEachChild((child) => visit_event_body(child, next_context, result));
+    return;
+  }
+
+  node.forEachChild((child) => visit_event_body(child, context, result));
+}
+
+function is_nested_function_boundary(node: ts.Node): boolean {
+  return (
+    ts.isArrowFunction(node) ||
+    ts.isFunctionExpression(node) ||
+    ts.isFunctionDeclaration(node) ||
+    ts.isMethodDeclaration(node) ||
+    ts.isGetAccessorDeclaration(node) ||
+    ts.isSetAccessorDeclaration(node)
+  );
+}
+
+function is_generator_function_boundary(node: ts.Node): boolean {
+  return (
+    (ts.isFunctionExpression(node) || ts.isFunctionDeclaration(node) ||
+      ts.isMethodDeclaration(node)) &&
+    node.asteriskToken !== undefined
+  );
+}
+
+function is_yield_star_expression(node: ts.Node): boolean {
+  if (ts.isYieldExpression(node)) {
+    return node.asteriskToken !== undefined;
+  }
+
+  return (
+    ts.isBinaryExpression(node) &&
+    node.operatorToken.kind === ts.SyntaxKind.AsteriskToken &&
+    ts.isIdentifier(node.left) &&
+    node.left.text === "yield"
+  );
 }
 
 function is_property_access_name(node: ts.Identifier): boolean {

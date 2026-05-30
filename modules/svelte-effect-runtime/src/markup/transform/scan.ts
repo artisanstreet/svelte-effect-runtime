@@ -1,7 +1,12 @@
+import { NestedYieldStarInEventHandlerError } from "$/error.ts";
 import { contains_top_level_yield_star } from "$/detect.ts";
 import MagicString from "magic-string";
 import ts from "typescript";
 
+import {
+  analyze_event_body_yield_star,
+  strip_arrow_function,
+} from "./expressions.ts";
 import type { MarkupCandidate, TagKind } from "./types.ts";
 
 interface SanitizeResult {
@@ -53,9 +58,11 @@ export function sanitize_markup(
     const is_event = is_event_expression(inner);
 
     /** Determine if this brace contains yield* that needs lowering. */
-    const has_yield = is_event
-      ? /\byield\s*\*/.test(inner)
-      : contains_yield_star_in_text(expr_body);
+    const event_yield = is_event
+      ? analyze_event_yield(inner, filename)
+      : undefined;
+    const has_yield = event_yield?.has_top_level_yield_star ??
+      contains_yield_star_in_text(expr_body);
 
     if (!has_yield) {
       cursor = close + 1;
@@ -252,6 +259,24 @@ function is_event_expression(inner: string): boolean {
   const trimmed = inner.trimStart();
 
   return /^(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/.test(trimmed);
+}
+
+function analyze_event_yield(
+  inner: string,
+  filename: string,
+): {
+  has_top_level_yield_star: boolean;
+} {
+  const event = strip_arrow_function(inner);
+  const analysis = analyze_event_body_yield_star(event.body);
+
+  if (analysis.has_nested_invalid_yield_star) {
+    throw new NestedYieldStarInEventHandlerError(filename, event.body);
+  }
+
+  return {
+    has_top_level_yield_star: analysis.has_top_level_yield_star,
+  };
 }
 
 function contains_yield_star_in_text(text: string): boolean {
