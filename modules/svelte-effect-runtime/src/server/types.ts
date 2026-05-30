@@ -1,5 +1,5 @@
-import type { create_form_error } from "$/remote/shared.ts";
-import type { RemoteFailure } from "$/remote/shared.ts";
+import type { RemoteQuery, RemoteQueryOverride } from "@sveltejs/kit";
+import type { create_form_error, RemoteFailure } from "$/remote/shared.ts";
 import type { Effect, Schema } from "effect";
 
 /**
@@ -93,6 +93,45 @@ export type EffectRemoteFunction<Input, A> = [Input] extends [void]
   : undefined extends Input
     ? (input?: Input) => Effect.Effect<A, RemoteFailure<unknown>, unknown>
   : (input: Input) => Effect.Effect<A, RemoteFailure<unknown>, unknown>;
+
+/**
+ * Effect-returning query resource with SvelteKit cache update methods
+ * preserved.
+ *
+ * @example
+ * ```ts
+ * const posts = GetPosts();
+ * yield* Effect.promise(() => posts.refresh());
+ * ```
+ *
+ * @since 2.0.0
+ */
+export type EffectRemoteQuery<A> =
+  & Effect.Effect<A, RemoteFailure<unknown>, unknown>
+  & Pick<RemoteQuery<A>, "refresh" | "set">
+  & {
+    readonly withOverride: (
+      update: (current: A) => A,
+    ) => RemoteQueryOverride;
+  };
+
+/**
+ * Effect-returning remote query function with SvelteKit query resource methods
+ * preserved on the returned Effect.
+ *
+ * @example
+ * ```ts
+ * const posts = GetPosts();
+ * yield* posts;
+ * yield* Effect.promise(() => posts.refresh());
+ * ```
+ *
+ * @since 2.0.0
+ */
+export type EffectRemoteQueryFunction<Input, A> = [Input] extends [void]
+  ? () => EffectRemoteQuery<A>
+  : undefined extends Input ? (input?: Input) => EffectRemoteQuery<A>
+  : (input: Input) => EffectRemoteQuery<A>;
 
 /**
  * Effect-returning command type with SvelteKit's pending counter preserved.

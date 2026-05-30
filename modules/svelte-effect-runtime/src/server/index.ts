@@ -9,6 +9,8 @@ export type {
   EffectLike,
   EffectRemoteCommand,
   EffectRemoteFunction,
+  EffectRemoteQuery,
+  EffectRemoteQueryFunction,
   FormInvalid,
   PrerenderOptions,
   RemoteFormHandler,

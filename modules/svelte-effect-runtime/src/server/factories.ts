@@ -13,27 +13,63 @@ import { make_remote_form_wrapper, make_remote_wrapper } from "./wrappers.ts";
 import type {
   EffectLike,
   EffectRemoteCommand,
-  EffectRemoteFunction,
+  EffectRemoteQuery,
+  EffectRemoteQueryFunction,
   PrerenderOptions,
   RemoteFormHandler,
   RemoteHandler,
   SchemaInput,
 } from "./types.ts";
 
+const query_resource_keys = new Set<PropertyKey>([
+  "refresh",
+  "set",
+  "withOverride",
+]);
+
 function to_effect_query<Input, Output>(
   native: ReturnType<typeof native_query>,
 ): ReturnType<typeof native_query> {
-  const wrapped = ((input: Input) =>
-    Effect.tryPromise({
-      try: () => Promise.resolve((native as (input: Input) => unknown)(input)),
+  const wrapped = ((input: Input) => {
+    const resource = (native as (input: Input) => unknown)(input);
+    const effect = Effect.tryPromise({
+      try: () => Promise.resolve(resource),
       catch: (error: unknown) => error,
-    }) as Effect.Effect<Output, unknown>) as unknown as ReturnType<
-      typeof native_query
-    >;
+    }) as unknown as EffectRemoteQuery<Output>;
+
+    copy_query_resource_descriptors(resource, effect);
+
+    return effect;
+  }) as unknown as ReturnType<
+    typeof native_query
+  >;
 
   copy_property_descriptors(native, wrapped);
 
   return wrapped;
+}
+
+function copy_query_resource_descriptors(
+  resource: unknown,
+  effect: object,
+): void {
+  if (typeof resource !== "object" && typeof resource !== "function") {
+    return;
+  }
+
+  if (resource === null) {
+    return;
+  }
+
+  for (const key of query_resource_keys) {
+    const descriptor = Object.getOwnPropertyDescriptor(resource, key);
+
+    if (!descriptor) {
+      continue;
+    }
+
+    Object.defineProperty(effect, key, descriptor);
+  }
 }
 
 /**
@@ -53,15 +89,15 @@ function to_effect_query<Input, Output>(
  */
 export function Query<A>(
   validate_or_handler: EffectLike<A>,
-): EffectRemoteFunction<void, A>;
+): EffectRemoteQueryFunction<void, A>;
 export function Query<Input, A>(
   validate_or_handler: "unchecked",
   maybe_handler: RemoteHandler<Input, A>,
-): EffectRemoteFunction<Input, A>;
+): EffectRemoteQueryFunction<Input, A>;
 export function Query<S extends Schema.Schema<unknown>, A>(
   validate_or_handler: S,
   maybe_handler: RemoteHandler<SchemaInput<S>, A>,
-): EffectRemoteFunction<SchemaInput<S>, A>;
+): EffectRemoteQueryFunction<SchemaInput<S>, A>;
 export function Query(
   validate_or_handler: unknown,
   maybe_handler?: RemoteHandler,

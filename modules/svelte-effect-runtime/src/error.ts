@@ -119,13 +119,13 @@ export class NestedYieldStarInEventHandlerError extends PreprocessError {
     super(
       [
         `${filename}: yield* cannot be used inside a nested non-generator callback in a markup event handler.`,
-        `Move the yield* to the event handler body, or use an Effect combinator on the Effect value instead.`,
+        `Move the yield* to the event handler body. Effect.try and Effect.sync callbacks are plain synchronous JavaScript; do not call Effect-returning functions inside them.`,
         "",
-        `Use this shape for remote calls:`,
+        `Run the remote Effect directly:`,
         `  onclick={() => yield* UpvotePost(id)}`,
         "",
-        `Use this shape for synchronous try/catch work:`,
-        `  onclick={() => yield* Effect.try(() => riskySyncWork())}`,
+        `Recover from remote failures by composing the Effect value:`,
+        `  onclick={() => yield* UpvotePost(id).pipe(Effect.catch(() => Effect.void))}`,
         "",
         `Problematic expression:`,
         expression_text,

@@ -220,6 +220,14 @@ Deno.test("rejects yield* inside nested non-generator event callbacks", () => {
     "yield* cannot be used inside a nested non-generator callback",
   );
   assertStringIncludes(error.message, `onclick={() => yield* UpvotePost(id)}`);
+  assertStringIncludes(
+    error.message,
+    `Effect.try and Effect.sync callbacks are plain synchronous JavaScript`,
+  );
+  assertStringIncludes(
+    error.message,
+    `onclick={() => yield* UpvotePost(id).pipe(Effect.catch(() => Effect.void))}`,
+  );
 });
 
 Deno.test("rejects nested callback yield* even with an outer yield*", () => {
