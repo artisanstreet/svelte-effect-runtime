@@ -1,3 +1,4 @@
+export { copy_property_descriptors } from "$/internal/descriptors.ts";
 import type { NativeMethod } from "./types.ts";
 
 /**
@@ -17,46 +18,4 @@ export function has_method<K extends PropertyKey>(
     value !== null &&
     typeof (value as Record<PropertyKey, unknown>)[key] === "function"
   );
-}
-
-/**
- * Copies own property descriptors from a native remote helper to an adapter.
- *
- * @since 2.0.0
- * @param source - Source object or function to mirror.
- * @param target - Adapter object receiving descriptors.
- * @param exclude - Property keys that should not be copied.
- * @returns Nothing.
- */
-export function copy_property_descriptors(
-  source: unknown,
-  target: object,
-  exclude: ReadonlySet<PropertyKey> = new Set(),
-): void {
-  if (typeof source !== "object" && typeof source !== "function") {
-    return;
-  }
-
-  if (source === null) {
-    return;
-  }
-
-  for (const key of Reflect.ownKeys(source)) {
-    if (
-      key === "length" ||
-      key === "name" ||
-      key === "prototype" ||
-      exclude.has(key)
-    ) {
-      continue;
-    }
-
-    const descriptor = Object.getOwnPropertyDescriptor(source, key);
-
-    if (!descriptor) {
-      continue;
-    }
-
-    Object.defineProperty(target, key, descriptor);
-  }
 }

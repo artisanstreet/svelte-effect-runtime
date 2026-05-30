@@ -1,81 +1,101 @@
-// deno-lint-ignore-file no-explicit-any
 import { is_invalid_position } from "./position.ts";
-import type { Mapper } from "../types.ts";
+import type { DocumentPosition, Mapper } from "../types.ts";
 
+/**
+ * Composes multiple document mappers in sequence.
+ *
+ * @example
+ * ```ts
+ * const mapper = new SequentialDocumentMapper([first, second], uri);
+ * ```
+ *
+ * @since 2.0.0
+ */
 export class SequentialDocumentMapper {
   constructor(
     private readonly mappers: Mapper[],
     private readonly url: string,
   ) {}
 
-  getOriginalPosition(generatedPosition: any) {
+  getOriginalPosition(generated_position: DocumentPosition): DocumentPosition {
     return this.mappers.reduce((position, mapper) => {
       if (is_invalid_position(position)) {
         return position;
       }
 
       return mapper.getOriginalPosition(position);
-    }, generatedPosition);
+    }, generated_position);
   }
 
-  getGeneratedPosition(originalPosition: any) {
+  getGeneratedPosition(original_position: DocumentPosition): DocumentPosition {
     return [...this.mappers].reverse().reduce((position, mapper) => {
       if (is_invalid_position(position)) {
         return position;
       }
 
       return mapper.getGeneratedPosition(position);
-    }, originalPosition);
+    }, original_position);
   }
 
-  isInGenerated(originalPosition: any) {
-    const generatedPosition = this.getGeneratedPosition(originalPosition);
-    return generatedPosition.line >= 0 && generatedPosition.character >= 0;
+  isInGenerated(original_position: DocumentPosition): boolean {
+    const generated_position = this.getGeneratedPosition(original_position);
+
+    return !is_invalid_position(generated_position);
   }
 
-  getURL() {
+  getURL(): string {
     return this.url;
   }
 }
 
+/**
+ * Combines the original snapshot mapper with the preprocessor mapper.
+ *
+ * @example
+ * ```ts
+ * const mapper = new SnapshotDocumentMapper(inner, preprocess, uri);
+ * ```
+ *
+ * @since 2.0.0
+ */
 export class SnapshotDocumentMapper {
   constructor(
-    private readonly innerMapper: Mapper,
-    private readonly preprocessMapper: Mapper,
+    private readonly inner_mapper: Mapper,
+    private readonly preprocess_mapper: Mapper,
     private readonly url: string,
   ) {}
 
-  getOriginalPosition(generatedPosition: any) {
-    return this.preprocessMapper.getOriginalPosition(
-      this.innerMapper.getOriginalPosition(generatedPosition),
+  getOriginalPosition(generated_position: DocumentPosition): DocumentPosition {
+    return this.preprocess_mapper.getOriginalPosition(
+      this.inner_mapper.getOriginalPosition(generated_position),
     );
   }
 
-  getGeneratedPosition(originalPosition: any) {
-    const preprocessedPosition = this.preprocessMapper.getGeneratedPosition(
-      originalPosition,
+  getGeneratedPosition(original_position: DocumentPosition): DocumentPosition {
+    const preprocessed_position = this.preprocess_mapper.getGeneratedPosition(
+      original_position,
     );
 
-    if (is_invalid_position(preprocessedPosition)) {
-      return preprocessedPosition;
+    if (is_invalid_position(preprocessed_position)) {
+      return preprocessed_position;
     }
 
-    return this.innerMapper.getGeneratedPosition(preprocessedPosition);
+    return this.inner_mapper.getGeneratedPosition(preprocessed_position);
   }
 
-  isInGenerated(originalPosition: any) {
-    const preprocessedPosition = this.preprocessMapper.getGeneratedPosition(
-      originalPosition,
+  isInGenerated(original_position: DocumentPosition): boolean {
+    const preprocessed_position = this.preprocess_mapper.getGeneratedPosition(
+      original_position,
     );
 
-    if (is_invalid_position(preprocessedPosition)) {
+    if (is_invalid_position(preprocessed_position)) {
       return false;
     }
 
-    return this.innerMapper.isInGenerated(preprocessedPosition);
+    return this.inner_mapper.isInGenerated(preprocessed_position);
   }
 
-  getURL() {
+  getURL(): string {
     return this.url;
   }
 }

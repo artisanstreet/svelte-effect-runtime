@@ -1,0 +1,10 @@
+export const CONFIG_ROOT = "svelte-effect-runtime";
+export const CONFIG_ENABLED = "languageServer.enabled";
+export const CONFIG_CLIENT_MODE = "languageServer.client";
+export const CONFIG_SERVER_PATH = "languageServer.path";
+export const SVELTE_EXTENSION_ID = "svelte.svelte-vscode";
+export const LEGACY_TARGET_KEY = "language-server.ls-path";
+export const LEGACY_STATE_PREVIOUS_PATH = "svelteEffectRuntime.previousLsPath";
+export const LEGACY_STATE_MANAGED_PATH = "svelteEffectRuntime.managedLsPath";
+export const CLIENT_ID = "svelte-effect-runtime";
+export const CLIENT_NAME = "Svelte Effect Runtime";

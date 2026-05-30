@@ -6,11 +6,8 @@ import {
 import type { FormIssue } from "$/remote/shared.ts";
 import { parse } from "devalue";
 
-import {
-  decode_remote_error,
-  decode_response_failure,
-  is_decoded_remote_failure,
-} from "./errors.ts";
+import { decode_remote_error, is_decoded_remote_failure } from "./failures.ts";
+import { decode_response_failure } from "./responses.ts";
 import { to_form_data } from "./form-data.ts";
 import type { NativeFormRecord } from "./types.ts";
 

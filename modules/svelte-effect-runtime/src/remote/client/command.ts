@@ -1,10 +1,8 @@
 import type { RemoteFailure } from "$/remote/shared.ts";
 import type { Effect } from "effect";
 
-import {
-  decode_response_or_value,
-  make_effect_from_promise,
-} from "./errors.ts";
+import { decode_response_or_value } from "./responses.ts";
+import { make_effect_from_promise } from "./effect.ts";
 import { copy_property_descriptors, has_method } from "./utils.ts";
 import type { NativeMethod, Pending } from "./types.ts";
 

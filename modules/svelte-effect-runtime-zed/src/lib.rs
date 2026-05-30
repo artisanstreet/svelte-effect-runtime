@@ -92,8 +92,11 @@ impl SvelteEffectRuntimeExtension {
     }
 
     fn worktree_server_script_path(&self, worktree: &zed::Worktree) -> Option<String> {
-        let path = PathBuf::from(worktree.root_path())
-            .join(WORKTREE_LANGUAGE_SERVER_SCRIPT_PATH);
+        let path = PathBuf::from(worktree.root_path()).join(WORKTREE_LANGUAGE_SERVER_SCRIPT_PATH);
+
+        if !is_file(&path) {
+            return None;
+        }
 
         Some(path.to_string_lossy().to_string())
     }
@@ -127,8 +130,7 @@ impl SvelteEffectRuntimeExtension {
         if !is_file(&path) {
             Err(format!(
                 "installed package '{}' did not contain expected path '{}'",
-                LANGUAGE_SERVER_PACKAGE_NAME,
-                MANAGED_LANGUAGE_SERVER_SCRIPT_PATH,
+                LANGUAGE_SERVER_PACKAGE_NAME, MANAGED_LANGUAGE_SERVER_SCRIPT_PATH,
             ))?;
         }
 

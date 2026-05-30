@@ -1,7 +1,8 @@
 import type { RemoteFailure } from "$/remote/shared.ts";
 import type { Effect } from "effect";
 
-import { make_effect_from_promise, resolve_query_result } from "./errors.ts";
+import { resolve_query_result } from "./query-result.ts";
+import { make_effect_from_promise } from "./effect.ts";
 import { has_method } from "./utils.ts";
 import type { NativeMethod } from "./types.ts";
 

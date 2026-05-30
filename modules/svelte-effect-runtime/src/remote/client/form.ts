@@ -1,9 +1,7 @@
 import type { RemoteFormInput } from "@sveltejs/kit";
 
-import {
-  decode_response_or_value,
-  make_effect_from_promise,
-} from "./errors.ts";
+import { decode_response_or_value } from "./responses.ts";
+import { make_effect_from_promise } from "./effect.ts";
 import { get_remote_action_id, submit_remote_form } from "./form-transport.ts";
 import { copy_property_descriptors, has_method } from "./utils.ts";
 import { wrap_enhance_callback } from "./form-enhance.ts";

@@ -4,10 +4,10 @@ import {
   prerender as native_prerender,
   query as native_query,
 } from "$app/server";
+import { copy_property_descriptors } from "$/internal/descriptors.ts";
 import { normalize_remote_helper_error } from "$/remote/server.ts";
 import { Effect, type Schema } from "effect";
 
-import { copy_remote_descriptors } from "./descriptors.ts";
 import { is_handler, is_unchecked, normalize_validator } from "./schema.ts";
 import { make_remote_form_wrapper, make_remote_wrapper } from "./wrappers.ts";
 import type {
@@ -31,7 +31,7 @@ function to_effect_query<Input, Output>(
       typeof native_query
     >;
 
-  copy_remote_descriptors(native, wrapped);
+  copy_property_descriptors(native, wrapped);
 
   return wrapped;
 }
