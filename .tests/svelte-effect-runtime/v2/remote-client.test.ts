@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import { stringify } from "devalue";
 import {
   create_remote_form_adapter,
+  create_remote_live_query_adapter,
   create_remote_query_adapter,
 } from "../../../modules/svelte-effect-runtime/src/remote/client.ts";
 import { create_serialized_remote_failure_envelope } from "../../../modules/svelte-effect-runtime/src/remote/shared.ts";
@@ -133,6 +134,140 @@ Deno.test("remote query adapter exposes http failures on the Effect error channe
   );
 
   assertEquals(result, 404);
+});
+
+Deno.test("remote query adapter preserves resource state and methods", async () => {
+  let refresh_called = false;
+  let override_called = false;
+  let set_value = 0;
+
+  const native = () => {
+    const resource = Promise.resolve(1) as Promise<number> & {
+      current: number;
+      error: unknown;
+      loading: boolean;
+      ready: boolean;
+      refresh: () => Promise<void>;
+      set: (value: number) => void;
+      withOverride: (update: (current: number) => number) => () => void;
+    };
+
+    Object.defineProperties(resource, {
+      current: { get: () => 1 },
+      error: { get: () => undefined },
+      loading: { get: () => false },
+      ready: { get: () => true },
+      refresh: {
+        value: () => {
+          refresh_called = true;
+
+          return Promise.resolve();
+        },
+      },
+      set: {
+        value: (value: number) => {
+          set_value = value;
+        },
+      },
+      withOverride: {
+        value: (update: (current: number) => number) => {
+          override_called = update(1) === 2;
+
+          return () => {};
+        },
+      },
+    });
+
+    return resource;
+  };
+
+  const query = create_remote_query_adapter<undefined, number>(
+    native,
+    (value) => value,
+    "",
+  )(undefined);
+
+  assertEquals(query.current, 1);
+  assertEquals(query.loading, false);
+  assertEquals(query.ready, true);
+  assertEquals(Effect.isEffect(query.refresh()), true);
+
+  query.set(7);
+  query.withOverride((current) => current + 1);
+
+  await Effect.runPromise(query.refresh());
+  const result = await Effect.runPromise(query);
+
+  assertEquals(result, 1);
+  assertEquals(refresh_called, true);
+  assertEquals(set_value, 7);
+  assertEquals(override_called, true);
+});
+
+Deno.test("remote live query adapter preserves state and wraps reconnect", async () => {
+  let reconnect_called = false;
+
+  const native = () => {
+    const resource = Promise.resolve("first") as Promise<string> & {
+      connected: boolean;
+      current: string;
+      done: boolean;
+      error: unknown;
+      loading: boolean;
+      ready: boolean;
+      reconnect: () => Promise<void>;
+      [Symbol.asyncIterator]: () => AsyncIterator<string>;
+    };
+
+    Object.defineProperties(resource, {
+      [Symbol.asyncIterator]: {
+        value: async function* () {
+          yield "first";
+          yield "second";
+        },
+      },
+      connected: { get: () => true },
+      current: { get: () => "first" },
+      done: { get: () => false },
+      error: { get: () => undefined },
+      loading: { get: () => false },
+      ready: { get: () => true },
+      reconnect: {
+        value: () => {
+          reconnect_called = true;
+
+          return Promise.resolve();
+        },
+      },
+    });
+
+    return resource;
+  };
+
+  const query = create_remote_live_query_adapter<undefined, string>(
+    native,
+    (value) => value,
+    "",
+  )(undefined);
+
+  const values: string[] = [];
+
+  for await (const value of query) {
+    values.push(value);
+  }
+
+  assertEquals(query.connected, true);
+  assertEquals(query.current, "first");
+  assertEquals(query.done, false);
+  assertEquals(query.ready, true);
+  assertEquals(Effect.isEffect(query.reconnect()), true);
+  assertEquals(values, ["first", "second"]);
+
+  await Effect.runPromise(query.reconnect());
+  const result = await Effect.runPromise(query);
+
+  assertEquals(result, "first");
+  assertEquals(reconnect_called, true);
 });
 
 Deno.test("remote form adapter preserves descriptors and wraps validate in an Effect", async () => {

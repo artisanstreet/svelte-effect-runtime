@@ -10,11 +10,19 @@ import type { RemoteFormInput } from "@sveltejs/kit";
 import { Effect, type Schema } from "effect";
 
 import { is_handler, is_unchecked, normalize_validator } from "./schema.ts";
-import { make_remote_form_wrapper, make_remote_wrapper } from "./wrappers.ts";
+import {
+  make_remote_form_wrapper,
+  make_remote_live_wrapper,
+  make_remote_wrapper,
+} from "./wrappers.ts";
 import type {
   EffectLike,
+  EffectRemoteBatchHandler,
   EffectRemoteCommand,
   EffectRemoteForm,
+  EffectRemoteLiveQuery,
+  EffectRemoteLiveQueryFunction,
+  EffectRemoteLiveSource,
   EffectRemoteQuery,
   EffectRemoteQueryFunction,
   PrerenderOptions,
@@ -27,9 +35,39 @@ type FormSchemaInput<S> = SchemaInput<S> extends RemoteFormInput
   ? SchemaInput<S>
   : never;
 
+type NativeQueryLike<Input = unknown> = (input: Input) => unknown;
+
+type EffectRemoteResource<Output> =
+  | EffectRemoteLiveQuery<Output>
+  | EffectRemoteQuery<Output>;
+
+type RemoteLiveHandler<Input = unknown, A = unknown> =
+  | EffectLike<EffectRemoteLiveSource<A>>
+  | EffectRemoteLiveSource<A>
+  | ((input: Input) =>
+    | EffectLike<EffectRemoteLiveSource<A>>
+    | EffectRemoteLiveSource<A>);
+
+interface QueryFactory {
+  <A>(
+    validate_or_handler: EffectLike<A>,
+  ): EffectRemoteQueryFunction<void, A>;
+  <Input, A>(
+    validate_or_handler: "unchecked",
+    maybe_handler: RemoteHandler<Input, A>,
+  ): EffectRemoteQueryFunction<Input, A>;
+  <S extends Schema.Schema<unknown>, A>(
+    validate_or_handler: S,
+    maybe_handler: RemoteHandler<SchemaInput<S>, A>,
+  ): EffectRemoteQueryFunction<SchemaInput<S>, A>;
+
+  readonly batch: typeof QueryBatch;
+  readonly live: typeof QueryLive;
+}
+
 function to_effect_query<Input, Output>(
-  native: ReturnType<typeof native_query>,
-): ReturnType<typeof native_query> {
+  native: NativeQueryLike<Input>,
+): EffectRemoteQueryFunction<Input, Output> {
   const wrapped = ((input: Input) => {
     const resource = (native as (input: Input) => unknown)(input);
     const effect = Effect.tryPromise({
@@ -40,20 +78,54 @@ function to_effect_query<Input, Output>(
     attach_query_resource_methods(resource, effect);
 
     return effect;
-  }) as unknown as ReturnType<
-    typeof native_query
-  >;
+  }) as unknown as EffectRemoteQueryFunction<Input, Output>;
 
   copy_property_descriptors(native, wrapped);
 
   return wrapped;
 }
 
-type NativeQueryResource<Output> = {
+function to_effect_live_query<Input, Output>(
+  native: NativeQueryLike<Input>,
+): EffectRemoteLiveQueryFunction<Input, Output> {
+  const wrapped = ((input: Input) => {
+    const resource = (native as (input: Input) => unknown)(input);
+    const effect = Effect.tryPromise({
+      try: () => Promise.resolve(resource),
+      catch: (error: unknown) => error,
+    }) as unknown as EffectRemoteLiveQuery<Output>;
+
+    attach_live_resource_methods(resource, effect);
+
+    return effect;
+  }) as unknown as EffectRemoteLiveQueryFunction<Input, Output>;
+
+  copy_property_descriptors(native, wrapped);
+
+  return wrapped;
+}
+
+type NativeRemoteResource<Output> = {
+  readonly current?: Output;
+  readonly error?: unknown;
+  readonly loading?: boolean;
+  readonly ready?: boolean;
+};
+
+type NativeQueryResource<Output> = NativeRemoteResource<Output> & {
   readonly refresh?: () => Promise<void>;
   readonly set?: (value: Output) => void;
   readonly withOverride?: (update: (current: Output) => Output) => unknown;
 };
+
+type NativeLiveQueryResource<Output> =
+  & NativeRemoteResource<Output>
+  & Partial<AsyncIterable<Output>>
+  & {
+    readonly connected?: boolean;
+    readonly done?: boolean;
+    readonly reconnect?: () => Promise<void>;
+  };
 
 function is_query_resource<Output>(
   resource: unknown,
@@ -66,6 +138,40 @@ function is_query_resource<Output>(
   );
 }
 
+function is_live_resource<Output>(
+  resource: unknown,
+): resource is NativeLiveQueryResource<Output> {
+  const resource_type = typeof resource;
+
+  return (
+    (resource_type === "object" && resource !== null) ||
+    resource_type === "function"
+  );
+}
+
+function attach_remote_resource_getters<Output>(
+  resource: unknown,
+  effect: EffectRemoteResource<Output>,
+): void {
+  const methods = is_query_resource<Output>(resource) ? resource : undefined;
+  const keys = ["current", "error", "loading", "ready"] as const;
+
+  if (!methods) {
+    return;
+  }
+
+  for (const key of keys) {
+    if (!(key in methods)) {
+      continue;
+    }
+
+    Object.defineProperty(effect, key, {
+      configurable: true,
+      get: () => methods[key],
+    });
+  }
+}
+
 function attach_query_resource_methods<Output>(
   resource: unknown,
   effect: EffectRemoteQuery<Output>,
@@ -74,6 +180,8 @@ function attach_query_resource_methods<Output>(
   const refresh = methods?.refresh;
   const set = methods?.set;
   const with_override = methods?.withOverride;
+
+  attach_remote_resource_getters(resource, effect);
 
   if (!methods) {
     return;
@@ -106,6 +214,56 @@ function attach_query_resource_methods<Output>(
   }
 }
 
+function attach_live_resource_methods<Output>(
+  resource: unknown,
+  effect: EffectRemoteLiveQuery<Output>,
+): void {
+  const methods = is_live_resource<Output>(resource) ? resource : undefined;
+  const reconnect = methods?.reconnect;
+  const async_iterator = methods?.[Symbol.asyncIterator];
+  const keys = [
+    "connected",
+    "current",
+    "done",
+    "error",
+    "loading",
+    "ready",
+  ] as const;
+
+  if (!methods) {
+    return;
+  }
+
+  for (const key of keys) {
+    if (!(key in methods)) {
+      continue;
+    }
+
+    Object.defineProperty(effect, key, {
+      configurable: true,
+      get: () => methods[key],
+    });
+  }
+
+  if (typeof reconnect === "function") {
+    Object.defineProperty(effect, "reconnect", {
+      configurable: true,
+      value: () =>
+        Effect.tryPromise({
+          try: () => Promise.resolve(reconnect.call(resource)),
+          catch: (error: unknown) => error,
+        }),
+    });
+  }
+
+  if (typeof async_iterator === "function") {
+    Object.defineProperty(effect, Symbol.asyncIterator, {
+      configurable: true,
+      value: () => async_iterator.call(resource),
+    });
+  }
+}
+
 /**
  * Factory for a read-only remote query function.
  *
@@ -121,18 +279,18 @@ function attach_query_resource_methods<Output>(
  * @param maybe_handler - Handler used when a validator is supplied.
  * @returns A SvelteKit query function.
  */
-export function Query<A>(
+function QueryRoot<A>(
   validate_or_handler: EffectLike<A>,
 ): EffectRemoteQueryFunction<void, A>;
-export function Query<Input, A>(
+function QueryRoot<Input, A>(
   validate_or_handler: "unchecked",
   maybe_handler: RemoteHandler<Input, A>,
 ): EffectRemoteQueryFunction<Input, A>;
-export function Query<S extends Schema.Schema<unknown>, A>(
+function QueryRoot<S extends Schema.Schema<unknown>, A>(
   validate_or_handler: S,
   maybe_handler: RemoteHandler<SchemaInput<S>, A>,
 ): EffectRemoteQueryFunction<SchemaInput<S>, A>;
-export function Query(
+function QueryRoot(
   validate_or_handler: unknown,
   maybe_handler?: RemoteHandler,
 ): unknown {
@@ -158,6 +316,113 @@ export function Query(
     throw normalize_remote_helper_error(error, "Query");
   }
 }
+
+/**
+ * Factory for a batched read-only remote query function.
+ *
+ * @since 2.0.0
+ * @param validate_or_handler - A schema or `"unchecked"` sentinel.
+ * @param maybe_handler - Handler receiving validated inputs as one batch.
+ * @returns A SvelteKit batch query function.
+ */
+function QueryBatch<Input, A>(
+  validate_or_handler: "unchecked",
+  maybe_handler: EffectRemoteBatchHandler<Input, A>,
+): EffectRemoteQueryFunction<Input, A>;
+function QueryBatch<S extends Schema.Schema<unknown>, A>(
+  validate_or_handler: S,
+  maybe_handler: EffectRemoteBatchHandler<SchemaInput<S>, A>,
+): EffectRemoteQueryFunction<SchemaInput<S>, A>;
+function QueryBatch(
+  validate_or_handler: unknown,
+  maybe_handler?: EffectRemoteBatchHandler,
+): unknown {
+  try {
+    if (!maybe_handler) {
+      throw new Error("Query.batch requires a handler");
+    }
+
+    return to_effect_query(native_query.batch(
+      normalize_validator(validate_or_handler) as never,
+      make_remote_wrapper(
+        maybe_handler as RemoteHandler,
+        "Query.batch",
+      ) as never,
+    ) as NativeQueryLike);
+  } catch (error: unknown) {
+    throw normalize_remote_helper_error(error, "Query.batch");
+  }
+}
+
+/**
+ * Factory for a live remote query function.
+ *
+ * @since 2.0.0
+ * @param validate_or_handler - A schema, `"unchecked"`, or no-arg live handler.
+ * @param maybe_handler - Handler used when a validator is supplied.
+ * @returns A SvelteKit live query function.
+ */
+function QueryLive<A>(
+  validate_or_handler: RemoteLiveHandler<void, A>,
+): EffectRemoteLiveQueryFunction<void, A>;
+function QueryLive<Input, A>(
+  validate_or_handler: "unchecked",
+  maybe_handler: RemoteLiveHandler<Input, A>,
+): EffectRemoteLiveQueryFunction<Input, A>;
+function QueryLive<S extends Schema.Schema<unknown>, A>(
+  validate_or_handler: S,
+  maybe_handler: RemoteLiveHandler<SchemaInput<S>, A>,
+): EffectRemoteLiveQueryFunction<SchemaInput<S>, A>;
+function QueryLive(
+  validate_or_handler: unknown,
+  maybe_handler?: RemoteLiveHandler,
+): unknown {
+  try {
+    if (maybe_handler) {
+      return to_effect_live_query(native_query.live(
+        normalize_validator(validate_or_handler) as never,
+        make_remote_live_wrapper(
+          maybe_handler,
+          "Query.live",
+        ) as never,
+      ) as NativeQueryLike);
+    }
+
+    if (is_unchecked(validate_or_handler)) {
+      throw new Error("Query.live('unchecked', handler) requires a handler");
+    }
+
+    return to_effect_live_query(native_query.live(
+      make_remote_live_wrapper(
+        validate_or_handler as RemoteLiveHandler,
+        "Query.live",
+      ) as never,
+    ) as NativeQueryLike);
+  } catch (error: unknown) {
+    throw normalize_remote_helper_error(error, "Query.live");
+  }
+}
+
+/**
+ * Factory for read-only remote query functions.
+ *
+ * @example
+ * ```ts
+ * export const getUser = Query(Schema.Struct({ id: Schema.String }), (input) =>
+ *   Effect.succeed(input.id)
+ * );
+ *
+ * export const getUserBatch = Query.batch(Schema.String, (ids) =>
+ *   Effect.succeed((id) => ids.includes(id))
+ * );
+ * ```
+ *
+ * @since 2.0.0
+ */
+export const Query: QueryFactory = Object.assign(QueryRoot, {
+  batch: QueryBatch,
+  live: QueryLive,
+});
 
 /**
  * Factory for a write-oriented remote command function.

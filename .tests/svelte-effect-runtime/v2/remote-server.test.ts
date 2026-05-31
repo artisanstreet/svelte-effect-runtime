@@ -4,8 +4,9 @@ import {
   assertRejects,
   assertStringIncludes,
 } from "@std/assert";
-import { Effect } from "effect";
+import { Effect, Stream } from "effect";
 import { parse } from "devalue";
+import { run_live_handler_source } from "../../../modules/svelte-effect-runtime/src/server/effects.ts";
 import {
   encode_remote_failure,
   normalize_remote_helper_error,
@@ -203,3 +204,61 @@ Deno.test("run_remote_effect throws error on non-FormError failure", async () =>
   assertEquals(body.__svelte_effect_remote__, true);
   assertEquals(parsed._tag, "DbError");
 });
+
+Deno.test("run_live_handler_source converts Effect Streams to async iterables", async () => {
+  const source = await run_live_handler_source(
+    Stream.make(1, 2, 3),
+    make_request_event(),
+  );
+
+  const values: number[] = [];
+
+  for await (const value of source as AsyncIterable<number>) {
+    values.push(value);
+  }
+
+  assertEquals(values, [1, 2, 3]);
+});
+
+Deno.test("run_live_handler_source passes through native async iterables", async () => {
+  async function* make_source(): AsyncGenerator<string> {
+    yield "first";
+    yield "second";
+  }
+
+  const source = await run_live_handler_source(
+    make_source(),
+    make_request_event(),
+  );
+
+  const values: string[] = [];
+
+  for await (const value of source as AsyncIterable<string>) {
+    values.push(value);
+  }
+
+  assertEquals(values, ["first", "second"]);
+});
+
+function make_request_event() {
+  return {
+    cookies: {
+      delete() {},
+      get() {
+        return undefined;
+      },
+      serialize() {
+        return "";
+      },
+      set() {},
+    },
+    getClientAddress() {
+      return "127.0.0.1";
+    },
+    locals: {},
+    params: {},
+    request: new Request("http://localhost/test"),
+    route: { id: null },
+    url: new URL("http://localhost/test"),
+  };
+}

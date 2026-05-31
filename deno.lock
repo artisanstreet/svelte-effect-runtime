@@ -11,7 +11,7 @@
     "npm:@babel/parser@*": "7.29.2",
     "npm:@babel/parser@^7.29.2": "7.29.2",
     "npm:@jridgewell/trace-mapping@~0.3.31": "0.3.31",
-    "npm:@sveltejs/kit@^2.56.1": "2.56.1_@sveltejs+vite-plugin-svelte@6.2.4__svelte@5.56.0__vite@7.3.1___@types+node@24.12.2___picomatch@4.0.4_svelte@5.56.0_typescript@5.9.3_vite@7.3.1__@types+node@24.12.2__picomatch@4.0.4",
+    "npm:@sveltejs/kit@^2.61.1": "2.61.1_@sveltejs+vite-plugin-svelte@6.2.4__svelte@5.56.0__vite@7.3.1___@types+node@24.12.2___picomatch@4.0.4_svelte@5.56.0_typescript@5.9.3_vite@7.3.1__@types+node@24.12.2__picomatch@4.0.4",
     "npm:@sveltejs/vite-plugin-svelte@^6.2.4": "6.2.4_svelte@5.56.0_vite@7.3.1__@types+node@24.12.2__picomatch@4.0.4",
     "npm:@tailwindcss/postcss@^4.3.0": "4.3.0",
     "npm:@types/mdx@^2.0.13": "2.0.13",
@@ -1504,8 +1504,8 @@
         "acorn"
       ]
     },
-    "@sveltejs/kit@2.56.1_@sveltejs+vite-plugin-svelte@6.2.4__svelte@5.56.0__vite@7.3.1___@types+node@24.12.2___picomatch@4.0.4_svelte@5.56.0_typescript@5.9.3_vite@7.3.1__@types+node@24.12.2__picomatch@4.0.4": {
-      "integrity": "sha512-9hDOl3yUh8UXWt+mN29dbcdrW0vNwPvMqi01y2Mw+ceErNIISh8MeEY7fXT2Dx1CjC/kfsVqrbxw7DifYr4hsg==",
+    "@sveltejs/kit@2.61.1_@sveltejs+vite-plugin-svelte@6.2.4__svelte@5.56.0__vite@7.3.1___@types+node@24.12.2___picomatch@4.0.4_svelte@5.56.0_typescript@5.9.3_vite@7.3.1__@types+node@24.12.2__picomatch@4.0.4": {
+      "integrity": "sha512-Ny8s1SR1TyQS2hD2Rvw0XKzU2Nw1eUF52dTb6T2bdcgz7wSC+Nyb5IwjWYlR4b2dvbbR5NJDiQwHg3rnNseghg==",
       "dependencies": [
         "@standard-schema/spec",
         "@sveltejs/acorn-typescript",
@@ -4002,7 +4002,7 @@
         "dependencies": [
           "jsr:@std/assert@^1.0.15",
           "jsr:@std/path@^1.1.2",
-          "npm:@sveltejs/kit@^2.56.1",
+          "npm:@sveltejs/kit@^2.61.1",
           "npm:@sveltejs/vite-plugin-svelte@^6.2.4",
           "npm:devalue@^5.5.0",
           "npm:effect@beta",
@@ -4036,7 +4036,7 @@
           "jsr:@std/assert@^1.0.15",
           "jsr:@std/path@^1.1.2",
           "npm:@babel/parser@^7.29.2",
-          "npm:@sveltejs/kit@^2.56.1",
+          "npm:@sveltejs/kit@^2.61.1",
           "npm:@sveltejs/vite-plugin-svelte@^6.2.4",
           "npm:devalue@^5.5.0",
           "npm:effect@beta",

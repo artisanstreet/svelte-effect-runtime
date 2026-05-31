@@ -112,6 +112,8 @@ Deno.test("vite remote client wrapper preserves native SvelteKit remote module",
     `import * as __remote from '__sveltekit/remote';`,
     ``,
     `export const get_post = __remote.query('abc/get_post');`,
+    `export const get_post_batch = __remote.query_batch('abc/get_post_batch');`,
+    `export const get_clock = __remote.query_live('abc/get_clock');`,
     `export const save_post = __remote.command('abc/save_post');`,
     `export const create_post = __remote.form('abc/create_post');`,
   ].join("\n");
@@ -120,11 +122,20 @@ Deno.test("vite remote client wrapper preserves native SvelteKit remote module",
 
   assertStringIncludes(result, `from '__sveltekit/remote';`);
   assertStringIncludes(result, `create_remote_query_adapter`);
+  assertStringIncludes(result, `create_remote_live_query_adapter`);
   assertStringIncludes(result, `create_remote_command_adapter`);
   assertStringIncludes(result, `create_remote_form_adapter`);
   assertStringIncludes(
     result,
     `export const get_post = create_remote_query_adapter(__remote.query('abc/get_post'), __ser_decode_payload);`,
+  );
+  assertStringIncludes(
+    result,
+    `export const get_post_batch = create_remote_query_adapter(__remote.query_batch('abc/get_post_batch'), __ser_decode_payload);`,
+  );
+  assertStringIncludes(
+    result,
+    `export const get_clock = create_remote_live_query_adapter(__remote.query_live('abc/get_clock'), __ser_decode_payload);`,
   );
   assertStringIncludes(
     result,

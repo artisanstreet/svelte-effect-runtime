@@ -61,12 +61,59 @@ export const get_user = Query(Schema.Struct({ id: Schema.String }), ({ id }) =>
 
 The client can handle the failure in an await block or inside an Effect pipeline.
 
+## Batch Queries
+
+Use `Query.batch` when many components request related rows in the same render pass. SvelteKit collects calls from the same macrotask and runs one server handler.
+
+```ts
+import { Query } from "svelte-effect-runtime/server";
+import { Effect, Schema } from "effect";
+
+export const get_user_summary = Query.batch(Schema.String, (ids) =>
+  Effect.succeed((id, index) => ({
+    id,
+    index,
+    found: ids.includes(id),
+  })),
+);
+```
+
+The returned query is still Effect-yieldable and keeps query controls like `refresh`, `set`, and `withOverride`.
+
+## Live Queries
+
+Use `Query.live` for server data that should stay connected while it is actively used. Effect Streams are accepted directly, and native async iterables work too.
+
+```ts
+import { Query } from "svelte-effect-runtime/server";
+import { Schema, Stream } from "effect";
+
+export const get_clock = Query.live(Schema.String, (_id) =>
+  Stream.tick(1000).pipe(
+    Stream.map(() => new Date()),
+  ),
+);
+```
+
+```svelte
+<script lang="ts" effect>
+  import { get_clock } from "./clock.remote";
+
+  const clock = get_clock("main");
+  const reconnect = () => clock.reconnect();
+</script>
+
+<p>{yield* clock}</p>
+<button onclick={reconnect}>Reconnect</button>
+```
+
 ## Common Mistakes
 
 - Mutating data in a query handler.
 - Accepting unvalidated input because TypeScript already knows the caller.
 - Throwing plain `Error` for expected business failures.
 - Calling a query repeatedly with unstable object inputs created from noisy state.
+- Using `Query.live` for data that only needs an explicit `refresh`.
 
 ## Related Pages
 

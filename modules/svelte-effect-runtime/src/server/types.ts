@@ -5,7 +5,7 @@ import type {
   RemoteQueryOverride,
 } from "@sveltejs/kit";
 import type { EffectRemoteForm as ClientEffectRemoteForm } from "$/remote/client.ts";
-import type { Effect, Schema } from "effect";
+import type { Effect, Schema, Stream } from "effect";
 
 /**
  * Effect-like values accepted by remote helper wrappers.
@@ -24,6 +24,17 @@ export type EffectLike<A = unknown> =
 export type RemoteHandler<Input = unknown, A = unknown> = (
   input: Input,
 ) => EffectLike<A>;
+
+/**
+ * Handler shape accepted by batch query helpers. The handler receives the
+ * validated inputs collected by SvelteKit and returns an Effect-producing
+ * resolver for each requested input.
+ *
+ * @since 2.0.0
+ */
+export type EffectRemoteBatchHandler<Input = unknown, A = unknown> = (
+  inputs: readonly Input[],
+) => EffectLike<(input: Input, index: number) => A>;
 
 /**
  * Handler shape accepted by the form helper.
@@ -81,6 +92,23 @@ export type SchemaInput<S> = S extends Schema.Schema<infer Input> ? Input
   : unknown;
 
 /**
+ * Source values accepted by live query helpers.
+ *
+ * @example
+ * ```ts
+ * const source: EffectRemoteLiveSource<number> = Stream.make(1, 2, 3);
+ * ```
+ *
+ * @since 2.0.0
+ */
+export type EffectRemoteLiveSource<A> =
+  | Stream.Stream<A, unknown, unknown>
+  | AsyncIterable<A>
+  | AsyncIterator<A>
+  | Iterable<A>
+  | Iterator<A>;
+
+/**
  * Effect-returning remote function type exposed by query and prerender.
  *
  * @example
@@ -112,9 +140,13 @@ export type EffectRemoteFunction<Input, A> = [Input] extends [void]
  * @since 2.0.0
  */
 export type EffectRemoteQuery<A> =
-  & Effect.Effect<A, RemoteFailure<unknown>, unknown>
+  & Effect.Effect<A, RemoteFailure<unknown>, never>
   & Pick<RemoteQuery<A>, "set">
   & {
+    readonly current: A | undefined;
+    readonly error: unknown;
+    readonly loading: boolean;
+    readonly ready: boolean;
     readonly refresh: () => Effect.Effect<void, unknown, never>;
     readonly withOverride: (
       update: (current: A) => A,
@@ -138,6 +170,52 @@ export type EffectRemoteQueryFunction<Input, A> = [Input] extends [void]
   ? () => EffectRemoteQuery<A>
   : undefined extends Input ? (input?: Input) => EffectRemoteQuery<A>
   : (input: Input) => EffectRemoteQuery<A>;
+
+/**
+ * Effect-returning live query resource with SvelteKit live stream state and
+ * reconnect controls preserved.
+ *
+ * @example
+ * ```ts
+ * const clock = getClock();
+ * yield* clock.reconnect();
+ *
+ * for await (const value of clock) {
+ *   console.log(value);
+ * }
+ * ```
+ *
+ * @since 2.0.0
+ */
+export type EffectRemoteLiveQuery<A> =
+  & Effect.Effect<A, RemoteFailure<unknown>, never>
+  & AsyncIterable<A>
+  & {
+    readonly connected: boolean;
+    readonly current: A | undefined;
+    readonly done: boolean;
+    readonly error: unknown;
+    readonly loading: boolean;
+    readonly ready: boolean;
+    readonly reconnect: () => Effect.Effect<void, unknown, never>;
+  };
+
+/**
+ * Effect-returning remote live query function with SvelteKit live stream
+ * properties preserved on the returned Effect.
+ *
+ * @example
+ * ```ts
+ * const clock = getClock();
+ * yield* clock;
+ * ```
+ *
+ * @since 2.0.0
+ */
+export type EffectRemoteLiveQueryFunction<Input, A> = [Input] extends [void]
+  ? () => EffectRemoteLiveQuery<A>
+  : undefined extends Input ? (input?: Input) => EffectRemoteLiveQuery<A>
+  : (input: Input) => EffectRemoteLiveQuery<A>;
 
 /**
  * Effect-returning command type with SvelteKit's pending counter preserved.

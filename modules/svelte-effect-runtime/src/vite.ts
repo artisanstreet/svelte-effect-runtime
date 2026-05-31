@@ -128,7 +128,7 @@ export function rewrite_remote_client_exports(
 
   const namespace = import_match[1];
   const export_pattern = new RegExp(
-    `export\\s+const\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${namespace}\\.(query_batch|query|command|form|prerender)\\((["'][^"']+["'])\\);?`,
+    `export\\s+const\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${namespace}\\.(query_batch|query_live|query|command|form|prerender)\\((["'][^"']+["'])\\);?`,
     "g",
   );
 
@@ -148,7 +148,7 @@ export function rewrite_remote_client_exports(
 
   const imports = [
     `import { app_dir, base } from "$app/paths/internal/client";`,
-    `import { create_remote_query_adapter, create_remote_command_adapter, create_remote_form_adapter } from "svelte-effect-runtime/internal/remote-client";`,
+    `import { create_remote_query_adapter, create_remote_live_query_adapter, create_remote_command_adapter, create_remote_form_adapter } from "svelte-effect-runtime/internal/remote-client";`,
   ].join("\n");
 
   const helpers = [
@@ -184,6 +184,10 @@ function make_remote_export(
 
   if (type === "form") {
     return `export const ${name} = create_remote_form_adapter(${native_call}, __ser_decode_payload, __ser_remote_base);`;
+  }
+
+  if (type === "query_live") {
+    return `export const ${name} = create_remote_live_query_adapter(${native_call}, __ser_decode_payload);`;
   }
 
   return `export const ${name} = create_remote_query_adapter(${native_call}, __ser_decode_payload);`;

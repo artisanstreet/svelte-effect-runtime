@@ -53,8 +53,9 @@ Deno.test("server remote helpers stay Effect-yieldable in markup helpers", async
   await assert_type_checks(
     "server-remote-markup.ts",
     `
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Stream } from "effect";
 import { Command, Form, Query } from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
+import type { EffectRemoteLiveSource } from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
 import { promise } from "__RUNTIME__/modules/svelte-effect-runtime/src/markup/promise.ts";
 import { run } from "__RUNTIME__/modules/svelte-effect-runtime/src/markup/run.ts";
 
@@ -72,6 +73,20 @@ const posts = [{
 const GetPosts = Query(Effect.gen(function* () {
   return posts;
 }));
+const GetPostSummary = Query.batch(Schema.String, (ids) =>
+  Effect.succeed((id, index) => ({
+    id,
+    index,
+    known: ids.includes(id),
+  }))
+);
+const GetClock = Query.live("unchecked", (_key: string) =>
+  Stream.make(1, 2, 3)
+);
+const GetNativeClock = Query.live(async function* () {
+  yield "tick";
+});
+const live_source: EffectRemoteLiveSource<number> = Stream.make(1);
 
 const UpvotePost = Command(Schema.String, (id) =>
   Effect.gen(function* () {
@@ -102,10 +117,18 @@ const SignIn = Form(
 const SignOut = Form(Effect.succeed({ signedOut: true }));
 
 type GetPostsParameters = Parameters<typeof GetPosts>;
+type GetPostSummaryParameters = Parameters<typeof GetPostSummary>;
+type GetClockParameters = Parameters<typeof GetClock>;
+type GetNativeClockParameters = Parameters<typeof GetNativeClock>;
 type UpvotePostParameters = Parameters<typeof UpvotePost>;
 type SignInParameters = Parameters<typeof SignIn>;
 type SignInInput = SignInParameters[0];
 type GetPostsHasNoInputParameter = Assert<Equal<GetPostsParameters, []>>;
+type GetPostSummaryRequiresInput = Assert<
+  Equal<GetPostSummaryParameters, [input: string]>
+>;
+type GetClockRequiresInput = Assert<Equal<GetClockParameters, [input: string]>>;
+type GetNativeClockHasNoInput = Assert<Equal<GetNativeClockParameters, []>>;
 type UpvotePostStillRequiresInput = Assert<
   Equal<UpvotePostParameters, [input: string]>
 >;
@@ -116,8 +139,12 @@ type SignInKeepsPasswordField = Assert<
 
 async function check_generated_markup_helpers() {
   const posts_query = GetPosts();
+  const summary_query = GetPostSummary("one");
+  const clock_query = GetClock("main");
   const refresh_effect: Effect.Effect<void, unknown, never> =
     posts_query.refresh();
+  const reconnect_effect: Effect.Effect<void, unknown, never> =
+    clock_query.reconnect();
   const sign_out_effect = SignOut();
 
   posts_query.set(posts);
@@ -125,8 +152,26 @@ async function check_generated_markup_helpers() {
 
   release_override();
   await Effect.runPromise(refresh_effect);
+  await Effect.runPromise(reconnect_effect);
+  await Effect.runPromise(summary_query.refresh());
   const sign_out_result = await Effect.runPromise(sign_out_effect);
+  const summary = await Effect.runPromise(summary_query);
+  const clock_value = await Effect.runPromise(clock_query);
+  const native_clock_value = await Effect.runPromise(GetNativeClock());
   const signed_out: boolean = sign_out_result.signedOut;
+  const connected: boolean = clock_query.connected;
+  const done: boolean = clock_query.done;
+  const summary_id: string = summary.id;
+  const summary_index: number = summary.index;
+  const summary_known: boolean = summary.known;
+  const clock_number: number = clock_value;
+  const native_clock_string: string = native_clock_value;
+
+  for await (const value of clock_query) {
+    const streamed_value: number = value;
+
+    break;
+  }
 
   const loaded = await promise("posts", [], function* () {
     return yield* GetPosts();
@@ -142,6 +187,15 @@ async function check_generated_markup_helpers() {
 
     return next_likes;
   });
+
+  void connected;
+  void done;
+  void summary_id;
+  void summary_index;
+  void summary_known;
+  void clock_number;
+  void native_clock_string;
+  void live_source;
 }
 
 void check_generated_markup_helpers;
@@ -167,6 +221,15 @@ type MaybePromise<T> = T | Promise<T>;
 export function query<Output>(fn: () => MaybePromise<Output>): unknown;
 export function query(..._args: unknown[]): unknown {
   return undefined;
+}
+export namespace query {
+  export function batch(..._args: unknown[]): unknown {
+    return undefined;
+  }
+
+  export function live(..._args: unknown[]): unknown {
+    return undefined;
+  }
 }
 
 export function command<Output>(fn: () => MaybePromise<Output>): unknown;

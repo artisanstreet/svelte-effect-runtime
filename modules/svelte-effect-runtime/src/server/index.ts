@@ -7,9 +7,13 @@ export {
 
 export type {
   EffectLike,
+  EffectRemoteBatchHandler,
   EffectRemoteCommand,
   EffectRemoteForm,
   EffectRemoteFunction,
+  EffectRemoteLiveQuery,
+  EffectRemoteLiveQueryFunction,
+  EffectRemoteLiveSource,
   EffectRemoteQuery,
   EffectRemoteQueryFunction,
   FormInvalid,
