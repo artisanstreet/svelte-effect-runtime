@@ -42,6 +42,12 @@ Pick the shape that matches the user intent:
   <Card title="Query" href="/docs/remote-functions/query">
     Read server data without changing it.
   </Card>
+  <Card title="Query.batch" href="/docs/remote-functions/query-batch">
+    Batch repeated lookups discovered during render.
+  </Card>
+  <Card title="Query.live" href="/docs/remote-functions/query-live">
+    Stream changing server data into the client.
+  </Card>
   <Card title="Command" href="/docs/remote-functions/command">
     Run a mutation from a button, menu item, or effect.
   </Card>
@@ -56,6 +62,8 @@ Pick the shape that matches the user intent:
 ## Decision Guide
 
 - Use `Query` when the UI needs server data without changing it.
+- Use `Query.batch` when many small same-kind reads should become one server call.
+- Use `Query.live` when server data should keep streaming while the UI is connected.
 - Use `Command` when the user does something that changes server state.
 - Use `Form` when HTML form semantics, validation, and progressive enhancement matter.
 - Use `Prerender` when data can be resolved at build time or cached as static output.
