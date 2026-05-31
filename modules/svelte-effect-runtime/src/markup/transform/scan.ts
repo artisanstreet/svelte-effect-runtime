@@ -14,6 +14,12 @@ interface SanitizeResult {
   candidates: MarkupCandidate[];
 }
 
+interface DeclarationInitializer {
+  start: number;
+  end: number;
+  expr_text: string;
+}
+
 export function sanitize_markup(
   content: string,
   filename: string,
@@ -46,6 +52,34 @@ export function sanitize_markup(
     const leading_ws = inner.length - trimmed.length;
 
     const tag_info = get_tag_info(trimmed);
+
+    const declaration_initializers = collect_declaration_initializers(
+      content,
+      open,
+      leading_ws,
+      trimmed,
+    );
+
+    if (declaration_initializers.length > 0) {
+      for (const initializer of declaration_initializers) {
+        const placeholder = `__ser_markup_placeholder_${helper_index}`;
+        helper_index += 1;
+
+        candidates.push({
+          placeholder,
+          start: initializer.start,
+          end: initializer.end,
+          expr_text: initializer.expr_text,
+          filename,
+          key: "plain",
+        });
+
+        magic.overwrite(initializer.start, initializer.end, placeholder);
+      }
+
+      cursor = close + 1;
+      continue;
+    }
 
     let expr_body = trimmed.slice(tag_info.prefix_length);
 
@@ -253,6 +287,54 @@ function get_tag_info(trimmed: string): TagInfo {
   }
 
   return { kind: "plain", prefix_length: 0 };
+}
+
+function collect_declaration_initializers(
+  content: string,
+  open: number,
+  leading_ws: number,
+  trimmed: string,
+): DeclarationInitializer[] {
+  if (!is_declaration_tag_text(trimmed)) {
+    return [];
+  }
+
+  const source_file = ts.createSourceFile(
+    "declaration-tag.ts",
+    `${trimmed};`,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+
+  const stmt = source_file.statements[0];
+
+  if (!stmt || !ts.isVariableStatement(stmt)) {
+    return [];
+  }
+
+  const tag_start = open + 1 + leading_ws;
+
+  return stmt.declarationList.declarations
+    .filter((decl) =>
+      decl.initializer && contains_top_level_yield_star(decl.initializer)
+    )
+    .map((decl) => {
+      const initializer = decl.initializer as ts.Expression;
+      const start = tag_start + initializer.getStart(source_file);
+      const end = tag_start + initializer.end;
+      const expr_text = content.slice(start, end).trim();
+
+      return {
+        start,
+        end,
+        expr_text,
+      };
+    });
+}
+
+function is_declaration_tag_text(trimmed: string): boolean {
+  return /^(?:const|let)\s/.test(trimmed);
 }
 
 function is_event_expression(inner: string): boolean {

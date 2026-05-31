@@ -125,6 +125,48 @@ Deno.test("rewrites {@const x = yield* expr} in const initializer", () => {
   if (!result.has_yield) throw new Error("has_yield should be true");
 });
 
+Deno.test("rewrites {const x = yield* expr} in declaration initializer", () => {
+  const source = `{const x = yield* compute()}{x}`;
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `{const x = await __ser_markup_promise`);
+  assertStringIncludes(result.code, `compute`);
+  if (!result.has_yield) throw new Error("has_yield should be true");
+});
+
+Deno.test("rewrites {let x = yield* expr} in declaration initializer", () => {
+  const source = `{let x = yield* compute()}{x}`;
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `{let x = await __ser_markup_promise`);
+  assertStringIncludes(result.code, `compute`);
+  if (!result.has_yield) throw new Error("has_yield should be true");
+});
+
+Deno.test("rewrites destructured declaration tag initializers", () => {
+  const source = `{const { value } = yield* load()}{value}`;
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertStringIncludes(
+    result.code,
+    `{const { value } = await __ser_markup_promise`,
+  );
+  assertStringIncludes(result.code, `load`);
+  if (!result.has_yield) throw new Error("has_yield should be true");
+});
+
+Deno.test("rewrites multiple declaration tag initializers", () => {
+  const source = `{const a = yield* getA(), b = yield* getB()}{a}{b}`;
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  const promise_calls =
+    [...result.code.matchAll(/\b__ser_markup_promise\(/g)].length;
+
+  assertEquals(promise_calls, 2);
+  assertStringIncludes(result.code, `getA`);
+  assertStringIncludes(result.code, `getB`);
+});
+
 Deno.test("rewrites {#key yield* expr} in key expression", () => {
   const source = `{#key yield* getKey()}<p>content</p>{/key}`;
   const result = transform_markup_effect(source, "Test.svelte");

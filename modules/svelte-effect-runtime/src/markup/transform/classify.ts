@@ -117,7 +117,8 @@ function visit_ast_node(
       return;
 
     case "ConstTag":
-      classify_const_tag(node, candidates, matched, classified);
+    case "DeclarationTag":
+      classify_declaration_tag(node, candidates, matched, classified);
       return;
 
     case "KeyBlock":
@@ -170,19 +171,22 @@ function classify_debug_tag(
   }
 }
 
-function classify_const_tag(
-  node: Extract<AST.Fragment["nodes"][number], { type: "ConstTag" }>,
+function classify_declaration_tag(
+  node: Extract<
+    AST.Fragment["nodes"][number],
+    { type: "ConstTag" | "DeclarationTag" }
+  >,
   candidates: Map<string, MarkupCandidate>,
   matched: Set<string>,
   classified: Array<{ candidate: MarkupCandidate; kind: TagKind }>,
 ): void {
-  const decl = node.declaration.declarations[0];
+  for (const decl of node.declaration.declarations) {
+    if (!decl.init) {
+      continue;
+    }
 
-  if (!decl?.init) {
-    return;
+    classify_expression(decl.init, "plain", candidates, matched, classified);
   }
-
-  classify_expression(decl.init, "plain", candidates, matched, classified);
 }
 
 interface ElementLikeNode {
