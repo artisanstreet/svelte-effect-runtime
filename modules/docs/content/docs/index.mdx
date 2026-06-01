@@ -17,13 +17,13 @@ description: Write Effect programs directly in Svelte components and SvelteKit r
   </Card>
 </Cards>
 
-## When To Use This
+## When to use this
 
 Use `svelte-effect-runtime` when your SvelteKit app already benefits from Effect services, typed failures, layers, or structured concurrency. It is especially useful when browser code and server code should share the same error model instead of converting every boundary to plain promises.
 
 Skip it for components that only need simple local state. Plain Svelte is still the right tool for simple UI transitions and tiny event handlers.
 
-## Three-Minute Setup
+## Three-minute setup
 
 Install the package, add the Svelte preprocessor, and add the Vite plugin before `sveltekit()`:
 
@@ -50,7 +50,7 @@ export default defineConfig({
 });
 ```
 
-## First Working Example
+## First working example
 
 Add `effect` to a component script and yield an Effect value from markup:
 
@@ -64,7 +64,7 @@ Add `effect` to a component script and yield an Effect value from markup:
 <p>{yield* greeting}</p>
 ```
 
-## Realistic Variant
+## Realistic variant
 
 Use a remote `Query` when the value belongs on the server:
 
@@ -96,7 +96,7 @@ export const get_profile = Query(ProfileInput, ({ user_id }) =>
 {/await}
 ```
 
-## Common Mistakes
+## Common mistakes
 
 - Add `preprocess: [preprocess()]` in `svelte.config.js`; that is what lowers component `yield*`.
 - Put `effect()` before `sveltekit()` in `vite.config.ts`; the plugin wraps server and remote-client code.
@@ -104,7 +104,7 @@ export const get_profile = Query(ProfileInput, ({ user_id }) =>
 - Use remote functions for server work instead of importing server-only services into browser components.
 - Keep examples small at first; introduce custom layers after the basic runtime works.
 
-## Related Pages
+## Related pages
 
 - [Install](/docs/install)
 - [Mental model](/docs/mental-model)

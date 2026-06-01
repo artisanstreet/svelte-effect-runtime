@@ -5,11 +5,11 @@ description: Add the package, Vite plugin, Svelte config flag, and editor notes.
 
 Installation has three parts: install the package, add the Svelte preprocessor, and add the Vite plugin. If you plan to use remote functions, also enable SvelteKit's remote function flag.
 
-## When To Use This
+## When to use this
 
 Use this page when starting a new SvelteKit app or when adding Effect support to an existing app. The setup is intentionally small, but the Svelte preprocessor is required for component `yield*`.
 
-## Minimal Working Example
+## Minimal working example
 
 <CodeBlockTabs defaultValue="pnpm">
   <CodeBlockTabsList>
@@ -95,7 +95,7 @@ const config = {
 export default config;
 ```
 
-## Realistic Variant
+## Realistic variant
 
 Many apps start with the default runtime and add custom services later:
 
@@ -110,11 +110,11 @@ export const init = () => {
 
 Put client runtime setup in `src/hooks.client.ts` and server runtime setup in `src/hooks.server.ts`.
 
-## Why Both Hooks Are Needed
+## Why both hooks are needed
 
 The Svelte preprocessor lowers `<script effect>` and markup `yield*` before Svelte parses the component. The Vite plugin handles server import rewrites and wraps SvelteKit's generated remote client exports in Effect-returning adapters.
 
-## Common Mistakes
+## Common mistakes
 
 - Forgetting `preprocess: [preprocess()]` in `svelte.config.js`.
 - Placing `effect()` after `sveltekit()` in the Vite plugin list.
@@ -122,7 +122,7 @@ The Svelte preprocessor lowers `<script effect>` and markup `yield*` before Svel
 - Installing the runtime package but forgetting the peer Effect package in package managers that do not hoist it for you.
 - Expecting the language server or VS Code extension packages to be part of V2 runtime work.
 
-## Related Pages
+## Related pages
 
 - [Mental model](/docs/mental-model)
 - [Vite plugin reference](/docs/reference/vite-plugin)

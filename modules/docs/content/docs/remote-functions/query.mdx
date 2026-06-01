@@ -5,11 +5,11 @@ description: Read server data with schemas, typed failures, and client usage.
 
 Use `Query` when the client needs server data and the operation should not mutate anything. A query is easiest to reason about when identical input can safely return cached or repeated output.
 
-## When To Use This
+## When to use this
 
 Use `Query` for dashboards, profile data, search results, permissions, and detail pages. Reach for `Command` or `Form` when a user action changes state.
 
-## Minimal Working Example
+## Minimal working example
 
 ```ts
 import { Query } from "svelte-effect-runtime/server";
@@ -41,7 +41,7 @@ export const get_user = Query(UserInput, ({ id }) =>
 {/await}
 ```
 
-## Realistic Variant
+## Realistic variant
 
 Model expected failures as data:
 
@@ -61,7 +61,7 @@ export const get_user = Query(Schema.Struct({ id: Schema.String }), ({ id }) =>
 
 The client can handle the failure in an await block or inside an Effect pipeline.
 
-## Query Variants
+## Query variants
 
 Use the base `Query` helper for one read per input. Reach for a variant when the access pattern changes:
 
@@ -74,14 +74,14 @@ Use the base `Query` helper for one read per input. Reach for a variant when the
   </Card>
 </Cards>
 
-## Common Mistakes
+## Common mistakes
 
 - Mutating data in a query handler.
 - Accepting unvalidated input because TypeScript already knows the caller.
 - Throwing plain `Error` for expected business failures.
 - Calling a query repeatedly with unstable object inputs created from noisy state.
 
-## Related Pages
+## Related pages
 
 - [Remote function overview](/docs/remote-functions)
 - [Query.batch](/docs/remote-functions/query-batch)

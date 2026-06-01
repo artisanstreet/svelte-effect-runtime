@@ -5,11 +5,11 @@ description: Provide Effect requirements to client and server runtimes.
 
 Layers keep dependencies explicit. Client effects get browser services from the client runtime, and remote handlers get server services from the server runtime.
 
-## When To Use This
+## When to use this
 
 Use this recipe once Effects need anything beyond pure values: storage, HTTP clients, database access, sessions, clocks, or logging.
 
-## Minimal Working Example
+## Minimal working example
 
 ```ts
 import { Context, Effect, Layer } from "effect";
@@ -24,7 +24,7 @@ export const LoggerLive = Layer.succeed(Logger, {
 });
 ```
 
-## Realistic Variant
+## Realistic variant
 
 Provide different layers to each runtime:
 
@@ -48,14 +48,14 @@ export const init = () => {
 };
 ```
 
-## Common Mistakes
+## Common mistakes
 
 - Sharing server-only layers with the browser bundle.
 - Making services depend on request data instead of reading `RequestEvent`.
 - Hiding dependency construction inside remote handlers.
 - Over-layering small components that only need local state.
 
-## Related Pages
+## Related pages
 
 - [Client runtime](/docs/client/runtime)
 - [Server runtime](/docs/server/runtime)

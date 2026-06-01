@@ -5,11 +5,11 @@ description: Batch many related remote reads into one server call.
 
 Use `Query.batch` when many parts of a page ask for the same kind of data at the same time. It is for small repeated lookups, not one large report.
 
-## When To Use This
+## When to use this
 
 Use `Query.batch` for list rows, permission checks, avatars, counters, or related records where each component knows only its own input. SvelteKit collects calls made in the same macrotask and sends them to one server handler.
 
-## Minimal Working Example
+## Minimal working example
 
 ```ts
 import { Query } from "svelte-effect-runtime/server";
@@ -44,7 +44,7 @@ export const get_author = Query.batch(Schema.String, (author_ids) =>
 {/await}
 ```
 
-## How It Works
+## How it works
 
 The client still calls `get_author("ada")` like a normal query. During a render pass, SvelteKit groups nearby calls and invokes the server handler once with the validated inputs:
 
@@ -60,14 +60,14 @@ export const get_author = Query.batch(Schema.String, (author_ids) =>
 
 The handler returns a resolver function. SvelteKit calls that resolver for each original input, so each component still receives its own result. The returned query remains Effect-yieldable and keeps `refresh`, `set`, and `withOverride`.
 
-## Common Mistakes
+## Common mistakes
 
 - Using `Query.batch` for one expensive request. Use `Query` for that.
 - Doing one database query per input inside the batch handler.
-- Returning results by array position when input identity is the safer lookup key.
+- Returning results by array position when input identity is safer.
 - Using batch for live updates. Use `Query.live` when the server should keep streaming.
 
-## Related Pages
+## Related pages
 
 - [Query](/docs/remote-functions/query)
 - [Query.live](/docs/remote-functions/query-live)

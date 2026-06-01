@@ -5,11 +5,11 @@ description: Access cookies, locals, params, and request-specific data from serv
 
 Remote handlers often need the SvelteKit request: cookies, locals, route params, headers, and auth state. `RequestEvent` exposes that request-scoped context to Effect code.
 
-## When To Use This
+## When to use this
 
 Use `RequestEvent` when a handler needs data that changes per request. Keep application services in layers and request data in request context.
 
-## Minimal Working Example
+## Minimal working example
 
 ```ts
 import { Query, RequestEvent } from "svelte-effect-runtime/server";
@@ -24,7 +24,7 @@ export const get_session_id = Query(() =>
 );
 ```
 
-## Realistic Variant
+## Realistic variant
 
 Read auth data from `locals` and fail when the user is missing:
 
@@ -50,14 +50,14 @@ export const get_me = Query(() =>
 );
 ```
 
-## Common Mistakes
+## Common mistakes
 
 - Caching the whole event object in a long-lived service.
 - Reading cookies from client code.
 - Mixing request-specific auth data into global runtime layers.
 - Throwing redirects or HTTP errors without deciding how the client should handle them.
 
-## Related Pages
+## Related pages
 
 - [Server runtime](/docs/server/runtime)
 - [Server errors](/docs/server/errors)

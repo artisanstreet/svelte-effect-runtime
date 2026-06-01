@@ -5,11 +5,11 @@ description: Configure ClientRuntime.make, layers, and browser services.
 
 The client runtime is the Effect runtime used by component effects in the browser. If you do nothing, a default runtime is created lazily. Register one when browser code needs services.
 
-## When To Use This
+## When to use this
 
 Use `ClientRuntime.make` when component effects depend on clocks, storage, analytics, feature flags, or other browser-side services.
 
-## Minimal Working Example
+## Minimal working example
 
 ```ts
 import { ClientRuntime } from "svelte-effect-runtime";
@@ -22,7 +22,7 @@ export const init = () => {
 
 Put this in `src/hooks.client.ts` so it runs when the browser app starts.
 
-## Realistic Variant
+## Realistic variant
 
 Provide a browser service layer:
 
@@ -48,14 +48,14 @@ Then use the service from a component Effect:
 </script>
 ```
 
-## Common Mistakes
+## Common mistakes
 
 - Creating a new runtime inside each component instead of once in a hook.
 - Providing server-only services to the browser runtime.
 - Registering services after components have already started reading them.
 - Hiding side effects in service constructors; prefer Effect resources for acquisition.
 
-## Related Pages
+## Related pages
 
 - [Services and layers](/docs/recipes/services-and-layers)
 - [Server runtime](/docs/server/runtime)

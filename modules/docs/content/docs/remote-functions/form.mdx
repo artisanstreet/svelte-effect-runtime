@@ -5,11 +5,11 @@ description: Build progressive forms with submit, validate, enhance, and field e
 
 Use `Form` when the browser should submit user input with normal form semantics while your server handler stays inside Effect. It is the best fit for validation, field errors, and progressive enhancement.
 
-## When To Use This
+## When to use this
 
 Use forms for sign in, profile editing, settings, creation flows, and anything that should still have a clear HTML shape. Use `Command` for non-form mutations.
 
-## Minimal Working Example
+## Minimal working example
 
 ```ts
 import { Form } from "svelte-effect-runtime/server";
@@ -37,7 +37,7 @@ export const update_name = Form(
 </form>
 ```
 
-## Realistic Variant
+## Realistic variant
 
 Validate before committing the mutation:
 
@@ -64,14 +64,14 @@ export const update_name = Form(
 
 On the client, the generated form object keeps SvelteKit's form descriptors. Programmatic helpers such as `validate`, `submit`, and `enhance` are wrapped so they can be yielded from Effect-aware code.
 
-## Common Mistakes
+## Common mistakes
 
 - Using a command for complex form validation and then rebuilding form behavior manually.
 - Trusting client-side validation without validating again in the server handler.
 - Returning one generic message when users need field-specific errors.
 - Forgetting that `enhance` is progressive; the server handler should still be correct without JavaScript.
 
-## Related Pages
+## Related pages
 
 - [Forms with validation](/docs/recipes/forms-with-validation)
 - [Remote errors](/docs/server/errors)

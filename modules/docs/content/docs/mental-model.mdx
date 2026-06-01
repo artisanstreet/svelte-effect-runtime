@@ -5,11 +5,11 @@ description: How script effects, markup effects, runtimes, and remote functions 
 
 Think of the package as two bridges. The client bridge lets Svelte components run Effect programs naturally. The server bridge lets SvelteKit remote functions execute inside an Effect runtime with typed inputs and failures.
 
-## When To Use This
+## When to use this
 
 Read this before choosing between `<script effect>`, markup `yield*`, and remote functions. The right choice is usually about where the work belongs: browser, server request, or build time.
 
-## Minimal Working Example
+## Minimal working example
 
 Client work lives in a Svelte component:
 
@@ -35,7 +35,7 @@ export const get_user = Query(Schema.Struct({ id: Schema.String }), ({ id }) =>
 );
 ```
 
-## Realistic Variant
+## Realistic variant
 
 Use runtimes when effects need services:
 
@@ -50,7 +50,7 @@ export const init = () => {
 
 The component yields an Effect. The runtime supplies requirements. Svelte still owns rendering, invalidation, and component lifecycle.
 
-## What Fits Where
+## What fits where
 
 <Cards>
   <Card title="script effect" href="/docs/client/script-effect">
@@ -64,14 +64,14 @@ The component yields an Effect. The runtime supplies requirements. Svelte still 
   </Card>
 </Cards>
 
-## Common Mistakes
+## Common mistakes
 
 - Treating every Effect as remote. Browser-only services can run in the client runtime.
 - Treating every remote function as a query. Mutations should usually be `Command` or `Form`.
 - Forgetting that remote functions run with request context, while component effects run with browser lifecycle.
 - Building one large demo before understanding the boundaries; isolated snippets make failures easier to diagnose.
 
-## Related Pages
+## Related pages
 
 - [Script effect](/docs/client/script-effect)
 - [Remote function overview](/docs/remote-functions)

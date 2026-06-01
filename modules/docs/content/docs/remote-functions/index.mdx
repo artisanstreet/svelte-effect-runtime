@@ -5,11 +5,11 @@ description: Choose Query, Command, Form, or Prerender for server work.
 
 Remote functions are SvelteKit server entry points wrapped in Effect. They keep server code on the server while giving clients typed inputs, typed failures, and predictable pending states.
 
-## When To Use This
+## When to use this
 
 Use a remote function when the work needs a database, secret, cookie, session, server service, or build-time data source. Keep purely local UI behavior in component effects.
 
-## Minimal Working Example
+## Minimal working example
 
 ```ts
 import { Query } from "svelte-effect-runtime/server";
@@ -34,7 +34,7 @@ export const get_count = Query(Schema.Struct({ key: Schema.String }), ({ key }) 
 {/await}
 ```
 
-## Realistic Variant
+## Realistic variant
 
 Pick the shape that matches the user intent:
 
@@ -59,7 +59,7 @@ Pick the shape that matches the user intent:
   </Card>
 </Cards>
 
-## Decision Guide
+## Decision guide
 
 - Use `Query` when the UI needs server data without changing it.
 - Use `Query.batch` when many small same-kind reads should become one server call.
@@ -68,14 +68,14 @@ Pick the shape that matches the user intent:
 - Use `Form` when HTML form semantics, validation, and progressive enhancement matter.
 - Use `Prerender` when data can be resolved at build time or cached as static output.
 
-## Common Mistakes
+## Common mistakes
 
 - Using `Query` for writes because it is convenient to call.
 - Returning unstructured thrown errors instead of typed failures.
 - Reading cookies or locals from component code instead of the server request context.
 - Forgetting to enable SvelteKit's remote function flag.
 
-## Related Pages
+## Related pages
 
 - [RequestEvent](/docs/server/request-event)
 - [Remote errors](/docs/server/errors)

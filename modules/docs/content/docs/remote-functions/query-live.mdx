@@ -5,11 +5,11 @@ description: Stream remote query values with Effect Streams.
 
 Use `Query.live` when server data should stay connected while the UI is using it. It returns a live query resource on the client and accepts Effect Streams on the server.
 
-## When To Use This
+## When to use this
 
 Use `Query.live` for changing values such as clocks, presence, notification counts, job progress, or event feeds. Use a normal `Query` when the user can refresh explicitly.
 
-## Minimal Working Example
+## Minimal working example
 
 ```ts
 import { Query } from "svelte-effect-runtime/server";
@@ -39,7 +39,7 @@ export const get_clock = Query.live(Schema.String, (_clock_id) =>
 <button onclick={() => yield* clock.reconnect()}>Reconnect</button>
 ```
 
-## Stream Sources
+## Stream sources
 
 Effect Streams are the idiomatic source:
 
@@ -69,7 +69,7 @@ export const watch_counter = Query.live(async function* () {
 });
 ```
 
-## Client Shape
+## Client shape
 
 `Query.live` returns an Effect-backed live resource. `yield* live_query` waits for the current or first value. The same object also exposes live state:
 
@@ -92,14 +92,14 @@ for await (const value of clock) {
 }
 ```
 
-## Common Mistakes
+## Common mistakes
 
 - Using live queries for data that only changes after a user action.
 - Forgetting that every active live query keeps server work alive.
 - Returning a plain `Promise` from `Query.live`. Return an Effect Stream, iterable, or async iterable.
 - Calling `reconnect()` without yielding or running the returned Effect.
 
-## Related Pages
+## Related pages
 
 - [Query](/docs/remote-functions/query)
 - [Query.batch](/docs/remote-functions/query-batch)

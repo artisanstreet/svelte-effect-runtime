@@ -5,11 +5,11 @@ description: Run server mutations from client events with pending state.
 
 Use `Command` for server work that changes state: saving settings, deleting records, sending invitations, or starting jobs. Commands make mutation intent visible in both server and client code.
 
-## When To Use This
+## When to use this
 
 Use a command from a button, menu item, or explicit client action. Prefer `Form` when the mutation starts from an HTML form and should work with progressive enhancement.
 
-## Minimal Working Example
+## Minimal working example
 
 ```ts
 import { Command } from "svelte-effect-runtime/server";
@@ -46,7 +46,7 @@ export const archive_project = Command(
 <button disabled={pending} onclick={archive}>Archive</button>
 ```
 
-## Realistic Variant
+## Realistic variant
 
 Use commands inside Effect-aware handlers when you want typed error recovery:
 
@@ -72,14 +72,14 @@ Use commands inside Effect-aware handlers when you want typed error recovery:
 <p>{message}</p>
 ```
 
-## Common Mistakes
+## Common mistakes
 
 - Using command results as if they were long-lived query state.
 - Forgetting to disable duplicate-trigger controls while the command is pending.
 - Swallowing server failures without giving the user a recovery path.
 - Using `Command` for forms that need field-level validation errors.
 
-## Related Pages
+## Related pages
 
 - [Form](/docs/remote-functions/form)
 - [Remote errors](/docs/server/errors)

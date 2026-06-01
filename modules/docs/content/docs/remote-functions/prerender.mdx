@@ -5,11 +5,11 @@ description: Resolve static or build-time data with optional dynamic fallback.
 
 Use `Prerender` for data that can be known at build time or generated as static output. It keeps static pages fast while still letting the code use Effect services.
 
-## When To Use This
+## When to use this
 
 Use it for docs indexes, product catalogs, marketing content, generated navigation, and other data that changes through deploys rather than per request.
 
-## Minimal Working Example
+## Minimal working example
 
 ```ts
 import { Prerender } from "svelte-effect-runtime/server";
@@ -29,7 +29,7 @@ export const get_docs_index = Prerender(
 );
 ```
 
-## Realistic Variant
+## Realistic variant
 
 Allow dynamic fallback only when the data can safely be computed at request time:
 
@@ -42,18 +42,18 @@ export const get_product = Prerender(
 );
 ```
 
-## When Not To Use It
+## When not to use it
 
 Do not use `Prerender` for authenticated data, cookies, rapidly changing records, or mutations. Use `Query` for request-time reads and `Command` or `Form` for writes.
 
-## Common Mistakes
+## Common mistakes
 
 - Reading request-only values while expecting static output.
 - Turning on `dynamic: true` to hide that data should really be a query.
 - Using prerendered data for permissions or account-specific UI.
 - Forgetting that build-time failures can break deployment.
 
-## Related Pages
+## Related pages
 
 - [Query](/docs/remote-functions/query)
 - [Server runtime](/docs/server/runtime)
