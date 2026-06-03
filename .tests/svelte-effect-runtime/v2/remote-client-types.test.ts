@@ -77,7 +77,7 @@ const GetPostSummary = Query.batch(Schema.String, (ids) =>
   Effect.succeed((id, index) => ({
     id,
     index,
-    known: ids.includes(id),
+    known: ids.some((candidate) => candidate === id),
   }))
 );
 const GetClock = Query.live("unchecked", (_key: string) =>

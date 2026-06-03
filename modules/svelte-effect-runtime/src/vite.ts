@@ -78,14 +78,19 @@ function make_remote_client_wrapper_plugin(options?: EffectOptions): Plugin {
 
     configResolved(config) {
       const no_external = config.ssr.noExternal;
+      const runtime_package = "svelte-effect-runtime";
 
       if (no_external === true) {
         return;
       }
 
       if (Array.isArray(no_external)) {
-        if (!no_external.includes("svelte-effect-runtime")) {
-          no_external.push("svelte-effect-runtime");
+        const has_runtime_package = no_external.some(
+          (entry) => entry === runtime_package,
+        );
+
+        if (!has_runtime_package) {
+          no_external.push(runtime_package);
         }
 
         return;
@@ -93,7 +98,7 @@ function make_remote_client_wrapper_plugin(options?: EffectOptions): Plugin {
 
       config.ssr.noExternal = [
         no_external,
-        "svelte-effect-runtime",
+        runtime_package,
       ].filter((value): value is string | RegExp => value !== undefined);
     },
 
