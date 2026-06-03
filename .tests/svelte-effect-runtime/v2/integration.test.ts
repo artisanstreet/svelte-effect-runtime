@@ -167,6 +167,22 @@ Deno.test("vite plugin keeps runtime package transformable in SSR builds", () =>
   ]);
 });
 
+Deno.test("root entry exposes server helpers for rewritten server imports", async () => {
+  const root = await import(
+    "../../../modules/svelte-effect-runtime/src/mod.ts"
+  );
+
+  assertEquals(typeof root.ServerRuntime.make, "function");
+  assertEquals(typeof root.Query, "function");
+  assertEquals(typeof root.Query.batch, "function");
+  assertEquals(typeof root.Query.live, "function");
+  assertEquals(typeof root.Command, "function");
+  assertEquals(typeof root.Form, "function");
+  assertEquals(typeof root.Prerender, "function");
+  assertEquals(typeof root.get_server_runtime_or_throw, "function");
+  assertEquals(typeof root.RequestEvent, "function");
+});
+
 Deno.test("vite remote client wrapper preserves native SvelteKit remote module", () => {
   const source = [
     `import * as __remote from '__sveltekit/remote';`,

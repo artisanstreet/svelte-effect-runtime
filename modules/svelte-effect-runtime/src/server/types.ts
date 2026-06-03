@@ -5,7 +5,7 @@ import type {
   RemoteQueryOverride,
 } from "@sveltejs/kit";
 import type { EffectRemoteForm as ClientEffectRemoteForm } from "$/remote/client.ts";
-import type { Effect, Schema, Stream } from "effect";
+import type { Effect, Layer, ManagedRuntime, Schema, Stream } from "effect";
 
 /**
  * Effect-like values accepted by remote helper wrappers.
@@ -24,6 +24,18 @@ export type EffectLike<A = unknown> =
 export type RemoteHandler<Input = unknown, A = unknown> = (
   input: Input,
 ) => EffectLike<A>;
+
+/**
+ * Handler or source shape accepted by live query helpers.
+ *
+ * @since 2.0.0
+ */
+export type RemoteLiveHandler<Input = unknown, A = unknown> =
+  | EffectLike<EffectRemoteLiveSource<A>>
+  | EffectRemoteLiveSource<A>
+  | ((input: Input) =>
+    | EffectLike<EffectRemoteLiveSource<A>>
+    | EffectRemoteLiveSource<A>);
 
 /**
  * Handler shape accepted by batch query helpers. The handler receives the
@@ -90,6 +102,125 @@ export type StandardSchema = {
  */
 export type SchemaInput<S> = S extends Schema.Schema<infer Input> ? Input
   : unknown;
+
+/**
+ * Root and server export shape for building the server-side runtime.
+ *
+ * @since 2.0.0
+ */
+export interface ServerRuntimeFactory {
+  make<R = never>(
+    layer?: Layer.Layer<R>,
+  ): ManagedRuntime.ManagedRuntime<R, never>;
+}
+
+/**
+ * Root and server export shape for query helpers.
+ *
+ * @since 2.0.0
+ */
+export interface QueryFactory {
+  <A>(
+    validate_or_handler: EffectLike<A> | RemoteHandler<void, A>,
+  ): EffectRemoteQueryFunction<void, A>;
+  <Input, A>(
+    validate_or_handler: "unchecked",
+    maybe_handler: RemoteHandler<Input, A>,
+  ): EffectRemoteQueryFunction<Input, A>;
+  <S extends Schema.Schema<unknown>, A>(
+    validate_or_handler: S,
+    maybe_handler: RemoteHandler<SchemaInput<S>, A>,
+  ): EffectRemoteQueryFunction<SchemaInput<S>, A>;
+
+  readonly batch: QueryBatchFactory;
+  readonly live: QueryLiveFactory;
+}
+
+/**
+ * Root and server export shape for batched query helpers.
+ *
+ * @since 2.0.0
+ */
+export interface QueryBatchFactory {
+  <Input, A>(
+    validate_or_handler: "unchecked",
+    maybe_handler: EffectRemoteBatchHandler<Input, A>,
+  ): EffectRemoteQueryFunction<Input, A>;
+  <S extends Schema.Schema<unknown>, A>(
+    validate_or_handler: S,
+    maybe_handler: EffectRemoteBatchHandler<SchemaInput<S>, A>,
+  ): EffectRemoteQueryFunction<SchemaInput<S>, A>;
+}
+
+/**
+ * Root and server export shape for live query helpers.
+ *
+ * @since 2.0.0
+ */
+export interface QueryLiveFactory {
+  <A>(
+    validate_or_handler: RemoteLiveHandler<void, A>,
+  ): EffectRemoteLiveQueryFunction<void, A>;
+  <Input, A>(
+    validate_or_handler: "unchecked",
+    maybe_handler: RemoteLiveHandler<Input, A>,
+  ): EffectRemoteLiveQueryFunction<Input, A>;
+  <S extends Schema.Schema<unknown>, A>(
+    validate_or_handler: S,
+    maybe_handler: RemoteLiveHandler<SchemaInput<S>, A>,
+  ): EffectRemoteLiveQueryFunction<SchemaInput<S>, A>;
+}
+
+/**
+ * Root and server export shape for command helpers.
+ *
+ * @since 2.0.0
+ */
+export interface CommandFactory {
+  <A>(
+    validate_or_handler: EffectLike<A> | RemoteHandler<void, A>,
+  ): EffectRemoteCommand<void, A>;
+  <Input, A>(
+    validate_or_handler: "unchecked",
+    maybe_handler: RemoteHandler<Input, A>,
+  ): EffectRemoteCommand<Input, A>;
+  <S extends Schema.Schema<unknown>, A>(
+    validate_or_handler: S,
+    maybe_handler: RemoteHandler<SchemaInput<S>, A>,
+  ): EffectRemoteCommand<SchemaInput<S>, A>;
+}
+
+/**
+ * Root and server export shape for form helpers.
+ *
+ * @since 2.0.0
+ */
+export interface FormFactory {
+  <A>(
+    validate_or_handler: EffectLike<A> | RemoteFormHandler<void, A>,
+  ): EffectRemoteForm<void, A>;
+  <Input extends RemoteFormInput, A>(
+    validate_or_handler: "unchecked",
+    maybe_handler: RemoteFormHandler<Input, A>,
+  ): EffectRemoteForm<Input, A>;
+  <S extends Schema.Schema<unknown>, A>(
+    validate_or_handler: S,
+    maybe_handler: RemoteFormHandler<FormSchemaInput<S>, A>,
+  ): EffectRemoteForm<FormSchemaInput<S>, A>;
+}
+
+/**
+ * Root and server export shape for prerender helpers.
+ *
+ * @since 2.0.0
+ */
+export interface PrerenderFactory {
+  (
+    validate_or_handler: unknown,
+    maybe_handler_or_options?: RemoteHandler | PrerenderOptions,
+    maybe_options?: PrerenderOptions,
+  ): unknown;
+}
 
 /**
  * Source values accepted by live query helpers.
@@ -253,3 +384,7 @@ export type EffectRemoteCommand<Input, A> =
  */
 export type EffectRemoteForm<Input extends RemoteFormInput | void, A> =
   ClientEffectRemoteForm<Input, A>;
+
+type FormSchemaInput<S> = SchemaInput<S> extends RemoteFormInput
+  ? SchemaInput<S>
+  : never;
