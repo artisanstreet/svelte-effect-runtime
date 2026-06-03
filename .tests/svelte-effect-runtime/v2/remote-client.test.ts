@@ -6,6 +6,7 @@ import {
   create_remote_live_query_adapter,
   create_remote_query_adapter,
 } from "../../../modules/svelte-effect-runtime/src/remote/client.ts";
+import { normalize_native_error } from "../../../modules/svelte-effect-runtime/src/remote/client/failures.ts";
 import { create_serialized_remote_failure_envelope } from "../../../modules/svelte-effect-runtime/src/remote/shared.ts";
 
 Deno.test("remote query adapter preserves decoded domain failures", async () => {
@@ -25,6 +26,33 @@ Deno.test("remote query adapter preserves decoded domain failures", async () => 
   const query = create_remote_query_adapter(native, (value) => value, "");
 
   const error = await assertRejects(() => Effect.runPromise(query(undefined)));
+
+  assertEquals(error, domain_error);
+});
+
+Deno.test("remote failure decoder unwraps SvelteKit message envelopes", () => {
+  const domain_error = { _tag: "DomainError", message: "nope" };
+  const envelope = create_serialized_remote_failure_envelope(
+    stringify(domain_error),
+  );
+  const error = normalize_native_error({
+    body: { message: JSON.stringify(envelope) },
+    status: 500,
+  });
+
+  assertEquals(error, domain_error);
+});
+
+Deno.test("remote failure decoder keeps envelopes with plain messages", () => {
+  const domain_error = { _tag: "DomainError", message: "nope" };
+  const envelope = {
+    ...create_serialized_remote_failure_envelope(stringify(domain_error)),
+    message: "Unknown Error",
+  };
+  const error = normalize_native_error({
+    body: envelope,
+    status: 500,
+  });
 
   assertEquals(error, domain_error);
 });
@@ -70,6 +98,37 @@ Deno.test("remote query adapter prefers callable query over hydratable load", as
   assertEquals(result, { source: "query" });
   assertEquals(called_query, true);
   assertEquals(called_load, false);
+});
+
+Deno.test("remote query adapter awaits modern thenable resources before legacy run handles", async () => {
+  let run_called = false;
+
+  const native = () => {
+    const resource = Promise.resolve("ready") as Promise<string> & {
+      run: () => never;
+    };
+
+    Object.defineProperty(resource, "run", {
+      value: () => {
+        run_called = true;
+
+        throw new Error("run removed");
+      },
+    });
+
+    return resource;
+  };
+
+  const query = create_remote_query_adapter<undefined, string>(
+    native,
+    (value) => value,
+    "",
+  );
+
+  const result = await Effect.runPromise(query(undefined));
+
+  assertEquals(result, "ready");
+  assertEquals(run_called, false);
 });
 
 Deno.test("remote query adapter maps validation responses to validation errors", async () => {

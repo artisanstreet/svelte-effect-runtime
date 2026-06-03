@@ -1,7 +1,13 @@
 import type MagicString from "magic-string";
 
 import { HELPERS } from "./constants.ts";
-import type { Insertion, MarkupRelocation, Replacement } from "./types.ts";
+import type {
+  HelperDeclaration,
+  Insertion,
+  MarkupRelocation,
+  PendingRelocation,
+  Replacement,
+} from "./types.ts";
 
 export function create_source_map(
   magic: MagicString,
@@ -29,14 +35,27 @@ export function blank_script_blocks(content: string): string {
 export function inject_helpers(
   magic: MagicString,
   content: string,
+  helpers: HelperDeclaration[] = [],
 ): Insertion | undefined {
-  if (content.includes(HELPERS.value)) return undefined;
+  if (content.includes(HELPERS.value)) {
+    return undefined;
+  }
 
-  const helper_block = [
+  const helper_segments: Array<{
+    text: string;
+    relocation?: PendingRelocation;
+  }> = [
     `import { value as ${HELPERS.value} } from "svelte-effect-runtime/internal/generators";`,
     `import { promise as ${HELPERS.promise} } from "svelte-effect-runtime/internal/generators";`,
     `import { run as ${HELPERS.run} } from "svelte-effect-runtime/internal/generators";`,
-  ].join("\n");
+    ...helpers,
+  ].map((helper) =>
+    typeof helper === "string" ? { text: helper } : helper
+  );
+
+  const helper_block = helper_segments.map((segment) => segment.text).join(
+    "\n",
+  );
 
   const script_tag = find_instance_script_tag(content);
 
@@ -45,13 +64,21 @@ export function inject_helpers(
 
     magic.appendLeft(script_tag.end, text);
 
-    return { start: script_tag.end, text };
+    return {
+      start: script_tag.end,
+      text,
+      relocations: make_insertion_relocations(helper_segments, "\n"),
+    };
   } else {
     const text = `<script>\n${helper_block}\n</script>\n\n`;
 
     magic.prepend(text);
 
-    return { start: 0, text };
+    return {
+      start: 0,
+      text,
+      relocations: make_insertion_relocations(helper_segments, "<script>\n"),
+    };
   }
 }
 
@@ -76,7 +103,7 @@ export function create_relocations(
     insertedLength: number;
   }>;
 
-  return replacements.flatMap((replacement) => {
+  const replacement_relocations = replacements.flatMap((replacement) => {
     if (!replacement.relocation) {
       return [];
     }
@@ -98,6 +125,50 @@ export function create_relocations(
         replacement.relocation.generatedEndInReplacement,
     }];
   });
+
+  const helper_relocations = helper_insertion?.relocations?.map(
+    (relocation) => ({
+      originalStart: relocation.originalStart,
+      originalEnd: relocation.originalEnd,
+      generatedStart: helper_insertion.start +
+        relocation.generatedStartInReplacement,
+      generatedEnd: helper_insertion.start +
+        relocation.generatedEndInReplacement,
+    }),
+  ) ?? [];
+
+  return [
+    ...replacement_relocations,
+    ...helper_relocations,
+  ];
+}
+
+function make_insertion_relocations(
+  segments: Array<{
+    text: string;
+    relocation?: PendingRelocation;
+  }>,
+  prefix: string,
+): PendingRelocation[] {
+  const relocations: PendingRelocation[] = [];
+  let offset = prefix.length;
+
+  for (const segment of segments) {
+    if (segment.relocation) {
+      relocations.push({
+        originalStart: segment.relocation.originalStart,
+        originalEnd: segment.relocation.originalEnd,
+        generatedStartInReplacement: offset +
+          segment.relocation.generatedStartInReplacement,
+        generatedEndInReplacement: offset +
+          segment.relocation.generatedEndInReplacement,
+      });
+    }
+
+    offset += segment.text.length + 1;
+  }
+
+  return relocations;
 }
 
 function find_instance_script_tag(

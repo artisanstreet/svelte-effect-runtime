@@ -2,6 +2,28 @@ import { Dispatcher as InternalDispatcher } from "$/dispatcher.ts";
 import type { Layer } from "effect";
 
 /**
+ * Result returned by the root Svelte markup preprocessor hook.
+ *
+ * @since 2.0.0
+ */
+interface MarkupResult {
+  code: string;
+}
+
+/**
+ * Root preprocessor group shape. The root export keeps transform code lazy so
+ * client imports do not pull parser-only dependencies into the browser.
+ *
+ * @since 2.0.0
+ */
+interface PreprocessGroup {
+  name: string;
+  markup(
+    options: { content: string; filename: string },
+  ): MarkupResult | Promise<MarkupResult>;
+}
+
+/**
  * Public API surface for `svelte-effect-runtime`.
  *
  * Call {@link ClientRuntime.make} in `hooks.client.ts`, import server helpers
@@ -60,4 +82,33 @@ export {
 
 /** Re-export app setup helpers so users can import them from root. */
 export { effect, type EffectOptions } from "$/vite.ts";
-export { preprocess } from "$/runtime/preprocess.ts";
+
+/**
+ * Creates the Svelte preprocessor that lowers script and markup `yield*`
+ * expressions. The heavy transform module is loaded lazily so browser imports
+ * from the package root stay client-safe.
+ *
+ * @example
+ * ```js
+ * import { preprocess } from "svelte-effect-runtime";
+ *
+ * export default {
+ *   preprocess: [preprocess()],
+ * };
+ * ```
+ *
+ * @since 2.0.0
+ * @returns A Svelte preprocessor group with an async markup hook.
+ */
+export function preprocess(): PreprocessGroup {
+  return {
+    name: "svelte-effect-runtime",
+
+    async markup(options: { content: string; filename: string }) {
+      const runtime = await import("./runtime/preprocess.ts");
+      const group = runtime.preprocess();
+
+      return await group.markup(options);
+    },
+  };
+}

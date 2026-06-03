@@ -1,10 +1,13 @@
-import { assertStringIncludes } from "@std/assert";
+import { assertEquals, assertStringIncludes } from "@std/assert";
 import {
   preprocess,
   transform_markup_effect,
   transform_script_effect,
 } from "../../../modules/svelte-effect-runtime/src/runtime/preprocess.ts";
-import { rewrite_remote_client_exports } from "../../../modules/svelte-effect-runtime/src/vite.ts";
+import {
+  effect,
+  rewrite_remote_client_exports,
+} from "../../../modules/svelte-effect-runtime/src/vite.ts";
 
 // ─── Full pipeline ─────────────────────────────────────────────
 
@@ -105,6 +108,63 @@ Deno.test("preprocess hook only lowers script effect and removes effect attribut
   if (result.code.includes(` effect>`)) {
     throw new Error("effect attribute should be removed before Svelte parses");
   }
+});
+
+Deno.test("vite plugin keeps runtime package transformable in SSR builds", () => {
+  const plugins = effect();
+  const server_plugin = plugins.find((plugin) =>
+    plugin.name === "svelte-effect-runtime:server-imports"
+  );
+  const client_plugin = plugins.find((plugin) =>
+    plugin.name === "svelte-effect-runtime:remote-client"
+  );
+
+  if (!server_plugin || typeof server_plugin.config !== "function") {
+    throw new Error("server rewrite plugin should expose a config hook");
+  }
+
+  if (!client_plugin || typeof client_plugin.config !== "function") {
+    throw new Error("remote client plugin should expose a config hook");
+  }
+
+  const server_config = server_plugin.config(
+    {},
+    {
+      command: "build",
+      isPreview: false,
+      isSsrBuild: true,
+      mode: "production",
+    },
+  );
+  const client_config = client_plugin.config(
+    {},
+    {
+      command: "build",
+      isPreview: false,
+      isSsrBuild: true,
+      mode: "production",
+    },
+  );
+
+  assertEquals(server_config, {
+    optimizeDeps: { exclude: ["svelte-effect-runtime"] },
+  });
+  assertEquals(client_config, {
+    ssr: { noExternal: ["svelte-effect-runtime"] },
+  });
+
+  const resolved_config = {
+    ssr: {
+      noExternal: ["svelte"],
+    },
+  };
+
+  client_plugin.configResolved?.(resolved_config as never);
+
+  assertEquals(resolved_config.ssr.noExternal, [
+    "svelte",
+    "svelte-effect-runtime",
+  ]);
 });
 
 Deno.test("vite remote client wrapper preserves native SvelteKit remote module", () => {

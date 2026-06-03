@@ -25,6 +25,12 @@ export function decode_remote_error(
   raw: unknown,
   decode?: (encoded: string) => unknown,
 ): RemoteFailure<unknown> | unknown {
+  const embedded = parse_embedded_remote_failure(raw);
+
+  if (embedded !== raw) {
+    return decode_remote_error(embedded, decode);
+  }
+
   if (is_serialized_remote_failure_envelope(raw)) {
     try {
       const decoded = decode ? decode(raw.encoded) : parse(raw.encoded);
@@ -39,6 +45,34 @@ export function decode_remote_error(
   }
 
   return raw;
+}
+
+function parse_embedded_remote_failure(raw: unknown): unknown {
+  if (typeof raw === "string") {
+    return parse_json_or_original(raw);
+  }
+
+  if (typeof raw !== "object" || raw === null || !("message" in raw)) {
+    return raw;
+  }
+
+  const message = (raw as { message?: unknown }).message;
+
+  if (typeof message !== "string") {
+    return raw;
+  }
+
+  const parsed = parse_json_or_original(message);
+
+  return parsed === message ? raw : parsed;
+}
+
+function parse_json_or_original(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
 }
 
 /**

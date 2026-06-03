@@ -1,6 +1,7 @@
 import {
   command as native_command,
   form as native_form,
+  getRequestEvent as get_native_request_event,
   prerender as native_prerender,
   query as native_query,
 } from "$app/server";
@@ -11,6 +12,7 @@ import { Effect, type Schema } from "effect";
 
 import { is_handler, is_unchecked, normalize_validator } from "./schema.ts";
 import {
+  is_running_remote_effect_handler,
   make_remote_form_wrapper,
   make_remote_live_wrapper,
   make_remote_wrapper,
@@ -50,7 +52,7 @@ type RemoteLiveHandler<Input = unknown, A = unknown> =
 
 interface QueryFactory {
   <A>(
-    validate_or_handler: EffectLike<A>,
+    validate_or_handler: EffectLike<A> | RemoteHandler<void, A>,
   ): EffectRemoteQueryFunction<void, A>;
   <Input, A>(
     validate_or_handler: "unchecked",
@@ -69,6 +71,10 @@ function to_effect_query<Input, Output>(
   native: NativeQueryLike<Input>,
 ): EffectRemoteQueryFunction<Input, Output> {
   const wrapped = ((input: Input) => {
+    if (is_current_remote_request()) {
+      return (native as (input: Input) => unknown)(input);
+    }
+
     const resource = (native as (input: Input) => unknown)(input);
     const effect = Effect.tryPromise({
       try: () => Promise.resolve(resource),
@@ -83,6 +89,20 @@ function to_effect_query<Input, Output>(
   copy_property_descriptors(native, wrapped);
 
   return wrapped;
+}
+
+function is_current_remote_request(): boolean {
+  if (is_running_remote_effect_handler()) {
+    return false;
+  }
+
+  try {
+    const event = get_native_request_event() as { isRemoteRequest?: boolean };
+
+    return event.isRemoteRequest === true;
+  } catch {
+    return false;
+  }
 }
 
 function to_effect_live_query<Input, Output>(
@@ -280,7 +300,7 @@ function attach_live_resource_methods<Output>(
  * @returns A SvelteKit query function.
  */
 function QueryRoot<A>(
-  validate_or_handler: EffectLike<A>,
+  validate_or_handler: EffectLike<A> | RemoteHandler<void, A>,
 ): EffectRemoteQueryFunction<void, A>;
 function QueryRoot<Input, A>(
   validate_or_handler: "unchecked",
@@ -433,7 +453,7 @@ export const Query: QueryFactory = Object.assign(QueryRoot, {
  * @returns A SvelteKit command function.
  */
 export function Command<A>(
-  validate_or_handler: EffectLike<A>,
+  validate_or_handler: EffectLike<A> | RemoteHandler<void, A>,
 ): EffectRemoteCommand<void, A>;
 export function Command<Input, A>(
   validate_or_handler: "unchecked",

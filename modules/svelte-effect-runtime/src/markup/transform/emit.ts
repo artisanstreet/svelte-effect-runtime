@@ -4,6 +4,7 @@ import {
   strip_arrow_function,
 } from "./expressions.ts";
 import type {
+  HelperDeclaration,
   MarkupCandidate,
   PendingRelocation,
   Replacement,
@@ -31,67 +32,115 @@ function emit_replacement(
 ): Replacement {
   const id = make_cache_id(candidate);
   const id_text = JSON.stringify(id);
-  const deps = collect_free_identifiers(candidate.expr_text);
-  const deps_text = deps.length === 0 ? "[]" : `[${deps.join(", ")}]`;
+  const helper_name = make_helper_name(candidate);
 
   let replacement_text: string;
+  let helpers: HelperDeclaration[];
   let relocation: PendingRelocation | undefined;
 
   if (kind === "await") {
-    replacement_text = emit_promise_expression(candidate, id_text, deps_text);
+    const effect = make_effect_helper(candidate, helper_name);
+
+    replacement_text = emit_promise_expression(id_text, effect);
+    helpers = [effect.helper];
   } else if (kind === "render") {
-    replacement_text = emit_render_expression(candidate, id_text, deps_text);
+    const effect = make_effect_helper(candidate, helper_name);
+
+    replacement_text = emit_render_expression(id_text, effect);
+    helpers = [effect.helper];
   } else if (kind === "each") {
-    replacement_text = emit_each_expression(candidate, id_text, deps_text);
+    const effect = make_effect_helper(candidate, helper_name);
+
+    replacement_text = emit_each_expression(id_text, effect);
+    helpers = [effect.helper];
   } else if (kind === "event") {
     const event = strip_arrow_function(candidate.expr_text);
     replacement_text =
       `${event.params} => { void ${HELPERS.run}(function* () { ${event.body}; }); }`;
+    helpers = [];
     relocation = make_relocation(candidate, replacement_text, {
       originalStart: event.body_start,
       originalEnd: event.body_end,
       generatedText: event.body,
     });
   } else {
-    replacement_text = emit_each_expression(candidate, id_text, deps_text);
-  }
+    const effect = make_effect_helper(candidate, helper_name);
 
-  relocation ??= make_relocation(candidate, replacement_text, {
-    originalStart: 0,
-    originalEnd: candidate.expr_text.length,
-    generatedText: candidate.expr_text,
-  });
+    replacement_text = emit_each_expression(id_text, effect);
+    helpers = [effect.helper];
+  }
 
   return {
     start: candidate.start,
     end: candidate.end,
     text: replacement_text,
+    helpers,
     relocation,
   };
 }
 
 function emit_promise_expression(
-  candidate: MarkupCandidate,
   id_text: string,
-  deps_text: string,
+  effect: EffectHelper,
 ): string {
-  return `${HELPERS.promise}(${id_text}, ${deps_text}, function* () { return (${candidate.expr_text}); })`;
+  return `${HELPERS.promise}(${id_text}, ${effect.deps_text}, () => ${effect.call})`;
 }
 
 function emit_render_expression(
-  candidate: MarkupCandidate,
   id_text: string,
-  deps_text: string,
+  effect: EffectHelper,
 ): string {
-  return `(await ${HELPERS.promise}(${id_text}, ${deps_text}, function* () { return (${candidate.expr_text}); }))()`;
+  return `(await ${emit_promise_expression(id_text, effect)})()`;
 }
 
 function emit_each_expression(
-  candidate: MarkupCandidate,
   id_text: string,
-  deps_text: string,
+  effect: EffectHelper,
 ): string {
-  return `await ${HELPERS.promise}(${id_text}, ${deps_text}, function* () { return (${candidate.expr_text}); })`;
+  return `await ${emit_promise_expression(id_text, effect)}`;
+}
+
+interface EffectHelper {
+  helper: HelperDeclaration;
+  call: string;
+  deps_text: string;
+}
+
+function make_effect_helper(
+  candidate: MarkupCandidate,
+  helper_name: string,
+): EffectHelper {
+  const deps = collect_free_identifiers(candidate.expr_text);
+  const params_text = deps.join(", ");
+  const args_text = deps.join(", ");
+  const deps_text = deps.length === 0 ? "[]" : `[${args_text}]`;
+  const call = `${helper_name}(${args_text})`;
+  const text =
+    `function* ${helper_name}(${params_text}) { return (${candidate.expr_text}); }`;
+  const generated_start = text.indexOf(candidate.expr_text);
+
+  return {
+    call,
+    deps_text,
+    helper: {
+      text,
+      relocation: {
+        originalStart: candidate.start,
+        originalEnd: candidate.end,
+        generatedStartInReplacement: generated_start,
+        generatedEndInReplacement: generated_start +
+          candidate.expr_text.length,
+      },
+    },
+  };
+}
+
+function make_cache_id(candidate: MarkupCandidate): string {
+  return `${candidate.filename}:${candidate.start}:${candidate.end}`;
+}
+
+function make_helper_name(candidate: MarkupCandidate): string {
+  return `__ser_markup_effect_${candidate.start}_${candidate.end}`;
 }
 
 function make_relocation(
@@ -115,8 +164,4 @@ function make_relocation(
     generatedStartInReplacement: generated_start,
     generatedEndInReplacement: generated_start + inner.generatedText.length,
   };
-}
-
-function make_cache_id(candidate: MarkupCandidate): string {
-  return `${candidate.filename}:${candidate.start}:${candidate.end}`;
 }

@@ -72,6 +72,31 @@ function make_remote_client_wrapper_plugin(options?: EffectOptions): Plugin {
     name: "svelte-effect-runtime:remote-client",
     enforce: "post",
 
+    config() {
+      return { ssr: { noExternal: ["svelte-effect-runtime"] } };
+    },
+
+    configResolved(config) {
+      const no_external = config.ssr.noExternal;
+
+      if (no_external === true) {
+        return;
+      }
+
+      if (Array.isArray(no_external)) {
+        if (!no_external.includes("svelte-effect-runtime")) {
+          no_external.push("svelte-effect-runtime");
+        }
+
+        return;
+      }
+
+      config.ssr.noExternal = [
+        no_external,
+        "svelte-effect-runtime",
+      ].filter((value): value is string | RegExp => value !== undefined);
+    },
+
     transform(code: string, id: string) {
       if (!is_remote_module(id) || !code.includes("__sveltekit/remote")) {
         return undefined;

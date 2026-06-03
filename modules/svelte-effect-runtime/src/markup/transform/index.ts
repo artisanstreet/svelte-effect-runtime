@@ -57,6 +57,9 @@ export function transform_markup_effect(
     work.candidates,
   );
   const replacements = emit_replacements(classified);
+  const helpers = replacements.flatMap((replacement) =>
+    replacement.helpers ?? []
+  );
 
   const magic = new MagicString(content);
 
@@ -66,7 +69,7 @@ export function transform_markup_effect(
     magic.overwrite(r.start, r.end, r.text);
   }
 
-  const helper_insertion = inject_helpers(magic, content);
+  const helper_insertion = inject_helpers(magic, content, helpers);
   const relocations = create_relocations(replacements, helper_insertion);
 
   return {

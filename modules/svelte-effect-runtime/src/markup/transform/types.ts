@@ -48,6 +48,12 @@ export interface Replacement {
   start: number;
   end: number;
   text: string;
+  helpers?: HelperDeclaration[];
+  relocation?: PendingRelocation;
+}
+
+export interface HelperDeclaration {
+  text: string;
   relocation?: PendingRelocation;
 }
 
@@ -61,4 +67,5 @@ export interface PendingRelocation {
 export interface Insertion {
   start: number;
   text: string;
+  relocations?: PendingRelocation[];
 }

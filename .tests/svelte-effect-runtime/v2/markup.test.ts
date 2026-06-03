@@ -40,7 +40,7 @@ Deno.test("rewrites {yield* expr} as async promise expression", () => {
 
   assertStringIncludes(result.code, `await __ser_markup_promise`);
   assertStringIncludes(result.code, `renderDate()`);
-  assertStringIncludes(result.code, `function* ()`);
+  assertStringIncludes(result.code, `function* __ser_markup_effect`);
   if (!result.has_yield) throw new Error("has_yield should be true");
 });
 

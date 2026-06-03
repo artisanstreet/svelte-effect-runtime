@@ -19,6 +19,26 @@ type RemoteLiveHandler<Input = unknown, A = unknown> =
     | EffectLike<EffectRemoteLiveSource<A>>
     | EffectRemoteLiveSource<A>);
 
+let running_remote_effect_handlers = 0;
+
+/**
+ * Reports whether SER is currently executing user remote handler code.
+ *
+ * @example
+ * ```ts
+ * if (is_running_remote_effect_handler()) {
+ *   return query();
+ * }
+ * ```
+ *
+ * @since 2.0.0
+ * @returns Whether a remote handler wrapper is currently active.
+ * @internal
+ */
+export function is_running_remote_effect_handler(): boolean {
+  return running_remote_effect_handlers > 0;
+}
+
 /**
  * Builds the wrapper passed to native query, command, and prerender helpers.
  *
@@ -32,14 +52,23 @@ export function make_remote_wrapper(
   helper_name: string,
 ): (input: unknown) => Promise<unknown> {
   return async (input: unknown) => {
-    try {
-      const event = get_native_request_event() as unknown as RequestEvent;
-      const result = is_handler(handler) ? handler(input) : handler;
+    let event: RequestEvent;
 
-      return await run_handler_effect(result, event);
+    try {
+      event = get_native_request_event() as unknown as RequestEvent;
     } catch (error: unknown) {
       throw normalize_remote_helper_error(error, helper_name);
     }
+
+    return await run_inside_remote_effect_handler(() => {
+      try {
+        const result = is_handler(handler) ? handler(input) : handler;
+
+        return run_handler_effect(result, event);
+      } catch (error: unknown) {
+        throw normalize_remote_helper_error(error, helper_name);
+      }
+    });
   };
 }
 
@@ -56,16 +85,25 @@ export function make_remote_live_wrapper<Input, A>(
   helper_name: string,
 ): (input: unknown) => Promise<unknown> {
   return async (input: unknown) => {
-    try {
-      const event = get_native_request_event() as unknown as RequestEvent;
-      const result = typeof handler === "function"
-        ? handler(input as Input)
-        : handler;
+    let event: RequestEvent;
 
-      return await run_live_handler_source(result, event);
+    try {
+      event = get_native_request_event() as unknown as RequestEvent;
     } catch (error: unknown) {
       throw normalize_remote_helper_error(error, helper_name);
     }
+
+    return await run_inside_remote_effect_handler(() => {
+      try {
+        const result = typeof handler === "function"
+          ? handler(input as Input)
+          : handler;
+
+        return run_live_handler_source(result, event);
+      } catch (error: unknown) {
+        throw normalize_remote_helper_error(error, helper_name);
+      }
+    });
   };
 }
 
@@ -82,18 +120,40 @@ export function make_remote_form_wrapper<Input, A>(
   helper_name: string,
 ): (data: unknown, issue: unknown) => Promise<unknown> {
   return async (data: unknown, issue: unknown) => {
-    try {
-      const event = get_native_request_event() as unknown as RequestEvent;
-      const invalid_proxy = make_invalid_proxy();
-      const result = handler({
-        data: data as Input,
-        invalid: invalid_proxy,
-        issue,
-      });
+    let event: RequestEvent;
 
-      return await run_handler_effect(result, event);
+    try {
+      event = get_native_request_event() as unknown as RequestEvent;
     } catch (error: unknown) {
       throw normalize_remote_helper_error(error, helper_name);
     }
+
+    return await run_inside_remote_effect_handler(() => {
+      const invalid_proxy = make_invalid_proxy();
+
+      try {
+        const result = handler({
+          data: data as Input,
+          invalid: invalid_proxy,
+          issue,
+        });
+
+        return run_handler_effect(result, event);
+      } catch (error: unknown) {
+        throw normalize_remote_helper_error(error, helper_name);
+      }
+    });
   };
+}
+
+async function run_inside_remote_effect_handler<A>(
+  run: () => Promise<A>,
+): Promise<A> {
+  running_remote_effect_handlers += 1;
+
+  try {
+    return await run();
+  } finally {
+    running_remote_effect_handlers -= 1;
+  }
 }
