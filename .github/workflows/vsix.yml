@@ -87,5 +87,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: svelte-effect-runtime-vscode
-          path: dist/svelte-effect-runtime-vsix/*.vsix
+          path: .dist/svelte-effect-runtime-vsix/*.vsix
           if-no-files-found: error
