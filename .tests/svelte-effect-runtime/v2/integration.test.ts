@@ -110,6 +110,15 @@ Deno.test("preprocess hook only lowers script effect and removes effect attribut
   }
 });
 
+Deno.test("preprocess hook accepts optional filename", () => {
+  const group = preprocess();
+  const source = `<p>{yield* loadValue()}</p>`;
+
+  const result = group.markup({ content: source });
+
+  assertStringIncludes(result.code, `__ser_markup_value`);
+});
+
 Deno.test("vite plugin keeps runtime package transformable in SSR builds", () => {
   const plugins = effect();
   const server_plugin = plugins.find((plugin) =>

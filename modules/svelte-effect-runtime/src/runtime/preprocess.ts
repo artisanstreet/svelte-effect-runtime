@@ -17,7 +17,7 @@ interface MarkupResult {
  */
 interface PreprocessGroup {
   name: string;
-  markup(options: { content: string; filename: string }): MarkupResult;
+  markup(options: { content: string; filename?: string }): MarkupResult;
 }
 
 /**
@@ -39,13 +39,14 @@ export function preprocess(): PreprocessGroup {
   return {
     name: "svelte-effect-runtime",
 
-    markup({ content, filename }: { content: string; filename: string }) {
+    markup({ content, filename }: { content: string; filename?: string }) {
+      const resolved_filename = filename ?? "unknown.svelte";
       const script = find_script(content);
 
       let combined = content;
 
       if (script?.has_effect) {
-        const result = transform_script_effect(script.text, filename);
+        const result = transform_script_effect(script.text, resolved_filename);
 
         combined = content.slice(0, script.effect_attr_start) +
           content.slice(script.effect_attr_end, script.open_end) +
@@ -53,7 +54,7 @@ export function preprocess(): PreprocessGroup {
           content.slice(script.close_start);
       }
 
-      const result = transform_markup_effect(combined, filename);
+      const result = transform_markup_effect(combined, resolved_filename);
 
       return { code: result.code };
     },

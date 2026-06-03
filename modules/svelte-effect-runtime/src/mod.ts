@@ -27,7 +27,7 @@ interface MarkupResult {
 interface PreprocessGroup {
   name: string;
   markup(
-    options: { content: string; filename: string },
+    options: { content: string; filename?: string },
   ): MarkupResult | Promise<MarkupResult>;
 }
 
@@ -266,7 +266,7 @@ export function preprocess(): PreprocessGroup {
   return {
     name: "svelte-effect-runtime",
 
-    async markup(options: { content: string; filename: string }) {
+    async markup(options: { content: string; filename?: string }) {
       const runtime = await import("./runtime/preprocess.ts");
       const group = runtime.preprocess();
 
