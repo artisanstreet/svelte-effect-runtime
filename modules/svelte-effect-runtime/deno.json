@@ -5,6 +5,7 @@
   "exports": {
     ".": "./src/mod.ts",
     "./server": "./src/server.ts",
+    "./vite": "./src/vite.ts",
     "./runtime/preprocess": "./src/runtime/preprocess.ts",
     "./internal/generators": "./src/internal/generators.ts",
     "./internal/remote-client": "./src/internal/remote-client.ts",

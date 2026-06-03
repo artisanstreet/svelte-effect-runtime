@@ -183,6 +183,25 @@ Deno.test("root entry exposes server helpers for rewritten server imports", asyn
   assertEquals(typeof root.RequestEvent, "function");
 });
 
+Deno.test("package manifests expose vite entrypoint", async () => {
+  const package_manifest = JSON.parse(
+    await Deno.readTextFile(
+      "../../modules/svelte-effect-runtime/package.json",
+    ),
+  );
+  const deno_manifest = JSON.parse(
+    await Deno.readTextFile(
+      "../../modules/svelte-effect-runtime/deno.json",
+    ),
+  );
+
+  assertEquals(package_manifest.exports["./vite"], {
+    types: "./.dist/vite.d.ts",
+    default: "./.dist/vite.js",
+  });
+  assertEquals(deno_manifest.exports["./vite"], "./src/vite.ts");
+});
+
 Deno.test("vite remote client wrapper preserves native SvelteKit remote module", () => {
   const source = [
     `import * as __remote from '__sveltekit/remote';`,
