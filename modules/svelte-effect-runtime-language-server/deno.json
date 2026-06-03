@@ -1,9 +1,8 @@
 {
   "tasks": {
     "build": "deno task clean && deno task prepare:runtime && deno run -A ../../build/lsp.ts",
-    "clean": "rm -rf dist runtime ../../dist/svelte-effect-runtime-language-server",
+    "clean": "rm -rf .dist runtime ../../.dist/svelte-effect-runtime-language-server",
     "prepare:runtime": "cd ../svelte-effect-runtime && deno task build && cd ../svelte-effect-runtime-language-server && deno run -A ../../build/assets.ts svelte-effect-runtime-language-server",
-    "start": "node ./dist/server.cjs --stdio",
-    "test": "deno task prepare:runtime && deno test -A --node-modules-dir=auto"
+    "start": "node ./.dist/server.cjs --stdio"
   }
 }

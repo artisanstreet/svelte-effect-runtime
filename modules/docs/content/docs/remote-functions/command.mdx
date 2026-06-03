@@ -1,0 +1,86 @@
+---
+title: Command
+description: Run server mutations from client events with pending state.
+---
+
+Use `Command` for server work that changes state: saving settings, deleting records, sending invitations, or starting jobs. Commands make mutation intent visible in both server and client code.
+
+## When to use this
+
+Use a command from a button, menu item, or explicit client action. Prefer `Form` when the mutation starts from an HTML form and should work with progressive enhancement.
+
+## Minimal working example
+
+```ts
+import { Command } from "svelte-effect-runtime/server";
+import { Effect, Schema } from "effect";
+
+const ArchiveProjectInput = Schema.Struct({
+  project_id: Schema.String,
+});
+
+export const archive_project = Command(
+  ArchiveProjectInput,
+  ({ project_id }) =>
+    Effect.succeed({ archived: true, project_id }),
+);
+```
+
+```svelte
+<script lang="ts">
+  import { archive_project } from "./project.remote";
+
+  let pending = $state(false);
+
+  async function archive() {
+    pending = true;
+
+    try {
+      await archive_project({ project_id: "p_123" });
+    } finally {
+      pending = false;
+    }
+  }
+</script>
+
+<button disabled={pending} onclick={archive}>Archive</button>
+```
+
+## Realistic variant
+
+Use commands inside Effect-aware handlers when you want typed error recovery:
+
+```svelte
+<script lang="ts" effect>
+  import { Effect } from "effect";
+  import { archive_project } from "./project.remote";
+
+  let message = $state("");
+
+  const archive = () =>
+    Effect.gen(function* () {
+      yield* archive_project({ project_id: "p_123" });
+      message = "Archived";
+    }).pipe(
+      Effect.catchAll(() => Effect.sync(() => {
+        message = "Archive failed";
+      })),
+    );
+</script>
+
+<button onclick={archive}>Archive</button>
+<p>{message}</p>
+```
+
+## Common mistakes
+
+- Using command results as if they were long-lived query state.
+- Forgetting to disable duplicate-trigger controls while the command is pending.
+- Swallowing server failures without giving the user a recovery path.
+- Using `Command` for forms that need field-level validation errors.
+
+## Related pages
+
+- [Form](/docs/remote-functions/form)
+- [Remote errors](/docs/server/errors)
+- [Remote client API](/docs/reference/remote-client-api)

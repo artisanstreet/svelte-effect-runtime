@@ -1,0 +1,11 @@
+{
+  "title": "Remote Functions",
+  "pages": [
+    "query",
+    "query-batch",
+    "query-live",
+    "command",
+    "form",
+    "prerender"
+  ]
+}

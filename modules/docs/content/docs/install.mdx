@@ -1,0 +1,129 @@
+---
+title: Install
+description: Add the package, Vite plugin, Svelte config flag, and editor notes.
+---
+
+Installation has three parts: install the package, add the Svelte preprocessor, and add the Vite plugin. If you plan to use remote functions, also enable SvelteKit's remote function flag.
+
+## When to use this
+
+Use this page when starting a new SvelteKit app or when adding Effect support to an existing app. The setup is intentionally small, but the Svelte preprocessor is required for component `yield*`.
+
+## Minimal working example
+
+<CodeBlockTabs defaultValue="pnpm">
+  <CodeBlockTabsList>
+    <CodeBlockTabsTrigger value="pnpm">pnpm</CodeBlockTabsTrigger>
+    <CodeBlockTabsTrigger value="npm">npm</CodeBlockTabsTrigger>
+    <CodeBlockTabsTrigger value="bun">bun</CodeBlockTabsTrigger>
+    <CodeBlockTabsTrigger value="deno">deno</CodeBlockTabsTrigger>
+  </CodeBlockTabsList>
+  <CodeBlockTab value="pnpm">
+
+```sh
+pnpm add svelte-effect-runtime effect
+```
+
+  </CodeBlockTab>
+  <CodeBlockTab value="npm">
+
+```sh
+npm install svelte-effect-runtime effect
+```
+
+  </CodeBlockTab>
+  <CodeBlockTab value="bun">
+
+```sh
+bun add svelte-effect-runtime effect
+```
+
+  </CodeBlockTab>
+  <CodeBlockTab value="deno">
+
+```sh
+deno add npm:svelte-effect-runtime npm:effect
+```
+
+  </CodeBlockTab>
+</CodeBlockTabs>
+
+Wire the Svelte preprocessor in `svelte.config.js`:
+
+```js
+import adapter from "@sveltejs/adapter-auto";
+import { preprocess } from "svelte-effect-runtime";
+
+const config = {
+  kit: {
+    adapter: adapter(),
+  },
+  preprocess: [preprocess()],
+};
+
+export default config;
+```
+
+Then add the Vite plugin before `sveltekit()`:
+
+```ts
+import { sveltekit } from "@sveltejs/kit/vite";
+import { defineConfig } from "vite";
+import { effect } from "svelte-effect-runtime";
+
+export default defineConfig({
+  plugins: [effect(), sveltekit()],
+});
+```
+
+Enable remote functions in the same Svelte config when you use `Query`, `Command`, `Form`, or `Prerender`:
+
+```js
+import adapter from "@sveltejs/adapter-auto";
+import { preprocess } from "svelte-effect-runtime";
+
+const config = {
+  kit: {
+    adapter: adapter(),
+    experimental: {
+      remoteFunctions: true,
+    },
+  },
+  preprocess: [preprocess()],
+};
+
+export default config;
+```
+
+## Realistic variant
+
+Many apps start with the default runtime and add custom services later:
+
+```ts
+import { ClientRuntime } from "svelte-effect-runtime";
+import { Layer } from "effect";
+
+export const init = () => {
+  ClientRuntime.make(Layer.empty);
+};
+```
+
+Put client runtime setup in `src/hooks.client.ts` and server runtime setup in `src/hooks.server.ts`.
+
+## Why both hooks are needed
+
+The Svelte preprocessor lowers `<script effect>` and markup `yield*` before Svelte parses the component. The Vite plugin handles server import rewrites and wraps SvelteKit's generated remote client exports in Effect-returning adapters.
+
+## Common mistakes
+
+- Forgetting `preprocess: [preprocess()]` in `svelte.config.js`.
+- Placing `effect()` after `sveltekit()` in the Vite plugin list.
+- Enabling remote functions only after writing remote files, then debugging missing routes.
+- Installing the runtime package but forgetting the peer Effect package in package managers that do not hoist it for you.
+- Expecting the language server or VS Code extension packages to be part of V2 runtime work.
+
+## Related pages
+
+- [Mental model](/docs/mental-model)
+- [Vite plugin reference](/docs/reference/vite-plugin)
+- [Client runtime](/docs/client/runtime)

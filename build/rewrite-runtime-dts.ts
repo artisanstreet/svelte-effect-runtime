@@ -1,11 +1,17 @@
 import { dirname, fromFileUrl, join, relative, resolve } from "@std/path";
+import { copy } from "@std/fs/copy";
 
 const repo_root = resolve(dirname(fromFileUrl(import.meta.url)), "..");
-const dist_root = join(
+const package_dist = join(
   repo_root,
   "modules",
   "svelte-effect-runtime",
-  "dist",
+  ".dist",
+);
+const dist_root = join(
+  repo_root,
+  ".dist",
+  "svelte-effect-runtime",
 ).replaceAll("\\", "/");
 
 const alias_patterns = [
@@ -15,15 +21,12 @@ const alias_patterns = [
       return specifier.slice(2).replace(/\.ts$/, ".js");
     },
   },
-  {
-    prefix: "$internal/",
-    resolve(specifier: string): string {
-      return `internal/${specifier.slice("$internal/".length).replace(/\.ts$/, ".js")}`;
-    },
-  },
 ] as const;
 
-function to_posix_relative(from_file: string, target_from_dist: string): string {
+function to_posix_relative(
+  from_file: string,
+  target_from_dist: string,
+): string {
   const target = `${dist_root}/${target_from_dist}`.replaceAll("\\", "/");
   const from_dir = from_file.slice(0, from_file.lastIndexOf("/"));
   const rel = relative(from_dir, target).replaceAll("\\", "/");
@@ -31,19 +34,26 @@ function to_posix_relative(from_file: string, target_from_dist: string): string 
 }
 
 function rewrite_alias_specifiers(file_path: string, content: string): string {
-  return content.replace(/(["'])(\$\/[^"']+\.ts|\$internal\/[^"']+\.ts)\1/g, (
+  return content.replace(/(["'])(\$\/[^"']+\.ts)\1/g, (
     match,
     quote: string,
     specifier: string,
   ) => {
-    const alias = alias_patterns.find(({ prefix }) => specifier.startsWith(prefix));
-
-    if (!alias) {
-      return match;
-    }
-
-    return `${quote}${to_posix_relative(file_path, alias.resolve(specifier))}${quote}`;
+    const alias = alias_patterns.find(({ prefix }) =>
+      specifier.startsWith(prefix)
+    );
+    if (!alias) return match;
+    return `${quote}${
+      to_posix_relative(file_path, alias.resolve(specifier))
+    }${quote}`;
   });
+}
+
+function rewrite_relative_specifiers(content: string): string {
+  return content.replace(
+    /((?:from|import)\s*["'])(\.{1,2}\/[^"']+)\.ts(["'])/g,
+    "$1$2.js$3",
+  );
 }
 
 for await (const entry of Deno.readDir(dist_root)) {
@@ -58,18 +68,20 @@ async function visit(relative_path: string): Promise<void> {
     for await (const entry of Deno.readDir(file_path)) {
       await visit(`${relative_path}/${entry.name}`);
     }
-
     return;
   }
 
-  if (!file_path.endsWith(".d.ts")) {
-    return;
-  }
+  if (!file_path.endsWith(".d.ts")) return;
 
   const content = await Deno.readTextFile(file_path);
-  const rewritten = rewrite_alias_specifiers(file_path, content);
+  const rewritten = rewrite_relative_specifiers(
+    rewrite_alias_specifiers(file_path, content),
+  );
 
   if (rewritten !== content) {
     await Deno.writeTextFile(file_path, rewritten);
   }
 }
+
+await Deno.remove(package_dist, { recursive: true }).catch(() => undefined);
+await copy(dist_root, package_dist, { overwrite: true });

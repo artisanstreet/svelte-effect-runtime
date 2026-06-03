@@ -1,0 +1,46 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "allowImportingTsExtensions": true,
+    "baseUrl": ".",
+    "esModuleInterop": true,
+    "incremental": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "paths": {
+      "@/*": [
+        "./*"
+      ],
+      "collections/*": [
+        "./.source/*"
+      ]
+    },
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "es2022"
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".source/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

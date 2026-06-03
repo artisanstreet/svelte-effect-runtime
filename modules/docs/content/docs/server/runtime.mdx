@@ -1,0 +1,65 @@
+---
+title: Server Runtime
+description: Configure ServerRuntime.make for remote handler execution.
+---
+
+The server runtime executes Effect programs inside remote function handlers. Register it once when handlers need database clients, auth services, logging, or other server-only layers.
+
+## When to use this
+
+Use `ServerRuntime.make` as soon as remote handlers need shared requirements. The default runtime is fine for examples that only use `Effect.succeed`.
+
+## Minimal working example
+
+```ts
+import { ServerRuntime } from "svelte-effect-runtime/server";
+import { Layer } from "effect";
+
+export const init = () => {
+  ServerRuntime.make(Layer.empty);
+};
+```
+
+Put this in `src/hooks.server.ts`.
+
+## Realistic variant
+
+Provide server services once and consume them from remote functions:
+
+```ts
+import { ServerRuntime } from "svelte-effect-runtime/server";
+import { DatabaseLive } from "$lib/server/database";
+import { SessionLive } from "$lib/server/session";
+import { Layer } from "effect";
+
+export const init = () => {
+  ServerRuntime.make(Layer.mergeAll(DatabaseLive, SessionLive));
+};
+```
+
+```ts
+import { Query } from "svelte-effect-runtime/server";
+import { Database } from "$lib/server/database";
+import { Effect } from "effect";
+
+export const get_projects = Query(() =>
+  Effect.gen(function* () {
+    const database = yield* Database;
+
+    return yield* database.projects.list();
+  }),
+);
+```
+
+## Common mistakes
+
+- Creating the server runtime inside each remote handler.
+- Providing browser services to the server runtime.
+- Reading request-scoped data from singleton services instead of `RequestEvent`.
+- Forgetting to make services safe for concurrent requests.
+
+## Related pages
+
+- [RequestEvent](/docs/server/request-event)
+- [Services and layers](/docs/recipes/services-and-layers)
+- [Server API reference](/docs/reference/server-api)

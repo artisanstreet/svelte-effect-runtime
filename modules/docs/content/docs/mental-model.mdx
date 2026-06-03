@@ -1,0 +1,78 @@
+---
+title: Mental Model
+description: How script effects, markup effects, runtimes, and remote functions fit together.
+---
+
+Think of the package as two bridges. The client bridge lets Svelte components run Effect programs naturally. The server bridge lets SvelteKit remote functions execute inside an Effect runtime with typed inputs and failures.
+
+## When to use this
+
+Read this before choosing between `<script effect>`, markup `yield*`, and remote functions. The right choice is usually about where the work belongs: browser, server request, or build time.
+
+## Minimal working example
+
+Client work lives in a Svelte component:
+
+```svelte
+<script lang="ts" effect>
+  import { Effect } from "effect";
+
+  let name = $state("Ada");
+  const message = Effect.succeed(`Hello, ${name}`);
+</script>
+
+<p>{yield* message}</p>
+```
+
+Server work lives in a remote function:
+
+```ts
+import { Query } from "svelte-effect-runtime/server";
+import { Effect, Schema } from "effect";
+
+export const get_user = Query(Schema.Struct({ id: Schema.String }), ({ id }) =>
+  Effect.succeed({ id, name: "Ada" }),
+);
+```
+
+## Realistic variant
+
+Use runtimes when effects need services:
+
+```ts
+import { ClientRuntime } from "svelte-effect-runtime";
+import { BrowserClockLive } from "$lib/services/browser-clock";
+
+export const init = () => {
+  ClientRuntime.make(BrowserClockLive);
+};
+```
+
+The component yields an Effect. The runtime supplies requirements. Svelte still owns rendering, invalidation, and component lifecycle.
+
+## What fits where
+
+<Cards>
+  <Card title="script effect" href="/docs/client/script-effect">
+    Use top-level `yield*` for component setup, derived values, and cleanup-aware fibers.
+  </Card>
+  <Card title="markup effect" href="/docs/client/markup-effect">
+    Use `{yield* ...}` when rendering directly depends on an Effect value.
+  </Card>
+  <Card title="remote function" href="/docs/remote-functions">
+    Use this when data, auth, cookies, or mutations belong on the server.
+  </Card>
+</Cards>
+
+## Common mistakes
+
+- Treating every Effect as remote. Browser-only services can run in the client runtime.
+- Treating every remote function as a query. Mutations should usually be `Command` or `Form`.
+- Forgetting that remote functions run with request context, while component effects run with browser lifecycle.
+- Building one large demo before understanding the boundaries; isolated snippets make failures easier to diagnose.
+
+## Related pages
+
+- [Script effect](/docs/client/script-effect)
+- [Remote function overview](/docs/remote-functions)
+- [Server runtime](/docs/server/runtime)

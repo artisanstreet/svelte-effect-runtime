@@ -1,0 +1,60 @@
+---
+title: Prerender
+description: Resolve static or build-time data with optional dynamic fallback.
+---
+
+Use `Prerender` for data that can be known at build time or generated as static output. It keeps static pages fast while still letting the code use Effect services.
+
+## When to use this
+
+Use it for docs indexes, product catalogs, marketing content, generated navigation, and other data that changes through deploys rather than per request.
+
+## Minimal working example
+
+```ts
+import { Prerender } from "svelte-effect-runtime/server";
+import { Effect, Schema } from "effect";
+
+const DocsIndexInput = Schema.Struct({
+  section: Schema.String,
+});
+
+export const get_docs_index = Prerender(
+  DocsIndexInput,
+  ({ section }) =>
+    Effect.succeed([
+      { section, title: "Install" },
+      { section, title: "Mental model" },
+    ]),
+);
+```
+
+## Realistic variant
+
+Allow dynamic fallback only when the data can safely be computed at request time:
+
+```ts
+export const get_product = Prerender(
+  Schema.Struct({ slug: Schema.String }),
+  ({ slug }) =>
+    Effect.succeed({ slug, name: "Starter Kit" }),
+  { dynamic: true },
+);
+```
+
+## When not to use it
+
+Do not use `Prerender` for authenticated data, cookies, rapidly changing records, or mutations. Use `Query` for request-time reads and `Command` or `Form` for writes.
+
+## Common mistakes
+
+- Reading request-only values while expecting static output.
+- Turning on `dynamic: true` to hide that data should really be a query.
+- Using prerendered data for permissions or account-specific UI.
+- Forgetting that build-time failures can break deployment.
+
+## Related pages
+
+- [Query](/docs/remote-functions/query)
+- [Server runtime](/docs/server/runtime)
+- [Remote function overview](/docs/remote-functions)

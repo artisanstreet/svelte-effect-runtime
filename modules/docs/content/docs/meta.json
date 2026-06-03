@@ -1,0 +1,14 @@
+{
+  "title": "Docs",
+  "pages": [
+    "index",
+    "tooling",
+    "best-practices",
+    "---Remote Functions---",
+    "remote-functions",
+    "---Runtimes---",
+    "runtimes",
+    "---Reference---",
+    "reference"
+  ]
+}

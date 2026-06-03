@@ -1,2 +1,4 @@
 .vercel
-.vitepress/cache
+.next
+.source
+next-env.d.ts

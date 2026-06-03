@@ -1,7 +1,0 @@
-**/.git/**
-**/.DS_Store
-scripts/**
-extension.js
-server.js
-patch-language-server.js
-!dist/**

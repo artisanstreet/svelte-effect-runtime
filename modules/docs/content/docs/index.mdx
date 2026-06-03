@@ -1,0 +1,111 @@
+---
+title: Getting Started
+description: Write Effect programs directly in Svelte components and SvelteKit remote functions.
+---
+
+`svelte-effect-runtime` lets SvelteKit code speak Effect without turning every component into plumbing. You get client-side `yield*` in Svelte, Effect-backed remote functions on the server, and small runtime helpers for wiring services and layers.
+
+<Cards>
+  <Card title="New to the package" href="/docs/install">
+    Install the Vite plugin, enable remote functions, and run the first snippet.
+  </Card>
+  <Card title="Using Effect in components" href="/docs/client/script-effect">
+    Use top-level `yield*`, `$state`, cleanup, and reactive assignments.
+  </Card>
+  <Card title="Calling the server" href="/docs/remote-functions">
+    Choose `Query`, `Command`, `Form`, or `Prerender` for server work.
+  </Card>
+</Cards>
+
+## When to use this
+
+Use `svelte-effect-runtime` when your SvelteKit app already benefits from Effect services, typed failures, layers, or structured concurrency. It is especially useful when browser code and server code should share the same error model instead of converting every boundary to plain promises.
+
+Skip it for components that only need simple local state. Plain Svelte is still the right tool for simple UI transitions and tiny event handlers.
+
+## Three-minute setup
+
+Install the package, add the Svelte preprocessor, and add the Vite plugin before `sveltekit()`:
+
+```js
+import { preprocess } from "svelte-effect-runtime";
+
+export default {
+  kit: {
+    experimental: {
+      remoteFunctions: true,
+    },
+  },
+  preprocess: [preprocess()],
+};
+```
+
+```ts
+import { sveltekit } from "@sveltejs/kit/vite";
+import { defineConfig } from "vite";
+import { effect } from "svelte-effect-runtime";
+
+export default defineConfig({
+  plugins: [effect(), sveltekit()],
+});
+```
+
+## First working example
+
+Add `effect` to a component script and yield an Effect value from markup:
+
+```svelte
+<script lang="ts" effect>
+  import { Effect } from "effect";
+
+  const greeting = Effect.succeed("Hello from Effect");
+</script>
+
+<p>{yield* greeting}</p>
+```
+
+## Realistic variant
+
+Use a remote `Query` when the value belongs on the server:
+
+```ts
+import { Query } from "svelte-effect-runtime/server";
+import { Effect, Schema } from "effect";
+
+const ProfileInput = Schema.Struct({
+  user_id: Schema.String,
+});
+
+export const get_profile = Query(ProfileInput, ({ user_id }) =>
+    Effect.succeed({ user_id, name: "Ada Lovelace" }),
+);
+```
+
+```svelte
+<script lang="ts" effect>
+  import { get_profile } from "./profile.remote";
+
+  let user_id = $state("42");
+  const profile = get_profile({ user_id });
+</script>
+
+{#await yield* profile}
+  <p>Loading...</p>
+{:then value}
+  <h2>{value.name}</h2>
+{/await}
+```
+
+## Common mistakes
+
+- Add `preprocess: [preprocess()]` in `svelte.config.js`; that is what lowers component `yield*`.
+- Put `effect()` before `sveltekit()` in `vite.config.ts`; the plugin wraps server and remote-client code.
+- Add the `effect` attribute to any component script that uses top-level `yield*`.
+- Use remote functions for server work instead of importing server-only services into browser components.
+- Keep examples small at first; introduce custom layers after the basic runtime works.
+
+## Related pages
+
+- [Install](/docs/install)
+- [Mental model](/docs/mental-model)
+- [Remote functions](/docs/remote-functions)

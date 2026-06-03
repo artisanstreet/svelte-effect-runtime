@@ -1,0 +1,66 @@
+---
+title: Server Errors
+description: Model RemoteFailure, validation errors, HTTP errors, and transport errors.
+---
+
+Remote functions cross a network boundary, so error shape matters. Expected domain failures should be typed. Validation errors should point to bad input. Transport failures should be treated as infrastructure problems.
+
+## When to use this
+
+Use this page when deciding whether an error belongs in your domain model, schema validation, HTTP response handling, or retry path.
+
+## Minimal working example
+
+```ts
+export type ProjectNotFound = {
+  readonly _tag: "ProjectNotFound";
+  project_id: string;
+};
+```
+
+```ts
+import { Effect } from "effect";
+
+const load_project = (project_id: string) =>
+  Effect.fail({ _tag: "ProjectNotFound", project_id } satisfies ProjectNotFound);
+```
+
+## Realistic variant
+
+Return field-level validation from a form through the form handler's `invalid` proxy:
+
+```ts
+import { Form } from "svelte-effect-runtime/server";
+import { Effect, Schema } from "effect";
+
+const ProfileInput = Schema.Struct({
+  name: Schema.String,
+});
+
+export const update_name = Form(
+  ProfileInput,
+  ({ data, invalid }) =>
+    Effect.gen(function* () {
+      if (data.name.trim().length === 0) {
+        return yield* invalid.name("Name is required");
+      }
+
+      return { name: data.name.trim() };
+    }),
+);
+```
+
+Use HTTP errors for protocol-level failures and typed failures for business cases the UI can recover from.
+
+## Common mistakes
+
+- Throwing plain `Error` for expected cases like missing records.
+- Collapsing validation, auth, and transport failures into one string.
+- Exposing server internals in client-visible failure payloads.
+- Retrying validation failures as if they were network failures.
+
+## Related pages
+
+- [Form](/docs/remote-functions/form)
+- [Loading and errors](/docs/recipes/loading-and-errors)
+- [Remote client API](/docs/reference/remote-client-api)

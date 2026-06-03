@@ -1,0 +1,43 @@
+---
+title: effect
+---
+
+# effect
+
+`effect()` is the Vite companion plugin entrypoint. It installs the `.svelte` effect transform path and the SvelteKit remote-function integration.
+
+```ts
+import { effect } from "svelte-effect-runtime";
+```
+
+## Signature
+
+```ts
+export interface EffectPluginOptions {
+  effect?: EffectPreprocessOptions;
+  remoteModuleId?: string;
+}
+
+export function effect(
+  options?: EffectPluginOptions
+): PluginOption[];
+```
+
+## Semantics
+
+- Returns a plugin array meant to be composed with `sveltekit()`.
+- Installs the `.svelte` effect transform.
+- Installs the remote adapter that makes `.remote.ts` calls default to `Effect`.
+- Does not install the SvelteKit plugin for you.
+
+## Expected Vite config
+
+```ts
+import { defineConfig } from "vite";
+import { sveltekit } from "@sveltejs/kit/vite";
+import { effect } from "svelte-effect-runtime";
+
+export default defineConfig({
+  plugins: [effect(), sveltekit()]
+});
+```

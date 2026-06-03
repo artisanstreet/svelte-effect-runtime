@@ -1,0 +1,35 @@
+---
+title: Transport
+---
+
+# Transport
+
+Transport support is explicit. Custom schema-backed values should be registered through `create_effect_transport(...)`.
+
+```ts
+import { create_effect_transport } from "svelte-effect-runtime";
+```
+
+## Signatures
+
+```ts
+export interface Transporter<T = any, U = { value: unknown }> {
+  decode: (data: U) => T;
+  encode: (value: T) => false | U;
+}
+
+export type Transport = Record<string, Transporter>;
+```
+
+```ts
+export function create_effect_transport<
+  const Schemas extends Record<string, EffectSchema>
+>(schemas: Schemas): Transport;
+```
+
+## Semantics
+
+- Accepts a record of `Effect.Schema` values.
+- Produces a SvelteKit `transport` object.
+- Intended for schema-backed classes, tagged classes, and tagged errors.
+- Plain devalue-supported values do not need explicit registration.

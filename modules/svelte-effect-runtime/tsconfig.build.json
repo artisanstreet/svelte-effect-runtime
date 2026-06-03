@@ -3,8 +3,8 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "rootDir": ".",
-    "outDir": "./dist",
+    "rootDir": "./src",
+    "outDir": "../../.dist/svelte-effect-runtime",
     "declaration": true,
     "verbatimModuleSyntax": true,
     "strict": true,
@@ -12,46 +12,31 @@
     "allowImportingTsExtensions": true,
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
-    "types": [
-      "node"
-    ],
+    "types": ["node"],
     "baseUrl": ".",
     "paths": {
-      "$": [
-        "./mod.ts"
-      ],
-      "$/*": [
-        "./*"
-      ],
-      "$internal/*": [
-        "./internal/*"
-      ],
-      "$tests/*": [
-        "./tests/*"
-      ],
-      "$app/server": [
-        "./internal/app-server-shim.ts"
-      ],
-      "@sveltejs/kit/internal/server": [
-        "./internal/sveltekit-internal-server-shim.d.ts"
-      ]
+      "$": ["./src/mod.ts"],
+      "$/*": ["./src/*"]
     }
   },
   "include": [
-    "./mod.ts",
-    "./root-node.ts",
-    "./v4/mod.ts",
-    "./v4/root-node.ts",
-    "./v4/effect.ts",
-    "./v4/preprocess.ts",
-    "./v4/server.ts",
-    "./v4/vite.ts",
-    "./effect.ts",
-    "./client.ts",
-    "./server.ts",
-    "./language-server.ts",
-    "./preprocess.ts",
-    "./vite.ts",
-    "./internal/**/*.ts"
+    "./src/mod.ts",
+    "./src/runtime/preprocess.ts",
+    "./src/internal/generators.ts",
+    "./src/internal/remote-client.ts",
+    "./src/internal/remote-server.ts",
+    "./src/detect.ts",
+    "./src/dispatcher.ts",
+    "./src/generators.ts",
+    "./src/preprocess.ts",
+    "./src/server.ts",
+    "./src/vite.ts",
+    "./src/remote/shared.ts",
+    "./src/remote/server.ts",
+    "./src/remote/client.ts",
+    "./src/markup/transform.ts",
+    "./src/markup/value.ts",
+    "./src/markup/promise.ts",
+    "./src/markup/run.ts"
   ]
 }

@@ -11,17 +11,17 @@ const package_dir = fromFileUrl(
 const repo_root = resolve(dirname(fromFileUrl(import.meta.url)), "..");
 const output_dir = join(
   repo_root,
-  "dist",
+  ".dist",
   "svelte-effect-runtime-language-server",
 );
-const package_dist = join(package_dir, "dist");
+const package_dist = join(package_dir, ".dist");
 
 await Deno.remove(output_dir, { recursive: true }).catch(() => undefined);
 await Deno.mkdir(output_dir, { recursive: true });
 await Deno.remove(package_dist, { recursive: true }).catch(() => undefined);
 
 await build({
-  input: join(package_dir, "server.ts"),
+  input: join(package_dir, "src", "server.ts"),
   output: {
     file: join(output_dir, "server.cjs"),
     format: "cjs",
@@ -33,6 +33,7 @@ await build({
     /^magic-string$/,
     /^@jridgewell\/trace-mapping$/,
     /^svelte-language-server$/,
+    /^vscode-languageserver(\/.*)?$/,
   ],
 });
 

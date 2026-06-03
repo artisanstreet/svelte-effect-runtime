@@ -1,0 +1,58 @@
+---
+title: Troubleshooting
+description: Fix common setup, transform, and remote function problems.
+---
+
+Most issues come from plugin order, missing remote function configuration, or using server code from the browser.
+
+## The effect script is not transformed
+
+Check the script tag and plugin order:
+
+```svelte
+<script lang="ts" effect>
+  import { Effect } from "effect";
+</script>
+```
+
+```ts
+plugins: [effect(), sveltekit()]
+```
+
+Also check that `svelte.config.js` includes the preprocessor:
+
+```js
+import { preprocess } from "svelte-effect-runtime";
+
+export default {
+  preprocess: [preprocess()],
+};
+```
+
+## Remote functions do not resolve
+
+Enable SvelteKit remote functions:
+
+```js
+const config = {
+  kit: {
+    experimental: {
+      remoteFunctions: true,
+    },
+  },
+};
+```
+
+## A browser build imports server code
+
+Move database clients, secrets, cookies, and request-only services into remote handlers or server runtime layers.
+
+## Code examples render strangely
+
+Use plain fenced code blocks and Fumadocs JSX components. Avoid legacy directive fences.
+
+## Related pages
+
+- [Install](/docs/install)
+- [Vite plugin](/docs/reference/vite-plugin)
+- [Server runtime](/docs/server/runtime)
