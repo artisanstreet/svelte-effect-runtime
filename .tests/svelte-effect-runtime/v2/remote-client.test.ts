@@ -413,6 +413,146 @@ Deno.test("remote form adapter posts explicit input when native submit is form-b
   }
 });
 
+Deno.test("remote form adapter uses native submit when no remote endpoint is configured", async () => {
+  let submitted_title = "";
+
+  const native = {
+    method: "POST",
+    action: "?/remote=abc%2Fcreate",
+    submit(input: { title: string }) {
+      submitted_title = input.title;
+
+      return Promise.resolve(`native ${input.title}`);
+    },
+  };
+
+  const form = create_remote_form_adapter<{ title: string }, string>(
+    native,
+    (value) => value,
+    "",
+  );
+
+  const result = await Effect.runPromise(form({ title: "draft" }));
+
+  assertEquals(result, "native draft");
+  assertEquals(submitted_title, "draft");
+});
+
+Deno.test("remote form adapter reports transport errors without submit or endpoint", async () => {
+  const form = create_remote_form_adapter<{ title: string }, string>(
+    { method: "POST" },
+    (value) => value,
+    "",
+  );
+
+  const error = await assertRejects(() =>
+    Effect.runPromise(form({ title: "draft" }))
+  );
+
+  assertEquals((error as { _tag?: string })._tag, "RemoteTransportError");
+});
+
+Deno.test("remote form adapter maps endpoint validation issues to the Effect error channel", async () => {
+  const original_fetch = globalThis.fetch;
+
+  globalThis.fetch = (() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          type: "result",
+          result: stringify({
+            issues: [{ message: "Title too short", path: ["title"] }],
+          }),
+        }),
+      ),
+    )) as typeof fetch;
+
+  try {
+    const form = create_remote_form_adapter<{ title: string }, string>(
+      {
+        method: "POST",
+        action: "?/remote=abc%2Fcreate",
+      },
+      (value) => value,
+      "/_app/remote",
+    );
+
+    const error = await assertRejects(() =>
+      Effect.runPromise(form({ title: "x" }))
+    );
+
+    assertEquals((error as { _tag?: string })._tag, "RemoteValidationError");
+    assertEquals(
+      (error as { issues?: Array<{ message: string }> }).issues?.[0]?.message,
+      "Title too short",
+    );
+  } finally {
+    globalThis.fetch = original_fetch;
+  }
+});
+
+Deno.test("remote form adapter returns keyed forms from nested for calls", async () => {
+  const keys: Array<string | number | boolean> = [];
+  const native = {
+    method: "POST",
+    action: "?/remote=abc%2Froot",
+    for(key: string | number | boolean) {
+      keys.push(key);
+
+      return {
+        method: "POST",
+        action: `?/remote=abc%2F${key}`,
+        submit(input: { title: string }) {
+          return Promise.resolve(`${key}:${input.title}`);
+        },
+      };
+    },
+  };
+
+  const form = create_remote_form_adapter<{ title: string }, string>(
+    native,
+    (value) => value,
+    "",
+  );
+
+  const child = form.for("profile");
+  const result = await Effect.runPromise(child({ title: "saved" }));
+
+  assertEquals(keys, ["profile"]);
+  assertEquals(child.action, "?/remote=abc%2Fprofile");
+  assertEquals(result, "profile:saved");
+});
+
+Deno.test("remote form adapter preflight calls native preflight and keeps callable", async () => {
+  const schemas: unknown[] = [];
+  const schema = { name: "draft" };
+  const native = {
+    method: "POST",
+    action: "?/remote=abc%2Fcreate",
+    preflight(next_schema: unknown) {
+      schemas.push(next_schema);
+
+      return native;
+    },
+    submit(input: { title: string }) {
+      return Promise.resolve(input.title);
+    },
+  };
+
+  const form = create_remote_form_adapter<{ title: string }, string>(
+    native,
+    (value) => value,
+    "",
+  );
+
+  const preflighted = form.preflight(schema);
+  const result = await Effect.runPromise(preflighted({ title: "ok" }));
+
+  assertEquals(preflighted, form);
+  assertEquals(schemas, [schema]);
+  assertEquals(result, "ok");
+});
+
 Deno.test("remote form adapter preserves SvelteKit 2.61 enhance instance descriptors", () => {
   const fields = { title: { value: () => "draft" } };
 
