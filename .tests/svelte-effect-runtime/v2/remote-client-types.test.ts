@@ -208,7 +208,11 @@ async function assert_type_checks(
   source: string,
 ): Promise<void> {
   const repo_root = join(Deno.cwd(), "../..");
-  const dir = await Deno.makeTempDir({ dir: join(repo_root, ".tmp") });
+  const tmp_root = join(repo_root, ".tmp");
+
+  await Deno.mkdir(tmp_root, { recursive: true });
+
+  const dir = await Deno.makeTempDir({ dir: tmp_root });
   const app_server_path = join(dir, "$app-server.ts");
   const source_path = join(dir, filename);
   const tsconfig_path = join(dir, "tsconfig.json");
@@ -283,7 +287,8 @@ export function prerender(..._args: unknown[]): unknown {
     ),
   );
 
-  const command = new Deno.Command("npm.cmd", {
+  const npm_command = Deno.build.os === "windows" ? "npm.cmd" : "npm";
+  const command = new Deno.Command(npm_command, {
     args: [
       "exec",
       "tsc",

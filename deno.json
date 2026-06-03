@@ -40,6 +40,7 @@
     "smoke:docs": "deno run -A build/smoke-docs.ts",
     "smoke:runtime": "deno run -A build/smoke-current-runtime.ts",
     "test": "deno task test:runtime",
+    "test:lsp": "deno task build:lsp",
     "test:runtime": "cd modules/svelte-effect-runtime && deno task test"
   }
 }
