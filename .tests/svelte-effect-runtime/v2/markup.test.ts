@@ -1,8 +1,9 @@
-import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
-import { Effect } from "effect";
+import { transform_markup_effect } from "../../../modules/svelte-effect-runtime/src/markup/transform.ts";
 import { reset_dispatcher } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
 import { value } from "../../../modules/svelte-effect-runtime/src/markup/value.ts";
-import { transform_markup_effect } from "../../../modules/svelte-effect-runtime/src/markup/transform.ts";
+import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
+import { compile } from "svelte/compiler";
+import { Effect } from "effect";
 
 // ─── Identity / pass-through ─────────────────────────────────
 
@@ -141,6 +142,56 @@ Deno.test("rewrites {let x = yield* expr} in declaration initializer", () => {
   assertStringIncludes(result.code, `{let x = await __ser_markup_promise`);
   assertStringIncludes(result.code, `compute`);
   if (!result.has_yield) throw new Error("has_yield should be true");
+});
+
+Deno.test("preserves declaration rune placement while lowering yield*", () => {
+  const source = [
+    `<script>`,
+    `  function getPublicationRemote() {}`,
+    `  const params = { publication_id: "p1" };`,
+    `</script>`,
+    `{let publication = $derived(yield* getPublicationRemote({ publicationId: params.publication_id }))}`,
+    `<p>{publication}</p>`,
+  ].join("\n");
+
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `$derived(await __ser_markup_promise`);
+
+  if (result.code.includes("[$derived")) {
+    throw new Error("runes must not be captured as runtime dependencies");
+  }
+
+  compile(result.code, {
+    filename: "Test.svelte",
+    generate: "server",
+    experimental: { async: true },
+  });
+});
+
+Deno.test("lowers multiple yield* expressions inside declaration runes", () => {
+  const source = [
+    `<script>`,
+    `  function first() {}`,
+    `  function second() {}`,
+    `</script>`,
+    `{let value = $derived((yield* first()) + (yield* second()))}`,
+    `<p>{value}</p>`,
+  ].join("\n");
+
+  const result = transform_markup_effect(source, "Test.svelte");
+  const promise_calls =
+    [...result.code.matchAll(/\b__ser_markup_promise\(/g)].length;
+
+  assertEquals(promise_calls, 2);
+  assertStringIncludes(result.code, `$derived((await __ser_markup_promise`);
+  assertStringIncludes(result.code, `+ (await __ser_markup_promise`);
+
+  compile(result.code, {
+    filename: "Test.svelte",
+    generate: "server",
+    experimental: { async: true },
+  });
 });
 
 Deno.test("rewrites destructured declaration tag initializers", () => {
