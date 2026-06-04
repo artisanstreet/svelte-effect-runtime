@@ -5,18 +5,15 @@ import ts from "typescript";
  *
  * @since 2.0.0
  * @param has_effect_import - Whether the user already imports `Effect`.
- * @param has_onmount_import - Whether the user already imports `onMount`.
  * @param has_dispatcher_import - Whether the user already imports
  *   `get_dispatcher`.
  * @returns Newline-separated import statements to inject.
  */
 export function make_imports(
   has_effect_import: boolean,
-  has_onmount_import: boolean,
   has_dispatcher_import: boolean,
 ): string {
   return [
-    !has_onmount_import && `import { onMount } from "svelte";`,
     !has_effect_import && `import { Effect } from "effect";`,
     !has_dispatcher_import &&
     `import { get_dispatcher } from "svelte-effect-runtime/internal/generators";`,

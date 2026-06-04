@@ -78,21 +78,39 @@ Deno.test("extracts $state(yield* expr) into a temp $state binding", () => {
     `= $state(undefined);`,
     `let user = $derived(__SER__`,
     `= yield* getUser(id);`,
-    `import { onMount } from "svelte"`,
     `import { Effect } from "effect"`,
     `import { get_dispatcher } from "svelte-effect-runtime/internal/generators"`,
+    `$effect(() => {`,
+    `void [getUser, id];`,
   ]);
 });
 
-Deno.test("wraps lowered assignments in Effect.gen + onMount", () => {
+Deno.test("wraps lowered assignments in dependency-tracked Effect.gen", () => {
   const source = `let x = $state(yield* f());`;
   const result = transform_script_effect(source, "Test.svelte");
 
   assertStringIncludes(result.code, `Effect.gen(function* () {`);
-  assertStringIncludes(result.code, `onMount(() => {`);
+  assertStringIncludes(result.code, `$effect(() => {`);
+  assertStringIncludes(result.code, `void [f];`);
   assertStringIncludes(result.code, `get_dispatcher();`);
   assertStringIncludes(result.code, `.fork(`);
   assertStringIncludes(result.code, `return `);
+});
+
+Deno.test("tracks reactive identifiers read by yielded remote arguments", () => {
+  const source = [
+    `let { params } = $props();`,
+    `let result = $derived(yield* getPost({ param: params.page_parameter }));`,
+  ].join("\n");
+  const result = transform_script_effect(source, "Page.svelte");
+
+  assertStringIncludes(result.code, `let { params } = $props();`);
+  assertStringIncludes(result.code, `let result = $derived(__SER__`);
+  assertStringIncludes(result.code, `void [getPost, params];`);
+  assertStringIncludes(
+    result.code,
+    `__SER__result = yield* getPost({ param: params.page_parameter });`,
+  );
 });
 
 // ─── const sugar lowering ────────────────────────────────────
@@ -218,12 +236,12 @@ Deno.test("handles multiple yield* expressions in one script", () => {
 
   const gen_count =
     (result.code.match(/Effect\.gen\(function\*/g) ?? []).length;
-  const mount_count = (result.code.match(/onMount\(/g) ?? []).length;
+  const effect_count = (result.code.match(/\$effect\(\(\) =>/g) ?? []).length;
   if (gen_count !== 1) {
     throw new Error(`Expected 1 Effect.gen, got ${gen_count}`);
   }
-  if (mount_count !== 1) {
-    throw new Error(`Expected 1 onMount, got ${mount_count}`);
+  if (effect_count !== 1) {
+    throw new Error(`Expected 1 $effect, got ${effect_count}`);
   }
 });
 
@@ -260,7 +278,7 @@ Deno.test("injects Effect when effect module import lacks Effect binding", () =>
   assertStringIncludes(result.code, `Effect.gen(function* () {`);
 });
 
-Deno.test("injects onMount when svelte import lacks onMount binding", () => {
+Deno.test("does not inject onMount for dependency-tracked runtime block", () => {
   const source = [
     `import { tick } from "svelte";`,
     `let x = $state(yield* f());`,
@@ -268,8 +286,8 @@ Deno.test("injects onMount when svelte import lacks onMount binding", () => {
   const result = transform_script_effect(source, "Test.svelte");
 
   assertStringIncludes(result.code, `import { tick } from "svelte";`);
-  assertStringIncludes(result.code, `import { onMount } from "svelte";`);
-  assertStringIncludes(result.code, `onMount(() => {`);
+  assertNotMatch(result.code, /import \{ onMount \} from "svelte";/);
+  assertStringIncludes(result.code, `$effect(() => {`);
 });
 
 Deno.test("injects dispatcher when generators import lacks get_dispatcher binding", () => {

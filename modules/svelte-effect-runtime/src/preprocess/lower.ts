@@ -1,6 +1,5 @@
+import { collect_free_identifiers } from "$/markup/transform/expressions.ts";
 import { contains_top_level_yield_star } from "$/detect.ts";
-import ts from "typescript";
-
 import {
   collect_yield_star_nodes,
   extract_binding_names,
@@ -9,11 +8,14 @@ import {
 } from "./ast.ts";
 import { slice, slice_start } from "./source.ts";
 import type {
+  EffectBlock,
   LoweredExpression,
   LoweredStatement,
   ScriptLoweringContext,
   TempBinding,
 } from "./types.ts";
+
+import ts from "typescript";
 
 /**
  * Delegates a statement to the correct lowerer based on syntax kind.
@@ -42,7 +44,7 @@ export function lower_statement(
   return {
     temps: [],
     rewritten_text: "",
-    effect_assignments: [text],
+    effect_blocks: [make_effect_block([text], collect_deps(text))],
     range: { start: stmt.getFullStart(), end: stmt.end },
   };
 }
@@ -54,7 +56,8 @@ function lower_variable_statement(
 ): LoweredStatement {
   const temps: TempBinding[] = [];
   const rewritten_decls: string[] = [];
-  const assignments: string[] = [];
+  const statements: string[] = [];
+  const deps: string[] = [];
 
   const decl_list = stmt.declarationList;
   const kind = (decl_list.flags & ts.NodeFlags.Let) !== 0 ? "let" : "const";
@@ -83,7 +86,8 @@ function lower_variable_statement(
           content,
         );
 
-        assignments.push(`${temp_name} = ${yield_text};`);
+        statements.push(`${temp_name} = ${yield_text};`);
+        deps.push(...collect_deps(yield_text));
       } else {
         const lowered = lower_expression_yields(
           decl.initializer,
@@ -93,7 +97,10 @@ function lower_variable_statement(
         );
 
         temps.push(...lowered.temps);
-        assignments.push(...lowered.effect_assignments);
+        for (const block of lowered.effect_blocks) {
+          statements.push(...block.statements);
+          deps.push(...block.deps);
+        }
 
         const rewritten_expr = rewrite_state_rune_as_derived(
           lowered.rewritten_expr,
@@ -115,8 +122,9 @@ function lower_variable_statement(
         content,
       );
 
-      assignments.push(`${temp_name} = ${yield_text};`);
-      assignments.push(`(${binding_text} = ${temp_name});`);
+      statements.push(`${temp_name} = ${yield_text};`);
+      statements.push(`(${binding_text} = ${temp_name});`);
+      deps.push(...collect_deps(yield_text));
     }
   }
 
@@ -127,7 +135,9 @@ function lower_variable_statement(
   return {
     temps,
     rewritten_text,
-    effect_assignments: assignments,
+    effect_blocks: statements.length === 0
+      ? []
+      : [make_effect_block(statements, deps)],
     range: { start: stmt.getStart(), end: stmt.end },
   };
 }
@@ -143,7 +153,7 @@ function lower_expression_statement(
     return {
       temps: [],
       rewritten_text: slice(content, stmt).trim(),
-      effect_assignments: [],
+      effect_blocks: [],
       range: { start: stmt.getStart(), end: stmt.end },
     };
   }
@@ -154,7 +164,7 @@ function lower_expression_statement(
     return {
       temps: [],
       rewritten_text: "",
-      effect_assignments: [text + ";"],
+      effect_blocks: [make_effect_block([text + ";"], collect_deps(text))],
       range: { start: stmt.getFullStart(), end: stmt.end },
     };
   }
@@ -169,7 +179,12 @@ function lower_expression_statement(
     return {
       temps: [],
       rewritten_text: "",
-      effect_assignments: [`${target} = ${yield_text};`],
+      effect_blocks: [
+        make_effect_block(
+          [`${target} = ${yield_text};`],
+          collect_deps(yield_text),
+        ),
+      ],
       range: { start: stmt.getStart(), end: stmt.end },
     };
   }
@@ -184,7 +199,7 @@ function lower_expression_statement(
   return {
     temps: lowered.temps,
     rewritten_text: lowered.rewritten_expr + ";",
-    effect_assignments: lowered.effect_assignments,
+    effect_blocks: lowered.effect_blocks,
     range: { start: stmt.getStart(), end: stmt.end },
   };
 }
@@ -202,14 +217,16 @@ function lower_expression_yields(
   }> = [];
 
   const temps: TempBinding[] = [];
-  const effect_assignments: string[] = [];
+  const statements: string[] = [];
+  const deps: string[] = [];
 
   collect_yield_star_nodes(expr, (node) => {
     const temp_name = context.next_temp_name(hint);
     const yield_text = slice_start(content, node).trim();
 
     temps.push({ name: temp_name });
-    effect_assignments.push(`${temp_name} = ${yield_text};`);
+    statements.push(`${temp_name} = ${yield_text};`);
+    deps.push(...collect_deps(yield_text));
     replacements.push({
       start: node.getStart(),
       end: node.end,
@@ -221,7 +238,7 @@ function lower_expression_yields(
     return {
       temps,
       rewritten_expr: slice(content, expr).trim(),
-      effect_assignments,
+      effect_blocks: [],
     };
   }
 
@@ -240,7 +257,7 @@ function lower_expression_yields(
   return {
     temps,
     rewritten_expr: text.trim(),
-    effect_assignments,
+    effect_blocks: [make_effect_block(statements, deps)],
   };
 }
 
@@ -265,4 +282,20 @@ function extract_yield_star_full_text(
   });
 
   return found ?? "undefined";
+}
+
+function make_effect_block(
+  statements: string[],
+  deps: string[],
+): EffectBlock {
+  return {
+    statements,
+    deps: [...new Set(deps)],
+  };
+}
+
+function collect_deps(expr_text: string): string[] {
+  return collect_free_identifiers(expr_text).filter(
+    (identifier) => !identifier.startsWith("__SER__"),
+  );
 }
