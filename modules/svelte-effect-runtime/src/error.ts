@@ -53,8 +53,7 @@ export class TopLevelAwaitError extends PreprocessError {
 
 /**
  * Thrown when `yield*` appears inside a Svelte rune whose semantics do not
- * support async expressions. Users should extract the `yield*` into a
- * separate `$state` binding and feed the resolved value into the rune.
+ * support async expressions.
  *
  * @since 2.0.0
  */
@@ -77,10 +76,7 @@ export class YieldStarInRuneError extends PreprocessError {
     super(
       [
         `${filename}: yield* cannot be used inside ${rune_name}().`,
-        `${rune_name}() expects a synchronous expression. Extract the yield* into a separate $state binding instead:`,
-        "",
-        `  let __temp = $state(yield* yourEffect());`,
-        `  ${rune_name}(__temp);`,
+        `${rune_name}() must stay synchronous. Do not put async Effect work inside this rune.`,
         "",
         `Problematic expression:`,
         expression_text,

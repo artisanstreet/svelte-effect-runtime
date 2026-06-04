@@ -26,6 +26,21 @@ function assert_transform(
   return result;
 }
 
+function assert_rejects_rune_yield(source: string, rune_name?: string): void {
+  const error = assertThrows(
+    () => transform_script_effect(source, "Test.svelte"),
+    Error,
+    "yield* cannot be used inside",
+  );
+
+  assertStringIncludes(error.message, "must stay synchronous");
+  assertNotMatch(error.message, /Extract|__temp|yourEffect|\$state\(yield\*/);
+
+  if (rune_name) {
+    assertStringIncludes(error.message, rune_name);
+  }
+}
+
 // ─── Pass-through (identity) tests ───────────────────────────
 
 Deno.test("passes through a regular script body unchanged (no yield*)", () => {
@@ -246,11 +261,7 @@ Deno.test("moves bare yield* statements into the effect body", () => {
 Deno.test("rejects yield* inside a $effect arrow function", () => {
   const source = `$effect(() => { yield* doThing(); });`;
 
-  assertThrows(
-    () => transform_script_effect(source, "Test.svelte"),
-    Error,
-    "yield* cannot be used inside $effect",
-  );
+  assert_rejects_rune_yield(source, "$effect");
 });
 
 Deno.test("does NOT lower yield* in Effect.gen inside a const declaration", () => {
@@ -367,11 +378,7 @@ Deno.test("rejects yield* in synchronous-only rune arguments", () => {
   ];
 
   for (const source of cases) {
-    assertThrows(
-      () => transform_script_effect(source, "Test.svelte"),
-      Error,
-      "yield* cannot be used inside",
-    );
+    assert_rejects_rune_yield(source);
   }
 });
 
@@ -384,11 +391,7 @@ Deno.test("rejects yield* inside synchronous rune callbacks", () => {
   ];
 
   for (const source of cases) {
-    assertThrows(
-      () => transform_script_effect(source, "Test.svelte"),
-      Error,
-      "yield* cannot be used inside",
-    );
+    assert_rejects_rune_yield(source);
   }
 });
 
