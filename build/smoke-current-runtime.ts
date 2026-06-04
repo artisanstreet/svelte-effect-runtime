@@ -3,7 +3,7 @@ import { dirname, fromFileUrl, join, resolve } from "@std/path";
 const repo_root = resolve(dirname(fromFileUrl(import.meta.url)), "..");
 const code_root = resolve(repo_root, "..");
 const smokes_root = join(code_root, "smokes");
-const smoke_dir = join(smokes_root, "ser-v2-current");
+const smoke_dir = join(smokes_root, "ser-current");
 const package_dir = join(repo_root, "modules", "svelte-effect-runtime");
 const deno = Deno.execPath();
 const npm = Deno.build.os === "windows" ? "npm.cmd" : "npm";
@@ -95,7 +95,7 @@ const page_svelte = `<script lang="ts" effect>
 </script>
 
 <main>
-  <h1>ser-v2 current smoke</h1>
+  <h1>ser current smoke</h1>
   <p data-testid="script">{script_value}</p>
   <p data-testid="count">{count}</p>
   <p data-testid="query">{query_value}</p>
@@ -116,7 +116,7 @@ const page_svelte = `<script lang="ts" effect>
     {/each}
   </ul>
 
-  <button data-testid="click" onclick={() => yield* click_effect()}>
+  <button data-testid="click" onclick={yield* click_effect()}>
     click
   </button>
 </main>
@@ -237,7 +237,7 @@ async function main(): Promise<void> {
   await Deno.mkdir(join(smoke_dir, "tests"), { recursive: true });
 
   await write_json("package.json", {
-    name: "ser-v2-current",
+    name: "ser-current",
     private: true,
     type: "module",
     scripts: {
