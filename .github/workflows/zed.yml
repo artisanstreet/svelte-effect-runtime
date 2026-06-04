@@ -1,0 +1,54 @@
+name: zed
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/zed.yml
+      - deno.json
+      - modules/svelte-effect-runtime-zed/**
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/zed.yml
+      - deno.json
+      - modules/svelte-effect-runtime-zed/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zed-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_zed_extension:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: setup_deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: setup_rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+
+      - name: check_zed_extension
+        run: deno task check:zed
+
+      - name: build_zed_extension
+        run: deno task build:zed
+
+      - name: upload_wasm_artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: svelte-effect-runtime-zed
+          path: modules/svelte-effect-runtime-zed/target/wasm32-wasip2/release/*.wasm
+          if-no-files-found: error

@@ -114,6 +114,18 @@ const SignIn = Form(
     }),
 );
 
+const UpdateQuantity = Form(
+  Schema.Struct({
+    quantity: Schema.NumberFromString,
+  }),
+  ({ data }) =>
+    Effect.gen(function* () {
+      const quantity: number = data.quantity;
+
+      return { quantity };
+    }),
+);
+
 const SignOut = Form(Effect.succeed({ signedOut: true }));
 
 type GetPostsParameters = Parameters<typeof GetPosts>;
@@ -122,7 +134,9 @@ type GetClockParameters = Parameters<typeof GetClock>;
 type GetNativeClockParameters = Parameters<typeof GetNativeClock>;
 type UpvotePostParameters = Parameters<typeof UpvotePost>;
 type SignInParameters = Parameters<typeof SignIn>;
+type UpdateQuantityParameters = Parameters<typeof UpdateQuantity>;
 type SignInInput = SignInParameters[0];
+type UpdateQuantityInput = UpdateQuantityParameters[0];
 type GetPostsHasNoInputParameter = Assert<Equal<GetPostsParameters, []>>;
 type GetPostSummaryRequiresInput = Assert<
   Equal<GetPostSummaryParameters, [input: string]>
@@ -135,6 +149,9 @@ type UpvotePostStillRequiresInput = Assert<
 type SignInKeepsEmailField = Assert<Equal<SignInInput["email"], string>>;
 type SignInKeepsPasswordField = Assert<
   Equal<SignInInput["password"], string>
+>;
+type UpdateQuantityAcceptsEncodedFormInput = Assert<
+  Equal<UpdateQuantityInput["quantity"], string>
 >;
 
 async function check_generated_markup_helpers() {
@@ -199,6 +216,33 @@ async function check_generated_markup_helpers() {
 }
 
 void check_generated_markup_helpers;
+`,
+  );
+});
+
+Deno.test("RequestEvent locals use SvelteKit App.Locals augmentation", async () => {
+  await assert_type_checks(
+    "request-event-locals.ts",
+    `
+import { Effect } from "effect";
+import { RequestEvent } from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
+
+declare global {
+  namespace App {
+    interface Locals {
+      user: {
+        id: string;
+      };
+    }
+  }
+}
+
+Effect.gen(function* () {
+  const event = yield* RequestEvent;
+  const user_id: string = event.locals.user.id;
+
+  return user_id;
+});
 `,
   );
 });

@@ -1,3 +1,4 @@
+import type { RequestEvent as SvelteKitRequestEvent } from "@sveltejs/kit";
 import { Context, Layer, ManagedRuntime } from "effect";
 
 /**
@@ -5,25 +6,18 @@ import { Context, Layer, ManagedRuntime } from "effect";
  *
  * @since 2.0.0
  */
-export interface RequestEvent {
-  readonly url: URL;
-  readonly request: Request;
-  readonly cookies: {
-    get(name: string): string | undefined;
-    set(name: string, value: string, opts?: Record<string, unknown>): void;
-    delete(name: string, opts?: Record<string, unknown>): void;
-    serialize(
-      name: string,
-      value: string,
-      opts?: Record<string, unknown>,
-    ): string;
-  };
-  readonly locals: Record<string, unknown>;
-  readonly params: Record<string, string>;
-  readonly route: { id: string | null };
-  readonly platform?: unknown;
-  readonly getClientAddress: () => string;
-}
+export interface RequestEvent extends
+  Pick<
+    SvelteKitRequestEvent,
+    | "cookies"
+    | "getClientAddress"
+    | "locals"
+    | "params"
+    | "platform"
+    | "request"
+    | "route"
+    | "url"
+  > {}
 
 /**
  * SvelteKit's `RequestEvent` exposed as an Effect {@link Context.Tag}.
