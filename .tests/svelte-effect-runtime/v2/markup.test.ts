@@ -229,49 +229,71 @@ Deno.test("rewrites {#key yield* expr} in key expression", () => {
 
 // ─── Event handlers ──────────────────────────────────────────
 
-Deno.test("rewrites on:click event with yield* as run() wrapper", () => {
-  const source = `<button on:click={() => yield* handleClick()}>click</button>`;
+Deno.test("rewrites onclick event effect expressions as run wrappers", () => {
+  const source = `<button onclick={yield* trackEvent()}>click</button>`;
   const result = transform_markup_effect(source, "Test.svelte");
 
+  assertStringIncludes(result.code, `onclick={(event) =>`);
   assertStringIncludes(result.code, `__ser_markup_run`);
-  assertStringIncludes(result.code, `handleClick`);
+  assertStringIncludes(
+    result.code,
+    `void __ser_markup_run(function* () { yield* trackEvent(); });`,
+  );
+  assertStringIncludes(result.code, `trackEvent`);
   if (!result.has_yield) throw new Error("has_yield should be true");
 });
 
-Deno.test("rewrites onclick event with yield* as run() wrapper", () => {
-  const source = `<button onclick={() => yield* trackEvent()}>click</button>`;
+Deno.test("rewrites event effect expressions with generated event parameter", () => {
+  const source =
+    `<input oninput={yield* validate(event.currentTarget.value)} />`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `__ser_markup_run`);
-  assertStringIncludes(result.code, `trackEvent`);
+  assertStringIncludes(result.code, `oninput={(event) =>`);
+  assertStringIncludes(result.code, `event.currentTarget.value`);
+  assertStringIncludes(
+    result.code,
+    `void __ser_markup_run(function* () { yield* validate(event.currentTarget.value); });`,
+  );
+
+  compile(result.code, {
+    filename: "Test.svelte",
+    generate: "server",
+    experimental: { async: true },
+  });
 });
 
-Deno.test("preserves event handler parameters when lowering yield*", () => {
-  const source =
-    `<button onclick={(event) => yield* save(event.currentTarget)}>save</button>`;
+Deno.test("rewrites onsubmit event effect expressions", () => {
+  const source = `<form onsubmit={yield* submit()}></form>`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `(event) =>`);
-  assertStringIncludes(result.code, `event.currentTarget`);
+  assertStringIncludes(result.code, `onsubmit={(event) =>`);
   assertStringIncludes(result.code, `__ser_markup_run`);
+  assertStringIncludes(result.code, `yield* submit()`);
 });
 
-Deno.test("preserves unparenthesized event handler parameters", () => {
-  const source =
-    `<button onclick={event => yield* save(event.currentTarget)}>save</button>`;
+Deno.test("rewrites on:click event effect expressions", () => {
+  const source = `<button on:click={yield* save(event)}>save</button>`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `event =>`);
-  assertStringIncludes(result.code, `event.currentTarget`);
+  assertStringIncludes(result.code, `on:click={(event) =>`);
   assertStringIncludes(result.code, `__ser_markup_run`);
+  assertStringIncludes(result.code, `yield* save(event)`);
+});
+
+Deno.test("rewrites custom event-like handler attributes", () => {
+  const source = `<button oncustom={yield* handle(event)}>save</button>`;
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `oncustom={(event) =>`);
+  assertStringIncludes(result.code, `yield* handle(event)`);
 });
 
 Deno.test("rewrites native-style form validation handlers only when marked with yield*", () => {
   const source =
-    `<form {...createPost} oninput={() => yield* createPost.validate()}></form>`;
+    `<form {...createPost} oninput={yield* createPost.validate()}></form>`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `oninput={() =>`);
+  assertStringIncludes(result.code, `oninput={(event) =>`);
   assertStringIncludes(
     result.code,
     `void __ser_markup_run(function* () { yield* createPost.validate(); });`,
@@ -292,18 +314,91 @@ Deno.test("leaves non-Effect event handlers untouched", () => {
   if (result.has_yield) throw new Error("has_yield should be false");
 });
 
-Deno.test("leaves nested generator yield* in event handlers untouched", () => {
+Deno.test("rejects yield* inside event callback handlers", () => {
+  const source = `<button onclick={() => yield* save()}>save</button>`;
+  const error = assertThrows(
+    () => transform_markup_effect(source, "Test.svelte"),
+  );
+
+  assertStringIncludes(
+    error.message,
+    "yield* in markup event handlers must be written directly",
+  );
+  assertStringIncludes(error.message, `onclick={yield* UpvotePost(id)}`);
+  assertStringIncludes(error.message, `onclick={() => yield* UpvotePost(id)}`);
+});
+
+Deno.test("rejects event callback handlers with parameters", () => {
+  const source = `<input oninput={(event) => yield* validate(event)} />`;
+  const error = assertThrows(
+    () => transform_markup_effect(source, "Test.svelte"),
+  );
+
+  assertStringIncludes(
+    error.message,
+    "yield* in markup event handlers must be written directly",
+  );
+});
+
+Deno.test("rejects legacy on directive callback handlers", () => {
+  const source = `<button on:click={() => yield* save()}>save</button>`;
+  const error = assertThrows(
+    () => transform_markup_effect(source, "Test.svelte"),
+  );
+
+  assertStringIncludes(
+    error.message,
+    "yield* in markup event handlers must be written directly",
+  );
+});
+
+Deno.test("rejects function expression event callbacks", () => {
   const source =
-    `<button onclick={() => Effect.gen(function* () { yield* save(); })}>save</button>`;
+    `<button onclick={function () { yield* save(); }}>save</button>`;
+  const error = assertThrows(
+    () => transform_markup_effect(source, "Test.svelte"),
+  );
+
+  assertStringIncludes(
+    error.message,
+    "yield* in markup event handlers must be written directly",
+  );
+});
+
+Deno.test("allows direct explicit Effect.gen event composition", () => {
+  const source =
+    `<button onclick={yield* Effect.gen(function* () { yield* save(); })}>save</button>`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertEquals(result.code, source);
-  if (result.has_yield) throw new Error("has_yield should be false");
+  assertStringIncludes(result.code, `onclick={(event) =>`);
+  assertStringIncludes(
+    result.code,
+    `yield* Effect.gen(function* () { yield* save(); })`,
+  );
+
+  compile(result.code, {
+    filename: "Test.svelte",
+    generate: "server",
+    experimental: { async: true },
+  });
+});
+
+Deno.test("rejects callbacks hiding yield* inside nested generators", () => {
+  const source =
+    `<button onclick={() => Effect.gen(function* () { yield* save(); })}>save</button>`;
+  const error = assertThrows(
+    () => transform_markup_effect(source, "Test.svelte"),
+  );
+
+  assertStringIncludes(
+    error.message,
+    "yield* in markup event handlers must be written directly",
+  );
 });
 
 Deno.test("rejects yield* inside nested non-generator event callbacks", () => {
   const source =
-    `<button onclick={() => Effect.try(() => yield* save())}>save</button>`;
+    `<button onclick={yield* Effect.try(() => yield* save())}>save</button>`;
   const error = assertThrows(
     () => transform_markup_effect(source, "Test.svelte"),
   );
@@ -312,20 +407,20 @@ Deno.test("rejects yield* inside nested non-generator event callbacks", () => {
     error.message,
     "yield* cannot be used inside a nested non-generator callback",
   );
-  assertStringIncludes(error.message, `onclick={() => yield* UpvotePost(id)}`);
+  assertStringIncludes(error.message, `onclick={yield* UpvotePost(id)}`);
   assertStringIncludes(
     error.message,
     `Effect.try and Effect.sync callbacks are plain synchronous JavaScript`,
   );
   assertStringIncludes(
     error.message,
-    `onclick={() => yield* UpvotePost(id).pipe(Effect.catch(() => Effect.void))}`,
+    `onclick={yield* UpvotePost(id).pipe(Effect.catch(() => Effect.void))}`,
   );
 });
 
 Deno.test("rejects nested callback yield* even with an outer yield*", () => {
   const source =
-    `<button onclick={() => yield* Effect.try(() => yield* save())}>save</button>`;
+    `<button onclick={yield* Effect.try(() => yield* save())}>save</button>`;
   const error = assertThrows(
     () => transform_markup_effect(source, "Test.svelte"),
   );
@@ -365,7 +460,7 @@ Deno.test("records source relocations for lowered markup hover spans", () => {
     `<ul>`,
     `  {#each yield* GetPosts() as { id, name, likes }}`,
     `    <li>`,
-    `      <button onclick={() => yield* UpvotePost(id)}>{name}</button>`,
+    `      <button onclick={yield* UpvotePost(id)}>{name}</button>`,
     `    </li>`,
     `  {/each}`,
     `</ul>`,

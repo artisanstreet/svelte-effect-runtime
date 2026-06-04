@@ -1,5 +1,4 @@
 import { collect_yield_star_nodes } from "$/preprocess/ast.ts";
-import { NestedYieldStarInEventHandlerError } from "$/error.ts";
 import { contains_top_level_yield_star } from "$/detect.ts";
 import MagicString from "magic-string";
 import ts from "typescript";
@@ -93,12 +92,12 @@ export function sanitize_markup(
       ? expr_body.indexOf("=")
       : -1;
 
-    /** Check if this is an event handler (arrow function containing yield*). */
-    const is_event = is_event_expression(inner);
+    /** Check if this is a callback handler containing yield*. */
+    const is_event_callback = is_event_callback_expression(inner);
 
     /** Determine if this brace contains yield* that needs lowering. */
-    const event_yield = is_event
-      ? analyze_event_yield(inner, filename)
+    const event_yield = is_event_callback
+      ? analyze_event_yield(inner)
       : undefined;
     const has_yield = event_yield?.has_top_level_yield_star ??
       contains_yield_star_in_text(expr_body);
@@ -349,27 +348,25 @@ function is_declaration_tag_text(trimmed: string): boolean {
   return /^(?:const|let)\s/.test(trimmed);
 }
 
-function is_event_expression(inner: string): boolean {
+function is_event_callback_expression(inner: string): boolean {
   const trimmed = inner.trimStart();
 
-  return /^(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/.test(trimmed);
+  return /^(?:async\s+)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/.test(trimmed) ||
+    /^(?:async\s+)?function\b/.test(trimmed);
 }
 
 function analyze_event_yield(
   inner: string,
-  filename: string,
 ): {
   has_top_level_yield_star: boolean;
 } {
   const event = strip_arrow_function(inner);
   const analysis = analyze_event_body_yield_star(event.body);
 
-  if (analysis.has_nested_invalid_yield_star) {
-    throw new NestedYieldStarInEventHandlerError(filename, event.body);
-  }
-
   return {
-    has_top_level_yield_star: analysis.has_top_level_yield_star,
+    has_top_level_yield_star: analysis.has_top_level_yield_star ||
+      analysis.has_nested_invalid_yield_star ||
+      /\byield\s*\*/.test(event.body),
   };
 }
 

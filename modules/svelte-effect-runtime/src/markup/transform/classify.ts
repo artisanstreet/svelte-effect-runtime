@@ -209,7 +209,7 @@ function visit_element_attributes(
     if (
       attr.type === "Attribute" &&
       attr.name &&
-      (attr.name.startsWith("on:") || /^on[a-z]/.test(attr.name))
+      is_event_attribute_name(attr.name)
     ) {
       visit_attribute_value(
         attr.value as
@@ -235,6 +235,10 @@ function visit_element_attributes(
       continue;
     }
   }
+}
+
+function is_event_attribute_name(name: string): boolean {
+  return name.startsWith("on:") || /^on[a-z]/.test(name);
 }
 
 function visit_attribute_value(

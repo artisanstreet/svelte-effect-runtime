@@ -45,6 +45,35 @@ export function strip_arrow_function(
 }
 
 /**
+ * Returns whether an expression is a callback function.
+ *
+ * @since 2.0.0
+ * @param expr - Expression text from a markup attribute or expression tag.
+ * @returns Whether the expression parses as an arrow or function expression.
+ */
+export function is_callback_function_expression(expr: string): boolean {
+  const wrapped = `const __ser_callback = ${expr};`;
+  const sf = ts.createSourceFile(
+    "callback.ts",
+    wrapped,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const stmt = sf.statements[0];
+
+  if (!ts.isVariableStatement(stmt)) {
+    return false;
+  }
+
+  const initializer = stmt.declarationList.declarations[0]?.initializer;
+
+  return initializer !== undefined &&
+    (ts.isArrowFunction(initializer) ||
+      ts.isFunctionExpression(initializer));
+}
+
+/**
  * Classifies `yield*` placement inside an event handler body.
  *
  * @example
