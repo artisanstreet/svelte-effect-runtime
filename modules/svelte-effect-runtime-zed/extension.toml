@@ -1,7 +1,7 @@
 id = "svelte-effect-runtime"
 name = "Svelte Effect Runtime"
 description = "Svelte Effect Runtime language-server support for Zed."
-version = "0.1.0"
+version = "2.0.1"
 schema_version = 1
 authors = ["Barekey"]
 repository = "https://github.com/usebarekey/svelte-effect-runtime"
