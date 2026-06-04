@@ -32,7 +32,7 @@ Deno.test("full pipeline: script lowered output feeds into markup pass", () => {
 <p>{yield* renderDate()}</p>
 
 {#if yield* hasAccess()}
-  <button on:click={() => yield* handleClick()}>go</button>
+  <button on:click={yield* handleClick(event)}>go</button>
 {/if}
 `.trim();
 

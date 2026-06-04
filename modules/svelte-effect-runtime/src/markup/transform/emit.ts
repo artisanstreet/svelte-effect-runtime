@@ -1,7 +1,12 @@
+import {
+  AsyncEffectInEventCallbackError,
+  YieldStarInEventCallbackError,
+} from "$/error.ts";
 import { HELPERS } from "./constants.ts";
 import {
+  analyze_event_body_yield_star,
   collect_free_identifiers,
-  strip_arrow_function,
+  is_callback_function_expression,
 } from "./expressions.ts";
 import type {
   HelperDeclaration,
@@ -54,14 +59,14 @@ function emit_replacement(
     replacement_text = emit_each_expression(id_text, effect);
     helpers = [effect.helper];
   } else if (kind === "event") {
-    const event = strip_arrow_function(candidate.expr_text);
-    replacement_text =
-      `${event.params} => { void ${HELPERS.run}(function* () { ${event.body}; }); }`;
+    const event = make_event_handler(candidate);
+
+    replacement_text = event.text;
     helpers = [];
     relocation = make_relocation(candidate, replacement_text, {
-      originalStart: event.body_start,
-      originalEnd: event.body_end,
-      generatedText: event.body,
+      originalStart: 0,
+      originalEnd: candidate.expr_text.length,
+      generatedText: candidate.expr_text,
     });
   } else {
     const effect = make_effect_helper(candidate, helper_name);
@@ -76,6 +81,29 @@ function emit_replacement(
     text: replacement_text,
     helpers,
     relocation,
+  };
+}
+
+function make_event_handler(candidate: MarkupCandidate): { text: string } {
+  if (is_callback_function_expression(candidate.expr_text)) {
+    throw new YieldStarInEventCallbackError(
+      candidate.filename,
+      candidate.expr_text,
+    );
+  }
+
+  const analysis = analyze_event_body_yield_star(candidate.expr_text);
+
+  if (analysis.has_nested_invalid_yield_star) {
+    throw new AsyncEffectInEventCallbackError(
+      candidate.filename,
+      candidate.expr_text,
+    );
+  }
+
+  return {
+    text:
+      `(event) => { void ${HELPERS.run}(function* () { ${candidate.expr_text}; }); }`,
   };
 }
 
