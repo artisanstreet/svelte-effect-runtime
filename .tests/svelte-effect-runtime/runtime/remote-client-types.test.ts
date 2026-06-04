@@ -55,7 +55,10 @@ Deno.test("server remote helpers stay Effect-yieldable in markup helpers", async
     `
 import { Effect, Schema, Stream } from "effect";
 import { Command, Form, Query } from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
-import type { EffectRemoteLiveSource } from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
+import type {
+  EffectRemoteLiveQueryResource,
+  EffectRemoteLiveSource,
+} from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
 import { promise } from "__RUNTIME__/modules/svelte-effect-runtime/src/markup/promise.ts";
 import { run } from "__RUNTIME__/modules/svelte-effect-runtime/src/markup/run.ts";
 
@@ -157,11 +160,9 @@ type UpdateQuantityAcceptsEncodedFormInput = Assert<
 async function check_generated_markup_helpers() {
   const posts_query = GetPosts();
   const summary_query = GetPostSummary("one");
-  const clock_query = GetClock("main");
+  const clock_query_effect = GetClock("main");
   const refresh_effect: Effect.Effect<void, unknown, never> =
     posts_query.refresh();
-  const reconnect_effect: Effect.Effect<void, unknown, never> =
-    clock_query.reconnect();
   const sign_out_effect = SignOut();
 
   posts_query.set(posts);
@@ -169,23 +170,34 @@ async function check_generated_markup_helpers() {
 
   release_override();
   await Effect.runPromise(refresh_effect);
-  await Effect.runPromise(reconnect_effect);
   await Effect.runPromise(summary_query.refresh());
   const sign_out_result = await Effect.runPromise(sign_out_effect);
   const summary = await Effect.runPromise(summary_query);
-  const clock_value = await Effect.runPromise(clock_query);
-  const native_clock_value = await Effect.runPromise(GetNativeClock());
+  const clock_query = await Effect.runPromise(clock_query_effect);
+  const native_clock_query = await Effect.runPromise(GetNativeClock());
+  const reconnect_effect: Effect.Effect<void, unknown, never> =
+    clock_query.reconnect();
+  const native_reconnect_effect: Effect.Effect<void, unknown, never> =
+    native_clock_query.reconnect();
   const signed_out: boolean = sign_out_result.signedOut;
+  const clock_resource: EffectRemoteLiveQueryResource<number> = clock_query;
   const connected: boolean = clock_query.connected;
   const done: boolean = clock_query.done;
   const summary_id: string = summary.id;
   const summary_index: number = summary.index;
   const summary_known: boolean = summary.known;
-  const clock_number: number = clock_value;
-  const native_clock_string: string = native_clock_value;
+
+  await Effect.runPromise(reconnect_effect);
+  await Effect.runPromise(native_reconnect_effect);
 
   for await (const value of clock_query) {
     const streamed_value: number = value;
+
+    break;
+  }
+
+  for await (const value of native_clock_query) {
+    const streamed_value: string = value;
 
     break;
   }
@@ -207,11 +219,10 @@ async function check_generated_markup_helpers() {
 
   void connected;
   void done;
+  void clock_resource;
   void summary_id;
   void summary_index;
   void summary_known;
-  void clock_number;
-  void native_clock_string;
   void live_source;
 }
 

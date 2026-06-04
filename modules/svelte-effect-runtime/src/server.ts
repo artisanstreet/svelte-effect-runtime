@@ -16,6 +16,7 @@ export type {
   EffectRemoteFunction,
   EffectRemoteLiveQuery,
   EffectRemoteLiveQueryFunction,
+  EffectRemoteLiveQueryResource,
   EffectRemoteLiveSource,
   EffectRemoteQuery,
   EffectRemoteQueryFunction,

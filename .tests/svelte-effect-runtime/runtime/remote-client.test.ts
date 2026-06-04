@@ -303,11 +303,12 @@ Deno.test("remote live query adapter preserves state and wraps reconnect", async
     return resource;
   };
 
-  const query = create_remote_live_query_adapter<undefined, string>(
+  const query_effect = create_remote_live_query_adapter<undefined, string>(
     native,
     (value) => value,
     "",
   )(undefined);
+  const query = await Effect.runPromise(query_effect);
 
   const values: string[] = [];
 
@@ -323,9 +324,7 @@ Deno.test("remote live query adapter preserves state and wraps reconnect", async
   assertEquals(values, ["first", "second"]);
 
   await Effect.runPromise(query.reconnect());
-  const result = await Effect.runPromise(query);
 
-  assertEquals(result, "first");
   assertEquals(reconnect_called, true);
 });
 

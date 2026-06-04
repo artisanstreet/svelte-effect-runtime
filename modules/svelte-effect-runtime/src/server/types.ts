@@ -303,12 +303,12 @@ export type EffectRemoteQueryFunction<Input, A> = [Input] extends [void]
   : (input: Input) => EffectRemoteQuery<A>;
 
 /**
- * Effect-returning live query resource with SvelteKit live stream state and
- * reconnect controls preserved.
+ * Live query resource with SvelteKit live stream state and reconnect controls
+ * preserved.
  *
  * @example
  * ```ts
- * const clock = getClock();
+ * const clock = yield* getClock();
  * yield* clock.reconnect();
  *
  * for await (const value of clock) {
@@ -318,9 +318,7 @@ export type EffectRemoteQueryFunction<Input, A> = [Input] extends [void]
  *
  * @since 2.0.0
  */
-export type EffectRemoteLiveQuery<A> =
-  & Effect.Effect<A, RemoteFailure<unknown>, never>
-  & AsyncIterable<A>
+export type EffectRemoteLiveQueryResource<A> =
   & {
     readonly connected: boolean;
     readonly current: A | undefined;
@@ -329,7 +327,25 @@ export type EffectRemoteLiveQuery<A> =
     readonly loading: boolean;
     readonly ready: boolean;
     readonly reconnect: () => Effect.Effect<void, unknown, never>;
-  };
+  }
+  & AsyncIterable<A>;
+
+/**
+ * Effect-returning live query whose yielded value is the live resource.
+ *
+ * @example
+ * ```ts
+ * const clock = yield* getClock();
+ * const current = clock.current;
+ * ```
+ *
+ * @since 2.2.0
+ */
+export type EffectRemoteLiveQuery<A> = Effect.Effect<
+  EffectRemoteLiveQueryResource<A>,
+  RemoteFailure<unknown>,
+  never
+>;
 
 /**
  * Effect-returning remote live query function with SvelteKit live stream
@@ -337,11 +353,10 @@ export type EffectRemoteLiveQuery<A> =
  *
  * @example
  * ```ts
- * const clock = getClock();
- * yield* clock;
+ * const clock = yield* getClock();
  * ```
  *
- * @since 2.0.0
+ * @since 2.2.0
  */
 export type EffectRemoteLiveQueryFunction<Input, A> = [Input] extends [void]
   ? () => EffectRemoteLiveQuery<A>

@@ -1,10 +1,10 @@
-import type { RemoteFailure } from "$/remote/shared.ts";
-import type { Effect } from "effect";
-
+import { copy_property_descriptors, has_method } from "./utils.ts";
+import { normalize_native_error } from "./failures.ts";
 import { resolve_query_result } from "./query-result.ts";
 import { make_effect_from_promise } from "./effect.ts";
-import { copy_property_descriptors, has_method } from "./utils.ts";
+import type { RemoteFailure } from "$/remote/shared.ts";
 import type { NativeMethod } from "./types.ts";
+import { Effect } from "effect";
 
 type RemoteResourceEffect<Output> =
   & Effect.Effect<Output, RemoteFailure<unknown>>
@@ -14,6 +14,10 @@ type RemoteResourceEffect<Output> =
     readonly loading: boolean;
     readonly ready: boolean;
   };
+
+type RemoteResourceLike<Output> =
+  | RemoteResourceEffect<Output>
+  | RemoteLiveQueryResource<Output>;
 
 type RemoteQueryEffect<Output> =
   & RemoteResourceEffect<Output>
@@ -25,14 +29,22 @@ type RemoteQueryEffect<Output> =
     ) => unknown;
   };
 
-type RemoteLiveQueryEffect<Output> =
-  & RemoteResourceEffect<Output>
-  & AsyncIterable<Output>
+type RemoteLiveQueryEffect<Output> = Effect.Effect<
+  RemoteLiveQueryResource<Output>,
+  RemoteFailure<unknown>
+>;
+
+type RemoteLiveQueryResource<Output> =
   & {
     readonly connected: boolean;
+    readonly current: Output | undefined;
     readonly done: boolean;
+    readonly error: unknown;
+    readonly loading: boolean;
+    readonly ready: boolean;
     readonly reconnect: () => Effect.Effect<void, unknown, never>;
-  };
+  }
+  & AsyncIterable<Output>;
 
 type NativeRemoteResource<Output> = {
   readonly connected?: boolean;
@@ -110,25 +122,27 @@ export function create_remote_query_adapter<Input, Output>(
 
 /**
  * Creates a remote live query adapter. The returned function takes input and
- * returns an `Effect` that awaits the first live value while preserving live
- * stream state and reconnect controls.
+ * returns an `Effect` that resolves to a live query resource with stream state
+ * and reconnect controls.
  *
  * @example
  * ```ts
  * const getTime = create_remote_live_query_adapter(nativeLive, (value) => value);
  * const time = yield* getTime();
+ * const current = time.current;
  * ```
  *
  * @since 2.0.0
  * @param native_factory - SvelteKit's native live query function.
- * @param decode_payload - Function to decode the initial response payload.
+ * @param _decode_payload - Deprecated payload decoder retained for parity with
+ *   other remote adapters.
  * @param _base - Deprecated transport base retained for compatibility.
  * @returns A function returning an Effect-backed live query resource.
  * @internal
  */
 export function create_remote_live_query_adapter<Input, Output>(
   native_factory: unknown,
-  decode_payload: (value: unknown) => unknown,
+  _decode_payload: (value: unknown) => unknown,
   _base = "",
 ): (input: Input) => RemoteLiveQueryEffect<Output> {
   const query = typeof native_factory === "function"
@@ -141,16 +155,17 @@ export function create_remote_live_query_adapter<Input, Output>(
     );
   }
 
-  const wrapped = ((input: Input) => {
-    const resource = query(input);
-    const effect = make_effect_from_promise(async () =>
-      await resolve_query_result<Output>(resource, decode_payload)
-    ) as RemoteLiveQueryEffect<Output>;
+  const wrapped = ((input: Input) =>
+    Effect.try({
+      try: () => {
+        const resource = query(input);
 
-    attach_live_query_resource(resource, effect);
-
-    return effect;
-  }) as (input: Input) => RemoteLiveQueryEffect<Output>;
+        return make_live_query_resource<Output>(resource);
+      },
+      catch: normalize_native_error,
+    }) as RemoteLiveQueryEffect<Output>) as (
+      input: Input,
+    ) => RemoteLiveQueryEffect<Output>;
 
   copy_property_descriptors(native_factory, wrapped);
 
@@ -170,7 +185,7 @@ function is_resource<Output>(
 
 function attach_resource_getters<Output>(
   resource: unknown,
-  effect: RemoteResourceEffect<Output>,
+  effect: RemoteResourceLike<Output>,
 ): void {
   const methods = is_resource<Output>(resource) ? resource : undefined;
   const keys = ["current", "error", "loading", "ready"] as const;
@@ -232,7 +247,7 @@ function attach_query_resource<Output>(
 
 function attach_live_query_resource<Output>(
   resource: unknown,
-  effect: RemoteLiveQueryEffect<Output>,
+  effect: RemoteLiveQueryResource<Output>,
 ): void {
   const methods = is_resource<Output>(resource) ? resource : undefined;
   const async_iterator = methods?.[Symbol.asyncIterator];
@@ -272,4 +287,14 @@ function attach_live_query_resource<Output>(
       value: () => async_iterator.call(resource),
     });
   }
+}
+
+function make_live_query_resource<Output>(
+  resource: unknown,
+): RemoteLiveQueryResource<Output> {
+  const live_resource = {} as RemoteLiveQueryResource<Output>;
+
+  attach_live_query_resource(resource, live_resource);
+
+  return live_resource;
 }

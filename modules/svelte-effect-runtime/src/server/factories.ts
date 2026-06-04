@@ -24,6 +24,7 @@ import type {
   EffectRemoteForm,
   EffectRemoteLiveQuery,
   EffectRemoteLiveQueryFunction,
+  EffectRemoteLiveQueryResource,
   EffectRemoteLiveSource,
   EffectRemoteQuery,
   EffectRemoteQueryFunction,
@@ -41,7 +42,7 @@ type FormSchemaEncodedInput<S> = S extends Schema.Top
 type NativeQueryLike<Input = unknown> = (input: Input) => unknown;
 
 type EffectRemoteResource<Output> =
-  | EffectRemoteLiveQuery<Output>
+  | EffectRemoteLiveQueryResource<Output>
   | EffectRemoteQuery<Output>;
 
 type RemoteLiveHandler<Input = unknown, A = unknown> =
@@ -109,17 +110,20 @@ function is_current_remote_request(): boolean {
 function to_effect_live_query<Input, Output>(
   native: NativeQueryLike<Input>,
 ): EffectRemoteLiveQueryFunction<Input, Output> {
-  const wrapped = ((input: Input) => {
-    const resource = (native as (input: Input) => unknown)(input);
-    const effect = Effect.tryPromise({
-      try: () => Promise.resolve(resource),
+  const wrapped = ((input: Input) =>
+    Effect.try({
+      try: () => {
+        const resource = (native as (input: Input) => unknown)(input);
+
+        return make_live_resource<Output>(resource);
+      },
       catch: (error: unknown) => error,
-    }) as unknown as EffectRemoteLiveQuery<Output>;
-
-    attach_live_resource_methods(resource, effect);
-
-    return effect;
-  }) as unknown as EffectRemoteLiveQueryFunction<Input, Output>;
+    }) as unknown as EffectRemoteLiveQuery<
+      Output
+    >) as unknown as EffectRemoteLiveQueryFunction<
+      Input,
+      Output
+    >;
 
   copy_property_descriptors(native, wrapped);
 
@@ -237,7 +241,7 @@ function attach_query_resource_methods<Output>(
 
 function attach_live_resource_methods<Output>(
   resource: unknown,
-  effect: EffectRemoteLiveQuery<Output>,
+  effect: EffectRemoteLiveQueryResource<Output>,
 ): void {
   const methods = is_live_resource<Output>(resource) ? resource : undefined;
   const reconnect = methods?.reconnect;
@@ -283,6 +287,16 @@ function attach_live_resource_methods<Output>(
       value: () => async_iterator.call(resource),
     });
   }
+}
+
+function make_live_resource<Output>(
+  resource: unknown,
+): EffectRemoteLiveQueryResource<Output> {
+  const live_resource = {} as EffectRemoteLiveQueryResource<Output>;
+
+  attach_live_resource_methods(resource, live_resource);
+
+  return live_resource;
 }
 
 /**
