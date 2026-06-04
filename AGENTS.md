@@ -161,15 +161,17 @@ import ts from "typescript";
 import type { Plugin } from "vite";
 ```
 
-## V2 Focus
+## Project Focus
 
-The `v2` branch focuses exclusively on the runtime module (`modules/svelte-effect-runtime`). The language server (`modules/svelte-effect-runtime-language-server`) and VS Code extension (`modules/svelte-effect-runtime-vsix`) modules are not being actively developed during V2. All new code, tests, and CI work targets only the runtime package.
+The runtime module is the primary implementation target. Language server and VS
+Code extension changes should be made when runtime syntax or generated code
+needs editor support.
 
 - **Source**: `modules/svelte-effect-runtime/src/`
-- **Tests**: `.tests/svelte-effect-runtime/v2/`
+- **Tests**: `.tests/svelte-effect-runtime/runtime/`
 - **Build output**: `.dist/svelte-effect-runtime/`
 
-Run tests: `cd .tests/svelte-effect-runtime && deno test --no-check -A v2/`
+Run tests: `cd .tests/svelte-effect-runtime && deno test --no-check -A runtime/`
 
 ## JSDoc
 
