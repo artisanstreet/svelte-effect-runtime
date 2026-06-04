@@ -18,18 +18,21 @@ Write effectful code without any hassle. Seriously!
 
 ```svelte
 <script lang="ts" effect>
-  import { Effect } from "effect";
-  import { GetPosts, UpvotePost } from "./posts.remote";
+  import * as StockCard from "./ticker-card.ts";
+  import { GetAllStocks, GetLivePrice } from "./tickers.remote.ts";
 </script>
 
-<ul>
-  {#each yield* GetPosts() as { title, link }}
-    <li>
-      <a href={link}>{title}</a>
-      <button onclick={() => yield* UpvotePost()}>Upvote</button>
-    </li>
+<ScrollArea>
+  {#each yield* GetAllStocks as stock}
+    {const liveQuery = yield* GetLivePrice(stock.ticker);
+    {const price = liveQuery.current ?? stock.initialPrice}
+    
+    <StockCard.Root>
+      <StockCard.Header>{stock.name}</StockCard.Header>
+      <StockCard.Price>{stock.name}</StockCard.Price>
+    </StockCard.Root>
   {/each}
-</ul>
+</ScrollArea>
 ```
 
 ## Packages
