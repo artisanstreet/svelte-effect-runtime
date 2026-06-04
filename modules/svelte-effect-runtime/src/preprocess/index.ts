@@ -1,22 +1,21 @@
 import { contains_top_level_yield_star } from "$/detect.ts";
+import { has_local_import_binding, make_imports } from "./imports.ts";
+import { create_source_map, slice } from "./source.ts";
 import { TopLevelAwaitError } from "$/error.ts";
+import { make_runtime_block } from "./runtime-block.ts";
+import { contains_top_level_await } from "./ast.ts";
+import { lower_statement } from "./lower.ts";
+import type { BlockRef, EffectBlock, ScriptTransformResult } from "./types.ts";
 
 import MagicString from "magic-string";
 import ts from "typescript";
-
-import { contains_top_level_await } from "./ast.ts";
-import { has_local_import_binding, make_imports } from "./imports.ts";
-import { lower_statement } from "./lower.ts";
-import { make_runtime_block } from "./runtime-block.ts";
-import { create_source_map, slice } from "./source.ts";
-import type { BlockRef, ScriptTransformResult } from "./types.ts";
 
 export type { BlockRef, ScriptTransformResult } from "./types.ts";
 
 /**
  * Transforms a `<script effect>` body by extracting top-level `yield*`
  * expressions into `$state` temp bindings and wrapping the lowered
- * assignments in an `Effect.gen` block that runs on mount.
+ * assignments in a dependency-tracked `$effect` block.
  *
  * @example
  * ```ts
@@ -46,7 +45,7 @@ export function transform_script_effect(
   );
 
   const magic = new MagicString(content);
-  const effect_assignments: string[] = [];
+  const effect_blocks: EffectBlock[] = [];
   const block_refs: BlockRef[] = [];
 
   let has_effect = false;
@@ -67,12 +66,6 @@ export function transform_script_effect(
     source_file,
     "effect",
     "Effect",
-  );
-
-  const has_onmount_import = has_local_import_binding(
-    source_file,
-    "svelte",
-    "onMount",
   );
 
   const has_dispatcher_import = has_local_import_binding(
@@ -109,7 +102,7 @@ export function transform_script_effect(
       magic.appendLeft(lowered.range.start, prefix + "\n");
     }
 
-    effect_assignments.push(...lowered.effect_assignments);
+    effect_blocks.push(...lowered.effect_blocks);
   }
 
   if (!has_effect) {
@@ -121,7 +114,6 @@ export function transform_script_effect(
   /** Phase 3: inject runtime imports after the last user import. */
   const imports = make_imports(
     has_effect_import,
-    has_onmount_import,
     has_dispatcher_import,
   );
 
@@ -136,7 +128,7 @@ export function transform_script_effect(
   }
 
   /** Phase 4: append the runtime program and lifecycle wiring. */
-  const runtime_block = make_runtime_block(effect_assignments);
+  const runtime_block = make_runtime_block(effect_blocks);
   magic.append("\n" + runtime_block);
 
   block_refs.push({ id: filename, kind: "script" });

@@ -45,10 +45,23 @@ export interface LoweredStatement {
   temps: TempBinding[];
   /** The rewritten statement text with yield* replaced by temp refs. */
   rewritten_text: string;
-  /** The assignments to emit in the effect body (includes `yield*`). */
-  effect_assignments: string[];
+  /** Effect bodies to emit in dependency-tracked runtime blocks. */
+  effect_blocks: EffectBlock[];
   /** Original statement range to replace in the source. */
   range: { start: number; end: number };
+}
+
+/**
+ * Describes a generated script effect body and the identifiers it reads
+ * synchronously for Svelte dependency tracking.
+ *
+ * @since 2.0.0
+ */
+export interface EffectBlock {
+  /** Statements to emit inside the generated `Effect.gen` body. */
+  statements: string[];
+  /** Identifier reads that should rerun this block when they change. */
+  deps: string[];
 }
 
 /**
@@ -59,7 +72,7 @@ export interface LoweredStatement {
 export interface LoweredExpression {
   temps: TempBinding[];
   rewritten_expr: string;
-  effect_assignments: string[];
+  effect_blocks: EffectBlock[];
 }
 
 /**
