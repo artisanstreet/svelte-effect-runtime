@@ -33,8 +33,9 @@ import type {
   SchemaInput,
 } from "./types.ts";
 
-type FormSchemaInput<S> = SchemaInput<S> extends RemoteFormInput
-  ? SchemaInput<S>
+type FormSchemaEncodedInput<S> = S extends Schema.Top
+  ? S["Encoded"] extends RemoteFormInput ? S["Encoded"]
+  : never
   : never;
 
 type NativeQueryLike<Input = unknown> = (input: Input) => unknown;
@@ -518,10 +519,10 @@ export function Form<Input extends RemoteFormInput, A>(
   validate_or_handler: "unchecked",
   maybe_handler: RemoteFormHandler<Input, A>,
 ): EffectRemoteForm<Input, A>;
-export function Form<S extends Schema.Schema<unknown>, A>(
+export function Form<S extends Schema.Top, A>(
   validate_or_handler: S,
-  maybe_handler: RemoteFormHandler<FormSchemaInput<S>, A>,
-): EffectRemoteForm<FormSchemaInput<S>, A>;
+  maybe_handler: RemoteFormHandler<SchemaInput<S>, A>,
+): EffectRemoteForm<FormSchemaEncodedInput<S>, A>;
 export function Form(
   validate_or_handler: unknown,
   maybe_handler?: RemoteFormHandler<never, unknown>,

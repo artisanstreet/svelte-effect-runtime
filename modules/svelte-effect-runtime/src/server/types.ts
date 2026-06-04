@@ -100,7 +100,7 @@ export type StandardSchema = {
  *
  * @since 2.0.0
  */
-export type SchemaInput<S> = S extends Schema.Schema<infer Input> ? Input
+export type SchemaInput<S> = S extends Schema.Top ? Schema.Schema.Type<S>
   : unknown;
 
 /**
@@ -203,10 +203,10 @@ export interface FormFactory {
     validate_or_handler: "unchecked",
     maybe_handler: RemoteFormHandler<Input, A>,
   ): EffectRemoteForm<Input, A>;
-  <S extends Schema.Schema<unknown>, A>(
+  <S extends Schema.Top, A>(
     validate_or_handler: S,
-    maybe_handler: RemoteFormHandler<FormSchemaInput<S>, A>,
-  ): EffectRemoteForm<FormSchemaInput<S>, A>;
+    maybe_handler: RemoteFormHandler<SchemaInput<S>, A>,
+  ): EffectRemoteForm<FormSchemaEncodedInput<S>, A>;
 }
 
 /**
@@ -385,6 +385,7 @@ export type EffectRemoteCommand<Input, A> =
 export type EffectRemoteForm<Input extends RemoteFormInput | void, A> =
   ClientEffectRemoteForm<Input, A>;
 
-type FormSchemaInput<S> = SchemaInput<S> extends RemoteFormInput
-  ? SchemaInput<S>
+type FormSchemaEncodedInput<S> = S extends Schema.Top
+  ? S["Encoded"] extends RemoteFormInput ? S["Encoded"]
+  : never
   : never;
