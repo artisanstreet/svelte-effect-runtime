@@ -33,6 +33,7 @@ function assert_rejects_rune_yield(source: string, rune_name?: string): void {
     "yield* cannot be used inside",
   );
 
+  assertStringIncludes(error.message, "[ASYNC_EFFECT_IN_SYNC_RUNE]:");
   assertStringIncludes(error.message, "must stay synchronous");
   assertNotMatch(error.message, /Extract|__temp|yourEffect|\$state\(yield\*/);
 
@@ -359,11 +360,13 @@ Deno.test("injects dispatcher when generators import lacks get_dispatcher bindin
 
 Deno.test("rejects top-level await with a clear error message", () => {
   const source = `const x = await fetch("/api");`;
-  assertThrows(
+  const error = assertThrows(
     () => transform_script_effect(source, "Test.svelte"),
     Error,
     "await",
   );
+
+  assertStringIncludes(error.message, "[TOP_LEVEL_AWAIT]:");
 });
 
 Deno.test("rejects yield* in synchronous-only rune arguments", () => {

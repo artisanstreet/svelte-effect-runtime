@@ -1,5 +1,5 @@
-import { NestedYieldStarInEventHandlerError } from "$/error.ts";
 import { contains_top_level_yield_star } from "$/detect.ts";
+import { AsyncEffectInEventCallbackError } from "$/error.ts";
 import MagicString from "magic-string";
 import ts from "typescript";
 
@@ -353,7 +353,7 @@ function analyze_event_yield(
   const analysis = analyze_event_body_yield_star(event.body);
 
   if (analysis.has_nested_invalid_yield_star) {
-    throw new NestedYieldStarInEventHandlerError(filename, event.body);
+    throw new AsyncEffectInEventCallbackError(filename, event.body);
   }
 
   return {

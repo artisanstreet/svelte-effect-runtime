@@ -1,4 +1,21 @@
 /**
+ * Formats a runtime-owned error message with a stable screaming-case code.
+ *
+ * @example
+ * ```ts
+ * throw new Error(make_error_message("DISPATCHER_DISPOSED", "Dispatcher has been disposed"));
+ * ```
+ *
+ * @since 2.0.0
+ * @param code - Stable screaming-case identifier for the error category.
+ * @param message - Human-readable error message without the leading code.
+ * @returns The complete error message prefixed with the stable code.
+ */
+export function make_error_message(code: string, message: string): string {
+  return `[${code}]: ${message}`;
+}
+
+/**
  * Base error class for all preprocessor errors emitted during script and
  * markup transformation. Carries the source filename so error messages can
  * reference the affected file.
@@ -38,7 +55,10 @@ export class TopLevelAwaitError extends PreprocessError {
   constructor(filename: string, statement_text: string) {
     super(
       [
-        `${filename}: top-level await is not supported in <script effect>.`,
+        make_error_message(
+          "TOP_LEVEL_AWAIT",
+          `${filename}: top-level await is not supported in <script effect>.`,
+        ),
         `Use yield* Effect.promise(...) or yield* Effect.tryPromise(...) instead.`,
         "",
         `Problematic statement:`,
@@ -52,14 +72,14 @@ export class TopLevelAwaitError extends PreprocessError {
 }
 
 /**
- * Thrown when `yield*` appears inside a Svelte rune whose semantics do not
- * support async expressions.
+ * Thrown when async Effect work appears inside a Svelte rune position that
+ * must stay synchronous.
  *
  * @since 2.0.0
  */
-export class YieldStarInRuneError extends PreprocessError {
+export class AsyncEffectInSyncRuneError extends PreprocessError {
   /**
-   * The name of the rune that contained the yield* expression.
+   * The name of the rune that contained async Effect work.
    *
    * @since 2.0.0
    */
@@ -75,7 +95,10 @@ export class YieldStarInRuneError extends PreprocessError {
   constructor(rune_name: string, expression_text: string, filename: string) {
     super(
       [
-        `${filename}: yield* cannot be used inside ${rune_name}().`,
+        make_error_message(
+          "ASYNC_EFFECT_IN_SYNC_RUNE",
+          `${filename}: yield* cannot be used inside ${rune_name}().`,
+        ),
         `${rune_name}() must stay synchronous. Do not put async Effect work inside this rune.`,
         "",
         `Problematic expression:`,
@@ -83,19 +106,19 @@ export class YieldStarInRuneError extends PreprocessError {
       ].join("\n"),
       filename,
     );
-    this.name = "YieldStarInRuneError";
+    this.name = "AsyncEffectInSyncRuneError";
     this.rune_name = rune_name;
     this.expression_text = expression_text;
   }
 }
 
 /**
- * Thrown when an event handler contains `yield*` inside a nested callback that
- * is not itself a generator function.
+ * Thrown when async Effect work appears inside a non-generator callback nested
+ * in a markup event handler.
  *
  * @example
  * ```ts
- * throw new NestedYieldStarInEventHandlerError(
+ * throw new AsyncEffectInEventCallbackError(
  *   "Component.svelte",
  *   "Effect.try(() => yield* save())",
  * );
@@ -103,7 +126,7 @@ export class YieldStarInRuneError extends PreprocessError {
  *
  * @since 2.0.0
  */
-export class NestedYieldStarInEventHandlerError extends PreprocessError {
+export class AsyncEffectInEventCallbackError extends PreprocessError {
   /**
    * The full text of the problematic event handler body.
    *
@@ -114,7 +137,10 @@ export class NestedYieldStarInEventHandlerError extends PreprocessError {
   constructor(filename: string, expression_text: string) {
     super(
       [
-        `${filename}: yield* cannot be used inside a nested non-generator callback in a markup event handler.`,
+        make_error_message(
+          "ASYNC_EFFECT_IN_EVENT_CALLBACK",
+          `${filename}: yield* cannot be used inside a nested non-generator callback in a markup event handler.`,
+        ),
         `Move the yield* to the event handler body. Effect.try and Effect.sync callbacks are plain synchronous JavaScript; do not call Effect-returning functions inside them.`,
         "",
         `Run the remote Effect directly:`,
@@ -128,7 +154,7 @@ export class NestedYieldStarInEventHandlerError extends PreprocessError {
       ].join("\n"),
       filename,
     );
-    this.name = "NestedYieldStarInEventHandlerError";
+    this.name = "AsyncEffectInEventCallbackError";
     this.expression_text = expression_text;
   }
 }

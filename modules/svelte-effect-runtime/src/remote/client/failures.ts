@@ -38,7 +38,9 @@ export function decode_remote_error(
       return decoded as RemoteFailure<unknown>;
     } catch {
       return create_remote_transport_error(
-        new Error("Failed to decode remote error payload"),
+        new Error(
+          "[REMOTE_ERROR_DECODE_FAILED]: Failed to decode remote error payload",
+        ),
         raw,
       );
     }

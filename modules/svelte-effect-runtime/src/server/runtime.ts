@@ -32,7 +32,9 @@ export interface RequestEvent extends
 export const RequestEvent: Context.Reference<RequestEvent> = Context
   .Reference<RequestEvent>("@ser/RequestEvent", {
     defaultValue: () => {
-      throw new Error("RequestEvent is only available during a remote call");
+      throw new Error(
+        "[REQUEST_EVENT_UNAVAILABLE]: RequestEvent is only available during a remote call",
+      );
     },
   });
 

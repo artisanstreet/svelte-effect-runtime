@@ -30,7 +30,9 @@ export function create_remote_command_adapter<Input, Output>(
     : undefined;
 
   if (typeof native_factory !== "function" && !invoke) {
-    throw new Error("Invalid command factory: expected a function");
+    throw new Error(
+      "[INVALID_COMMAND_FACTORY]: Invalid command factory: expected a function",
+    );
   }
 
   const count = pending ?? { value: 0 };

@@ -324,7 +324,9 @@ function QueryRoot(
     }
 
     if (is_unchecked(validate_or_handler)) {
-      throw new Error("Query('unchecked', handler) requires a handler");
+      throw new Error(
+        "[MISSING_REMOTE_HANDLER]: Query('unchecked', handler) requires a handler",
+      );
     }
 
     return to_effect_query(native_query(
@@ -360,7 +362,9 @@ function QueryBatch(
 ): unknown {
   try {
     if (!maybe_handler) {
-      throw new Error("Query.batch requires a handler");
+      throw new Error(
+        "[MISSING_REMOTE_HANDLER]: Query.batch requires a handler",
+      );
     }
 
     return to_effect_query(native_query.batch(
@@ -410,7 +414,9 @@ function QueryLive(
     }
 
     if (is_unchecked(validate_or_handler)) {
-      throw new Error("Query.live('unchecked', handler) requires a handler");
+      throw new Error(
+        "[MISSING_REMOTE_HANDLER]: Query.live('unchecked', handler) requires a handler",
+      );
     }
 
     return to_effect_live_query(native_query.live(
@@ -477,7 +483,9 @@ export function Command(
     }
 
     if (is_unchecked(validate_or_handler)) {
-      throw new Error("Command('unchecked', handler) requires a handler");
+      throw new Error(
+        "[MISSING_REMOTE_HANDLER]: Command('unchecked', handler) requires a handler",
+      );
     }
 
     return native_command(
@@ -536,7 +544,9 @@ export function Form(
     }
 
     if (is_unchecked(validate_or_handler)) {
-      throw new Error("Form('unchecked', handler) requires a handler");
+      throw new Error(
+        "[MISSING_REMOTE_HANDLER]: Form('unchecked', handler) requires a handler",
+      );
     }
 
     const inputless_handler: RemoteFormHandler<void, unknown> = (
@@ -581,7 +591,9 @@ export function Prerender(
     }
 
     if (is_unchecked(validate_or_handler)) {
-      throw new Error("Prerender('unchecked', handler) requires a handler");
+      throw new Error(
+        "[MISSING_REMOTE_HANDLER]: Prerender('unchecked', handler) requires a handler",
+      );
     }
 
     return native_prerender(

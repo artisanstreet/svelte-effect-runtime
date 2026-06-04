@@ -21,6 +21,7 @@ Deno.test("normalize_remote_helper_error wraps outside-a-route message", () => {
   const err = new Error("Cannot use query outside a route");
   const result = normalize_remote_helper_error(err, "Query");
 
+  assertStringIncludes(result.message, "[REMOTE_HELPER_CONTEXT]:");
   assertStringIncludes(
     result.message,
     "Query was called outside a .remote.ts file",
@@ -39,7 +40,7 @@ Deno.test("normalize_remote_helper_error wraps non-Error values", () => {
   const result = normalize_remote_helper_error("raw string", "Form");
 
   assert(result instanceof Error);
-  assertEquals(result.message, "raw string");
+  assertEquals(result.message, "[REMOTE_HELPER_ERROR]: raw string");
 });
 
 // ─── throw_form_error ──────────────────────────────────────────
@@ -94,7 +95,7 @@ Deno.test("encode_remote_failure handles cause with no failures gracefully", () 
   const encoded = encode_remote_failure(cause);
   const parsed = parse(encoded);
 
-  assertEquals(parsed.message, "Unknown error");
+  assertEquals(parsed.message, "[UNKNOWN_REMOTE_FAILURE]: Unknown error");
 });
 
 // ─── run_remote_effect ─────────────────────────────────────────

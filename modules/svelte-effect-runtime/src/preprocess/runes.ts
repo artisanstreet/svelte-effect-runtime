@@ -1,5 +1,5 @@
 import { contains_top_level_yield_star } from "$/detect.ts";
-import { YieldStarInRuneError } from "$/error.ts";
+import { AsyncEffectInSyncRuneError } from "$/error.ts";
 import { slice } from "./source.ts";
 
 import ts from "typescript";
@@ -99,7 +99,11 @@ function validate_call_expression(
     !ASYNC_EXPRESSION_RUNES.has(rune_name) &&
     contains_top_level_yield_star(call)
   ) {
-    throw new YieldStarInRuneError(rune_name, slice(content, call), filename);
+    throw new AsyncEffectInSyncRuneError(
+      rune_name,
+      slice(content, call),
+      filename,
+    );
   }
 
   if (!CALLBACK_RUNES.has(rune_name)) {
@@ -112,7 +116,11 @@ function validate_call_expression(
     return;
   }
 
-  throw new YieldStarInRuneError(rune_name, slice(content, call), filename);
+  throw new AsyncEffectInSyncRuneError(
+    rune_name,
+    slice(content, call),
+    filename,
+  );
 }
 
 function callback_has_top_level_yield_star(node: ts.Expression): boolean {

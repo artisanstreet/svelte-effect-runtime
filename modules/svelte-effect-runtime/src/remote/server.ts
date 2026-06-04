@@ -99,7 +99,7 @@ export function encode_remote_failure(cause: Cause.Cause<unknown>): string {
     }
   }
 
-  return stringify({ message: "Unknown error" });
+  return stringify({ message: "[UNKNOWN_REMOTE_FAILURE]: Unknown error" });
 }
 
 /**
@@ -153,10 +153,12 @@ export function normalize_remote_helper_error(
 
   if (message.includes("Cannot use") || message.includes("outside a route")) {
     return new Error(
-      `${helper_name} was called outside a .remote.ts file. ` +
+      `[REMOTE_HELPER_CONTEXT]: ${helper_name} was called outside a .remote.ts file. ` +
         `Ensure the file is named \`*.remote.ts\` and is located in a route directory.`,
     );
   }
 
-  return err instanceof Error ? err : new Error(message);
+  return err instanceof Error
+    ? err
+    : new Error(`[REMOTE_HELPER_ERROR]: ${message}`);
 }

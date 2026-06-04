@@ -79,7 +79,9 @@ export function create_remote_query_adapter<Input, Output>(
     : undefined;
 
   if (!query && !load) {
-    throw new Error("Invalid query factory: expected a function");
+    throw new Error(
+      "[INVALID_QUERY_FACTORY]: Invalid query factory: expected a function",
+    );
   }
 
   const wrapped = ((input: Input) => {
@@ -134,7 +136,9 @@ export function create_remote_live_query_adapter<Input, Output>(
     : undefined;
 
   if (!query) {
-    throw new Error("Invalid live query factory: expected a function");
+    throw new Error(
+      "[INVALID_LIVE_QUERY_FACTORY]: Invalid live query factory: expected a function",
+    );
   }
 
   const wrapped = ((input: Input) => {

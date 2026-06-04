@@ -31,7 +31,9 @@ export async function submit_remote_form<Output>(
 
   if (!action_id || remote_base.length === 0) {
     throw create_remote_transport_error(
-      new Error("Form has no submit method or remote endpoint"),
+      new Error(
+        "[REMOTE_FORM_ENDPOINT_MISSING]: Form has no submit method or remote endpoint",
+      ),
     );
   }
 
@@ -97,7 +99,9 @@ function decode_form_response<Output>(
     !("type" in envelope)
   ) {
     throw create_remote_transport_error(
-      new Error("Invalid remote form response"),
+      new Error(
+        "[REMOTE_FORM_RESPONSE_INVALID]: Invalid remote form response",
+      ),
       envelope,
     );
   }
@@ -124,7 +128,9 @@ function decode_form_response<Output>(
 
   if (response.type !== "result" || typeof response.result !== "string") {
     throw create_remote_transport_error(
-      new Error("Unsupported remote form response"),
+      new Error(
+        "[REMOTE_FORM_RESPONSE_UNSUPPORTED]: Unsupported remote form response",
+      ),
       envelope,
     );
   }

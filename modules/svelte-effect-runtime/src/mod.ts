@@ -219,6 +219,7 @@ export { effect, type EffectOptions } from "$/vite.ts";
 
 /** Re-export server helper types from the root entrypoint. */
 export type {
+  CommandFactory,
   EffectLike,
   EffectRemoteBatchHandler,
   EffectRemoteCommand,
@@ -229,18 +230,17 @@ export type {
   EffectRemoteLiveSource,
   EffectRemoteQuery,
   EffectRemoteQueryFunction,
+  FormFactory,
   FormInvalid,
+  PrerenderFactory,
   PrerenderOptions,
   QueryBatchFactory,
   QueryFactory,
   QueryLiveFactory,
-  RemoteLiveHandler,
   RemoteFormHandler,
   RemoteHandler,
+  RemoteLiveHandler,
   SchemaInput,
-  CommandFactory,
-  FormFactory,
-  PrerenderFactory,
   ServerRuntimeFactory,
   StandardSchema,
 } from "$/server/types.ts";
@@ -283,7 +283,9 @@ function make_server_only_class(name: string): unknown {
   };
 }
 
-function make_server_only_function(name: string): (...args: unknown[]) => never {
+function make_server_only_function(
+  name: string,
+): (...args: unknown[]) => never {
   return (..._args: unknown[]): never => {
     throw make_server_only_error(name);
   };
@@ -291,7 +293,7 @@ function make_server_only_function(name: string): (...args: unknown[]) => never 
 
 function make_server_only_error(name: string): Error {
   return new Error(
-    `${name} is only available in SvelteKit server files. ` +
+    `[SERVER_ONLY_IMPORT]: ${name} is only available in SvelteKit server files. ` +
       `Ensure the SER Vite plugin is enabled so root imports are rewritten ` +
       `to \`svelte-effect-runtime/server\` before evaluation.`,
   );

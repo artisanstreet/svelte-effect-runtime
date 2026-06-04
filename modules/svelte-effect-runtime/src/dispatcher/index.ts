@@ -173,7 +173,9 @@ export class Dispatcher {
    */
   promise<A>(options: PromiseOptions<A>): Promise<A> {
     if (this.#disposed) {
-      return Promise.reject(new Error("Dispatcher has been disposed"));
+      return Promise.reject(
+        new Error("[DISPATCHER_DISPOSED]: Dispatcher has been disposed"),
+      );
     }
 
     const cache_key = `promise:${options.id}::${hash_deps(options.deps)}`;
@@ -220,7 +222,9 @@ export class Dispatcher {
    */
   run<A, E, R>(effect: Effect.Effect<A, E, R>): Promise<A> {
     if (this.#disposed) {
-      return Promise.reject(new Error("Dispatcher has been disposed"));
+      return Promise.reject(
+        new Error("[DISPATCHER_DISPOSED]: Dispatcher has been disposed"),
+      );
     }
 
     return this.#runtime

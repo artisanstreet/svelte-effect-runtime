@@ -54,7 +54,7 @@ export function getRequestEvent(): never {
 
 function make_sveltekit_server_error(name: string): Error {
   return new Error(
-    `SvelteKit virtual $app/server export ${name} is only available ` +
+    `[SVELTEKIT_SERVER_MODULE_UNAVAILABLE]: SvelteKit virtual $app/server export ${name} is only available ` +
       `inside a SvelteKit server module.`,
   );
 }

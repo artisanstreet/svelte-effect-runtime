@@ -125,7 +125,7 @@ function to_live_source_effect<A>(
   if (!Effect.isEffect(value)) {
     return Effect.fail(
       new Error(
-        "Query.live handler must return an Effect Stream, Iterable, or AsyncIterable",
+        "[INVALID_LIVE_QUERY_SOURCE]: Query.live handler must return an Effect Stream, Iterable, or AsyncIterable",
       ),
     );
   }

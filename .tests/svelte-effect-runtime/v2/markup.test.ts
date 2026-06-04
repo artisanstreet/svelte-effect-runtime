@@ -257,6 +257,7 @@ Deno.test("rejects yield* inside nested non-generator event callbacks", () => {
     () => transform_markup_effect(source, "Test.svelte"),
   );
 
+  assertStringIncludes(error.message, "[ASYNC_EFFECT_IN_EVENT_CALLBACK]:");
   assertStringIncludes(
     error.message,
     "yield* cannot be used inside a nested non-generator callback",
@@ -279,6 +280,7 @@ Deno.test("rejects nested callback yield* even with an outer yield*", () => {
     () => transform_markup_effect(source, "Test.svelte"),
   );
 
+  assertStringIncludes(error.message, "[ASYNC_EFFECT_IN_EVENT_CALLBACK]:");
   assertStringIncludes(
     error.message,
     "yield* cannot be used inside a nested non-generator callback",
