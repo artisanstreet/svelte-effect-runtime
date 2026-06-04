@@ -1,4 +1,5 @@
 import {
+  assertEquals,
   assertMatch,
   assertNotMatch,
   assertStringIncludes,
@@ -51,6 +52,30 @@ Deno.test("passes through a regular script body unchanged (no yield*)", () => {
   assertNotMatch(result.code, /get_dispatcher/);
 });
 
+Deno.test("passes through ordinary Svelte rune usage unchanged", () => {
+  const source = [
+    `let count = $state(0);`,
+    `let raw = $state.raw({ value: 1 });`,
+    `const snapshot = $state.snapshot(raw);`,
+    `const doubled = $derived(count * 2);`,
+    `const tripled = $derived.by(() => count * 3);`,
+    `let { value = $bindable("x"), ...rest } = $props();`,
+    `const props_id = $props.id();`,
+    `$effect(() => { console.log(count); });`,
+    `$effect.pre(() => { console.log("pre", count); });`,
+    `const dispose = $effect.root(() => { console.log(count); });`,
+    `const pending = $effect.pending();`,
+    `const tracking = $effect.tracking();`,
+    `$inspect(count, doubled).with((type, value) => console.log(type, value));`,
+    `$inspect.trace("count");`,
+    `const host = $host();`,
+  ].join("\n");
+  const result = transform_script_effect(source, "Test.svelte");
+
+  assertEquals(result.code, source);
+  assertNotMatch(result.code, /__SER__/);
+});
+
 Deno.test("passes through types, interfaces, enums, classes untouched", () => {
   const source = [
     `type User = { name: string };`,
@@ -71,8 +96,43 @@ Deno.test("passes through types, interfaces, enums, classes untouched", () => {
 
 // ─── $state(yield* expr) lowering ────────────────────────────
 
-Deno.test("extracts $state(yield* expr) into a temp $state binding", () => {
+Deno.test("preserves $state(yield* expr) as writable state", () => {
   const source = `let user = $state(yield* getUser(id));`;
+  assert_transform(source, [
+    `let user = $state(undefined);`,
+    `user = yield* getUser(id);`,
+    `void [getUser, id];`,
+  ], [
+    `let user = $derived`,
+  ]);
+});
+
+Deno.test("preserves $state expressions with multiple yield points", () => {
+  const source =
+    `let label = $state(\`\${yield* getFirst()} \${yield* getLast()}\`);`;
+  const result = transform_script_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `let label = $state(undefined);`);
+  assertStringIncludes(
+    result.code,
+    "label = `${yield* getFirst()} ${yield* getLast()}`;",
+  );
+  assertStringIncludes(result.code, `void [getFirst, getLast];`);
+  assertNotMatch(result.code, /let label = \$derived/);
+});
+
+Deno.test("preserves $state.raw(yield* expr) as raw state", () => {
+  const source = `let raw = $state.raw(yield* getRaw(id));`;
+  const result = transform_script_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `let raw = $state.raw(undefined);`);
+  assertStringIncludes(result.code, `raw = yield* getRaw(id);`);
+  assertStringIncludes(result.code, `void [getRaw, id];`);
+  assertNotMatch(result.code, /let raw = \$derived/);
+});
+
+Deno.test("extracts bare yield const sugar into a derived value", () => {
+  const source = `const user = yield* getUser(id);`;
   assert_transform(source, [
     `let __SER__`,
     `= $state(undefined);`,
@@ -113,18 +173,6 @@ Deno.test("tracks reactive identifiers read by yielded remote arguments", () => 
   );
 });
 
-// ─── const sugar lowering ────────────────────────────────────
-
-Deno.test("extracts const x = yield* expr (bare const sugar)", () => {
-  const source = `const user = yield* getUser(id);`;
-  assert_transform(source, [
-    `let __SER__`,
-    `= $state(undefined);`,
-    `let user = $derived(__SER__`,
-    `= yield* getUser(id);`,
-  ]);
-});
-
 // ─── Destructuring yield* lowering ───────────────────────────
 
 Deno.test("extracts destructuring yield* into temp binding", () => {
@@ -157,16 +205,7 @@ Deno.test("extracts $derived(yield* expr) into a temp binding", () => {
   assertStringIncludes(result.code, `= yield* format(user);`);
 });
 
-// ─── $state.raw / $inspect lowering ──────────────────────────
-
-Deno.test("extracts $state.raw(yield* expr) into a temp binding", () => {
-  const source = `let raw = $state.raw(yield* getRaw(id));`;
-  const result = transform_script_effect(source, "Test.svelte");
-
-  assertStringIncludes(result.code, `let __SER__`);
-  assertStringIncludes(result.code, `= $state(undefined);`);
-  assertStringIncludes(result.code, `let raw = $derived(__SER__`);
-});
+// ─── $inspect lowering ───────────────────────────────────────
 
 Deno.test("extracts $inspect(yield* expr) into a temp binding", () => {
   const source = `$inspect(yield* debugInfo());`;
@@ -204,13 +243,14 @@ Deno.test("moves bare yield* statements into the effect body", () => {
 
 // ─── NOT lowered (function boundary) ─────────────────────────
 
-Deno.test("does NOT lower yield* inside an arrow function", () => {
+Deno.test("rejects yield* inside a $effect arrow function", () => {
   const source = `$effect(() => { yield* doThing(); });`;
-  const result = transform_script_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `$effect(() => { yield* doThing(); });`);
-  assertNotMatch(result.code, /__SER__/);
-  assertNotMatch(result.code, /onMount/);
+  assertThrows(
+    () => transform_script_effect(source, "Test.svelte"),
+    Error,
+    "yield* cannot be used inside $effect",
+  );
 });
 
 Deno.test("does NOT lower yield* in Effect.gen inside a const declaration", () => {
@@ -315,10 +355,47 @@ Deno.test("rejects top-level await with a clear error message", () => {
   );
 });
 
+Deno.test("rejects yield* in synchronous-only rune arguments", () => {
+  const cases = [
+    `const snapshot = $state.snapshot(yield* getSnapshot());`,
+    `let { value = $bindable(yield* getFallback()) } = $props();`,
+    `const props = $props(yield* getProps());`,
+    `const id = $props.id(yield* getId());`,
+    `const host = $host(yield* getHost());`,
+    `const pending = $effect.pending(yield* getPending());`,
+    `const tracking = $effect.tracking(yield* getTracking());`,
+  ];
+
+  for (const source of cases) {
+    assertThrows(
+      () => transform_script_effect(source, "Test.svelte"),
+      Error,
+      "yield* cannot be used inside",
+    );
+  }
+});
+
+Deno.test("rejects yield* inside synchronous rune callbacks", () => {
+  const cases = [
+    `$effect(() => yield* runEffect());`,
+    `$effect.pre(() => yield* runPreEffect());`,
+    `$effect.root(() => yield* runRootEffect());`,
+    `const value = $derived.by(() => yield* compute());`,
+  ];
+
+  for (const source of cases) {
+    assertThrows(
+      () => transform_script_effect(source, "Test.svelte"),
+      Error,
+      "yield* cannot be used inside",
+    );
+  }
+});
+
 // ─── Generated naming conventions ────────────────────────────
 
 Deno.test("generates __SER__ prefix for temp bindings", () => {
-  const source = `let user = $state(yield* getUser(id));`;
+  const source = `const user = yield* getUser(id);`;
   const result = transform_script_effect(source, "Test.svelte");
   assertMatch(result.code, /__SER__/);
 });
@@ -353,7 +430,8 @@ Deno.test("handles ternary with yield* in condition position", () => {
   const result = transform_script_effect(source, "Test.svelte");
 
   assertStringIncludes(result.code, `? "a" : "b"`);
-  assertStringIncludes(result.code, `$derived(__SER__`);
+  assertStringIncludes(result.code, `let flag = $state(undefined);`);
+  assertStringIncludes(result.code, `flag = yield* check() ? "a" : "b";`);
 });
 
 Deno.test("does not choke on $props() or $bindable declarations", () => {

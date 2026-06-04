@@ -5,6 +5,7 @@ import { TopLevelAwaitError } from "$/error.ts";
 import { make_runtime_block } from "./runtime-block.ts";
 import { contains_top_level_await } from "./ast.ts";
 import { lower_statement } from "./lower.ts";
+import { validate_rune_yield_usage } from "./runes.ts";
 import type { BlockRef, EffectBlock, ScriptTransformResult } from "./types.ts";
 
 import MagicString from "magic-string";
@@ -80,6 +81,8 @@ export function transform_script_effect(
       const text = slice(content, stmt);
       throw new TopLevelAwaitError(filename, text);
     }
+
+    validate_rune_yield_usage(stmt, content, filename);
 
     if (!contains_top_level_yield_star(stmt)) {
       continue;

@@ -6,6 +6,7 @@ import {
   find_yield_star_node,
   is_yield_star_expression,
 } from "./ast.ts";
+import { get_state_rune_initializer } from "./runes.ts";
 import { slice, slice_start } from "./source.ts";
 import type {
   EffectBlock,
@@ -89,6 +90,21 @@ function lower_variable_statement(
         statements.push(`${temp_name} = ${yield_text};`);
         deps.push(...collect_deps(yield_text));
       } else {
+        const state_rune = get_state_rune_initializer(
+          decl.initializer,
+          content,
+        );
+
+        if (state_rune) {
+          has_bare_yield = true;
+          rewritten_decls.push(
+            `${original_name} = ${state_rune.rune_name}(undefined)`,
+          );
+          statements.push(`${original_name} = ${state_rune.value_text};`);
+          deps.push(...collect_deps(state_rune.value_text));
+          continue;
+        }
+
         const lowered = lower_expression_yields(
           decl.initializer,
           content,
