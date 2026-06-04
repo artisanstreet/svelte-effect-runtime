@@ -38,15 +38,14 @@ export class PreprocessError extends Error {
 }
 
 /**
- * Thrown when `await` is used at the top level of a `<script effect>` block.
- * Top-level `await` is not supported — users should use
- * `yield* Effect.promise(...)` or `yield* Effect.tryPromise(...)` instead.
+ * Thrown when a statement mixes JavaScript `await` with Effect `yield*` work
+ * that must be lowered into an `Effect.gen` program.
  *
  * @since 2.0.0
  */
-export class TopLevelAwaitError extends PreprocessError {
+export class AwaitInEffectWorkError extends PreprocessError {
   /**
-   * The full text of the problematic statement containing the `await`.
+   * The full text of the problematic statement containing mixed async work.
    *
    * @since 2.0.0
    */
@@ -56,17 +55,17 @@ export class TopLevelAwaitError extends PreprocessError {
     super(
       [
         make_error_message(
-          "TOP_LEVEL_AWAIT",
-          `${filename}: top-level await is not supported in <script effect>.`,
+          "AWAIT_IN_EFFECT_WORK",
+          `${filename}: await cannot be mixed with yield* in Effect work.`,
         ),
-        `Use yield* Effect.promise(...) or yield* Effect.tryPromise(...) instead.`,
+        `Top-level await is supported as ordinary Svelte async rendering, but statements lowered into Effect.gen must use yield* for async Effect work.`,
         "",
         `Problematic statement:`,
         statement_text,
       ].join("\n"),
       filename,
     );
-    this.name = "TopLevelAwaitError";
+    this.name = "AwaitInEffectWorkError";
     this.statement_text = statement_text;
   }
 }

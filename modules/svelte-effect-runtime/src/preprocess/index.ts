@@ -1,7 +1,7 @@
 import { contains_top_level_yield_star } from "$/detect.ts";
 import { has_local_import_binding, make_imports } from "./imports.ts";
 import { create_source_map, slice } from "./source.ts";
-import { TopLevelAwaitError } from "$/error.ts";
+import { AwaitInEffectWorkError } from "$/error.ts";
 import { make_runtime_block } from "./runtime-block.ts";
 import { contains_top_level_await } from "./ast.ts";
 import { lower_statement } from "./lower.ts";
@@ -77,15 +77,17 @@ export function transform_script_effect(
 
   /** Phase 2: lower every top-level statement that contains `yield*`. */
   for (const stmt of source_file.statements) {
-    if (contains_top_level_await(stmt)) {
-      const text = slice(content, stmt);
-      throw new TopLevelAwaitError(filename, text);
-    }
-
     validate_rune_yield_usage(stmt, content, filename);
 
-    if (!contains_top_level_yield_star(stmt)) {
+    const has_top_level_yield_star = contains_top_level_yield_star(stmt);
+
+    if (!has_top_level_yield_star) {
       continue;
+    }
+
+    if (contains_top_level_await(stmt)) {
+      const text = slice(content, stmt);
+      throw new AwaitInEffectWorkError(filename, text);
     }
 
     has_effect = true;

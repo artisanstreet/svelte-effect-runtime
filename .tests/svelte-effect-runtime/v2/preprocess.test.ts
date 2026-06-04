@@ -358,15 +358,23 @@ Deno.test("injects dispatcher when generators import lacks get_dispatcher bindin
 
 // ─── Error cases ─────────────────────────────────────────────
 
-Deno.test("rejects top-level await with a clear error message", () => {
+Deno.test("passes through top-level await without yield*", () => {
   const source = `const x = await fetch("/api");`;
+  const result = transform_script_effect(source, "Test.svelte");
+
+  assertEquals(result.code, source);
+});
+
+Deno.test("rejects await mixed with lowered Effect work", () => {
+  const source = `const x = await transform(yield* load());`;
+
   const error = assertThrows(
     () => transform_script_effect(source, "Test.svelte"),
     Error,
-    "await",
+    "await cannot be mixed with yield*",
   );
 
-  assertStringIncludes(error.message, "[TOP_LEVEL_AWAIT]:");
+  assertStringIncludes(error.message, "[AWAIT_IN_EFFECT_WORK]:");
 });
 
 Deno.test("rejects yield* in synchronous-only rune arguments", () => {
