@@ -1,3 +1,4 @@
+import { collect_yield_star_nodes } from "$/preprocess/ast.ts";
 import { contains_top_level_yield_star } from "$/detect.ts";
 import { AsyncEffectInEventCallbackError } from "$/error.ts";
 import MagicString from "magic-string";
@@ -14,7 +15,7 @@ interface SanitizeResult {
   candidates: MarkupCandidate[];
 }
 
-interface DeclarationInitializer {
+interface DeclarationYieldExpression {
   start: number;
   end: number;
   expr_text: string;
@@ -53,28 +54,32 @@ export function sanitize_markup(
 
     const tag_info = get_tag_info(trimmed);
 
-    const declaration_initializers = collect_declaration_initializers(
+    const declaration_yields = collect_declaration_yield_expressions(
       content,
       open,
       leading_ws,
       trimmed,
     );
 
-    if (declaration_initializers.length > 0) {
-      for (const initializer of declaration_initializers) {
+    if (declaration_yields.length > 0) {
+      for (const declaration_yield of declaration_yields) {
         const placeholder = `__ser_markup_placeholder_${helper_index}`;
         helper_index += 1;
 
         candidates.push({
           placeholder,
-          start: initializer.start,
-          end: initializer.end,
-          expr_text: initializer.expr_text,
+          start: declaration_yield.start,
+          end: declaration_yield.end,
+          expr_text: declaration_yield.expr_text,
           filename,
           key: "plain",
         });
 
-        magic.overwrite(initializer.start, initializer.end, placeholder);
+        magic.overwrite(
+          declaration_yield.start,
+          declaration_yield.end,
+          placeholder,
+        );
       }
 
       cursor = close + 1;
@@ -289,12 +294,12 @@ function get_tag_info(trimmed: string): TagInfo {
   return { kind: "plain", prefix_length: 0 };
 }
 
-function collect_declaration_initializers(
+function collect_declaration_yield_expressions(
   content: string,
   open: number,
   leading_ws: number,
   trimmed: string,
-): DeclarationInitializer[] {
+): DeclarationYieldExpression[] {
   if (!is_declaration_tag_text(trimmed)) {
     return [];
   }
@@ -315,22 +320,29 @@ function collect_declaration_initializers(
 
   const tag_start = open + 1 + leading_ws;
 
-  return stmt.declarationList.declarations
-    .filter((decl) =>
-      decl.initializer && contains_top_level_yield_star(decl.initializer)
-    )
-    .map((decl) => {
-      const initializer = decl.initializer as ts.Expression;
-      const start = tag_start + initializer.getStart(source_file);
-      const end = tag_start + initializer.end;
+  return stmt.declarationList.declarations.flatMap((decl) => {
+    const initializer = decl.initializer;
+
+    if (!initializer || !contains_top_level_yield_star(initializer)) {
+      return [];
+    }
+
+    const expressions: DeclarationYieldExpression[] = [];
+
+    collect_yield_star_nodes(initializer, (yield_node) => {
+      const start = tag_start + yield_node.getStart(source_file);
+      const end = tag_start + yield_node.end;
       const expr_text = content.slice(start, end).trim();
 
-      return {
+      expressions.push({
         start,
         end,
         expr_text,
-      };
+      });
     });
+
+    return expressions;
+  });
 }
 
 function is_declaration_tag_text(trimmed: string): boolean {

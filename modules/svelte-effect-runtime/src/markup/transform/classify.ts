@@ -289,31 +289,84 @@ function classify_expression(
     return;
   }
 
-  const candidate = find_candidate(expression, candidates);
+  const found_candidates = find_candidates(expression, candidates);
 
-  if (!candidate || matched.has(candidate.placeholder)) {
+  for (const candidate of found_candidates) {
+    if (matched.has(candidate.placeholder)) {
+      continue;
+    }
+
+    matched.add(candidate.placeholder);
+    classified.push({ candidate, kind });
+  }
+}
+
+function find_candidates(
+  expression: ExpressionLike,
+  candidates: Map<string, MarkupCandidate>,
+): MarkupCandidate[] {
+  const found: MarkupCandidate[] = [];
+  const seen_nodes = new Set<unknown>();
+  const seen_placeholders = new Set<string>();
+
+  visit_expression_value(
+    expression,
+    candidates,
+    seen_nodes,
+    seen_placeholders,
+    found,
+  );
+
+  return found;
+}
+
+function visit_expression_value(
+  value: unknown,
+  candidates: Map<string, MarkupCandidate>,
+  seen_nodes: Set<unknown>,
+  seen_placeholders: Set<string>,
+  found: MarkupCandidate[],
+): void {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      visit_expression_value(
+        item,
+        candidates,
+        seen_nodes,
+        seen_placeholders,
+        found,
+      );
+    }
+
     return;
   }
 
-  matched.add(candidate.placeholder);
-  classified.push({ candidate, kind });
+  if (!is_record(value) || seen_nodes.has(value)) {
+    return;
+  }
+
+  seen_nodes.add(value);
+
+  if (value.type === "Identifier" && typeof value.name === "string") {
+    const candidate = candidates.get(value.name);
+
+    if (candidate && !seen_placeholders.has(candidate.placeholder)) {
+      seen_placeholders.add(candidate.placeholder);
+      found.push(candidate);
+    }
+  }
+
+  for (const child of Object.values(value)) {
+    visit_expression_value(
+      child,
+      candidates,
+      seen_nodes,
+      seen_placeholders,
+      found,
+    );
+  }
 }
 
-function find_candidate(
-  expression: ExpressionLike,
-  candidates: Map<string, MarkupCandidate>,
-): MarkupCandidate | undefined {
-  if (expression.type === "Identifier" && expression.name) {
-    return candidates.get(expression.name);
-  }
-
-  if (
-    expression.type === "CallExpression" &&
-    expression.callee?.type === "Identifier" &&
-    expression.callee.name
-  ) {
-    return candidates.get(expression.callee.name);
-  }
-
-  return undefined;
+function is_record(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
