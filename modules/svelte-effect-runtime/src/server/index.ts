@@ -1,9 +1,19 @@
 export { Command, Form, Prerender, Query } from "./factories.ts";
+export { Error, Redirect } from "./control-flow.ts";
 export {
   get_server_runtime_or_throw,
   RequestEvent,
   ServerRuntime,
 } from "./runtime.ts";
+
+export type {
+  ErrorEffectFactory,
+  ErrorStatus,
+  ErrorStatusName,
+  RedirectEffectFactory,
+  RedirectStatus,
+  RedirectStatusName,
+} from "./control-flow.ts";
 
 export type {
   CommandFactory,

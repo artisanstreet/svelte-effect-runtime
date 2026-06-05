@@ -1,4 +1,8 @@
 import { Dispatcher as InternalDispatcher } from "$/dispatcher.ts";
+import type {
+  ErrorEffectFactory,
+  RedirectEffectFactory,
+} from "$/server/control-flow.ts";
 import type { RequestEvent as RequestEventShape } from "$/server/runtime.ts";
 import type {
   CommandFactory,
@@ -128,6 +132,24 @@ export const Command: CommandFactory = make_server_only_function(
 ) as never;
 
 /**
+ * SvelteKit HTTP error control-flow export for `.remote.ts` files imported
+ * from the root entrypoint. The Vite plugin rewrites it to the real server
+ * implementation.
+ *
+ * @example
+ * ```ts
+ * import { Error } from "svelte-effect-runtime";
+ *
+ * return yield* Error("NotFound", "Post not found");
+ * ```
+ *
+ * @since 2.3.0
+ */
+export const Error: ErrorEffectFactory = make_server_only_function(
+  "Error",
+) as never;
+
+/**
  * Remote form factory export for `.remote.ts` files imported from the root
  * entrypoint. The Vite plugin rewrites it to the real server implementation.
  *
@@ -160,6 +182,24 @@ export const Form: FormFactory = make_server_only_function(
  */
 export const Prerender: PrerenderFactory = make_server_only_function(
   "Prerender",
+) as never;
+
+/**
+ * SvelteKit redirect control-flow export for `.remote.ts` files imported from
+ * the root entrypoint. The Vite plugin rewrites it to the real server
+ * implementation.
+ *
+ * @example
+ * ```ts
+ * import { Redirect } from "svelte-effect-runtime";
+ *
+ * return yield* Redirect("SeeOther", "/posts");
+ * ```
+ *
+ * @since 2.3.0
+ */
+export const Redirect: RedirectEffectFactory = make_server_only_function(
+  "Redirect",
 ) as never;
 
 /**
@@ -216,6 +256,16 @@ export {
 
 /** Re-export app setup helpers so users can import them from root. */
 export { effect, type EffectOptions } from "$/vite.ts";
+
+/** Re-export server helper types from the root entrypoint. */
+export type {
+  ErrorEffectFactory,
+  ErrorStatus,
+  ErrorStatusName,
+  RedirectEffectFactory,
+  RedirectStatus,
+  RedirectStatusName,
+} from "$/server/control-flow.ts";
 
 /** Re-export server helper types from the root entrypoint. */
 export type {
@@ -292,8 +342,8 @@ function make_server_only_function(
   };
 }
 
-function make_server_only_error(name: string): Error {
-  return new Error(
+function make_server_only_error(name: string): globalThis.Error {
+  return new globalThis.Error(
     `[SERVER_ONLY_IMPORT]: ${name} is only available in SvelteKit server files. ` +
       `Ensure the SER Vite plugin is enabled so root imports are rewritten ` +
       `to \`svelte-effect-runtime/server\` before evaluation.`,
