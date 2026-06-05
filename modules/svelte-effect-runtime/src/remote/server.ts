@@ -1,7 +1,7 @@
 import { create_serialized_remote_failure_envelope } from "$/remote/shared.ts";
+import type { FormIssue } from "$/remote/shared.ts";
 import { Cause, Effect, Exit } from "effect";
 import { stringify } from "devalue";
-import type { FormIssue } from "$/remote/shared.ts";
 
 /**
  * Runs a user-supplied Effect program through a ManagedRuntime, maps its
@@ -89,17 +89,88 @@ export function encode_remote_failure(cause: Cause.Cause<unknown>): string {
   for (const reason of reasons) {
     if (Cause.isFailReason(reason as never)) {
       const failure = reason.error;
-      if (typeof failure === "object" && failure !== null) {
-        try {
-          return stringify(failure);
-        } catch {
-          continue;
-        }
+
+      const encoded = stringify_failure(failure);
+
+      if (encoded !== undefined) {
+        return encoded;
+      }
+
+      const serializable_failure = to_serializable_failure(failure);
+      const serializable_encoded = stringify_failure(serializable_failure);
+
+      if (serializable_encoded !== undefined) {
+        return serializable_encoded;
       }
     }
   }
 
   return stringify({ message: "Unknown error" });
+}
+
+function stringify_failure(value: unknown): string | undefined {
+  try {
+    return stringify(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function to_serializable_failure(
+  value: unknown,
+  seen = new WeakSet<object>(),
+): unknown {
+  if (typeof value === "function" || typeof value === "symbol") {
+    return undefined;
+  }
+
+  if (!is_object_like(value)) {
+    return value;
+  }
+
+  if (stringify_failure(value) !== undefined) {
+    return value;
+  }
+
+  if (seen.has(value)) {
+    return undefined;
+  }
+
+  seen.add(value);
+
+  const serializable = Array.isArray(value)
+    ? value.map((item) => to_serializable_failure(item, seen))
+    : to_plain_record(value, seen);
+
+  seen.delete(value);
+
+  return serializable;
+}
+
+function to_plain_record(
+  value: object,
+  seen: WeakSet<object>,
+): Record<string, unknown> {
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const record: Record<string, unknown> = {};
+
+  for (const [key, descriptor] of Object.entries(descriptors)) {
+    if (key === "stack" || !("value" in descriptor)) {
+      continue;
+    }
+
+    record[key] = to_serializable_failure(descriptor.value, seen);
+  }
+
+  if (value instanceof Error && !("message" in record)) {
+    record.message = value.message;
+  }
+
+  return record;
+}
+
+function is_object_like(value: unknown): value is object {
+  return typeof value === "object" && value !== null;
 }
 
 /**
