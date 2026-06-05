@@ -4,7 +4,7 @@ import {
   assertRejects,
   assertStringIncludes,
 } from "@std/assert";
-import { Effect, Stream } from "effect";
+import { Data, Effect, Stream } from "effect";
 import { parse } from "devalue";
 import { run_live_handler_source } from "../../../modules/svelte-effect-runtime/src/server/effects.ts";
 import {
@@ -87,6 +87,36 @@ Deno.test("encode_remote_failure serialises a tagged error from a Cause", async 
 
   assertEquals(parsed._tag, "MyError");
   assertEquals(parsed.code, 42);
+});
+
+Deno.test("encode_remote_failure serialises Effect tagged error instances", async () => {
+  class AuthenticationError extends Data.TaggedError("AuthenticationError")<{
+    readonly message: string;
+    readonly reason: string;
+  }> {}
+
+  const program = Effect.gen(function* () {
+    return yield* Effect.fail(
+      new AuthenticationError({
+        message: "OAuth is currently disabled",
+        reason: "development",
+      }),
+    );
+  });
+
+  const exit = await Effect.runPromise(Effect.exit(program));
+  const failure = exit as { _tag: string; cause: unknown };
+
+  if (failure._tag !== "Failure") {
+    throw new Error("expected failed exit");
+  }
+
+  const encoded = encode_remote_failure(failure.cause);
+  const parsed = parse(encoded);
+
+  assertEquals(parsed._tag, "AuthenticationError");
+  assertEquals(parsed.message, "OAuth is currently disabled");
+  assertEquals(parsed.reason, "development");
 });
 
 Deno.test("encode_remote_failure handles cause with no failures gracefully", () => {
