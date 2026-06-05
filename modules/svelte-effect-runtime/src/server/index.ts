@@ -1,4 +1,5 @@
 export { Command, Form, Prerender, Query } from "./factories.ts";
+export { Error, Redirect } from "./control-flow.ts";
 export {
   get_server_runtime_or_throw,
   RequestEvent,
@@ -6,6 +7,16 @@ export {
 } from "./runtime.ts";
 
 export type {
+  ErrorEffectFactory,
+  ErrorStatus,
+  ErrorStatusName,
+  RedirectEffectFactory,
+  RedirectStatus,
+  RedirectStatusName,
+} from "./control-flow.ts";
+
+export type {
+  CommandFactory,
   EffectLike,
   EffectRemoteBatchHandler,
   EffectRemoteCommand,
@@ -16,17 +27,16 @@ export type {
   EffectRemoteLiveSource,
   EffectRemoteQuery,
   EffectRemoteQueryFunction,
-  FormInvalid,
-  CommandFactory,
   FormFactory,
-  PrerenderOptions,
+  FormInvalid,
   PrerenderFactory,
+  PrerenderOptions,
   QueryBatchFactory,
   QueryFactory,
   QueryLiveFactory,
-  RemoteLiveHandler,
   RemoteFormHandler,
   RemoteHandler,
+  RemoteLiveHandler,
   SchemaInput,
   ServerRuntimeFactory,
   StandardSchema,

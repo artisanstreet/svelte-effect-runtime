@@ -1,11 +1,28 @@
 import {
   assert,
   assertEquals,
+  assertFalse,
   assertRejects,
   assertStringIncludes,
 } from "@std/assert";
+import {
+  error as svelte_error,
+  invalid as svelte_invalid,
+  isHttpError,
+  isRedirect,
+  isValidationError,
+  redirect as svelte_redirect,
+} from "@sveltejs/kit";
 import { Data, Effect, Stream } from "effect";
 import { parse } from "devalue";
+import {
+  Error as RootError,
+  Redirect as RootRedirect,
+} from "../../../modules/svelte-effect-runtime/src/mod.ts";
+import {
+  Error as ServerError,
+  Redirect as ServerRedirect,
+} from "../../../modules/svelte-effect-runtime/src/server/index.ts";
 import { run_live_handler_source } from "../../../modules/svelte-effect-runtime/src/server/effects.ts";
 import {
   encode_remote_failure,
@@ -129,6 +146,67 @@ Deno.test("encode_remote_failure handles cause with no failures gracefully", () 
 
 // ─── run_remote_effect ─────────────────────────────────────────
 
+Deno.test("Error resolves named status aliases", async () => {
+  const thrown = await assertRejects(() =>
+    Effect.runPromise(ServerError("NotFound", "missing"))
+  );
+
+  assert(isHttpError(thrown, 404));
+  assertEquals(thrown.body, { message: "missing" });
+});
+
+Deno.test("Error passes numeric statuses through", async () => {
+  const thrown = await assertRejects(() =>
+    Effect.runPromise(ServerError(418, "short and stout"))
+  );
+
+  assert(isHttpError(thrown, 418));
+  assertEquals(thrown.body, { message: "short and stout" });
+});
+
+Deno.test("Redirect resolves named status aliases", async () => {
+  const thrown = await assertRejects(() =>
+    Effect.runPromise(ServerRedirect("TemporaryRedirect", "/oauth"))
+  );
+
+  assert(isRedirect(thrown));
+  assertEquals(thrown.status, 307);
+  assertEquals(thrown.location, "/oauth");
+});
+
+Deno.test("Redirect passes numeric statuses through", async () => {
+  const thrown = await assertRejects(() =>
+    Effect.runPromise(ServerRedirect(303, "/done"))
+  );
+
+  assert(isRedirect(thrown));
+  assertEquals(thrown.status, 303);
+  assertEquals(thrown.location, "/done");
+});
+
+Deno.test("control-flow helpers type-check in Effect generators", () => {
+  const server_error_program = Effect.gen(function* () {
+    return yield* ServerError("NotFound", "missing");
+  });
+
+  const server_redirect_program = Effect.gen(function* () {
+    return yield* ServerRedirect("SeeOther", "/done");
+  });
+
+  const root_error_program = Effect.gen(function* () {
+    return yield* RootError("NotFound", "missing");
+  });
+
+  const root_redirect_program = Effect.gen(function* () {
+    return yield* RootRedirect("SeeOther", "/done");
+  });
+
+  assert(Effect.isEffect(server_error_program));
+  assert(Effect.isEffect(server_redirect_program));
+  assert(Effect.isEffect(root_error_program));
+  assert(Effect.isEffect(root_redirect_program));
+});
+
 Deno.test("run_remote_effect returns the success value", async () => {
   class TestRuntime {
     runPromise(
@@ -233,6 +311,108 @@ Deno.test("run_remote_effect throws error on non-FormError failure", async () =>
 
   assertEquals(body.__svelte_effect_remote__, true);
   assertEquals(parsed._tag, "DbError");
+});
+
+Deno.test("run_remote_effect rethrows SvelteKit redirect defects", async () => {
+  class TestRuntime {
+    runPromise(
+      effect: Effect.Effect<unknown, unknown, unknown>,
+    ): Promise<unknown> {
+      return Effect.runPromise(effect);
+    }
+  }
+
+  const runtime = new TestRuntime();
+  let invalid_called = false;
+  let error_called = false;
+
+  const thrown = await assertRejects(async () => {
+    await run_remote_effect(
+      Effect.sync(() => svelte_redirect(303, "/oauth")),
+      runtime,
+      () => {
+        invalid_called = true;
+        throw new globalThis.Error("invalid");
+      },
+      () => {
+        error_called = true;
+        throw new globalThis.Error("error");
+      },
+    );
+  });
+
+  assert(isRedirect(thrown));
+  assertEquals(thrown.status, 303);
+  assertEquals(thrown.location, "/oauth");
+  assertFalse(invalid_called);
+  assertFalse(error_called);
+});
+
+Deno.test("run_remote_effect rethrows SvelteKit HTTP error defects", async () => {
+  class TestRuntime {
+    runPromise(
+      effect: Effect.Effect<unknown, unknown, unknown>,
+    ): Promise<unknown> {
+      return Effect.runPromise(effect);
+    }
+  }
+
+  const runtime = new TestRuntime();
+  let invalid_called = false;
+  let error_called = false;
+
+  const thrown = await assertRejects(async () => {
+    await run_remote_effect(
+      Effect.sync(() => svelte_error(404, "missing")),
+      runtime,
+      () => {
+        invalid_called = true;
+        throw new globalThis.Error("invalid");
+      },
+      () => {
+        error_called = true;
+        throw new globalThis.Error("error");
+      },
+    );
+  });
+
+  assert(isHttpError(thrown, 404));
+  assertEquals(thrown.body, { message: "missing" });
+  assertFalse(invalid_called);
+  assertFalse(error_called);
+});
+
+Deno.test("run_remote_effect rethrows SvelteKit validation defects", async () => {
+  class TestRuntime {
+    runPromise(
+      effect: Effect.Effect<unknown, unknown, unknown>,
+    ): Promise<unknown> {
+      return Effect.runPromise(effect);
+    }
+  }
+
+  const runtime = new TestRuntime();
+  let invalid_called = false;
+  let error_called = false;
+
+  const thrown = await assertRejects(async () => {
+    await run_remote_effect(
+      Effect.sync(() => svelte_invalid("bad input")),
+      runtime,
+      () => {
+        invalid_called = true;
+        throw new globalThis.Error("invalid");
+      },
+      () => {
+        error_called = true;
+        throw new globalThis.Error("error");
+      },
+    );
+  });
+
+  assert(isValidationError(thrown));
+  assertFalse(invalid_called);
+  assertFalse(error_called);
 });
 
 Deno.test("run_live_handler_source converts Effect Streams to async iterables", async () => {

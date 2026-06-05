@@ -1,7 +1,14 @@
 import { create_serialized_remote_failure_envelope } from "$/remote/shared.ts";
 import type { FormIssue } from "$/remote/shared.ts";
+import { isHttpError, isRedirect, isValidationError } from "@sveltejs/kit";
 import { Cause, Effect, Exit } from "effect";
 import { stringify } from "devalue";
+
+type CauseReason = {
+  readonly _tag: string;
+  readonly defect?: unknown;
+  readonly error?: unknown;
+};
 
 /**
  * Runs a user-supplied Effect program through a ManagedRuntime, maps its
@@ -47,10 +54,26 @@ function handle_failure(
   invalid: (status: number, body: unknown) => never,
   error: (status: number, body: unknown) => never,
 ): never {
-  const reasons =
-    (cause as unknown as { reasons: Array<{ _tag: string; error?: unknown }> })
-      .reasons;
+  const reasons = get_cause_reasons(cause);
 
+  /**
+   * Phase 1 — let SvelteKit's thrown control-flow sentinels escape.
+   */
+  for (const reason of reasons) {
+    if (!Cause.isDieReason(reason as never)) {
+      continue;
+    }
+
+    const defect = reason.defect;
+
+    if (is_sveltekit_control_flow(defect)) {
+      throw defect;
+    }
+  }
+
+  /**
+   * Phase 2 — preserve typed form validation failures.
+   */
   for (const reason of reasons) {
     if (Cause.isFailReason(reason as never)) {
       const failure = reason.error;
@@ -66,6 +89,9 @@ function handle_failure(
     }
   }
 
+  /**
+   * Phase 3 — encode all other failures for the remote client.
+   */
   const encoded = encode_remote_failure(cause);
   const envelope = create_serialized_remote_failure_envelope(encoded);
 
@@ -82,9 +108,7 @@ function handle_failure(
  * @internal
  */
 export function encode_remote_failure(cause: Cause.Cause<unknown>): string {
-  const reasons =
-    (cause as unknown as { reasons: Array<{ _tag: string; error?: unknown }> })
-      .reasons;
+  const reasons = get_cause_reasons(cause);
 
   for (const reason of reasons) {
     if (Cause.isFailReason(reason as never)) {
@@ -106,6 +130,19 @@ export function encode_remote_failure(cause: Cause.Cause<unknown>): string {
   }
 
   return stringify({ message: "Unknown error" });
+}
+
+function get_cause_reasons(
+  cause: Cause.Cause<unknown>,
+): readonly CauseReason[] {
+  const reasons = (cause as unknown as { reasons?: readonly CauseReason[] })
+    .reasons;
+
+  return reasons ?? [];
+}
+
+function is_sveltekit_control_flow(value: unknown): boolean {
+  return isRedirect(value) || isHttpError(value) || isValidationError(value);
 }
 
 function stringify_failure(value: unknown): string | undefined {
@@ -219,15 +256,15 @@ export function throw_form_error(
 export function normalize_remote_helper_error(
   err: unknown,
   helper_name: string,
-): Error {
+): globalThis.Error {
   const message = err instanceof Error ? err.message : String(err);
 
   if (message.includes("Cannot use") || message.includes("outside a route")) {
-    return new Error(
+    return new globalThis.Error(
       `${helper_name} was called outside a .remote.ts file. ` +
         `Ensure the file is named \`*.remote.ts\` and is located in a route directory.`,
     );
   }
 
-  return err instanceof Error ? err : new Error(message);
+  return err instanceof Error ? err : new globalThis.Error(message);
 }
