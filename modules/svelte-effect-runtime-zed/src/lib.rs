@@ -16,7 +16,7 @@ const LOCAL_LANGUAGE_SERVER_SCRIPT_PATH: &str =
 const MANAGED_LANGUAGE_SERVER_SCRIPT_PATH: &str =
     "node_modules/svelte-effect-runtime-language-server/.dist/server.cjs";
 const INSTALLED_LANGUAGE_SERVER_SCRIPT_PATH: &str =
-    "../../work/svelte-effect-runtime/node_modules/svelte-effect-runtime-language-server/.dist/server.cjs";
+    "../../work/svelte-effect-runtime-language-server/node_modules/svelte-effect-runtime-language-server/.dist/server.cjs";
 const WORKTREE_LANGUAGE_SERVER_SCRIPT_PATH: &str =
     "node_modules/svelte-effect-runtime-language-server/.dist/server.cjs";
 const TS_PLUGIN_PACKAGE_NAME: &str = "typescript-svelte-plugin";
