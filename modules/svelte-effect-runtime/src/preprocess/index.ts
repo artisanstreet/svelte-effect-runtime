@@ -75,6 +75,12 @@ export function transform_script_effect(
     "get_dispatcher",
   );
 
+  const has_untrack_import = has_local_import_binding(
+    source_file,
+    "svelte",
+    "untrack",
+  );
+
   /** Phase 2: lower every top-level statement that contains `yield*`. */
   for (const stmt of source_file.statements) {
     validate_rune_yield_usage(stmt, content, filename);
@@ -120,6 +126,7 @@ export function transform_script_effect(
   const imports = make_imports(
     has_effect_import,
     has_dispatcher_import,
+    has_untrack_import,
   );
 
   const last_import = [...source_file.statements]

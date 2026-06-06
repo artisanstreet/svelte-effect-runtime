@@ -7,16 +7,19 @@ import ts from "typescript";
  * @param has_effect_import - Whether the user already imports `Effect`.
  * @param has_dispatcher_import - Whether the user already imports
  *   `get_dispatcher`.
+ * @param has_untrack_import - Whether the user already imports `untrack`.
  * @returns Newline-separated import statements to inject.
  */
 export function make_imports(
   has_effect_import: boolean,
   has_dispatcher_import: boolean,
+  has_untrack_import: boolean,
 ): string {
   return [
-    !has_effect_import && `import { Effect } from "effect";`,
     !has_dispatcher_import &&
     `import { get_dispatcher } from "svelte-effect-runtime/internal/generators";`,
+    !has_untrack_import && `import { untrack } from "svelte";`,
+    !has_effect_import && `import { Effect } from "effect";`,
   ]
     .filter(Boolean)
     .join("\n");

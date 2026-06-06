@@ -52,7 +52,7 @@
     "test": "deno task test"
   },
   "peerDependencies": {
-    "@sveltejs/kit": "^2.0.0",
+    "@sveltejs/kit": "^2.0.0 || ^3.0.0-next.0",
     "@sveltejs/vite-plugin-svelte": "^6.0.0 || ^7.0.0",
     "effect": "^4.0.0-beta",
     "svelte": "^5.0.0",
@@ -61,7 +61,7 @@
   "dependencies": {
     "devalue": "^5.5.0",
     "magic-string": "^0.30.21",
-    "typescript": "^5.9.3"
+    "typescript": "^6.0.0"
   },
   "devDependencies": {
     "@types/node": "^24.6.1",

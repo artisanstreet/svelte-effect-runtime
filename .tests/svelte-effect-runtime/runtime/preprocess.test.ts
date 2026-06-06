@@ -169,7 +169,10 @@ Deno.test("wraps lowered assignments in dependency-tracked Effect.gen", () => {
   assertStringIncludes(result.code, `$effect(() => {`);
   assertStringIncludes(result.code, `void [f];`);
   assertStringIncludes(result.code, `get_dispatcher();`);
-  assertStringIncludes(result.code, `.fork(`);
+  assertStringIncludes(
+    result.code,
+    `untrack(() => __SER__dispatcher.fork(__SER__program));`,
+  );
   assertStringIncludes(result.code, `return `);
 });
 
@@ -245,6 +248,21 @@ Deno.test("moves count = yield* expr into the effect body", () => {
   assertStringIncludes(result.code, `let count = $state(0);`);
   assertStringIncludes(result.code, `count = yield* getCount();`);
   assertNotMatch(result.code, /count = __SER__/);
+});
+
+Deno.test("does not track assignment targets as reactive dependencies", () => {
+  const source = [
+    `let count = $state(0);`,
+    `count = yield* Effect.succeed(count + 1);`,
+  ].join("\n");
+  const result = transform_script_effect(source, "Test.svelte");
+
+  assertStringIncludes(
+    result.code,
+    `count = yield* Effect.succeed(count + 1);`,
+  );
+  assertStringIncludes(result.code, `void [Effect];`);
+  assertNotMatch(result.code, /void \[Effect, count\];/);
 });
 
 // ─── Bare yield* statement (fire and forget) ─────────────────
@@ -340,6 +358,32 @@ Deno.test("does not inject onMount for dependency-tracked runtime block", () => 
   assertStringIncludes(result.code, `import { tick } from "svelte";`);
   assertNotMatch(result.code, /import \{ onMount \} from "svelte";/);
   assertStringIncludes(result.code, `$effect(() => {`);
+});
+
+Deno.test("injects untrack when svelte import lacks untrack binding", () => {
+  const source = [
+    `import { tick } from "svelte";`,
+    `let x = $state(yield* f());`,
+  ].join("\n");
+  const result = transform_script_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `import { tick } from "svelte";`);
+  assertStringIncludes(result.code, `import { untrack } from "svelte";`);
+  assertStringIncludes(result.code, `untrack(() =>`);
+});
+
+Deno.test("reuses existing untrack import when already present", () => {
+  const source = [
+    `import { tick, untrack } from "svelte";`,
+    `let x = $state(yield* f());`,
+  ].join("\n");
+  const result = transform_script_effect(source, "Test.svelte");
+  const import_count =
+    [...result.code.matchAll(/import.*untrack.*from.*"svelte"/g)].length;
+
+  if (import_count !== 1) {
+    throw new Error(`Expected 1 untrack import, got ${import_count}`);
+  }
 });
 
 Deno.test("injects dispatcher when generators import lacks get_dispatcher binding", () => {

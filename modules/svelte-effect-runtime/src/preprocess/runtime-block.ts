@@ -25,7 +25,7 @@ export function make_runtime_block(blocks: EffectBlock[]): string {
     "  const __SER__program = Effect.gen(function* () {",
     body,
     "  });",
-    "  const __SER__cancel = __SER__dispatcher.fork(__SER__program);",
+    "  const __SER__cancel = untrack(() => __SER__dispatcher.fork(__SER__program));",
     "  import.meta.hot?.dispose(__SER__cancel);",
     "  return __SER__cancel;",
     "});",

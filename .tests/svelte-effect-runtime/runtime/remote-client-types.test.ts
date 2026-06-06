@@ -322,6 +322,7 @@ export function prerender(..._args: unknown[]): unknown {
         compilerOptions: {
           allowImportingTsExtensions: true,
           baseUrl: `${to_posix_path(repo_root)}/modules/svelte-effect-runtime`,
+          ignoreDeprecations: "6.0",
           lib: ["dom", "dom.iterable", "es2022"],
           module: "nodenext",
           moduleResolution: "nodenext",
