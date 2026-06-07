@@ -117,7 +117,8 @@ Deno.test("preserves $state(yield* expr) as writable state", () => {
   assert_transform(source, [
     `let user = $state(undefined);`,
     `user = yield* getUser(id);`,
-    `void [getUser, id];`,
+    `  getUser;`,
+    `  id;`,
   ], [
     `let user = $derived`,
   ]);
@@ -133,7 +134,8 @@ Deno.test("preserves $state expressions with multiple yield points", () => {
     result.code,
     "label = `${yield* getFirst()} ${yield* getLast()}`;",
   );
-  assertStringIncludes(result.code, `void [getFirst, getLast];`);
+  assertStringIncludes(result.code, `  getFirst;`);
+  assertStringIncludes(result.code, `  getLast;`);
   assertNotMatch(result.code, /let label = \$derived/);
 });
 
@@ -143,7 +145,8 @@ Deno.test("preserves $state.raw(yield* expr) as raw state", () => {
 
   assertStringIncludes(result.code, `let raw = $state.raw(undefined);`);
   assertStringIncludes(result.code, `raw = yield* getRaw(id);`);
-  assertStringIncludes(result.code, `void [getRaw, id];`);
+  assertStringIncludes(result.code, `  getRaw;`);
+  assertStringIncludes(result.code, `  id;`);
   assertNotMatch(result.code, /let raw = \$derived/);
 });
 
@@ -157,7 +160,8 @@ Deno.test("extracts bare yield const sugar into a derived value", () => {
     `import { Effect } from "effect"`,
     `import { get_dispatcher } from "svelte-effect-runtime/internal/generators"`,
     `$effect(() => {`,
-    `void [getUser, id];`,
+    `  getUser;`,
+    `  id;`,
   ]);
 });
 
@@ -167,7 +171,7 @@ Deno.test("wraps lowered assignments in dependency-tracked Effect.gen", () => {
 
   assertStringIncludes(result.code, `Effect.gen(function* () {`);
   assertStringIncludes(result.code, `$effect(() => {`);
-  assertStringIncludes(result.code, `void [f];`);
+  assertStringIncludes(result.code, `  f;`);
   assertStringIncludes(result.code, `get_dispatcher();`);
   assertStringIncludes(
     result.code,
@@ -185,7 +189,8 @@ Deno.test("tracks reactive identifiers read by yielded remote arguments", () => 
 
   assertStringIncludes(result.code, `let { params } = $props();`);
   assertStringIncludes(result.code, `let result = $derived(__SER__`);
-  assertStringIncludes(result.code, `void [getPost, params];`);
+  assertStringIncludes(result.code, `  getPost;`);
+  assertStringIncludes(result.code, `  params;`);
   assertStringIncludes(
     result.code,
     `__SER__result = yield* getPost({ param: params.page_parameter });`,
@@ -261,8 +266,9 @@ Deno.test("does not track assignment targets as reactive dependencies", () => {
     result.code,
     `count = yield* Effect.succeed(count + 1);`,
   );
-  assertStringIncludes(result.code, `void [Effect];`);
-  assertNotMatch(result.code, /void \[Effect, count\];/);
+  assertStringIncludes(result.code, `  Effect;`);
+  assertNotMatch(result.code, /\n\s*count;\n/);
+  assertNotMatch(result.code, /void \[/);
 });
 
 // ─── Bare yield* statement (fire and forget) ─────────────────

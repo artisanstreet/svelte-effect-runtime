@@ -237,8 +237,11 @@ Deno.test("rewrites onclick event effect expressions as run wrappers", () => {
   assertStringIncludes(result.code, `__ser_markup_run`);
   assertStringIncludes(
     result.code,
-    `void __ser_markup_run(function* () { yield* trackEvent(); });`,
+    `__ser_markup_run(function* () { yield* trackEvent(); });`,
   );
+  if (result.code.includes("void __ser_markup_run")) {
+    throw new Error("event handler wrappers should not emit void");
+  }
   assertStringIncludes(result.code, `trackEvent`);
   if (!result.has_yield) throw new Error("has_yield should be true");
 });
@@ -252,7 +255,7 @@ Deno.test("rewrites event effect expressions with generated event parameter", ()
   assertStringIncludes(result.code, `event.currentTarget.value`);
   assertStringIncludes(
     result.code,
-    `void __ser_markup_run(function* () { yield* validate(event.currentTarget.value); });`,
+    `__ser_markup_run(function* () { yield* validate(event.currentTarget.value); });`,
   );
 
   compile(result.code, {
@@ -296,7 +299,7 @@ Deno.test("rewrites native-style form validation handlers only when marked with 
   assertStringIncludes(result.code, `oninput={(event) =>`);
   assertStringIncludes(
     result.code,
-    `void __ser_markup_run(function* () { yield* createPost.validate(); });`,
+    `__ser_markup_run(function* () { yield* createPost.validate(); });`,
   );
   assertStringIncludes(
     result.code,

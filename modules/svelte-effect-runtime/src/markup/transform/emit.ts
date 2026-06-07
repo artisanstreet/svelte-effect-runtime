@@ -103,7 +103,7 @@ function make_event_handler(candidate: MarkupCandidate): { text: string } {
 
   return {
     text:
-      `(event) => { void ${HELPERS.run}(function* () { ${candidate.expr_text}; }); }`,
+      `(event) => { ${HELPERS.run}(function* () { ${candidate.expr_text}; }); }`,
   };
 }
 
