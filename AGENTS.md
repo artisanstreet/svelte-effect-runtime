@@ -7,6 +7,22 @@
 - **File names**: `kebab-case.ts`
 - **Directories**: group related files by directory, not by filename prefix (e.g. `internal/transform.ts` not `internal-transform.ts`)
 
+## Git
+
+Have good git etiquette. For each successful change, create a commit and push it
+to the relevant remote branch.
+
+- Never push to `master` without explicit human approval.
+- Always create a branch named for the work you are doing before making changes.
+- When follow-up work grows beyond the branch's original purpose, create a new
+  branch from the current branch instead of piling unrelated work onto one broad
+  branch.
+- Keep commit messages brief and easy to read, using conventional prefixes such
+  as `docs: fix typo in get started page` or `fix: preserve tagged remote
+  failures`.
+- Do not include AI model names, provider names, or agent identifiers in commit
+  messages unless a human explicitly asks for them.
+
 ### Spacing
 
 Every function gives its logic room to breathe. No dense walls of code.
@@ -240,6 +256,6 @@ When releasing:
    - **Minor** (`1.7.0`): new features, backward-compatible.
    - **Patch** (`1.6.3`): bug fixes, no API or feature changes.
 2. Bump all four files to the same version.
-3. Commit and push to `master`.
+3. After explicit human approval, commit and push to `master`.
 
 The CI will detect the version bump, run the full test suite, build all packages, and publish. If the versions are out of sync at any point, the release job will fail.
