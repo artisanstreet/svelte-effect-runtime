@@ -52,7 +52,7 @@ export function strip_arrow_function(
  * @returns Whether the expression parses as an arrow or function expression.
  */
 export function is_callback_function_expression(expr: string): boolean {
-  const wrapped = `const __ser_callback = ${expr};`;
+  const wrapped = `const __SER___callback = ${expr};`;
   const sf = ts.createSourceFile(
     "callback.ts",
     wrapped,
@@ -91,7 +91,7 @@ export function analyze_event_body_yield_star(body: string): {
   has_top_level_yield_star: boolean;
   has_nested_invalid_yield_star: boolean;
 } {
-  const wrapped = `function* __ser_event() { ${body}; }`;
+  const wrapped = `function* __SER___event() { ${body}; }`;
   const sf = ts.createSourceFile(
     "event.ts",
     wrapped,
@@ -126,7 +126,7 @@ export function analyze_event_body_yield_star(body: string): {
  * @returns Identifier names referenced by the expression.
  */
 export function collect_free_identifiers(expr_text: string): string[] {
-  const wrapped = `function* __w() { return (${expr_text}); }`;
+  const wrapped = `function* __SER___w() { return (${expr_text}); }`;
   let sf: ts.SourceFile;
 
   try {

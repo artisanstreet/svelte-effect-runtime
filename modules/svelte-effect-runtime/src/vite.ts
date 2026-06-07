@@ -182,8 +182,8 @@ export function rewrite_remote_client_exports(
   ].join("\n");
 
   const helpers = [
-    `const __ser_remote_base = \`\${base}/\${app_dir}/remote\`;`,
-    `function __ser_decode_payload(value) { return value; }`,
+    `const __SER___remote_base = \`\${base}/\${app_dir}/remote\`;`,
+    `function __SER___decode_payload(value) { return value; }`,
   ].join("\n");
 
   const debug_line = options?.debug
@@ -209,16 +209,16 @@ function make_remote_export(
   const native_call = `${namespace}.${type}(${id_literal})`;
 
   if (type === "command") {
-    return `export const ${name} = create_remote_command_adapter(${native_call}, __ser_decode_payload);`;
+    return `export const ${name} = create_remote_command_adapter(${native_call}, __SER___decode_payload);`;
   }
 
   if (type === "form") {
-    return `export const ${name} = create_remote_form_adapter(${native_call}, __ser_decode_payload, __ser_remote_base);`;
+    return `export const ${name} = create_remote_form_adapter(${native_call}, __SER___decode_payload, __SER___remote_base);`;
   }
 
   if (type === "query_live") {
-    return `export const ${name} = create_remote_live_query_adapter(${native_call}, __ser_decode_payload);`;
+    return `export const ${name} = create_remote_live_query_adapter(${native_call}, __SER___decode_payload);`;
   }
 
-  return `export const ${name} = create_remote_query_adapter(${native_call}, __ser_decode_payload);`;
+  return `export const ${name} = create_remote_query_adapter(${native_call}, __SER___decode_payload);`;
 }

@@ -54,7 +54,9 @@ export function transform_script_effect(
   const context = {
     next_temp_name(hint?: string) {
       const suffix = temp_counter === 0 ? "" : `_${temp_counter}`;
-      const name = hint ? `__SER__${hint}${suffix}` : `__SER__${temp_counter}`;
+      const name = hint
+        ? `__SER___${hint}${suffix}`
+        : `__SER___${temp_counter}`;
 
       temp_counter += 1;
 

@@ -62,7 +62,7 @@ export function sanitize_markup(
 
     if (declaration_yields.length > 0) {
       for (const declaration_yield of declaration_yields) {
-        const placeholder = `__ser_markup_placeholder_${helper_index}`;
+        const placeholder = `__SER___markup_placeholder_${helper_index}`;
         helper_index += 1;
 
         candidates.push({
@@ -147,7 +147,7 @@ export function sanitize_markup(
     }
 
     /** Create a placeholder and replace the expression (preserving tag prefixes). */
-    const placeholder = `__ser_markup_placeholder_${helper_index}`;
+    const placeholder = `__SER___markup_placeholder_${helper_index}`;
     helper_index += 1;
 
     candidates.push({

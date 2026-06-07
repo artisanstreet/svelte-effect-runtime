@@ -319,7 +319,7 @@ function collect_deps(
 
   return collect_free_identifiers(expr_text).filter(
     (identifier) =>
-      !identifier.startsWith("__SER__") && !excluded.has(identifier),
+      !identifier.startsWith("__SER___") && !excluded.has(identifier),
   );
 }
 

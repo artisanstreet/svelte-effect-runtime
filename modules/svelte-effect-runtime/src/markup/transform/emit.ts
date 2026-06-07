@@ -168,7 +168,7 @@ function make_cache_id(candidate: MarkupCandidate): string {
 }
 
 function make_helper_name(candidate: MarkupCandidate): string {
-  return `__ser_markup_effect_${candidate.start}_${candidate.end}`;
+  return `__SER___markup_effect_${candidate.start}_${candidate.end}`;
 }
 
 function make_relocation(
