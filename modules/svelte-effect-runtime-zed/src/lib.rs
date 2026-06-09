@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::env;
-use std::fs;
 use std::path::PathBuf;
 
 use zed_extension_api::{self as zed, serde_json, Result};
@@ -11,13 +10,7 @@ struct SvelteEffectRuntimeExtension {
 
 const LANGUAGE_SERVER_BINARY_NAME: &str = "svelte-effect-runtime-language-server";
 const LANGUAGE_SERVER_PACKAGE_NAME: &str = "svelte-effect-runtime-language-server";
-const LOCAL_LANGUAGE_SERVER_SCRIPT_PATH: &str =
-    "../svelte-effect-runtime-language-server/.dist/server.cjs";
 const MANAGED_LANGUAGE_SERVER_SCRIPT_PATH: &str =
-    "node_modules/svelte-effect-runtime-language-server/.dist/server.cjs";
-const INSTALLED_LANGUAGE_SERVER_SCRIPT_PATH: &str =
-    "../../work/svelte-effect-runtime-language-server/node_modules/svelte-effect-runtime-language-server/.dist/server.cjs";
-const WORKTREE_LANGUAGE_SERVER_SCRIPT_PATH: &str =
     "node_modules/svelte-effect-runtime-language-server/.dist/server.cjs";
 const TS_PLUGIN_PACKAGE_NAME: &str = "typescript-svelte-plugin";
 
@@ -28,18 +21,6 @@ fn package_path(package_name: &str) -> Result<PathBuf> {
         .join(package_name);
 
     Ok(path)
-}
-
-fn extension_path(relative_path: &str) -> Result<PathBuf> {
-    let path = env::current_dir()
-        .map_err(|error| error.to_string())?
-        .join(relative_path);
-
-    Ok(path)
-}
-
-fn is_file(path: &PathBuf) -> bool {
-    fs::metadata(path).map_or(false, |metadata| metadata.is_file())
 }
 
 impl SvelteEffectRuntimeExtension {
@@ -81,6 +62,30 @@ impl SvelteEffectRuntimeExtension {
         Ok(())
     }
 
+    fn configured_server_command(
+        &self,
+        id: &zed::LanguageServerId,
+        worktree: &zed::Worktree,
+    ) -> Result<Option<zed::Command>> {
+        let settings = zed::settings::LspSettings::for_worktree(id.as_ref(), worktree)?;
+        let Some(binary) = settings.binary else {
+            return Ok(None);
+        };
+
+        let Some(command) = binary.path else {
+            return Ok(None);
+        };
+
+        let args = binary
+            .arguments
+            .unwrap_or_else(|| vec!["--stdio".to_string()]);
+
+        let mut env: zed::EnvVars = binary.env.unwrap_or_default().into_iter().collect();
+        env.sort_by(|(left, _), (right, _)| left.cmp(right));
+
+        Ok(Some(zed::Command { command, args, env }))
+    }
+
     fn local_server_command(&self, worktree: &zed::Worktree) -> Option<zed::Command> {
         let command = worktree.which(LANGUAGE_SERVER_BINARY_NAME)?;
 
@@ -91,48 +96,12 @@ impl SvelteEffectRuntimeExtension {
         })
     }
 
-    fn worktree_server_script_path(&self, worktree: &zed::Worktree) -> Option<String> {
-        let path = PathBuf::from(worktree.root_path()).join(WORKTREE_LANGUAGE_SERVER_SCRIPT_PATH);
-
-        if !is_file(&path) {
-            return None;
-        }
-
-        Some(path.to_string_lossy().to_string())
-    }
-
-    fn repository_server_script_path(&self) -> Result<Option<String>> {
-        let path = extension_path(LOCAL_LANGUAGE_SERVER_SCRIPT_PATH)?;
-
-        if !is_file(&path) {
-            return Ok(None);
-        }
-
-        Ok(Some(path.to_string_lossy().to_string()))
-    }
-
     fn managed_server_script_path(&mut self, id: &zed::LanguageServerId) -> Result<String> {
-        for relative_path in [
-            MANAGED_LANGUAGE_SERVER_SCRIPT_PATH,
-            INSTALLED_LANGUAGE_SERVER_SCRIPT_PATH,
-        ] {
-            let path = extension_path(relative_path)?;
-
-            if is_file(&path) {
-                return Ok(path.to_string_lossy().to_string());
-            }
-        }
-
         self.install_package_if_needed(id, LANGUAGE_SERVER_PACKAGE_NAME)?;
 
-        let path = extension_path(MANAGED_LANGUAGE_SERVER_SCRIPT_PATH)?;
-
-        if !is_file(&path) {
-            Err(format!(
-                "installed package '{}' did not contain expected path '{}'",
-                LANGUAGE_SERVER_PACKAGE_NAME, MANAGED_LANGUAGE_SERVER_SCRIPT_PATH,
-            ))?;
-        }
+        let path = env::current_dir()
+            .map_err(|error| error.to_string())?
+            .join(MANAGED_LANGUAGE_SERVER_SCRIPT_PATH);
 
         Ok(path.to_string_lossy().to_string())
     }
@@ -152,22 +121,15 @@ impl zed::Extension for SvelteEffectRuntimeExtension {
     ) -> Result<zed::Command> {
         self.install_package_if_needed(id, TS_PLUGIN_PACKAGE_NAME)?;
 
+        if let Some(command) = self.configured_server_command(id, worktree)? {
+            return Ok(command);
+        }
+
         if let Some(command) = self.local_server_command(worktree) {
             return Ok(command);
         }
 
-        if let Some(script_path) = self.worktree_server_script_path(worktree) {
-            return Ok(zed::Command {
-                command: zed::node_binary_path()?,
-                args: vec![script_path, "--stdio".to_string()],
-                env: Default::default(),
-            });
-        }
-
-        let script_path = match self.repository_server_script_path()? {
-            Some(path) => path,
-            None => self.managed_server_script_path(id)?,
-        };
+        let script_path = self.managed_server_script_path(id)?;
 
         Ok(zed::Command {
             command: zed::node_binary_path()?,

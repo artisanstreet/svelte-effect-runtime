@@ -22,18 +22,27 @@ but disable its language server:
 }
 ```
 
-For local development, build the sibling language-server package first:
+For local development, point Zed at your local language-server binary with
+`lsp.svelte-effect-runtime-language-server.binary.path`:
 
-```sh
-cd modules/svelte-effect-runtime-language-server
-deno task build
+```json
+{
+  "lsp": {
+    "svelte-effect-runtime-language-server": {
+      "binary": {
+        "path": "/path/to/svelte-effect-runtime-language-server",
+        "arguments": ["--stdio"]
+      }
+    }
+  }
+}
 ```
 
 The extension resolves the server in this order:
 
-1. `svelte-effect-runtime-language-server` on the worktree `PATH`.
-2. `../svelte-effect-runtime-language-server/.dist/server.cjs` for this repo.
+1. `lsp.svelte-effect-runtime-language-server.binary.path` from Zed settings.
+2. `svelte-effect-runtime-language-server` on the worktree `PATH`.
 3. An extension-managed npm install of `svelte-effect-runtime-language-server`.
 
-The npm fallback is for the published package path; local testing should use the
-sibling `.dist/server.cjs` path above.
+The npm fallback is the published-package path. Local testing should use the
+Zed settings override above.
