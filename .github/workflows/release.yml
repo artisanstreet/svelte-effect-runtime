@@ -182,7 +182,8 @@ jobs:
 
       - name: publish_runtime_to_jsr
         working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime
-        run: npx jsr publish
+        timeout-minutes: 10
+        run: npx --yes jsr publish
 
       - name: build_lsp
         working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-language-server
@@ -232,7 +233,7 @@ jobs:
             exit 1
           fi
 
-          npx ovsx publish "$VSIX_PATH" -p "${{ secrets.OPEN_VSX_TOKEN }}"
+          npx --yes ovsx publish "$VSIX_PATH" -p "${{ secrets.OPEN_VSX_TOKEN }}"
 
       - name: publish_extension_to_marketplace
         shell: bash
