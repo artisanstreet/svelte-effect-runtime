@@ -32,8 +32,11 @@ deno task build
 The extension resolves the server in this order:
 
 1. `svelte-effect-runtime-language-server` on the worktree `PATH`.
-2. `../svelte-effect-runtime-language-server/.dist/server.cjs` for this repo.
-3. An extension-managed npm install of `svelte-effect-runtime-language-server`.
+2. `node_modules/svelte-effect-runtime-language-server/.dist/server.cjs` in the
+   open worktree.
+3. `../svelte-effect-runtime-language-server/.dist/server.cjs` for this repo.
+4. A GitHub release asset matching this extension's `extension.toml` version.
 
-The npm fallback is for the published package path; local testing should use the
-sibling `.dist/server.cjs` path above.
+When the release asset path is used, the extension installs the public Node
+dependencies that the bundled server needs beside the extension. The language
+server package itself is private and is not resolved through npm.
