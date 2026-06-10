@@ -42,7 +42,11 @@ The extension resolves the server in this order:
 
 1. `lsp.svelte-effect-runtime-language-server.binary.path` from Zed settings.
 2. `svelte-effect-runtime-language-server` on the worktree `PATH`.
-3. An extension-managed npm install of `svelte-effect-runtime-language-server`.
+3. `node_modules/svelte-effect-runtime-language-server/.dist/server.cjs` beside
+   the extension.
+4. A GitHub release asset matching this extension's `extension.toml` version.
 
-The npm fallback is the published-package path. Local testing should use the
-Zed settings override above.
+When the release asset path is used, the extension installs the public Node
+dependencies that the bundled server needs beside the extension. The language
+server package itself is private and is not resolved through npm. Local testing
+should use the Zed settings override above.
