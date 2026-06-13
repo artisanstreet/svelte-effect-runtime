@@ -386,6 +386,79 @@ Deno.test("allows direct explicit Effect.gen event composition", () => {
   });
 });
 
+Deno.test("rewrites nested yield* in Effect.matchCause event handlers", () => {
+  const source = [
+    `<button onclick={yield* savePost().pipe(Effect.matchCause({`,
+    `  onSuccess: (result) => { return yield* notify(result); },`,
+    `  onFailure: (cause) => "failed"`,
+    `}))}>save</button>`,
+  ].join("\n");
+
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `Effect.matchCauseEffect`);
+  assertStringIncludes(
+    result.code,
+    `onSuccess: (result) => Effect.gen(function* () { return yield* notify(result); })`,
+  );
+  assertStringIncludes(
+    result.code,
+    `onFailure: (cause) => Effect.sync(() => ("failed"))`,
+  );
+
+  compile(result.code, {
+    filename: "Test.svelte",
+    generate: "server",
+    experimental: { async: true },
+  });
+});
+
+Deno.test("rewrites nested yield* inside explicit Effect.gen event handlers", () => {
+  const source = [
+    `<button onclick={yield* Effect.gen(function* () {`,
+    `  yield* savePost().pipe(Effect.matchCause({`,
+    `    onSuccess: (result) => { return yield* notify(result); },`,
+    `    onFailure: (cause) => "failed"`,
+    `  }));`,
+    `})}>save</button>`,
+  ].join("\n");
+
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `Effect.matchCauseEffect`);
+  assertStringIncludes(
+    result.code,
+    `onSuccess: (result) => Effect.gen(function* () { return yield* notify(result); })`,
+  );
+
+  compile(result.code, {
+    filename: "Test.svelte",
+    generate: "server",
+    experimental: { async: true },
+  });
+});
+
+Deno.test("rewrites nested yield* in effect-returning event callbacks", () => {
+  const source = [
+    `<button onclick={yield* loadPost().pipe(`,
+    `  Effect.flatMap((post) => { return yield* notify(post); })`,
+    `)}>save</button>`,
+  ].join("\n");
+
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertStringIncludes(
+    result.code,
+    `Effect.flatMap((post) => Effect.gen(function* () { return yield* notify(post); }))`,
+  );
+
+  compile(result.code, {
+    filename: "Test.svelte",
+    generate: "server",
+    experimental: { async: true },
+  });
+});
+
 Deno.test("rejects callbacks hiding yield* inside nested generators", () => {
   const source =
     `<button onclick={() => Effect.gen(function* () { yield* save(); })}>save</button>`;
