@@ -210,6 +210,84 @@ function is_object_like(value: unknown): value is object {
   return typeof value === "object" && value !== null;
 }
 
+function get_cause_reasons(
+  cause: Cause.Cause<unknown>,
+): readonly CauseReason[] {
+  const reasons = (cause as unknown as { reasons?: readonly CauseReason[] })
+    .reasons;
+
+  return reasons ?? [];
+}
+
+function is_sveltekit_control_flow(value: unknown): boolean {
+  return isRedirect(value) || isHttpError(value) || isValidationError(value);
+}
+
+function stringify_failure(value: unknown): string | undefined {
+  try {
+    return stringify(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function to_serializable_failure(
+  value: unknown,
+  seen = new WeakSet<object>(),
+): unknown {
+  if (typeof value === "function" || typeof value === "symbol") {
+    return undefined;
+  }
+
+  if (!is_object_like(value)) {
+    return value;
+  }
+
+  if (stringify_failure(value) !== undefined) {
+    return value;
+  }
+
+  if (seen.has(value)) {
+    return undefined;
+  }
+
+  seen.add(value);
+
+  const serializable = Array.isArray(value)
+    ? value.map((item) => to_serializable_failure(item, seen))
+    : to_plain_record(value, seen);
+
+  seen.delete(value);
+
+  return serializable;
+}
+
+function to_plain_record(
+  value: object,
+  seen: WeakSet<object>,
+): Record<string, unknown> {
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const record: Record<string, unknown> = {};
+
+  for (const [key, descriptor] of Object.entries(descriptors)) {
+    if (key === "stack" || !("value" in descriptor)) {
+      continue;
+    }
+
+    record[key] = to_serializable_failure(descriptor.value, seen);
+  }
+
+  if (value instanceof Error && !("message" in record)) {
+    record.message = value.message;
+  }
+
+  return record;
+}
+
+function is_object_like(value: unknown): value is object {
+  return typeof value === "object" && value !== null;
+}
+
 /**
  * Throws a SvelteKit `invalid` response from a {@link FormError}, calling
  * through to the request-scoped `invalid` helper.

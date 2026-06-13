@@ -129,6 +129,20 @@ const UpdateQuantity = Form(
     }),
 );
 
+const OptionalPost = Form(
+  Schema.Struct({
+    title: Schema.NonEmptyString,
+    summary: Schema.optional(Schema.String),
+  }),
+  ({ data }) =>
+    Effect.gen(function* () {
+      const title: string = data.title;
+      const summary: string | undefined = data.summary;
+
+      return { title, summary };
+    }),
+);
+
 const SignOut = Form(Effect.succeed({ signedOut: true }));
 
 type GetPostsParameters = Parameters<typeof GetPosts>;
@@ -138,8 +152,10 @@ type GetNativeClockParameters = Parameters<typeof GetNativeClock>;
 type UpvotePostParameters = Parameters<typeof UpvotePost>;
 type SignInParameters = Parameters<typeof SignIn>;
 type UpdateQuantityParameters = Parameters<typeof UpdateQuantity>;
+type OptionalPostParameters = Parameters<typeof OptionalPost>;
 type SignInInput = SignInParameters[0];
 type UpdateQuantityInput = UpdateQuantityParameters[0];
+type OptionalPostInput = OptionalPostParameters[0];
 type GetPostsHasNoInputParameter = Assert<Equal<GetPostsParameters, []>>;
 type GetPostSummaryRequiresInput = Assert<
   Equal<GetPostSummaryParameters, [input: string]>
@@ -155,6 +171,12 @@ type SignInKeepsPasswordField = Assert<
 >;
 type UpdateQuantityAcceptsEncodedFormInput = Assert<
   Equal<UpdateQuantityInput["quantity"], string>
+>;
+type OptionalPostKeepsTitleField = Assert<
+  Equal<OptionalPostInput["title"], string>
+>;
+type OptionalPostKeepsOptionalSummaryField = Assert<
+  Equal<OptionalPostInput["summary"], string | undefined>
 >;
 
 async function check_generated_markup_helpers() {
@@ -189,6 +211,9 @@ async function check_generated_markup_helpers() {
 
   await Effect.runPromise(reconnect_effect);
   await Effect.runPromise(native_reconnect_effect);
+  const optional_title: string | undefined = OptionalPost.fields.title.value();
+  const optional_summary: string | undefined =
+    OptionalPost.fields.summary.value();
 
   for await (const value of clock_query) {
     const streamed_value: number = value;
@@ -223,6 +248,8 @@ async function check_generated_markup_helpers() {
   void summary_id;
   void summary_index;
   void summary_known;
+  void optional_title;
+  void optional_summary;
   void live_source;
 }
 
@@ -326,6 +353,7 @@ export function prerender(..._args: unknown[]): unknown {
           module: "nodenext",
           moduleResolution: "nodenext",
           noEmit: true,
+          exactOptionalPropertyTypes: true,
           paths: {
             "$app/server": [to_posix_path(app_server_path)],
             "$": ["./src/mod.ts"],

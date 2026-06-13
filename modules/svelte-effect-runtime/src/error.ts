@@ -110,7 +110,6 @@ export class AsyncEffectInSyncRuneError extends PreprocessError {
     this.expression_text = expression_text;
   }
 }
-
 /**
  * Thrown when async Effect work appears inside a non-generator callback nested
  * in a markup event handler.

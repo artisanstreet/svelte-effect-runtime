@@ -35,9 +35,31 @@ import type {
 } from "./types.ts";
 
 type FormSchemaEncodedInput<S> = S extends Schema.Top
-  ? S["Encoded"] extends RemoteFormInput ? S["Encoded"]
-  : never
+  ? FormRemoteInput<S["Encoded"]>
   : never;
+
+type FormRemoteInput<Input> = NormalizeFormEncoded<Input> extends
+  RemoteFormInput ? NormalizeFormEncoded<Input>
+  : never;
+
+type FormScalar = string | number | boolean | File;
+
+type NormalizeFormEncoded<Value> = Value extends FormScalar ? Value
+  : Value extends ReadonlyArray<infer Item> ? Array<NormalizeFormEncoded<Item>>
+  : Value extends object ? NormalizeFormObject<Value>
+  : Value;
+
+type NormalizeFormObject<Value> = {
+  readonly [Key in keyof Value]: Key extends OptionalFormKeys<Value>
+    ? NormalizeFormEncoded<Exclude<Value[Key], undefined>>
+    : NormalizeFormEncoded<Value[Key]>;
+};
+
+type OptionalFormKeys<Value> = {
+  [Key in keyof Value]-?: Record<PropertyKey, never> extends Pick<Value, Key>
+    ? Key
+    : never;
+}[keyof Value];
 
 type NativeQueryLike<Input = unknown> = (input: Input) => unknown;
 
