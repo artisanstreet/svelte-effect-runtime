@@ -2,12 +2,13 @@ import {
   NestedYieldStarInEventHandlerError,
   YieldStarInEventCallbackError,
 } from "$/error.ts";
-import { HELPERS } from "./constants.ts";
 import {
   analyze_event_body_yield_star,
   collect_free_identifiers,
   is_callback_function_expression,
 } from "./expressions.ts";
+import { normalize_effect_callback_yields } from "./effect-callbacks.ts";
+import { HELPERS } from "./constants.ts";
 import type {
   HelperDeclaration,
   MarkupCandidate,
@@ -66,7 +67,7 @@ function emit_replacement(
     relocation = make_relocation(candidate, replacement_text, {
       originalStart: 0,
       originalEnd: candidate.expr_text.length,
-      generatedText: candidate.expr_text,
+      generatedText: event.expr_text,
     });
   } else {
     const effect = make_effect_helper(candidate, helper_name);
@@ -84,26 +85,31 @@ function emit_replacement(
   };
 }
 
-function make_event_handler(candidate: MarkupCandidate): { text: string } {
-  if (is_callback_function_expression(candidate.expr_text)) {
+function make_event_handler(
+  candidate: MarkupCandidate,
+): { text: string; expr_text: string } {
+  const expr_text = normalize_effect_callback_yields(candidate.expr_text);
+
+  if (is_callback_function_expression(expr_text)) {
     throw new YieldStarInEventCallbackError(
       candidate.filename,
-      candidate.expr_text,
+      expr_text,
     );
   }
 
-  const analysis = analyze_event_body_yield_star(candidate.expr_text);
+  const analysis = analyze_event_body_yield_star(expr_text);
 
   if (analysis.has_nested_invalid_yield_star) {
     throw new NestedYieldStarInEventHandlerError(
       candidate.filename,
-      candidate.expr_text,
+      expr_text,
     );
   }
 
   return {
+    expr_text,
     text:
-      `(event) => { void ${HELPERS.run}(function* () { ${candidate.expr_text}; }); }`,
+      `(event) => { void ${HELPERS.run}(function* () { ${expr_text}; }); }`,
   };
 }
 
