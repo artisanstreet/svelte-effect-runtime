@@ -109,7 +109,7 @@ function make_event_handler(
   return {
     expr_text,
     text:
-      `(event) => { void ${HELPERS.run}(function* () { ${expr_text}; }); }`,
+      `(event) => { ${HELPERS.run}(function* () { ${expr_text}; }); }`,
   };
 }
 

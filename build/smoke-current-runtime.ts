@@ -154,33 +154,28 @@ export const get_snapshot = Prerender(
 );
 `;
 
-const svelte_config = `import adapter from "@sveltejs/adapter-node";
-import { preprocess } from "svelte-effect-runtime";
-
-const config = {
-  compilerOptions: {
-    experimental: {
-      async: true,
-    },
-  },
-  kit: {
-    adapter: adapter(),
-    experimental: {
-      remoteFunctions: true,
-    },
-  },
-  preprocess: [preprocess()],
-};
-
-export default config;
-`;
-
-const vite_config = `import { effect } from "svelte-effect-runtime";
+const vite_config = `import { effect, preprocess } from "svelte-effect-runtime";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig } from "vite";
 
+import adapter from "@sveltejs/adapter-node";
+
 export default defineConfig({
-  plugins: [effect(), sveltekit()],
+  plugins: [
+    effect(),
+    sveltekit({
+      adapter: adapter(),
+      compilerOptions: {
+        experimental: {
+          async: true,
+        },
+      },
+      experimental: {
+        remoteFunctions: true,
+      },
+      preprocess: [preprocess()],
+    }),
+  ],
 });
 `;
 
@@ -247,13 +242,13 @@ async function main(): Promise<void> {
     },
     dependencies: {
       "@playwright/test": "^1.60.0",
-      "@sveltejs/adapter-node": "^5.2.0",
-      "@sveltejs/kit": "^2.56.1",
-      "@sveltejs/vite-plugin-svelte": "^6.2.4",
+      "@sveltejs/adapter-node": "6.0.0-next.0",
+      "@sveltejs/kit": "3.0.0-next.1",
+      "@sveltejs/vite-plugin-svelte": "^7.0.0",
       effect: "^4.0.0-beta.66",
-      svelte: "^5.55.1",
-      typescript: "^5.9.3",
-      vite: "^7.3.1",
+      svelte: "^5.56.0",
+      typescript: "^6.0.0",
+      vite: "^8.0.0",
     },
     devDependencies: {},
   });
@@ -262,12 +257,11 @@ async function main(): Promise<void> {
   await write_text("src/lib/demo.remote.ts", demo_remote_ts);
   await write_text("src/routes/+layout.svelte", layout_svelte);
   await write_text("src/routes/+page.svelte", page_svelte);
-  await write_text("svelte.config.js", svelte_config);
   await write_text("vite.config.ts", vite_config);
   await write_text("playwright.config.ts", playwright_config);
   await write_text("tests/runtime.spec.ts", runtime_spec);
 
-  await run_command(npm, ["install"], smoke_dir);
+  await run_command(npm, ["install", "--legacy-peer-deps"], smoke_dir);
   await run_command(deno, ["task", "build"], package_dir);
   await run_command(npm, ["pack", package_dir, "--json"], smoke_dir);
 
@@ -287,7 +281,11 @@ async function main(): Promise<void> {
     throw new Error("npm pack did not create a svelte-effect-runtime tarball.");
   }
 
-  await run_command(npm, ["install", join(smoke_dir, tarball)], smoke_dir);
+  await run_command(
+    npm,
+    ["install", "--legacy-peer-deps", join(smoke_dir, tarball)],
+    smoke_dir,
+  );
   await run_command(npm, ["run", "build"], smoke_dir);
   await run_command(npx, ["playwright", "install", "chromium"], smoke_dir);
   await run_command(npm, ["run", "smoke"], smoke_dir);

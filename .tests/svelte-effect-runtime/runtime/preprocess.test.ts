@@ -117,7 +117,8 @@ Deno.test("preserves $state(yield* expr) as writable state", () => {
   assert_transform(source, [
     `let user = $state(undefined);`,
     `user = yield* getUser(id);`,
-    `void [getUser, id];`,
+    `  getUser;`,
+    `  id;`,
   ], [
     `let user = $derived`,
   ]);
@@ -133,7 +134,8 @@ Deno.test("preserves $state expressions with multiple yield points", () => {
     result.code,
     "label = `${yield* getFirst()} ${yield* getLast()}`;",
   );
-  assertStringIncludes(result.code, `void [getFirst, getLast];`);
+  assertStringIncludes(result.code, `  getFirst;`);
+  assertStringIncludes(result.code, `  getLast;`);
   assertNotMatch(result.code, /let label = \$derived/);
 });
 
@@ -143,7 +145,8 @@ Deno.test("preserves $state.raw(yield* expr) as raw state", () => {
 
   assertStringIncludes(result.code, `let raw = $state.raw(undefined);`);
   assertStringIncludes(result.code, `raw = yield* getRaw(id);`);
-  assertStringIncludes(result.code, `void [getRaw, id];`);
+  assertStringIncludes(result.code, `  getRaw;`);
+  assertStringIncludes(result.code, `  id;`);
   assertNotMatch(result.code, /let raw = \$derived/);
 });
 
@@ -157,7 +160,8 @@ Deno.test("extracts bare yield const sugar into a derived value", () => {
     `import { Effect } from "effect"`,
     `import { get_dispatcher } from "svelte-effect-runtime/internal/generators"`,
     `$effect(() => {`,
-    `void [getUser, id];`,
+    `  getUser;`,
+    `  id;`,
   ]);
 });
 
@@ -167,9 +171,12 @@ Deno.test("wraps lowered assignments in dependency-tracked Effect.gen", () => {
 
   assertStringIncludes(result.code, `Effect.gen(function* () {`);
   assertStringIncludes(result.code, `$effect(() => {`);
-  assertStringIncludes(result.code, `void [f];`);
+  assertStringIncludes(result.code, `  f;`);
   assertStringIncludes(result.code, `get_dispatcher();`);
-  assertStringIncludes(result.code, `.fork(`);
+  assertStringIncludes(
+    result.code,
+    `untrack(() => __SER__dispatcher.fork(__SER__program));`,
+  );
   assertStringIncludes(result.code, `return `);
 });
 
@@ -182,7 +189,8 @@ Deno.test("tracks reactive identifiers read by yielded remote arguments", () => 
 
   assertStringIncludes(result.code, `let { params } = $props();`);
   assertStringIncludes(result.code, `let result = $derived(__SER__`);
-  assertStringIncludes(result.code, `void [getPost, params];`);
+  assertStringIncludes(result.code, `  getPost;`);
+  assertStringIncludes(result.code, `  params;`);
   assertStringIncludes(
     result.code,
     `__SER__result = yield* getPost({ param: params.page_parameter });`,
@@ -245,6 +253,22 @@ Deno.test("moves count = yield* expr into the effect body", () => {
   assertStringIncludes(result.code, `let count = $state(0);`);
   assertStringIncludes(result.code, `count = yield* getCount();`);
   assertNotMatch(result.code, /count = __SER__/);
+});
+
+Deno.test("does not track assignment targets as reactive dependencies", () => {
+  const source = [
+    `let count = $state(0);`,
+    `count = yield* Effect.succeed(count + 1);`,
+  ].join("\n");
+  const result = transform_script_effect(source, "Test.svelte");
+
+  assertStringIncludes(
+    result.code,
+    `count = yield* Effect.succeed(count + 1);`,
+  );
+  assertStringIncludes(result.code, `  Effect;`);
+  assertNotMatch(result.code, /\n\s*count;\n/);
+  assertNotMatch(result.code, /void \[/);
 });
 
 // ─── Bare yield* statement (fire and forget) ─────────────────
@@ -340,6 +364,32 @@ Deno.test("does not inject onMount for dependency-tracked runtime block", () => 
   assertStringIncludes(result.code, `import { tick } from "svelte";`);
   assertNotMatch(result.code, /import \{ onMount \} from "svelte";/);
   assertStringIncludes(result.code, `$effect(() => {`);
+});
+
+Deno.test("injects untrack when svelte import lacks untrack binding", () => {
+  const source = [
+    `import { tick } from "svelte";`,
+    `let x = $state(yield* f());`,
+  ].join("\n");
+  const result = transform_script_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `import { tick } from "svelte";`);
+  assertStringIncludes(result.code, `import { untrack } from "svelte";`);
+  assertStringIncludes(result.code, `untrack(() =>`);
+});
+
+Deno.test("reuses existing untrack import when already present", () => {
+  const source = [
+    `import { tick, untrack } from "svelte";`,
+    `let x = $state(yield* f());`,
+  ].join("\n");
+  const result = transform_script_effect(source, "Test.svelte");
+  const import_count =
+    [...result.code.matchAll(/import.*untrack.*from.*"svelte"/g)].length;
+
+  if (import_count !== 1) {
+    throw new Error(`Expected 1 untrack import, got ${import_count}`);
+  }
 });
 
 Deno.test("injects dispatcher when generators import lacks get_dispatcher binding", () => {

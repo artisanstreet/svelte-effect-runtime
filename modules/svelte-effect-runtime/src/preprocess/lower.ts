@@ -191,6 +191,7 @@ function lower_expression_statement(
   ) {
     const target = slice(content, expr.left).trim();
     const yield_text = extract_yield_star_full_text(expr, content);
+    const target_names = collect_assignment_target_names(expr.left);
 
     return {
       temps: [],
@@ -198,7 +199,7 @@ function lower_expression_statement(
       effect_blocks: [
         make_effect_block(
           [`${target} = ${yield_text};`],
-          collect_deps(yield_text),
+          collect_deps(yield_text, target_names),
         ),
       ],
       range: { start: stmt.getStart(), end: stmt.end },
@@ -310,8 +311,58 @@ function make_effect_block(
   };
 }
 
-function collect_deps(expr_text: string): string[] {
+function collect_deps(
+  expr_text: string,
+  excluded_names: readonly string[] = [],
+): string[] {
+  const excluded = new Set(excluded_names);
+
   return collect_free_identifiers(expr_text).filter(
-    (identifier) => !identifier.startsWith("__SER__"),
+    (identifier) =>
+      !identifier.startsWith("__SER__") && !excluded.has(identifier),
   );
+}
+
+function collect_assignment_target_names(node: ts.Node): string[] {
+  if (ts.isIdentifier(node)) {
+    return [node.text];
+  }
+
+  if (ts.isParenthesizedExpression(node)) {
+    return collect_assignment_target_names(node.expression);
+  }
+
+  if (
+    ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)
+  ) {
+    return collect_assignment_target_names(node.expression);
+  }
+
+  if (ts.isObjectLiteralExpression(node)) {
+    return node.properties.flatMap((property) => {
+      if (ts.isShorthandPropertyAssignment(property)) {
+        return [property.name.text];
+      }
+
+      if (ts.isPropertyAssignment(property)) {
+        return collect_assignment_target_names(property.initializer);
+      }
+
+      if (ts.isSpreadAssignment(property)) {
+        return collect_assignment_target_names(property.expression);
+      }
+
+      return [];
+    });
+  }
+
+  if (ts.isArrayLiteralExpression(node)) {
+    return node.elements.flatMap((element) =>
+      ts.isSpreadElement(element)
+        ? collect_assignment_target_names(element.expression)
+        : collect_assignment_target_names(element)
+    );
+  }
+
+  return [];
 }

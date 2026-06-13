@@ -9,9 +9,7 @@ import type { EffectBlock } from "./types.ts";
  */
 export function make_runtime_block(blocks: EffectBlock[]): string {
   const merged_block = merge_effect_blocks(blocks);
-  const dep_reads = merged_block.deps.length === 0
-    ? []
-    : [`  void [${merged_block.deps.join(", ")}];`];
+  const dep_reads = merged_block.deps.map((dep) => `  ${dep};`);
 
   const body = merged_block.statements
     .map((statement) => `    ${statement}`)
@@ -25,7 +23,7 @@ export function make_runtime_block(blocks: EffectBlock[]): string {
     "  const __SER__program = Effect.gen(function* () {",
     body,
     "  });",
-    "  const __SER__cancel = __SER__dispatcher.fork(__SER__program);",
+    "  const __SER__cancel = untrack(() => __SER__dispatcher.fork(__SER__program));",
     "  import.meta.hot?.dispose(__SER__cancel);",
     "  return __SER__cancel;",
     "});",

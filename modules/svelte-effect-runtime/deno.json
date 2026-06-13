@@ -15,7 +15,7 @@
     "lib": ["deno.ns", "dom", "dom.iterable", "es2022"]
   },
   "tasks": {
-    "build": "deno task clean && deno run -A ../../build/runtime.ts && tsc -p tsconfig.build.json --emitDeclarationOnly && deno run -A ../../build/rewrite-runtime-dts.ts",
+    "build": "deno task clean && deno run -A ../../build/runtime.ts && deno run -A npm:typescript@^6.0.0/tsc -p tsconfig.build.json --emitDeclarationOnly && deno run -A ../../build/rewrite-runtime-dts.ts",
     "check": "deno check --node-modules-dir=auto src/mod.ts src/runtime/preprocess.ts src/internal/generators.ts src/internal/remote-client.ts src/internal/remote-server.ts src/detect.ts src/dispatcher.ts src/generators.ts src/preprocess.ts src/vite.ts src/remote/shared.ts src/remote/server.ts src/remote/client.ts src/markup/transform.ts src/markup/value.ts src/markup/promise.ts src/markup/run.ts",
     "clean": "rm -rf ../../.dist/svelte-effect-runtime",
     "test": "cd ../../.tests/svelte-effect-runtime && deno test --no-check -A runtime",
@@ -36,12 +36,12 @@
     "svelte": "npm:svelte@^5.56.0",
     "svelte/": "npm:/svelte@^5.56.0/",
     "magic-string": "npm:magic-string@^0.30.21",
-    "typescript": "npm:typescript@^5.9.3",
-    "vite": "npm:vite@^7.3.1",
-    "@sveltejs/vite-plugin-svelte": "npm:@sveltejs/vite-plugin-svelte@^6.2.4",
-    "@sveltejs/kit": "npm:@sveltejs/kit@^2.61.1",
-    "@sveltejs/kit/": "npm:/@sveltejs/kit@^2.61.1/",
-    "@sveltejs/kit/internal/server": "npm:/@sveltejs/kit@^2.61.1/internal/server"
+    "typescript": "npm:typescript@^6.0.0",
+    "vite": "npm:vite@^8.0.0",
+    "@sveltejs/vite-plugin-svelte": "npm:@sveltejs/vite-plugin-svelte@^7.0.0",
+    "@sveltejs/kit": "npm:@sveltejs/kit@3.0.0-next.1",
+    "@sveltejs/kit/": "npm:/@sveltejs/kit@3.0.0-next.1/",
+    "@sveltejs/kit/internal/server": "npm:/@sveltejs/kit@3.0.0-next.1/internal/server"
   },
   "publish": {
     "exclude": []

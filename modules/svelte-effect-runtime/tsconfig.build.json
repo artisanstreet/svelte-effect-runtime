@@ -6,6 +6,7 @@
     "rootDir": "./src",
     "outDir": "../../.dist/svelte-effect-runtime",
     "declaration": true,
+    "ignoreDeprecations": "6.0",
     "verbatimModuleSyntax": true,
     "strict": true,
     "skipLibCheck": true,
