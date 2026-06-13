@@ -41,6 +41,9 @@ export function inject_helpers(
     return undefined;
   }
 
+  const import_helpers = unique_import_helpers(helpers);
+  const local_helpers = helpers.filter((helper) => !is_import_helper(helper));
+
   const helper_segments: Array<{
     text: string;
     relocation?: PendingRelocation;
@@ -48,10 +51,9 @@ export function inject_helpers(
     `import { value as ${HELPERS.value} } from "svelte-effect-runtime/internal/generators";`,
     `import { promise as ${HELPERS.promise} } from "svelte-effect-runtime/internal/generators";`,
     `import { run as ${HELPERS.run} } from "svelte-effect-runtime/internal/generators";`,
-    ...helpers,
-  ].map((helper) =>
-    typeof helper === "string" ? { text: helper } : helper
-  );
+    ...import_helpers,
+    ...local_helpers,
+  ].map((helper) => typeof helper === "string" ? { text: helper } : helper);
 
   const helper_block = helper_segments.map((segment) => segment.text).join(
     "\n",
@@ -195,4 +197,28 @@ function find_instance_script_tag(
   }
 
   return undefined;
+}
+
+function unique_import_helpers(
+  helpers: HelperDeclaration[],
+): HelperDeclaration[] {
+  const seen = new Set<string>();
+
+  return helpers.filter((helper) => {
+    if (!is_import_helper(helper)) {
+      return false;
+    }
+
+    if (seen.has(helper.text)) {
+      return false;
+    }
+
+    seen.add(helper.text);
+
+    return true;
+  });
+}
+
+function is_import_helper(helper: HelperDeclaration): boolean {
+  return helper.text.trimStart().startsWith("import ");
 }

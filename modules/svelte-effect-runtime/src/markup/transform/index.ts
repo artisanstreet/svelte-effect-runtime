@@ -9,6 +9,7 @@ import {
   inject_helpers,
 } from "./apply.ts";
 import { classify_candidates } from "./classify.ts";
+import { collect_effect_callback_bindings } from "./effect-bindings.ts";
 import { emit_replacements } from "./emit.ts";
 import { sanitize_markup } from "./scan.ts";
 import type { MarkupTransformResult } from "./types.ts";
@@ -41,6 +42,7 @@ export function transform_markup_effect(
 
   /** Find all brace expressions containing yield* and replace with placeholders. */
   const work = sanitize_markup(content, filename);
+  const effect_context = collect_effect_callback_bindings(content);
 
   if (work.candidates.length === 0) {
     return { code: content, has_yield: false };
@@ -56,7 +58,7 @@ export function transform_markup_effect(
     ast,
     work.candidates,
   );
-  const replacements = emit_replacements(classified);
+  const replacements = emit_replacements(classified, effect_context);
   const helpers = replacements.flatMap((replacement) =>
     replacement.helpers ?? []
   );

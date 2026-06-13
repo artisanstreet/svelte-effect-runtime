@@ -459,6 +459,155 @@ Deno.test("rewrites nested yield* in effect-returning event callbacks", () => {
   });
 });
 
+Deno.test("rewrites nested yield* through aliased Effect imports", () => {
+  const source = [
+    `<script>import { Effect as E } from "effect";</script>`,
+    `<button onclick={yield* savePost().pipe(E.matchCause({`,
+    `  onSuccess: (result) => { return yield* notify(result); },`,
+    `  onFailure: (cause) => "failed"`,
+    `}))}>save</button>`,
+  ].join("\n");
+
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `E.matchCauseEffect`);
+  assertStringIncludes(
+    result.code,
+    `onSuccess: (result) => E.gen(function* () { return yield* notify(result); })`,
+  );
+  assertStringIncludes(
+    result.code,
+    `onFailure: (cause) => E.sync(() => ("failed"))`,
+  );
+
+  compile(result.code, {
+    filename: "Test.svelte",
+    generate: "server",
+    experimental: { async: true },
+  });
+});
+
+Deno.test("rewrites nested yield* through effect module namespaces", () => {
+  const source = [
+    `<script>import * as E from "effect/Effect";</script>`,
+    `<button onclick={yield* loadPost().pipe(`,
+    `  E.flatMap((post) => { return yield* notify(post); })`,
+    `)}>save</button>`,
+  ].join("\n");
+
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertStringIncludes(
+    result.code,
+    `E.flatMap((post) => E.gen(function* () { return yield* notify(post); }))`,
+  );
+
+  compile(result.code, {
+    filename: "Test.svelte",
+    generate: "server",
+    experimental: { async: true },
+  });
+});
+
+Deno.test("rewrites nested yield* through effect package namespaces", () => {
+  const source = [
+    `<script>import * as Fx from "effect";</script>`,
+    `<button onclick={yield* savePost().pipe(Fx.Effect.match({`,
+    `  onSuccess: (result) => { return yield* notify(result); },`,
+    `  onFailure: () => "failed"`,
+    `}))}>save</button>`,
+  ].join("\n");
+
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `Fx.Effect.matchEffect`);
+  assertStringIncludes(
+    result.code,
+    `onSuccess: (result) => Fx.Effect.gen(function* () { return yield* notify(result); })`,
+  );
+  assertStringIncludes(
+    result.code,
+    `onFailure: () => Fx.Effect.sync(() => ("failed"))`,
+  );
+
+  compile(result.code, {
+    filename: "Test.svelte",
+    generate: "server",
+    experimental: { async: true },
+  });
+});
+
+Deno.test("rewrites nested yield* through direct effect function imports", () => {
+  const source = [
+    `<script>`,
+    `  import { matchCause as mc } from "effect/Effect";`,
+    `  const Effect = {};`,
+    `</script>`,
+    `<button onclick={yield* savePost().pipe(mc({`,
+    `  onSuccess: (result) => { return yield* notify(result); },`,
+    `  onFailure: () => "failed"`,
+    `}))}>save</button>`,
+  ].join("\n");
+
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertStringIncludes(
+    result.code,
+    `import { Effect as __SER___Effect } from "effect";`,
+  );
+  assertStringIncludes(result.code, `__SER___Effect.matchCauseEffect`);
+  assertStringIncludes(
+    result.code,
+    `onSuccess: (result) => __SER___Effect.gen(function* () { return yield* notify(result); })`,
+  );
+
+  compile(result.code, {
+    filename: "Test.svelte",
+    generate: "server",
+    experimental: { async: true },
+  });
+});
+
+Deno.test("rewrites nested yield* in non-event markup expressions", () => {
+  const source = [
+    `<script>import { Effect as E } from "effect";</script>`,
+    `<p>{yield* loadPost().pipe(`,
+    `  E.flatMap((post) => { return yield* renderPost(post); })`,
+    `)}</p>`,
+  ].join("\n");
+
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertStringIncludes(
+    result.code,
+    `E.flatMap((post) => E.gen(function* () { return yield* renderPost(post); }))`,
+  );
+
+  compile(result.code, {
+    filename: "Test.svelte",
+    generate: "server",
+    experimental: { async: true },
+  });
+});
+
+Deno.test("rejects unrelated matchCause receivers with nested yield*", () => {
+  const source = [
+    `<button onclick={yield* savePost().pipe(foo.matchCause({`,
+    `  onSuccess: (result) => { return yield* notify(result); },`,
+    `  onFailure: () => "failed"`,
+    `}))}>save</button>`,
+  ].join("\n");
+  const error = assertThrows(
+    () => transform_markup_effect(source, "Test.svelte"),
+  );
+
+  assertStringIncludes(error.message, "[ASYNC_EFFECT_IN_EVENT_CALLBACK]:");
+  assertStringIncludes(
+    error.message,
+    "yield* cannot be used inside a nested non-generator callback",
+  );
+});
+
 Deno.test("rejects callbacks hiding yield* inside nested generators", () => {
   const source =
     `<button onclick={() => Effect.gen(function* () { yield* save(); })}>save</button>`;

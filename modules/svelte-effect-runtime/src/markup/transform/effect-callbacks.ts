@@ -1,4 +1,6 @@
 import { contains_top_level_yield_star } from "$/detect.ts";
+import type { EffectCallbackRewriteContext } from "./effect-bindings.ts";
+import type { HelperDeclaration } from "./types.ts";
 
 import MagicString from "magic-string";
 import ts from "typescript";
@@ -32,14 +34,19 @@ interface RewriteContext {
   source_text: string;
   magic: MagicString;
   offset: number;
+  bindings: EffectCallbackRewriteContext;
   changed: boolean;
+  uses_wrapper: boolean;
 }
 
 interface EffectMember {
   name: string;
   name_start: number;
   name_end: number;
+  direct: boolean;
 }
+
+type EffectWrapperMember = "gen" | "sync";
 
 /**
  * Rewrites effectful callback shorthand inside event handler expressions.
@@ -48,16 +55,23 @@ interface EffectMember {
  * ```ts
  * normalize_effect_callback_yields(
  *   `yield* action.pipe(Effect.flatMap((value) => yield* next(value)))`,
+ *   collect_effect_callback_bindings(source),
  * );
  * ```
  *
  * @since 2.0.0
- * @param expr_text - Event handler expression text before it is wrapped in the
- *   generated Effect event runner.
+ * @param expr_text - Markup expression text before it is wrapped in the
+ *   generated Effect runner.
+ * @param bindings - Local Effect import bindings collected from the Svelte
+ *   component's script blocks.
  * @returns The expression with nested Effect callback `yield*` shorthand
- *   lowered into explicit `Effect.gen` callbacks.
+ *   lowered into explicit Effect callbacks, plus any import needed by generated
+ *   wrapper calls.
  */
-export function normalize_effect_callback_yields(expr_text: string): string {
+export function normalize_effect_callback_yields(
+  expr_text: string,
+  bindings: EffectCallbackRewriteContext,
+): { expr_text: string; helpers: HelperDeclaration[] } {
   const prefix = "const __SER___expression = ";
   const source_text = `${prefix}${expr_text};`;
   const source_file = ts.createSourceFile(
@@ -74,26 +88,35 @@ export function normalize_effect_callback_yields(expr_text: string): string {
     source_text,
     magic,
     offset: prefix.length,
+    bindings,
     changed: false,
+    uses_wrapper: false,
   };
 
   if (!ts.isVariableStatement(statement)) {
-    return expr_text;
+    return { expr_text, helpers: [] };
   }
 
   const expression = statement.declarationList.declarations[0]?.initializer;
 
   if (!expression) {
-    return expr_text;
+    return { expr_text, helpers: [] };
   }
 
   visit_expression(expression, context);
 
   if (!context.changed) {
-    return expr_text;
+    return { expr_text, helpers: [] };
   }
 
-  return magic.toString();
+  const helpers = context.uses_wrapper && bindings.wrapper_import
+    ? [bindings.wrapper_import]
+    : [];
+
+  return {
+    expr_text: magic.toString(),
+    helpers,
+  };
 }
 
 function visit_expression(node: ts.Node, context: RewriteContext): void {
@@ -134,7 +157,7 @@ function rewrite_match_call(
     return;
   }
 
-  context.magic.overwrite(member.name_start, member.name_end, upgraded_name);
+  rewrite_effect_member_name(member, upgraded_name, context);
   context.changed = true;
 
   for (const handler of handlers) {
@@ -200,11 +223,11 @@ function rewrite_callback_to_effect_gen(
   }
 
   if (ts.isArrowFunction(callback)) {
-    rewrite_arrow_callback(callback, "Effect.gen", context);
+    rewrite_arrow_callback(callback, "gen", context);
     return;
   }
 
-  rewrite_function_body(callback, "Effect.gen", context);
+  rewrite_function_body(callback, "gen", context);
 }
 
 function rewrite_callback_to_effect_sync(
@@ -216,16 +239,16 @@ function rewrite_callback_to_effect_sync(
   }
 
   if (ts.isArrowFunction(callback)) {
-    rewrite_arrow_callback(callback, "Effect.sync", context);
+    rewrite_arrow_callback(callback, "sync", context);
     return;
   }
 
-  rewrite_function_body(callback, "Effect.sync", context);
+  rewrite_function_body(callback, "sync", context);
 }
 
 function rewrite_arrow_callback(
   callback: ts.ArrowFunction,
-  wrapper: "Effect.gen" | "Effect.sync",
+  wrapper: EffectWrapperMember,
   context: RewriteContext,
 ): void {
   const start = to_expr_pos(callback.getStart(context.source_file), context);
@@ -237,7 +260,12 @@ function rewrite_arrow_callback(
     )
     .trim();
   const body_text = get_body_text(callback.body, context);
-  const rewritten_body = make_effect_body(callback.body, body_text, wrapper);
+  const rewritten_body = make_effect_body(
+    callback.body,
+    body_text,
+    wrapper,
+    context,
+  );
   const replacement = `${params_text} => ${rewritten_body}`;
 
   context.magic.overwrite(start, end, replacement);
@@ -246,7 +274,7 @@ function rewrite_arrow_callback(
 
 function rewrite_function_body(
   callback: ts.FunctionExpression,
-  wrapper: "Effect.gen" | "Effect.sync",
+  wrapper: EffectWrapperMember,
   context: RewriteContext,
 ): void {
   const body_start = to_expr_pos(
@@ -255,30 +283,42 @@ function rewrite_function_body(
   );
   const body_end = to_expr_pos(callback.body.end, context);
   const body_text = get_body_text(callback.body, context);
-  const rewritten_body = make_effect_body(callback.body, body_text, wrapper);
+  const rewritten_body = make_effect_body(
+    callback.body,
+    body_text,
+    wrapper,
+    context,
+  );
 
-  context.magic.overwrite(body_start, body_end, `{ return ${rewritten_body}; }`);
+  context.magic.overwrite(
+    body_start,
+    body_end,
+    `{ return ${rewritten_body}; }`,
+  );
   context.changed = true;
 }
 
 function make_effect_body(
   body: ts.ConciseBody,
   body_text: string,
-  wrapper: "Effect.gen" | "Effect.sync",
+  wrapper: EffectWrapperMember,
+  context: RewriteContext,
 ): string {
-  if (wrapper === "Effect.gen") {
+  const wrapper_access = make_effect_access(wrapper, context);
+
+  if (wrapper === "gen") {
     if (ts.isBlock(body)) {
-      return `Effect.gen(function* () ${body_text})`;
+      return `${wrapper_access}(function* () ${body_text})`;
     }
 
-    return `Effect.gen(function* () { return (${body_text}); })`;
+    return `${wrapper_access}(function* () { return (${body_text}); })`;
   }
 
   if (ts.isBlock(body)) {
-    return `Effect.sync(() => ${body_text})`;
+    return `${wrapper_access}(() => ${body_text})`;
   }
 
-  return `Effect.sync(() => (${body_text}))`;
+  return `${wrapper_access}(() => (${body_text}))`;
 }
 
 function get_body_text(body: ts.ConciseBody, context: RewriteContext): string {
@@ -327,15 +367,29 @@ function get_effect_member(
   expression: ts.Expression,
   context: RewriteContext,
 ): EffectMember | undefined {
+  if (ts.isIdentifier(expression)) {
+    const direct_member = context.bindings.direct_members.get(expression.text);
+
+    if (!direct_member) {
+      return undefined;
+    }
+
+    return {
+      name: direct_member,
+      name_start: to_expr_pos(
+        expression.getStart(context.source_file),
+        context,
+      ),
+      name_end: to_expr_pos(expression.end, context),
+      direct: true,
+    };
+  }
+
   if (!ts.isPropertyAccessExpression(expression)) {
     return undefined;
   }
 
-  if (!ts.isIdentifier(expression.expression)) {
-    return undefined;
-  }
-
-  if (expression.expression.text !== "Effect") {
+  if (!is_effect_namespace_expression(expression.expression, context)) {
     return undefined;
   }
 
@@ -346,7 +400,59 @@ function get_effect_member(
       context,
     ),
     name_end: to_expr_pos(expression.name.end, context),
+    direct: false,
   };
+}
+
+function rewrite_effect_member_name(
+  member: EffectMember,
+  upgraded_name: string,
+  context: RewriteContext,
+): void {
+  if (member.direct) {
+    context.magic.overwrite(
+      member.name_start,
+      member.name_end,
+      make_effect_access(upgraded_name, context),
+    );
+
+    return;
+  }
+
+  context.magic.overwrite(member.name_start, member.name_end, upgraded_name);
+}
+
+function make_effect_access(
+  member_name: string,
+  context: RewriteContext,
+): string {
+  context.uses_wrapper = true;
+
+  return `${context.bindings.wrapper_expression}.${member_name}`;
+}
+
+function is_effect_namespace_expression(
+  expression: ts.Expression,
+  context: RewriteContext,
+): boolean {
+  if (ts.isIdentifier(expression)) {
+    return context.bindings.effect_object_names.has(expression.text) ||
+      context.bindings.effect_module_names.has(expression.text);
+  }
+
+  if (!ts.isPropertyAccessExpression(expression)) {
+    return false;
+  }
+
+  if (expression.name.text !== "Effect") {
+    return false;
+  }
+
+  if (!ts.isIdentifier(expression.expression)) {
+    return false;
+  }
+
+  return context.bindings.effect_package_names.has(expression.expression.text);
 }
 
 function get_property_name(name: ts.PropertyName): string | undefined {
