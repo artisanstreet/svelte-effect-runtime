@@ -58,7 +58,7 @@ interface EffectMember {
  *   lowered into explicit `Effect.gen` callbacks.
  */
 export function normalize_effect_callback_yields(expr_text: string): string {
-  const prefix = "const __ser_expression = ";
+  const prefix = "const __SER___expression = ";
   const source_text = `${prefix}${expr_text};`;
   const source_file = ts.createSourceFile(
     "event-expression.ts",

@@ -14,16 +14,16 @@ import {
 Deno.test("full pipeline: script lowered output feeds into markup pass", () => {
   const script_content = `
     let user = $state();
-    const __SER__loadUser = $state();
-    const __SER__dispatcher = get_dispatcher();
+    const __SER___loadUser = $state();
+    const __SER___dispatcher = get_dispatcher();
 
     onMount(() => {
-      const __SER__program = Effect.gen(function* () {
-        __SER__loadUser = yield* loadUser();
-        user = __SER__loadUser;
+      const __SER___program = Effect.gen(function* () {
+        __SER___loadUser = yield* loadUser();
+        user = __SER___loadUser;
       });
-      const __SER__cleanup = __SER__dispatcher.fork(__SER__program);
-      return __SER__cleanup;
+      const __SER___cleanup = __SER___dispatcher.fork(__SER___program);
+      return __SER___cleanup;
     });
   `.trim();
 
@@ -40,8 +40,8 @@ Deno.test("full pipeline: script lowered output feeds into markup pass", () => {
 
   const result = transform_markup_effect(full_source, "Test.svelte");
 
-  assertStringIncludes(result.code, `__ser_markup_value`);
-  assertStringIncludes(result.code, `__ser_markup_run`);
+  assertStringIncludes(result.code, `__SER___markup_value`);
+  assertStringIncludes(result.code, `__SER___markup_run`);
   assertStringIncludes(result.code, `renderDate`);
   assertStringIncludes(result.code, `hasAccess`);
   assertStringIncludes(result.code, `handleClick`);
@@ -55,7 +55,7 @@ Deno.test("full pipeline: both preprocessors agree on has_yield", () => {
   `.trim();
 
   const script_result = transform_script_effect(script, "Test.svelte");
-  assertStringIncludes(script_result.code, `__SER__`);
+  assertStringIncludes(script_result.code, `__SER___`);
 
   const full =
     `<script>\n${script_result.code}\n</script>\n\n<p>{yield* getValue()}</p>`;
@@ -104,7 +104,7 @@ Deno.test("preprocess hook only lowers script effect and removes effect attribut
   const result = group.markup({ content: source, filename: "Test.svelte" });
 
   assertStringIncludes(result.code, `<script lang="ts">`);
-  assertStringIncludes(result.code, `__SER__program`);
+  assertStringIncludes(result.code, `__SER___program`);
   if (result.code.includes(` effect>`)) {
     throw new Error("effect attribute should be removed before Svelte parses");
   }
@@ -116,7 +116,7 @@ Deno.test("preprocess hook accepts optional filename", () => {
 
   const result = group.markup({ content: source });
 
-  assertStringIncludes(result.code, `__ser_markup_value`);
+  assertStringIncludes(result.code, `__SER___markup_value`);
 });
 
 Deno.test("vite plugin keeps runtime package transformable in SSR builds", () => {
@@ -231,27 +231,27 @@ Deno.test("vite remote client wrapper preserves native SvelteKit remote module",
   assertStringIncludes(result, `create_remote_form_adapter`);
   assertStringIncludes(
     result,
-    `export const get_post = create_remote_query_adapter(__remote.query('abc/get_post'), __ser_decode_payload);`,
+    `export const get_post = create_remote_query_adapter(__remote.query('abc/get_post'), __SER___decode_payload);`,
   );
   assertStringIncludes(
     result,
-    `export const get_post_batch = create_remote_query_adapter(__remote.query_batch('abc/get_post_batch'), __ser_decode_payload);`,
+    `export const get_post_batch = create_remote_query_adapter(__remote.query_batch('abc/get_post_batch'), __SER___decode_payload);`,
   );
   assertStringIncludes(
     result,
-    `export const get_clock = create_remote_live_query_adapter(__remote.query_live('abc/get_clock'), __ser_decode_payload);`,
+    `export const get_clock = create_remote_live_query_adapter(__remote.query_live('abc/get_clock'), __SER___decode_payload);`,
   );
   assertStringIncludes(
     result,
-    `export const save_post = create_remote_command_adapter(__remote.command('abc/save_post'), __ser_decode_payload);`,
+    `export const save_post = create_remote_command_adapter(__remote.command('abc/save_post'), __SER___decode_payload);`,
   );
   assertStringIncludes(
     result,
-    `export const create_post = create_remote_form_adapter(__remote.form('abc/create_post'), __ser_decode_payload, __ser_remote_base);`,
+    `export const create_post = create_remote_form_adapter(__remote.form('abc/create_post'), __SER___decode_payload, __SER___remote_base);`,
   );
 
   if (
-    result.indexOf(`const __ser_remote_base`) >
+    result.indexOf(`const __SER___remote_base`) >
       result.indexOf(`export const create_post`)
   ) {
     throw new Error("remote helpers must be declared before wrapped exports");
