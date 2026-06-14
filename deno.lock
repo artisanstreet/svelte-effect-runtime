@@ -32,6 +32,7 @@
     "npm:rolldown@^1.0.0-rc.13": "1.0.0-rc.13",
     "npm:svelte-language-server@~0.17.30": "0.17.30_prettier@3.3.3_svelte@4.2.20_typescript@5.9.3",
     "npm:svelte@*": "5.56.0",
+    "npm:svelte@^5.48.0": "5.56.0",
     "npm:svelte@^5.55.1": "5.56.0",
     "npm:svelte@^5.56.0": "5.56.0",
     "npm:tailwindcss@4": "4.3.0",
@@ -4062,6 +4063,8 @@
             "npm:magic-string@~0.30.21",
             "npm:rolldown@^1.0.0-rc.13",
             "npm:svelte-language-server@~0.17.30",
+            "npm:svelte@^5.48.0",
+            "npm:typescript@^5.9.3",
             "npm:vscode-languageserver@9.0.1"
           ]
         }

@@ -31,12 +31,13 @@ deno task build
 
 The extension resolves the server in this order:
 
-1. `svelte-effect-runtime-language-server` on the worktree `PATH`.
-2. `node_modules/svelte-effect-runtime-language-server/.dist/server.cjs` in the
+1. `node_modules/svelte-effect-runtime-language-server/.dist/server.cjs` in the
    open worktree.
-3. `../svelte-effect-runtime-language-server/.dist/server.cjs` for this repo.
-4. A GitHub release asset matching this extension's `extension.toml` version.
+2. `../svelte-effect-runtime-language-server/.dist/server.cjs` for this repo.
+3. `node_modules/svelte-effect-runtime-language-server/.dist/server.cjs`
+   installed beside the extension by Zed.
 
-When the release asset path is used, the extension installs the public Node
-dependencies that the bundled server needs beside the extension. The language
-server package itself is private and is not resolved through npm.
+Each path is only used when the package also contains its bundled
+`runtime/package.json`. If no local development build is available, the
+extension installs the standalone `svelte-effect-runtime-language-server`
+package from npm and runs that copy.
