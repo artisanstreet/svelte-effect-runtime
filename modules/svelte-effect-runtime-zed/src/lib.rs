@@ -22,6 +22,10 @@ const INSTALLED_LANGUAGE_SERVER_SCRIPT_PATH: &str =
     "../../work/svelte-effect-runtime-language-server/node_modules/svelte-effect-runtime-language-server/.dist/server.cjs";
 const INSTALLED_LANGUAGE_SERVER_RUNTIME_PATH: &str =
     "../../work/svelte-effect-runtime-language-server/node_modules/svelte-effect-runtime-language-server/runtime/package.json";
+const LEGACY_INSTALLED_LANGUAGE_SERVER_SCRIPT_PATH: &str =
+    "../../work/svelte-effect-runtime/node_modules/svelte-effect-runtime-language-server/.dist/server.cjs";
+const LEGACY_INSTALLED_LANGUAGE_SERVER_RUNTIME_PATH: &str =
+    "../../work/svelte-effect-runtime/node_modules/svelte-effect-runtime-language-server/runtime/package.json";
 const WORKTREE_LANGUAGE_SERVER_SCRIPT_PATH: &str =
     "node_modules/svelte-effect-runtime-language-server/.dist/server.cjs";
 const WORKTREE_LANGUAGE_SERVER_RUNTIME_PATH: &str =
@@ -96,6 +100,30 @@ impl SvelteEffectRuntimeExtension {
         Ok(())
     }
 
+    fn configured_server_command(
+        &self,
+        id: &zed::LanguageServerId,
+        worktree: &zed::Worktree,
+    ) -> Result<Option<zed::Command>> {
+        let settings = zed::settings::LspSettings::for_worktree(id.as_ref(), worktree)?;
+        let Some(binary) = settings.binary else {
+            return Ok(None);
+        };
+
+        let Some(command) = binary.path else {
+            return Ok(None);
+        };
+
+        let args = binary
+            .arguments
+            .unwrap_or_else(|| vec!["--stdio".to_string()]);
+
+        let mut env: zed::EnvVars = binary.env.unwrap_or_default().into_iter().collect();
+        env.sort_by(|(left, _), (right, _)| left.cmp(right));
+
+        Ok(Some(zed::Command { command, args, env }))
+    }
+
     fn worktree_server_script_path(&self, worktree: &zed::Worktree) -> Option<String> {
         let script_path =
             PathBuf::from(worktree.root_path()).join(WORKTREE_LANGUAGE_SERVER_SCRIPT_PATH);
@@ -122,9 +150,45 @@ impl SvelteEffectRuntimeExtension {
                 INSTALLED_LANGUAGE_SERVER_SCRIPT_PATH,
                 INSTALLED_LANGUAGE_SERVER_RUNTIME_PATH,
             ),
+            (
+                LEGACY_INSTALLED_LANGUAGE_SERVER_SCRIPT_PATH,
+                LEGACY_INSTALLED_LANGUAGE_SERVER_RUNTIME_PATH,
+            ),
         ] {
             let script_path = extension_path(script_relative_path)?;
             let runtime_path = extension_path(runtime_relative_path)?;
+
+            if let Some(path) = verified_script_path(script_path, runtime_path) {
+                return Ok(Some(path));
+            }
+        }
+
+        let Some(path) = self.local_zed_work_server_script_path()? else {
+            return Ok(None);
+        };
+
+        Ok(Some(path))
+    }
+
+    fn local_zed_work_server_script_path(&self) -> Result<Option<String>> {
+        let local_app_data = match env::var("LOCALAPPDATA") {
+            Ok(value) => PathBuf::from(value),
+            Err(_) => return Ok(None),
+        };
+        let extensions_dir = local_app_data.join("Zed").join("extensions");
+
+        for work_dir in [
+            "svelte-effect-runtime-language-server",
+            "svelte-effect-runtime",
+        ] {
+            let script_path = extensions_dir
+                .join("work")
+                .join(work_dir)
+                .join(MANAGED_LANGUAGE_SERVER_SCRIPT_PATH);
+            let runtime_path = extensions_dir
+                .join("work")
+                .join(work_dir)
+                .join(MANAGED_LANGUAGE_SERVER_RUNTIME_PATH);
 
             if let Some(path) = verified_script_path(script_path, runtime_path) {
                 return Ok(Some(path));
@@ -159,6 +223,10 @@ impl zed::Extension for SvelteEffectRuntimeExtension {
         worktree: &zed::Worktree,
     ) -> Result<zed::Command> {
         self.install_package_if_needed(id, TS_PLUGIN_PACKAGE_NAME)?;
+
+        if let Some(command) = self.configured_server_command(id, worktree)? {
+            return Ok(command);
+        }
 
         if let Some(script_path) = self.worktree_server_script_path(worktree) {
             return Ok(zed::Command {
