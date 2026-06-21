@@ -4,7 +4,7 @@ import { Effect } from "effect";
 
 import { make_effect_from_promise } from "./effect.ts";
 import { has_method } from "./utils.ts";
-import type { NativeMethod } from "./types.ts";
+import type { EffectRemoteFormSubmit, NativeMethod } from "./types.ts";
 
 /**
  * Wraps a remote form enhance callback so Effect return values are run.
@@ -58,20 +58,17 @@ function wrap_submit_callback(event: unknown): unknown {
 
 function make_submit_effect(
   original_submit: NativeMethod,
-): Effect.Effect<unknown, RemoteFailure<unknown>> & Record<string, unknown> {
+): EffectRemoteFormSubmit {
   let updates_args: unknown[] | undefined;
 
-  const effect = make_effect_from_promise(async () => {
+  const effect = make_effect_from_promise(async (): Promise<boolean> => {
     const result = original_submit();
+    const value = updates_args && has_method(result, "updates")
+      ? await Promise.resolve(result.updates(...updates_args))
+      : await Promise.resolve(result);
 
-    if (updates_args && has_method(result, "updates")) {
-      return await Promise.resolve(result.updates(...updates_args));
-    }
-
-    return await Promise.resolve(result);
-  }) as
-    & Effect.Effect<unknown, RemoteFailure<unknown>>
-    & Record<string, unknown>;
+    return value === true;
+  }) as EffectRemoteFormSubmit;
 
   Object.defineProperty(effect, "updates", {
     configurable: true,

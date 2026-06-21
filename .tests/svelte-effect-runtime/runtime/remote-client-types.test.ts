@@ -49,6 +49,47 @@ Effect.gen(function* () {
   );
 });
 
+Deno.test("remote form enhance submit keeps native success types", async () => {
+  await assert_type_checks(
+    "enhance-submit-types.ts",
+    `
+import { Cause, Effect } from "effect";
+import { create_remote_form_adapter } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
+import type { RemoteFailure } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/shared.ts";
+import type { RemoteFormInput } from "@sveltejs/kit";
+
+const form = create_remote_form_adapter<RemoteFormInput, { id: string }>(
+  {},
+  (value) => value,
+);
+
+form.enhance(({ result, submit }) =>
+  Effect.gen(function* () {
+    const matched = yield* submit().pipe(
+      Effect.matchCause({
+        onSuccess: (value) => {
+          const success: boolean = value;
+
+          return success;
+        },
+        onFailure: (cause) => {
+          const failure_cause: Cause.Cause<RemoteFailure<unknown>> = cause;
+
+          return false;
+        },
+      }),
+    );
+
+    const current_result: { id: string } | undefined = result;
+
+    void current_result;
+    void matched;
+  })
+);
+`,
+  );
+});
+
 Deno.test("server remote helpers stay Effect-yieldable in markup helpers", async () => {
   await assert_type_checks(
     "server-remote-markup.ts",

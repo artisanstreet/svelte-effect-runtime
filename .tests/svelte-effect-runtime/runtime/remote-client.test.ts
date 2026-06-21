@@ -628,6 +628,34 @@ Deno.test("remote form adapter wraps enhance submit callbacks as Effects", () =>
   assertEquals(callback_submit_is_effect, true);
 });
 
+Deno.test("remote form adapter resolves enhance submit to native success flag", async () => {
+  let submit_effect: unknown;
+
+  const native = {
+    method: "POST",
+    action: "?/remote=abc%2Fcreate",
+    enhance(callback: (event: unknown) => unknown) {
+      callback({
+        submit: () => Promise.resolve(true),
+      });
+
+      return { method: "POST" };
+    },
+  };
+
+  const form = create_remote_form_adapter(native, (value) => value, "");
+
+  form.enhance((event: unknown) => {
+    submit_effect = (event as { submit: () => unknown }).submit();
+  });
+
+  const result = await Effect.runPromise(
+    submit_effect as Effect.Effect<boolean, unknown, unknown>,
+  );
+
+  assertEquals(result, true);
+});
+
 Deno.test("remote form adapter preserves enhance submit updates as an Effect", async () => {
   let submit_started = false;
   let updates_called = false;

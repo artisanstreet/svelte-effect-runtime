@@ -1,4 +1,8 @@
-import type { RemoteForm, RemoteFormInput } from "@sveltejs/kit";
+import type {
+  RemoteForm,
+  RemoteFormInput,
+  RemoteQueryUpdate,
+} from "@sveltejs/kit";
 import type { RemoteFailure } from "$/remote/shared.ts";
 import type { Effect } from "effect";
 
@@ -29,8 +33,8 @@ export type NativeMethod = (...args: unknown[]) => unknown;
 export type NativeFormRecord = Record<PropertyKey, unknown>;
 
 /**
- * Represents the form submit handle passed into an Effect-aware enhanced
- * remote form callback.
+ * Represents the native form submit handle passed into an Effect-aware
+ * enhanced remote form callback.
  *
  * @example
  * ```ts
@@ -44,11 +48,11 @@ export type NativeFormRecord = Record<PropertyKey, unknown>;
  * @since 2.0.0
  */
 export type EffectRemoteFormSubmit =
-  & Effect.Effect<unknown, RemoteFailure<unknown>>
+  & Effect.Effect<boolean, RemoteFailure<unknown>>
   & {
     updates: (
-      ...updates: unknown[]
-    ) => Effect.Effect<unknown, RemoteFailure<unknown>>;
+      ...updates: RemoteQueryUpdate[]
+    ) => Effect.Effect<boolean, RemoteFailure<unknown>>;
   };
 
 /**
@@ -69,9 +73,10 @@ export type EffectRemoteFormSubmit =
  */
 export type EffectRemoteFormEnhanceOptions<
   Input extends RemoteFormInput | void,
+  Output,
 > =
   & Omit<
-    Parameters<RemoteForm<Input, unknown>["enhance"]>[0] extends (
+    Parameters<RemoteForm<Input, Output>["enhance"]>[0] extends (
       options: infer Options,
     ) => unknown ? Options
       : never,
@@ -103,7 +108,7 @@ export type EffectRemoteForm<Input extends RemoteFormInput | void, Output> =
   & {
     enhance(
       callback?: (
-        options: EffectRemoteFormEnhanceOptions<Input>,
+        options: EffectRemoteFormEnhanceOptions<Input, Output>,
       ) => void | Promise<void> | Effect.Effect<void, unknown, unknown>,
     ): ReturnType<RemoteForm<Input, Output>["enhance"]>;
     for(id: Parameters<RemoteForm<Input, Output>["for"]>[0]): Omit<
