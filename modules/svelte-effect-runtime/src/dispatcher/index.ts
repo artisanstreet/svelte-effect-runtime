@@ -1,4 +1,4 @@
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Cause, Effect, Exit, Fiber, Layer, ManagedRuntime } from "effect";
 import type { Fiber as FiberType } from "effect/Fiber";
 import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime";
 
@@ -31,6 +31,8 @@ export class Dispatcher {
   #values = new Map<string, unknown>();
   /** Current cache key per value block id. */
   #value_ids = new Map<string, string>();
+  /** Current cache key per promise block id. */
+  #promise_ids = new Map<string, string>();
   /** Whether dispose has been called, blocking new work. */
   #disposed = false;
   /** Monotonically increasing counter for unnamed fiber keys. */
@@ -139,7 +141,7 @@ export class Dispatcher {
    * @returns The cached value if resolved, otherwise the fallback.
    */
   value<A>(options: ValueOptions<A>): A {
-    const cache_key = `${options.id}::${hash_deps(options.deps)}`;
+    const cache_key = this.#make_value_cache_key(options.id, options.deps);
     const old_key = this.#value_ids.get(options.id);
 
     if (old_key !== undefined && old_key !== cache_key) {
@@ -178,30 +180,23 @@ export class Dispatcher {
       );
     }
 
-    const cache_key = `promise:${options.id}::${hash_deps(options.deps)}`;
+    const cache_key = this.#make_promise_cache_key(options.id, options.deps);
+    const old_key = this.#promise_ids.get(options.id);
+
+    if (old_key !== undefined && old_key !== cache_key) {
+      this.#interrupt_cached_fiber(old_key);
+      this.#values.delete(old_key);
+    }
+
+    this.#promise_ids.set(options.id, cache_key);
+
     const existing = this.#values.get(cache_key);
 
     if (existing instanceof Promise) {
       return existing as Promise<A>;
     }
 
-    const program = Effect.gen(function* () {
-      const result = yield* Effect.gen(options.factory);
-
-      return result;
-    });
-    const promise = this.#runtime
-      .runPromise(program as Effect.Effect<unknown, unknown, unknown>)
-      .then((value) => {
-        this.#values.delete(cache_key);
-
-        return value;
-      })
-      .catch((error: unknown) => {
-        this.#values.delete(cache_key);
-
-        throw error;
-      }) as Promise<A>;
+    const promise = this.#start_promise_fiber(cache_key, options);
 
     this.#values.set(cache_key, promise);
 
@@ -259,6 +254,15 @@ export class Dispatcher {
     this.#fibers.clear();
     this.#values.clear();
     this.#value_ids.clear();
+    this.#promise_ids.clear();
+  }
+
+  #make_value_cache_key(id: string, deps: readonly unknown[]): string {
+    return `value:${id}::${hash_deps(deps)}`;
+  }
+
+  #make_promise_cache_key(id: string, deps: readonly unknown[]): string {
+    return `promise:${id}::${hash_deps(deps)}`;
   }
 
   #interrupt_cached_fiber(cache_key: string): void {
@@ -297,6 +301,40 @@ export class Dispatcher {
       on_complete: () => this.#fibers.delete(cache_key),
       on_success: (value) => this.#values.set(cache_key, value),
     });
+  }
+
+  #start_promise_fiber<A>(
+    cache_key: string,
+    options: PromiseOptions<A>,
+  ): Promise<A> {
+    const program = Effect.gen(function* () {
+      const result = yield* Effect.gen(options.factory);
+
+      return result;
+    });
+    const fiber = this.#runtime.runFork(
+      program as Effect.Effect<unknown, unknown, unknown>,
+    );
+
+    this.#fibers.set(cache_key, fiber);
+
+    return this.#runtime.runPromise(
+      Effect.flatMap(Fiber.await(fiber), (exit) =>
+        Effect.sync(() => {
+          this.#fibers.delete(cache_key);
+          this.#values.delete(cache_key);
+
+          if (this.#promise_ids.get(options.id) === cache_key) {
+            this.#promise_ids.delete(options.id);
+          }
+
+          if (Exit.isSuccess(exit)) {
+            return exit.value as A;
+          }
+
+          throw Cause.squash(exit.cause);
+        })),
+    );
   }
 }
 
