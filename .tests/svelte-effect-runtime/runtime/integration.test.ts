@@ -8,6 +8,7 @@ import {
   effect,
   rewrite_remote_client_exports,
 } from "../../../modules/svelte-effect-runtime/src/vite.ts";
+import { parse } from "svelte/compiler";
 
 // ─── Full pipeline ─────────────────────────────────────────────
 
@@ -121,12 +122,23 @@ Deno.test("preprocess hook accepts optional filename", () => {
 
 Deno.test("vite plugin keeps runtime package transformable in SSR builds", () => {
   const plugins = effect();
+  const preprocess_plugin = plugins.find((plugin) =>
+    plugin.name === "svelte-effect-runtime:svelte-preprocess"
+  );
   const server_plugin = plugins.find((plugin) =>
     plugin.name === "svelte-effect-runtime:server-imports"
   );
   const client_plugin = plugins.find((plugin) =>
     plugin.name === "svelte-effect-runtime:remote-client"
   );
+
+  if (!preprocess_plugin || typeof preprocess_plugin.transform !== "object") {
+    throw new Error("svelte preprocess plugin should expose a pre transform");
+  }
+
+  if (preprocess_plugin.transform.order !== "pre") {
+    throw new Error("svelte preprocess transform should run before parsers");
+  }
 
   if (!server_plugin || typeof server_plugin.config !== "function") {
     throw new Error("server rewrite plugin should expose a config hook");
@@ -174,6 +186,48 @@ Deno.test("vite plugin keeps runtime package transformable in SSR builds", () =>
     "svelte",
     "svelte-effect-runtime",
   ]);
+});
+
+Deno.test("vite plugin lowers svelte yield before parser-style plugins", async () => {
+  const plugins = effect();
+  const plugin = plugins.find((candidate) =>
+    candidate.name === "svelte-effect-runtime:svelte-preprocess"
+  );
+
+  if (!plugin || typeof plugin.transform !== "object") {
+    throw new Error("svelte preprocess plugin should expose a pre transform");
+  }
+
+  const source = [
+    `<script effect>`,
+    `  let value = $state(yield* loadValue());`,
+    `</script>`,
+    ``,
+    `<button onclick={yield* save(value)}>Save</button>`,
+  ].join("\n");
+
+  const result = await plugin.transform.handler(
+    source,
+    "C:/src/routes/Test.svelte",
+  );
+
+  if (!result || typeof result === "string") {
+    throw new Error("svelte preprocess transform should return code output");
+  }
+
+  assertStringIncludes(result.code, `<script>`);
+  assertStringIncludes(result.code, `__SER__program`);
+  assertStringIncludes(result.code, `__ser_markup_run`);
+
+  parse(result.code, { filename: "Test.svelte" });
+
+  if (result.code.includes(`<script effect>`)) {
+    throw new Error("effect attribute should be removed before parser plugins");
+  }
+
+  if (result.code.includes(`onclick={yield*`)) {
+    throw new Error("markup yield should be lowered before parser plugins");
+  }
 });
 
 Deno.test("root entry exposes server helpers for rewritten server imports", async () => {

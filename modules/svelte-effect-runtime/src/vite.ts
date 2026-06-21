@@ -1,3 +1,4 @@
+import { preprocess } from "./runtime/preprocess.ts";
 import type { Plugin } from "vite";
 
 /**
@@ -29,9 +30,36 @@ export interface EffectOptions {
  */
 export function effect(options?: EffectOptions): Plugin[] {
   return [
+    make_svelte_preprocess_plugin(),
     make_server_rewrite_plugin(),
     make_remote_client_wrapper_plugin(options),
   ];
+}
+
+function make_svelte_preprocess_plugin(): Plugin {
+  const group = preprocess();
+
+  return {
+    name: "svelte-effect-runtime:svelte-preprocess",
+    enforce: "pre",
+
+    transform: {
+      order: "pre",
+      handler(code: string, id: string) {
+        if (!is_svelte_component_module(id)) {
+          return undefined;
+        }
+
+        const result = group.markup({ content: code, filename: id });
+
+        if (result.code === code) {
+          return undefined;
+        }
+
+        return { code: result.code, map: null };
+      },
+    },
+  };
 }
 
 function make_server_rewrite_plugin(): Plugin {
@@ -129,6 +157,23 @@ function is_server_runtime_module(id: string): boolean {
 function is_remote_module(id: string): boolean {
   return /\.(remote|remote\.[cm]?)\.[jt]s(?:\?.*)?$/.test(id) ||
     id.includes(".remote.");
+}
+
+function is_svelte_component_module(id: string): boolean {
+  const [filename, query = ""] = id.split("?", 2);
+
+  if (!filename.endsWith(".svelte")) {
+    return false;
+  }
+
+  if (query.length === 0) {
+    return true;
+  }
+
+  const params = new URLSearchParams(query);
+  const allowed_params = ["t", "v"];
+
+  return [...params.keys()].every((key) => allowed_params.includes(key));
 }
 
 /**
