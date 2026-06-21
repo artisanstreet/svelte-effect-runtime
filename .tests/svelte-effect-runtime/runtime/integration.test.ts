@@ -216,8 +216,8 @@ Deno.test("vite plugin lowers svelte yield before parser-style plugins", async (
   }
 
   assertStringIncludes(result.code, `<script>`);
-  assertStringIncludes(result.code, `__SER__program`);
-  assertStringIncludes(result.code, `__ser_markup_run`);
+  assertStringIncludes(result.code, `__SER___program`);
+  assertStringIncludes(result.code, `__SER___markup_run`);
 
   parse(result.code, { filename: "Test.svelte" });
 
