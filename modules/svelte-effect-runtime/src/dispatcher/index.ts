@@ -255,6 +255,12 @@ export class Dispatcher {
     this.#fibers.clear();
     this.#values.clear();
     this.#value_ids.clear();
+
+    void this.#runtime.dispose().catch((error: unknown) => {
+      queueMicrotask(() => {
+        throw error;
+      });
+    });
   }
 
   #interrupt_cached_fiber(cache_key: string): void {

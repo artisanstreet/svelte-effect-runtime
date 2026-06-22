@@ -18,8 +18,21 @@ declare const schema: {
 };
 
 const form = create_remote_form_adapter<RemoteFormInput, void>({}, (value) => value);
+const returning_form = create_remote_form_adapter<
+  RemoteFormInput,
+  { ok: boolean }
+>({}, (value) => value);
 
 form.preflight(schema).enhance(() => Effect.void);
+form.preflight(schema).enhance(({ submit }) => submit());
+form.preflight(schema).enhance(({ submit }) => submit().updates());
+form.preflight(schema).enhance(({ submit }) =>
+  Effect.gen(function* () {
+    yield* submit().updates();
+  })
+);
+returning_form.preflight(schema).enhance(({ submit }) => submit());
+returning_form.preflight(schema).enhance(({ submit }) => submit().updates());
 `,
   );
 });

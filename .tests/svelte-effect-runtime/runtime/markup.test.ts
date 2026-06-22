@@ -410,6 +410,37 @@ Deno.test("rewrites nested yield* in Effect.matchCause event handlers", () => {
   });
 });
 
+Deno.test("preserves plain matchCause success callback values when upgrading", () => {
+  const source = [
+    `<button onclick={yield* savePost().pipe(Effect.matchCause({`,
+    `  onSuccess: (result) => result.id,`,
+    `  onFailure: (cause) => { return yield* recover(cause); }`,
+    `}))}>save</button>`,
+  ].join("\n");
+
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `Effect.matchCauseEffect`);
+  assertStringIncludes(
+    result.code,
+    `onSuccess: (result) => Effect.sync(() => (result.id))`,
+  );
+
+  if (result.code.includes(`onSuccess: (result) => true`)) {
+    throw new Error("matchCauseEffect success callbacks must preserve values");
+  }
+
+  if (result.code.includes(`onSuccess: (result) => false`)) {
+    throw new Error("matchCauseEffect success callbacks must preserve values");
+  }
+
+  compile(result.code, {
+    filename: "Test.svelte",
+    generate: "server",
+    experimental: { async: true },
+  });
+});
+
 Deno.test("rewrites nested yield* inside explicit Effect.gen event handlers", () => {
   const source = [
     `<button onclick={yield* Effect.gen(function* () {`,

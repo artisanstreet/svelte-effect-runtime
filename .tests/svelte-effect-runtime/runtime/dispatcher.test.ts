@@ -493,6 +493,25 @@ Deno.test({
   },
 });
 
+Deno.test("dispose releases managed runtime layer finalizers", async () => {
+  let finalized = false;
+
+  const layer = Layer.effectDiscard(
+    Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        finalized = true;
+      })
+    ),
+  );
+  const d = Dispatcher.make(layer);
+
+  await d.run(Effect.void);
+  d.dispose();
+  await sleep(0);
+
+  assertEquals(finalized, true);
+});
+
 Deno.test("fork is a no-op after dispose", async () => {
   const d = make_dispatcher();
   d.dispose();
