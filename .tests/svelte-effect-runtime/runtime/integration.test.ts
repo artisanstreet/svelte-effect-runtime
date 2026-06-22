@@ -122,8 +122,8 @@ Deno.test("preprocess hook accepts optional filename", () => {
 
 Deno.test("vite plugin keeps runtime package transformable in SSR builds", () => {
   const plugins = effect();
-  const preprocess_plugin = plugins.find((plugin) =>
-    plugin.name === "svelte-effect-runtime:svelte-preprocess"
+  const transform_plugin = plugins.find((plugin) =>
+    plugin.name === "svelte-effect-runtime:svelte-transform"
   );
   const server_plugin = plugins.find((plugin) =>
     plugin.name === "svelte-effect-runtime:server-imports"
@@ -132,12 +132,12 @@ Deno.test("vite plugin keeps runtime package transformable in SSR builds", () =>
     plugin.name === "svelte-effect-runtime:remote-client"
   );
 
-  if (!preprocess_plugin || typeof preprocess_plugin.transform !== "object") {
-    throw new Error("svelte preprocess plugin should expose a pre transform");
+  if (!transform_plugin || typeof transform_plugin.transform !== "object") {
+    throw new Error("svelte transform plugin should expose a pre transform");
   }
 
-  if (preprocess_plugin.transform.order !== "pre") {
-    throw new Error("svelte preprocess transform should run before parsers");
+  if (transform_plugin.transform.order !== "pre") {
+    throw new Error("svelte transform should run before parsers");
   }
 
   if (!server_plugin || typeof server_plugin.config !== "function") {
@@ -191,11 +191,11 @@ Deno.test("vite plugin keeps runtime package transformable in SSR builds", () =>
 Deno.test("vite plugin lowers svelte yield before parser-style plugins", async () => {
   const plugins = effect();
   const plugin = plugins.find((candidate) =>
-    candidate.name === "svelte-effect-runtime:svelte-preprocess"
+    candidate.name === "svelte-effect-runtime:svelte-transform"
   );
 
   if (!plugin || typeof plugin.transform !== "object") {
-    throw new Error("svelte preprocess plugin should expose a pre transform");
+    throw new Error("svelte transform plugin should expose a pre transform");
   }
 
   const source = [
@@ -212,7 +212,7 @@ Deno.test("vite plugin lowers svelte yield before parser-style plugins", async (
   );
 
   if (!result || typeof result === "string") {
-    throw new Error("svelte preprocess transform should return code output");
+    throw new Error("svelte transform should return code output");
   }
 
   assertStringIncludes(result.code, `<script>`);
