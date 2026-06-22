@@ -857,6 +857,27 @@ Deno.test("is idempotent for generated event handlers", () => {
 
 // ─── Edge cases ──────────────────────────────────────────────
 
+Deno.test("is idempotent for generated Effect.gen event handlers", () => {
+  const source = [
+    `<input type="file" onchange={yield* Effect.gen(function* () {`,
+    `  const file = event.currentTarget.files?.[0];`,
+    `  if (!file) return;`,
+    `  yield* upload(file);`,
+    `})} />`,
+  ].join("\n");
+  const first = transform_markup_effect(source, "EventEffect.svelte");
+  const second = transform_markup_effect(first.code, "EventEffect.svelte");
+
+  compile(first.code, {
+    filename: "EventEffect.svelte",
+    generate: "server",
+    experimental: { async: true },
+  });
+
+  assertEquals(second.code, first.code);
+  assertEquals(second.has_yield, false);
+});
+
 Deno.test("does not choke on empty yield* brace contents", () => {
   const source = `<span>{yield* }</span>`;
   const result = transform_markup_effect(source, "Test.svelte");
