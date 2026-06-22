@@ -29,6 +29,15 @@ export default {
 };
 ```
 
+## Another plugin reports `yield` as reserved
+
+Some Vite plugins parse `.svelte` files in their own `transform.order = "pre"`
+hook. Those plugins can see SER syntax before the normal transform pipeline
+lowers it, even when `effect()` appears earlier in `plugins`.
+
+That plugin is incompatible with SER until it stops parsing raw Svelte syntax
+before other source transforms, or until it lets users opt out for SER files.
+
 ## Remote functions do not resolve
 
 Enable SvelteKit remote functions:
