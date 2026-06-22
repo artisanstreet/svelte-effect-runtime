@@ -1,4 +1,3 @@
-import { transform_svelte_effect } from "./runtime/transform.ts";
 import type { Plugin } from "vite";
 
 /**
@@ -43,11 +42,14 @@ function make_svelte_transform_plugin(): Plugin {
 
     transform: {
       order: "pre",
-      handler(code: string, id: string) {
+      async handler(code: string, id: string) {
         if (!is_svelte_component_module(id)) {
           return undefined;
         }
 
+        const { transform_svelte_effect } = await import(
+          "./runtime/transform.ts"
+        );
         const result = transform_svelte_effect(code, id);
 
         if (result.code === code) {

@@ -265,6 +265,21 @@ Deno.test("package manifests expose vite entrypoint", async () => {
   assertEquals(deno_manifest.exports["./vite"], "./src/vite.ts");
 });
 
+Deno.test("vite entrypoint defers svelte transformer import until transform hook", async () => {
+  const source = await Deno.readTextFile(
+    "../../modules/svelte-effect-runtime/src/vite.ts",
+  );
+  const static_import_pattern =
+    /^import\s+.*["']\.\/runtime\/transform\.ts["'];/m;
+
+  if (static_import_pattern.test(source)) {
+    throw new Error("vite entrypoint should not statically import transformer");
+  }
+
+  assertStringIncludes(source, `await import(`);
+  assertStringIncludes(source, `"./runtime/transform.ts"`);
+});
+
 Deno.test("vite remote client wrapper preserves native SvelteKit remote module", () => {
   const source = [
     `import * as __remote from '__sveltekit/remote';`,
