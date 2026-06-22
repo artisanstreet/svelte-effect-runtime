@@ -22,11 +22,11 @@ import {
  * @param response - Failed fetch response returned by the remote endpoint.
  * @returns Remote failure represented by the response.
  */
-export async function decode_response_failure(
+export async function decode_response_failure<ErrorType = never>(
   response: Response,
-): Promise<RemoteFailure<unknown>> {
+): Promise<RemoteFailure<ErrorType>> {
   const body = await response.json().catch(() => undefined);
-  const decoded = decode_remote_error(body);
+  const decoded = decode_remote_error<ErrorType>(body);
 
   if (is_decoded_remote_failure(decoded)) {
     return decoded;
@@ -52,13 +52,13 @@ export async function decode_response_failure(
  * @param decode_payload - Function used to decode successful payloads.
  * @returns Decoded successful output.
  */
-export async function decode_response_or_value<Output>(
+export async function decode_response_or_value<Output, ErrorType = never>(
   value: unknown,
   decode_payload: (value: unknown) => unknown,
 ): Promise<Output> {
   if (value instanceof Response) {
     if (!value.ok) {
-      throw await decode_response_failure(value);
+      throw await decode_response_failure<ErrorType>(value);
     }
 
     const data = await value.json();

@@ -73,7 +73,7 @@ form.enhance(({ result, submit }) =>
           return success;
         },
         onFailure: (cause) => {
-          const failure_cause: Cause.Cause<RemoteFailure<unknown>> = cause;
+          const failure_cause: Cause.Cause<RemoteFailure<never>> = cause;
 
           return false;
         },
@@ -86,6 +86,109 @@ form.enhance(({ result, submit }) =>
     void matched;
   })
 );
+`,
+  );
+});
+
+Deno.test("remote client adapters keep structured remote failure types", async () => {
+  await assert_type_checks(
+    "remote-failure-types.ts",
+    `
+import { Cause, Effect } from "effect";
+import {
+  create_remote_form_adapter,
+  create_remote_query_adapter,
+} from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
+import type { RemoteFailure } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/shared.ts";
+
+type Equal<Left, Right> =
+  (<Type>() => Type extends Left ? 1 : 2) extends
+  (<Type>() => Type extends Right ? 1 : 2) ? true : false;
+type Assert<Type extends true> = Type;
+
+const form = create_remote_form_adapter<{ title: string }, { id: string }>(
+  {},
+  (value) => value,
+);
+const query = create_remote_query_adapter<void, { id: string }>(
+  () => Promise.resolve({ id: "one" }),
+  (value) => value,
+);
+
+const form_submit = form.submit({ title: "draft" });
+type FormSubmit = Assert<
+  Equal<typeof form_submit, Effect.Effect<{ id: string }, RemoteFailure<never>>>
+>;
+
+form.submit({ title: "draft" }).pipe(
+  Effect.matchCause({
+    onFailure: (cause) => {
+      const typed_cause: Cause.Cause<RemoteFailure<never>> = cause;
+
+      return typed_cause;
+    },
+    onSuccess: (value) => value.id,
+  }),
+);
+
+query().pipe(
+  Effect.catchTag("RemoteHttpError", (failure) =>
+    Effect.succeed(failure.status)
+  ),
+);
+`,
+  );
+});
+
+Deno.test("remote form updates accepts Effect query wrappers", async () => {
+  await assert_type_checks(
+    "remote-updates-query-wrapper.ts",
+    `
+import { Effect } from "effect";
+import {
+  create_remote_form_adapter,
+  create_remote_live_query_adapter,
+  create_remote_query_adapter,
+} from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
+
+const posts = create_remote_query_adapter<void, string[]>(
+  () => Promise.resolve(["one"]),
+  (value) => value,
+);
+
+const clock = create_remote_live_query_adapter<void, number>(
+  () => ({
+    connected: true,
+    current: 1,
+    done: false,
+    error: undefined,
+    loading: false,
+    ready: true,
+    reconnect: () => Promise.resolve(),
+    [Symbol.asyncIterator]: async function* () {
+      yield 1;
+    },
+  }),
+  (value) => value,
+);
+
+const form = create_remote_form_adapter<{ title: string }, { id: string }>(
+  {},
+  (value) => value,
+);
+
+const post_result = posts();
+const clock_result = clock();
+
+form.enhance(({ submit }) =>
+  Effect.gen(function* () {
+    yield* submit().updates(posts);
+    yield* submit().updates(clock);
+  })
+);
+
+void post_result;
+void clock_result;
 `,
   );
 });

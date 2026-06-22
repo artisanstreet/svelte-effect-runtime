@@ -28,15 +28,16 @@ import type { EffectRemoteForm, NativeFormRecord } from "./types.ts";
 export function create_remote_form_adapter<
   Input extends RemoteFormInput | void,
   Output,
+  ErrorType = never,
 >(
   native_factory: unknown,
   decode_payload: (value: unknown) => unknown,
   remote_base = "",
-): EffectRemoteForm<Input, Output> {
+): EffectRemoteForm<Input, Output, ErrorType> {
   const form_obj = native_factory as NativeFormRecord;
 
   const submit_effect = (input: Input) =>
-    make_effect_from_promise(async () => {
+    make_effect_from_promise<Output, ErrorType>(async () => {
       const can_use_remote_endpoint = remote_base.length > 0 &&
         get_remote_action_id(form_obj) !== undefined;
 
@@ -56,7 +57,8 @@ export function create_remote_form_adapter<
 
   const callable = ((input: Input) => submit_effect(input)) as EffectRemoteForm<
     Input,
-    Output
+    Output,
+    ErrorType
   >;
 
   copy_property_descriptors(
@@ -76,7 +78,7 @@ export function create_remote_form_adapter<
       configurable: true,
       enumerable: false,
       value: (options?: Record<string, unknown>) =>
-        make_effect_from_promise(async () => {
+        make_effect_from_promise<void, ErrorType>(async () => {
           await form_obj.validate(options);
         }),
     });
@@ -96,7 +98,7 @@ export function create_remote_form_adapter<
       configurable: true,
       enumerable: false,
       value: (key: string | number | boolean) =>
-        create_remote_form_adapter<Input, Output>(
+        create_remote_form_adapter<Input, Output, ErrorType>(
           form_obj.for(key),
           decode_payload,
           remote_base,

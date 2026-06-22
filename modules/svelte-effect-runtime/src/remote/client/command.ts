@@ -19,12 +19,18 @@ import type { NativeMethod, Pending } from "./types.ts";
  * @returns A function returning an Effect of the response.
  * @internal
  */
-export function create_remote_command_adapter<Input, Output>(
+export function create_remote_command_adapter<
+  Input,
+  Output,
+  ErrorType = never,
+>(
   native_factory: unknown,
   decode_payload: (value: unknown) => unknown,
   _base = "",
   pending?: Pending,
-): (input: Input) => Effect.Effect<Output, RemoteFailure<unknown>> {
+): (
+  input: undefined extends Input ? Input | void : Input,
+) => Effect.Effect<Output, RemoteFailure<ErrorType>> {
   const invoke = has_method(native_factory, "invoke")
     ? native_factory.invoke
     : undefined;
@@ -37,8 +43,8 @@ export function create_remote_command_adapter<Input, Output>(
 
   const count = pending ?? { value: 0 };
 
-  const adapter = (input: Input) =>
-    make_effect_from_promise(async () => {
+  const adapter = (input: undefined extends Input ? Input | void : Input) =>
+    make_effect_from_promise<Output, ErrorType>(async () => {
       count.value += 1;
 
       try {
@@ -46,7 +52,10 @@ export function create_remote_command_adapter<Input, Output>(
           ? await invoke(input)
           : await (native_factory as NativeMethod)(input);
 
-        return await decode_response_or_value<Output>(result, decode_payload);
+        return await decode_response_or_value<Output, ErrorType>(
+          result,
+          decode_payload,
+        );
       } finally {
         count.value -= 1;
       }
