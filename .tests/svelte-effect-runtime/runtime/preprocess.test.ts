@@ -271,6 +271,42 @@ Deno.test("does not track assignment targets as reactive dependencies", () => {
   assertNotMatch(result.code, /void \[/);
 });
 
+Deno.test("preserves surrounding assignment RHS expressions", () => {
+  const source = [
+    `let value = $state(0);`,
+    `value = (yield* loadValue()) + 1;`,
+  ].join("\n");
+  const result = transform_script_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `let __SER___value = $state(undefined);`);
+  assertStringIncludes(result.code, `__SER___value = yield* loadValue();`);
+  assertStringIncludes(result.code, `value = (__SER___value) + 1;`);
+  assertNotMatch(result.code, /^    value = yield\* loadValue\(\);$/m);
+});
+
+Deno.test("runs compound assignments after yielded operands resolve", () => {
+  const source = [
+    `let count = $state(0);`,
+    `count += yield* getDelta();`,
+  ].join("\n");
+  const result = transform_script_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `let __SER___count = $state(undefined);`);
+  assertStringIncludes(result.code, `__SER___count = yield* getDelta();`);
+  assertStringIncludes(result.code, `count += __SER___count;`);
+  assertNotMatch(result.code, /count \+= __SER___count;\n\n\$effect/);
+});
+
+Deno.test("runs ordinary call statements after yielded arguments resolve", () => {
+  const source = `recordValue(yield* loadValue());`;
+  const result = transform_script_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `let __SER___call = $state(undefined);`);
+  assertStringIncludes(result.code, `__SER___call = yield* loadValue();`);
+  assertStringIncludes(result.code, `recordValue(__SER___call);`);
+  assertNotMatch(result.code, /^recordValue\(__SER___call\);/m);
+});
+
 // ─── Bare yield* statement (fire and forget) ─────────────────
 
 Deno.test("moves bare yield* statements into the effect body", () => {
@@ -352,6 +388,36 @@ Deno.test("injects Effect when effect module import lacks Effect binding", () =>
   assertStringIncludes(result.code, `import { pipe } from "effect";`);
   assertStringIncludes(result.code, `import { Effect } from "effect";`);
   assertStringIncludes(result.code, `Effect.gen(function* () {`);
+});
+
+Deno.test("type-only Effect import still injects a runtime Effect binding", () => {
+  const source = [
+    `import type { Effect } from "effect";`,
+    `let value = $state(yield* loadValue());`,
+  ].join("\n");
+  const result = transform_script_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `import type { Effect } from "effect";`);
+  assertStringIncludes(
+    result.code,
+    `import { Effect as __SER___Effect } from "effect";`,
+  );
+  assertStringIncludes(result.code, `__SER___Effect.gen(function* () {`);
+});
+
+Deno.test("local Effect binding does not collide with runtime Effect import", () => {
+  const source = [
+    `import { Effect } from "./local-effect";`,
+    `let value = $state(yield* loadValue());`,
+  ].join("\n");
+  const result = transform_script_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `import { Effect } from "./local-effect";`);
+  assertStringIncludes(
+    result.code,
+    `import { Effect as __SER___Effect } from "effect";`,
+  );
+  assertStringIncludes(result.code, `__SER___Effect.gen(function* () {`);
 });
 
 Deno.test("does not inject onMount for dependency-tracked runtime block", () => {
@@ -490,6 +556,51 @@ Deno.test("extracts every yield* expression in a compound initializer", () => {
     result.code,
     /\$derived\(\(__SER___\w+\) \+ \(__SER___\w+\)\)/,
   );
+});
+
+Deno.test("plain compound declarations become derived from yielded temps", () => {
+  const source = `const value = (yield* loadValue()) + 1;`;
+  const result = transform_script_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `let __SER___value = $state(undefined);`);
+  assertStringIncludes(
+    result.code,
+    `let value = $derived((__SER___value) + 1);`,
+  );
+  assertStringIncludes(result.code, `__SER___value = yield* loadValue();`);
+  assertNotMatch(result.code, /const value = \(__SER___value\) \+ 1;/);
+});
+
+Deno.test("destructuring defaults with yield are assigned inside the effect body", () => {
+  const source = [
+    `const post = { title: undefined };`,
+    `const { title = yield* getTitle() } = post;`,
+  ].join("\n");
+  const result = transform_script_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `const post = { title: undefined };`);
+  assertStringIncludes(result.code, `let title = $state(undefined);`);
+  assertStringIncludes(
+    result.code,
+    `({ title = yield* getTitle() } = post);`,
+  );
+  assertNotMatch(result.code, /const \{ title = yield\*/);
+});
+
+Deno.test("rejects yield inside class fields", () => {
+  const source = [
+    `class Model {`,
+    `  value = yield* loadValue();`,
+    `}`,
+  ].join("\n");
+
+  const error = assertThrows(
+    () => transform_script_effect(source, "Test.svelte"),
+    Error,
+    "yield* cannot be used inside class members",
+  );
+
+  assertStringIncludes(error.message, "[ASYNC_EFFECT_IN_CLASS_MEMBER]:");
 });
 
 Deno.test("handles ternary with yield* in condition position", () => {

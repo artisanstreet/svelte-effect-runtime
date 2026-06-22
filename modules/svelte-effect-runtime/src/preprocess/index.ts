@@ -1,12 +1,21 @@
 import { contains_top_level_yield_star } from "$/detect.ts";
-import { has_local_import_binding, make_imports } from "./imports.ts";
+import {
+  has_local_import_binding,
+  has_top_level_binding,
+  make_imports,
+} from "./imports.ts";
 import { create_source_map, slice } from "./source.ts";
-import { AwaitInEffectWorkError } from "$/error.ts";
-import { make_runtime_block } from "./runtime-block.ts";
+import { AwaitInEffectWorkError, PreprocessError } from "$/error.ts";
+import { make_runtime_block_with_bindings } from "./runtime-block.ts";
 import { contains_top_level_await } from "./ast.ts";
 import { lower_statement } from "./lower.ts";
 import { validate_rune_yield_usage } from "./runes.ts";
-import type { BlockRef, EffectBlock, ScriptTransformResult } from "./types.ts";
+import type {
+  BlockRef,
+  EffectBlock,
+  RuntimeImportBindings,
+  ScriptTransformResult,
+} from "./types.ts";
 
 import MagicString from "magic-string";
 import ts from "typescript";
@@ -83,9 +92,16 @@ export function transform_script_effect(
     "untrack",
   );
 
+  const runtime_bindings: RuntimeImportBindings = {
+    effect: has_effect_import || !has_top_level_binding(source_file, "Effect")
+      ? "Effect"
+      : "__SER___Effect",
+  };
+
   /** Phase 2: lower every top-level statement that contains `yield*`. */
   for (const stmt of source_file.statements) {
     validate_rune_yield_usage(stmt, content, filename);
+    validate_script_yield_boundaries(stmt, content, filename);
 
     const has_top_level_yield_star = contains_top_level_yield_star(stmt);
 
@@ -129,6 +145,7 @@ export function transform_script_effect(
     has_effect_import,
     has_dispatcher_import,
     has_untrack_import,
+    runtime_bindings,
   );
 
   const last_import = [...source_file.statements]
@@ -142,7 +159,10 @@ export function transform_script_effect(
   }
 
   /** Phase 4: append the runtime program and lifecycle wiring. */
-  const runtime_block = make_runtime_block(effect_blocks);
+  const runtime_block = make_runtime_block_with_bindings(
+    effect_blocks,
+    runtime_bindings,
+  );
   magic.append("\n" + runtime_block);
 
   block_refs.push({ id: filename, kind: "script" });
@@ -152,4 +172,54 @@ export function transform_script_effect(
     blocks: block_refs,
     map: create_source_map(magic, filename),
   };
+}
+
+function validate_script_yield_boundaries(
+  stmt: ts.Statement,
+  content: string,
+  filename: string,
+): void {
+  const bad_member = find_class_member_with_yield_star(stmt);
+
+  if (!bad_member) {
+    return;
+  }
+
+  throw new PreprocessError(
+    [
+      `[ASYNC_EFFECT_IN_CLASS_MEMBER]: ${filename}: yield* cannot be used inside class members.`,
+      `Class fields and methods are not component top-level reactive work. Move the Effect work into a script effect statement before assigning it to the class instance.`,
+      "",
+      "Problematic member:",
+      slice(content, bad_member),
+    ].join("\n"),
+    filename,
+  );
+}
+
+function find_class_member_with_yield_star(
+  stmt: ts.Statement,
+): ts.Node | undefined {
+  let found: ts.Node | undefined;
+
+  function visit(node: ts.Node): void {
+    if (found) {
+      return;
+    }
+
+    if (
+      ts.isPropertyDeclaration(node) &&
+      node.initializer &&
+      contains_top_level_yield_star(node.initializer)
+    ) {
+      found = node;
+      return;
+    }
+
+    node.forEachChild(visit);
+  }
+
+  visit(stmt);
+
+  return found;
 }

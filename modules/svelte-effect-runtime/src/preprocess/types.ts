@@ -83,3 +83,13 @@ export interface LoweredExpression {
 export interface ScriptLoweringContext {
   next_temp_name(hint?: string): string;
 }
+
+/**
+ * Runtime import bindings selected for generated script effect code.
+ *
+ * @since 2.4.2
+ */
+export interface RuntimeImportBindings {
+  /** Binding name used for the Effect namespace in generated code. */
+  effect: string;
+}
