@@ -5,7 +5,11 @@ import { make_effect_from_promise } from "./effect.ts";
 import { get_remote_action_id, submit_remote_form } from "./form-transport.ts";
 import { copy_property_descriptors, has_method } from "./utils.ts";
 import { wrap_enhance_callback } from "./form-enhance.ts";
-import type { EffectRemoteForm, NativeFormRecord } from "./types.ts";
+import type {
+  EffectRemoteForm,
+  NativeFormRecord,
+  NativeMethod,
+} from "./types.ts";
 
 type RemoteInput<Input> = undefined extends Input ? Input | void : Input;
 
@@ -91,8 +95,10 @@ export function create_remote_form_adapter<
     Object.defineProperty(callable, "enhance", {
       configurable: true,
       enumerable: false,
-      value: (callback?: Parameters<typeof wrap_enhance_callback>[0]) =>
-        form_obj.enhance(wrap_enhance_callback(callback)),
+      value: (callback?: NativeMethod) =>
+        form_obj.enhance(
+          wrap_enhance_callback<Output, ErrorType>(callback),
+        ),
     });
   }
 

@@ -627,15 +627,26 @@ Deno.test("remote form adapter wraps enhance submit callbacks as Effects", () =>
   assertEquals(callback_submit_is_effect, true);
 });
 
-Deno.test("remote form adapter resolves enhance submit to native success flag", async () => {
+Deno.test("remote form adapter resolves enhance submit to form result", async () => {
   let submit_effect: unknown;
+  let form_result: { id: string } | undefined;
 
   const native = {
     method: "POST",
     action: "?/remote=abc%2Fcreate",
+    get result() {
+      return form_result;
+    },
     enhance(callback: (event: unknown) => unknown) {
       callback({
-        submit: () => Promise.resolve(true),
+        get result() {
+          return form_result;
+        },
+        submit: () => {
+          form_result = { id: "created" };
+
+          return Promise.resolve(true);
+        },
       });
 
       return { method: "POST" };
@@ -649,33 +660,42 @@ Deno.test("remote form adapter resolves enhance submit to native success flag", 
   });
 
   const result = await Effect.runPromise(
-    submit_effect as Effect.Effect<boolean, unknown, unknown>,
+    submit_effect as Effect.Effect<
+      { id: string } | undefined,
+      unknown,
+      unknown
+    >,
   );
 
-  assertEquals(result, true);
+  assertEquals(result, { id: "created" });
 });
 
 Deno.test("remote form adapter preserves enhance submit updates as an Effect", async () => {
   let submit_started = false;
   let updates_called = false;
   let submit_effect: unknown;
+  let form_result: { id: string } | undefined;
 
   const native = {
     method: "POST",
     action: "?/remote=abc%2Fcreate",
     enhance(callback: (event: unknown) => unknown) {
       callback({
+        get result() {
+          return form_result;
+        },
         submit: () => {
           submit_started = true;
 
-          const promise = Promise.resolve("ok") as Promise<string> & {
-            updates: (...args: unknown[]) => Promise<string>;
+          const promise = Promise.resolve(true) as Promise<boolean> & {
+            updates: (...args: unknown[]) => Promise<boolean>;
           };
 
           promise.updates = (...args: unknown[]) => {
             updates_called = args[0] === "refresh";
+            form_result = { id: "updated" };
 
-            return promise;
+            return Promise.resolve(true);
           };
 
           return promise;
@@ -699,10 +719,15 @@ Deno.test("remote form adapter preserves enhance submit updates as an Effect", a
   assertEquals(Effect.isEffect(submit_effect), true);
   assertEquals(submit_started, false);
 
-  await Effect.runPromise(
-    submit_effect as Effect.Effect<unknown, unknown, unknown>,
+  const result = await Effect.runPromise(
+    submit_effect as Effect.Effect<
+      { id: string } | undefined,
+      unknown,
+      unknown
+    >,
   );
 
+  assertEquals(result, { id: "updated" });
   assertEquals(submit_started, true);
   assertEquals(updates_called, true);
 });

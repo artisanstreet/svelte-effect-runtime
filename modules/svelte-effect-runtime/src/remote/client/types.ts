@@ -135,12 +135,12 @@ export type NativeFormRecord = Record<PropertyKey, unknown>;
  *
  * @since 2.0.0
  */
-export type EffectRemoteFormSubmit<ErrorType = never> =
-  & Effect.Effect<boolean, RemoteFailure<ErrorType>>
+export type EffectRemoteFormSubmit<Output = unknown, ErrorType = never> =
+  & Effect.Effect<Output | undefined, RemoteFailure<ErrorType>>
   & {
     updates: <const Updates extends readonly unknown[]>(
       ...updates: EffectRemoteQueryUpdates<Updates>
-    ) => Effect.Effect<boolean, RemoteFailure<ErrorType>>;
+    ) => Effect.Effect<Output | undefined, RemoteFailure<ErrorType>>;
   };
 
 /**
@@ -172,7 +172,7 @@ export type EffectRemoteFormEnhanceOptions<
     "submit"
   >
   & {
-    submit: () => EffectRemoteFormSubmit<ErrorType>;
+    submit: () => EffectRemoteFormSubmit<Output, ErrorType>;
   };
 
 /**

@@ -49,7 +49,7 @@ Effect.gen(function* () {
   );
 });
 
-Deno.test("remote form enhance submit keeps native success types", async () => {
+Deno.test("remote form enhance submit keeps form result types", async () => {
   await assert_type_checks(
     "enhance-submit-types.ts",
     `
@@ -68,7 +68,7 @@ form.enhance(({ result, submit }) =>
     const matched = yield* submit().pipe(
       Effect.matchCause({
         onSuccess: (value) => {
-          const success: boolean = value;
+          const success: { id: string } | undefined = value;
 
           return success;
         },
