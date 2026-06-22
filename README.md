@@ -29,7 +29,7 @@ Write effectful code without any hassle. Seriously!
     
     <StockCard.Root>
       <StockCard.Header>{stock.name}</StockCard.Header>
-      <StockCard.Price>{stock.name}</StockCard.Price>
+      <StockCard.Price>${price}</StockCard.Price>
     </StockCard.Root>
   {/each}
 </ScrollArea>
