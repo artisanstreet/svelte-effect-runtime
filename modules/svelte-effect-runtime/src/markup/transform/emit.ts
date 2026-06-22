@@ -65,7 +65,12 @@ function emit_replacement(
   } else if (kind === "render") {
     const effect = make_effect_helper(normalized_candidate, helper_name);
 
-    replacement_text = emit_render_expression(id_text, effect);
+    replacement_text = emit_render_expression(id_text, effect, candidate);
+    helpers = [...normalized.helpers, effect.helper];
+  } else if (kind === "render_argument") {
+    const effect = make_effect_helper(normalized_candidate, helper_name);
+
+    replacement_text = emit_each_expression(id_text, effect);
     helpers = [...normalized.helpers, effect.helper];
   } else if (kind === "each") {
     const effect = make_effect_helper(normalized_candidate, helper_name);
@@ -135,8 +140,15 @@ function emit_promise_expression(
 function emit_render_expression(
   id_text: string,
   effect: EffectHelper,
+  candidate: MarkupCandidate,
 ): string {
-  return `(await ${emit_promise_expression(id_text, effect)})()`;
+  const expression = emit_promise_expression(id_text, effect);
+
+  if (/^\s*yield\s*\*/.test(candidate.expr_text)) {
+    return `(await ${expression})()`;
+  }
+
+  return `await ${expression}`;
 }
 
 function emit_each_expression(
@@ -182,7 +194,9 @@ function make_effect_helper(
 }
 
 function make_cache_id(candidate: MarkupCandidate): string {
-  return `${candidate.filename}:${candidate.start}:${candidate.end}`;
+  const normalized_filename = candidate.filename.replace(/[?#].*$/, "");
+
+  return `${normalized_filename}:${candidate.start}:${candidate.end}`;
 }
 
 function make_helper_name(candidate: MarkupCandidate): string {

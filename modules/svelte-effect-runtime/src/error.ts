@@ -208,3 +208,44 @@ export class YieldStarInEventCallbackError extends PreprocessError {
     this.expression_text = expression_text;
   }
 }
+
+/**
+ * Thrown when async Effect work appears in a markup position SER cannot lower
+ * safely.
+ *
+ * @example
+ * ```ts
+ * throw new UnsupportedMarkupEffectPositionError(
+ *   "Component.svelte",
+ *   "value={yield* load()}",
+ * );
+ * ```
+ *
+ * @since 2.4.2
+ */
+export class UnsupportedMarkupEffectPositionError extends PreprocessError {
+  /**
+   * The unsupported markup expression text.
+   *
+   * @since 2.4.2
+   */
+  readonly expression_text: string;
+
+  constructor(filename: string, expression_text: string) {
+    super(
+      [
+        make_error_message(
+          "UNSUPPORTED_MARKUP_EFFECT_POSITION",
+          `${filename}: yield* cannot be used in this markup position.`,
+        ),
+        `Move the Effect work into a supported expression tag, block expression, render expression, declaration tag, or event handler.`,
+        "",
+        `Problematic expression:`,
+        expression_text,
+      ].join("\n"),
+      filename,
+    );
+    this.name = "UnsupportedMarkupEffectPositionError";
+    this.expression_text = expression_text;
+  }
+}

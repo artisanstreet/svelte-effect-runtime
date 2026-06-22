@@ -7,6 +7,7 @@ import {
   analyze_event_body_yield_star,
   strip_arrow_function,
 } from "./expressions.ts";
+import { HELPERS } from "./constants.ts";
 import type { MarkupCandidate, TagKind } from "./types.ts";
 
 interface SanitizeResult {
@@ -34,7 +35,10 @@ export function sanitize_markup(
     if (open === -1) break;
 
     /** Skip braces inside <script> and <style> blocks. */
-    if (is_inside_excluded_block(content, open)) {
+    if (
+      is_inside_excluded_block(content, open) ||
+      is_inside_html_comment(content, open)
+    ) {
       cursor = open + 1;
       continue;
     }
@@ -146,6 +150,39 @@ export function sanitize_markup(
       continue;
     }
 
+    if (key === "render" && !/^\s*yield\s*\*/.test(expr_text)) {
+      const render_arg_yields = collect_expression_yield_expressions(
+        content,
+        expr_start,
+        expr_text,
+      );
+
+      if (render_arg_yields.length > 0) {
+        for (const render_arg_yield of render_arg_yields) {
+          const placeholder = `__SER___markup_placeholder_${helper_index}`;
+          helper_index += 1;
+
+          candidates.push({
+            placeholder,
+            start: render_arg_yield.start,
+            end: render_arg_yield.end,
+            expr_text: render_arg_yield.expr_text,
+            filename,
+            key: "render_argument",
+          });
+
+          magic.overwrite(
+            render_arg_yield.start,
+            render_arg_yield.end,
+            placeholder,
+          );
+        }
+
+        cursor = close + 1;
+        continue;
+      }
+    }
+
     /** Create a placeholder and replace the expression (preserving tag prefixes). */
     const placeholder = `__SER___markup_placeholder_${helper_index}`;
     helper_index += 1;
@@ -171,6 +208,49 @@ export function sanitize_markup(
   return { code: magic.toString(), candidates };
 }
 
+function collect_expression_yield_expressions(
+  content: string,
+  expr_start: number,
+  expr_text: string,
+): DeclarationYieldExpression[] {
+  const source_file = ts.createSourceFile(
+    "markup-expression.ts",
+    `const __SER___expr = ${expr_text};`,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const stmt = source_file.statements[0];
+
+  if (!stmt || !ts.isVariableStatement(stmt)) {
+    return [];
+  }
+
+  const initializer = stmt.declarationList.declarations[0]?.initializer;
+
+  if (!initializer || !contains_top_level_yield_star(initializer)) {
+    return [];
+  }
+
+  const prefix_length = source_file.text.indexOf(expr_text);
+  const expressions: DeclarationYieldExpression[] = [];
+
+  collect_yield_star_nodes(initializer, (yield_node) => {
+    const start = expr_start + yield_node.getStart(source_file) -
+      prefix_length;
+    const end = expr_start + yield_node.end - prefix_length;
+    const yielded_text = content.slice(start, end).trim();
+
+    expressions.push({
+      start,
+      end,
+      expr_text: yielded_text,
+    });
+  });
+
+  return expressions;
+}
+
 function is_inside_excluded_block(content: string, pos: number): boolean {
   const script = find_tag_end(content, "script", pos);
   const style = find_tag_end(content, "style", pos);
@@ -179,6 +259,13 @@ function is_inside_excluded_block(content: string, pos: number): boolean {
     (script !== undefined && pos < script.end && pos > script.start) ||
     (style !== undefined && pos < style.end && pos > style.start)
   );
+}
+
+function is_inside_html_comment(content: string, pos: number): boolean {
+  const open = content.lastIndexOf("<!--", pos);
+  const close = content.lastIndexOf("-->", pos);
+
+  return open !== -1 && open > close;
 }
 
 function find_tag_end(
@@ -362,6 +449,13 @@ function analyze_event_yield(
 } {
   const event = strip_arrow_function(inner);
   const analysis = analyze_event_body_yield_star(event.body);
+  const generated_run = `${HELPERS.run}(function*`;
+
+  if (event.body.includes(generated_run)) {
+    return {
+      has_top_level_yield_star: false,
+    };
+  }
 
   return {
     has_top_level_yield_star: analysis.has_top_level_yield_star ||

@@ -12,6 +12,7 @@ import { classify_candidates } from "./classify.ts";
 import { collect_effect_callback_bindings } from "./effect-bindings.ts";
 import { emit_replacements } from "./emit.ts";
 import { sanitize_markup } from "./scan.ts";
+import { UnsupportedMarkupEffectPositionError } from "$/error.ts";
 import type { MarkupTransformResult } from "./types.ts";
 
 export type { MarkupRelocation, MarkupTransformResult } from "./types.ts";
@@ -58,6 +59,20 @@ export function transform_markup_effect(
     ast,
     work.candidates,
   );
+  const matched = new Set(
+    classified.map(({ candidate }) => candidate.placeholder),
+  );
+  const unmatched = work.candidates.find((candidate) =>
+    !matched.has(candidate.placeholder)
+  );
+
+  if (unmatched) {
+    throw new UnsupportedMarkupEffectPositionError(
+      filename,
+      unmatched.expr_text,
+    );
+  }
+
   const replacements = emit_replacements(classified, effect_context);
   const helpers = replacements.flatMap((replacement) =>
     replacement.helpers ?? []

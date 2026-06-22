@@ -155,20 +155,12 @@ function visit_ast_node(
 }
 
 function classify_debug_tag(
-  node: Extract<AST.Fragment["nodes"][number], { type: "DebugTag" }>,
-  candidates: Map<string, MarkupCandidate>,
-  matched: Set<string>,
-  classified: Array<{ candidate: MarkupCandidate; kind: TagKind }>,
+  _node: Extract<AST.Fragment["nodes"][number], { type: "DebugTag" }>,
+  _candidates: Map<string, MarkupCandidate>,
+  _matched: Set<string>,
+  _classified: Array<{ candidate: MarkupCandidate; kind: TagKind }>,
 ): void {
-  const idents = node.identifiers;
-
-  if (!idents || idents.length === 0) {
-    return;
-  }
-
-  for (const ident of idents) {
-    classify_expression(ident, "plain", candidates, matched, classified);
-  }
+  return;
 }
 
 function classify_declaration_tag(
@@ -301,8 +293,22 @@ function classify_expression(
     }
 
     matched.add(candidate.placeholder);
-    classified.push({ candidate, kind });
+    classified.push({
+      candidate,
+      kind: resolve_candidate_kind(candidate, kind),
+    });
   }
+}
+
+function resolve_candidate_kind(
+  candidate: MarkupCandidate,
+  context_kind: TagKind,
+): TagKind {
+  if (candidate.key === "render_argument") {
+    return "render_argument";
+  }
+
+  return context_kind;
 }
 
 function find_candidates(

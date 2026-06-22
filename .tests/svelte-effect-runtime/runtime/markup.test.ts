@@ -117,6 +117,30 @@ Deno.test("rewrites {@render yield* fn()} as awaited snippet call", () => {
   if (!result.has_yield) throw new Error("has_yield should be true");
 });
 
+Deno.test("rewrites yield inside render tag arguments without double-calling snippet output", () => {
+  const source = [
+    `<script>let { load } = $props();</script>`,
+    `{#snippet child(value)}<p>{value}</p>{/snippet}`,
+    `{@render child(yield* load())}`,
+  ].join("");
+  const result = transform_markup_effect(source, "RenderArg.svelte");
+
+  assertStringIncludes(
+    result.code,
+    `{@render child(await __SER___markup_promise`,
+  );
+  assertStringIncludes(result.code, `return (yield* load());`);
+  if (result.code.includes(`)()}`)) {
+    throw new Error("render arguments must not double-call snippet output");
+  }
+
+  compile(result.code, {
+    filename: "RenderArg.svelte",
+    generate: "server",
+    experimental: { async: true },
+  });
+});
+
 Deno.test("rewrites {@const x = yield* expr} in const initializer", () => {
   const source = `{@const x = yield* compute()}{x}`;
   const result = transform_markup_effect(source, "Test.svelte");
@@ -590,6 +614,18 @@ Deno.test("rewrites nested yield* in non-event markup expressions", () => {
   });
 });
 
+Deno.test("tracks free identifiers inside nested generator expressions", () => {
+  const source =
+    `<p>{yield* Effect.gen(function* () { return yield* load(user); })}</p>`;
+  const result = transform_markup_effect(source, "Deps.svelte");
+
+  assertStringIncludes(result.code, `[Effect, load, user]`);
+  assertStringIncludes(
+    result.code,
+    `function* __SER___markup_effect`,
+  );
+});
+
 Deno.test("rejects unrelated matchCause receivers with nested yield*", () => {
   const source = [
     `<button onclick={yield* savePost().pipe(foo.matchCause({`,
@@ -810,6 +846,15 @@ Deno.test("is idempotent across repeated preprocess passes", () => {
   }
 });
 
+Deno.test("is idempotent for generated event handlers", () => {
+  const source = `<button onclick={yield* trackEvent()}>click</button>`;
+  const first = transform_markup_effect(source, "Event.svelte");
+  const second = transform_markup_effect(first.code, "Event.svelte");
+
+  assertEquals(second.code, first.code);
+  assertEquals(second.has_yield, false);
+});
+
 // ─── Edge cases ──────────────────────────────────────────────
 
 Deno.test("does not choke on empty yield* brace contents", () => {
@@ -838,12 +883,48 @@ Deno.test("rewrites {@html yield* expr} in raw HTML insertion", () => {
   assertStringIncludes(result.code, `renderMarkup`);
 });
 
-Deno.test("rewrites {@debug yield* expr} in debug expression", () => {
+Deno.test("rejects {@debug yield* expr} instead of emitting invalid Svelte", () => {
   const source = `{@debug yield* inspectVars()}`;
-  const result = transform_markup_effect(source, "Test.svelte");
+  const error = assertThrows(
+    () => transform_markup_effect(source, "Debug.svelte"),
+  );
 
-  assertStringIncludes(result.code, `__SER___markup_promise`);
-  assertStringIncludes(result.code, `inspectVars`);
+  assertStringIncludes(
+    error.message,
+    "[UNSUPPORTED_MARKUP_EFFECT_POSITION]:",
+  );
+  assertStringIncludes(error.message, `yield* inspectVars()`);
+});
+
+Deno.test("rejects unsupported attribute yield positions", () => {
+  const source = `<Widget value={yield* load()} />`;
+  const error = assertThrows(
+    () => transform_markup_effect(source, "Attr.svelte"),
+  );
+
+  assertStringIncludes(
+    error.message,
+    "[UNSUPPORTED_MARKUP_EFFECT_POSITION]:",
+  );
+  assertStringIncludes(error.message, `yield* load()`);
+});
+
+Deno.test("ignores yield text inside HTML comments", () => {
+  const source = `<!-- {yield* Effect.succeed("ignored")} --><p>ok</p>`;
+  const result = transform_markup_effect(source, "Comment.svelte");
+
+  assertEquals(result.code, source);
+  assertEquals(result.has_yield, false);
+});
+
+Deno.test("normalizes HMR query strings out of markup cache ids", () => {
+  const source = `<p>{yield* getValue()}</p>`;
+  const result = transform_markup_effect(source, "Page.svelte?t=12345");
+
+  assertStringIncludes(result.code, `"Page.svelte:`);
+  if (result.code.includes("Page.svelte?t=12345:")) {
+    throw new Error("cache id should not include HMR query string");
+  }
 });
 
 Deno.test("markup value starts effects during SSR to register hydratables", async () => {

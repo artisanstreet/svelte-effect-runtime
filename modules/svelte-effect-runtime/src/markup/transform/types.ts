@@ -42,7 +42,13 @@ export interface MarkupCandidate {
   key: TagKind;
 }
 
-export type TagKind = "plain" | "each" | "await" | "event" | "render";
+export type TagKind =
+  | "plain"
+  | "each"
+  | "await"
+  | "event"
+  | "render"
+  | "render_argument";
 
 export interface Replacement {
   start: number;
