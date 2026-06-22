@@ -1,6 +1,6 @@
 {
   "name": "@barekey/svelte-effect-runtime",
-  "version": "2.5.1",
+  "version": "2.6.0",
   "license": "BSD-3-Clause",
   "exports": {
     ".": "./src/mod.ts",
