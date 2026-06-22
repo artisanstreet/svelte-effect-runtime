@@ -154,19 +154,22 @@ Deno.test("preserves $state.raw(yield* expr) as raw state", () => {
   assertNotMatch(result.code, /let raw = \$derived/);
 });
 
-Deno.test("extracts bare yield const sugar into a derived value", () => {
+Deno.test("extracts bare yield const sugar into a boundary-compatible await", () => {
   const source = `const user = yield* getUser(id);`;
-  assert_transform(source, [
-    `let __SER___`,
-    `= $state<`,
-    `let user = $derived(__SER___`,
-    `= yield* getUser(id);`,
-    `import { Effect } from "effect"`,
+  const result = assert_transform(source, [
+    `function* __SER___effect_user() { return (yield* getUser(id)); }`,
     `import { get_dispatcher } from "svelte-effect-runtime/internal/generators"`,
-    `$effect(() => {`,
-    `  getUser;`,
-    `  id;`,
+    `const user = await get_dispatcher().promise({`,
+    `id: "Test.svelte:13:31"`,
+    `deps: [getUser, id]`,
+    `factory: () => __SER___effect_user()`,
   ]);
+
+  assertNotMatch(result.code, /\|\s*undefined/);
+  assertNotMatch(result.code, /let user = \$derived/);
+  assertNotMatch(result.code, /\$effect\(\(\) =>/);
+  assertNotMatch(result.code, /import \{ Effect \} from "effect"/);
+  assertNotMatch(result.code, /import \{ untrack \} from "svelte"/);
 });
 
 Deno.test("wraps lowered assignments in dependency-tracked Effect.gen", () => {

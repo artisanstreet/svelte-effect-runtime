@@ -1,5 +1,12 @@
-import ts from "typescript";
 import type { RuntimeImportBindings } from "./types.ts";
+
+import ts from "typescript";
+
+interface RuntimeImportOptions {
+  needs_dispatcher?: boolean;
+  needs_effect?: boolean;
+  needs_untrack?: boolean;
+}
 
 /**
  * Builds the import statements injected by the script preprocessor.
@@ -9,6 +16,8 @@ import type { RuntimeImportBindings } from "./types.ts";
  * @param has_dispatcher_import - Whether the user already imports
  *   `get_dispatcher`.
  * @param has_untrack_import - Whether the user already imports `untrack`.
+ * @param bindings - Local names reserved for generated runtime helpers.
+ * @param options - Runtime helper imports required by this transformed script.
  * @returns Newline-separated import statements to inject.
  */
 export function make_imports(
@@ -23,7 +32,12 @@ export function make_imports(
     program: "__SER___program",
     untrack: "untrack",
   },
+  options: RuntimeImportOptions = {},
 ): string {
+  const needs_dispatcher = options.needs_dispatcher ?? true;
+  const needs_effect = options.needs_effect ?? true;
+  const needs_untrack = options.needs_untrack ?? true;
+
   const dispatcher_import = bindings.dispatcher === "get_dispatcher"
     ? `import { get_dispatcher } from "svelte-effect-runtime/internal/generators";`
     : `import { get_dispatcher as ${bindings.dispatcher} } from "svelte-effect-runtime/internal/generators";`;
@@ -39,9 +53,9 @@ export function make_imports(
     : `import { Effect as ${bindings.effect} } from "effect";`;
 
   return [
-    !has_dispatcher_import && dispatcher_import,
-    !has_untrack_import && untrack_import,
-    effect_import,
+    needs_dispatcher && !has_dispatcher_import && dispatcher_import,
+    needs_untrack && !has_untrack_import && untrack_import,
+    needs_effect && effect_import,
   ]
     .filter(Boolean)
     .join("\n");

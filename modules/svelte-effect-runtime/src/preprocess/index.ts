@@ -70,6 +70,8 @@ export function transform_script_effect(
   const emit_types = options.emit_types ?? true;
 
   let has_effect = false;
+  let uses_dispatcher_promise = false;
+  let uses_effect_types = false;
 
   /** Phase 1: detect imports already provided by the user. */
   const has_effect_import = has_local_import_binding(
@@ -107,8 +109,13 @@ export function transform_script_effect(
   };
 
   const context: ScriptLoweringContext = {
+    filename,
+    dispatcher_name: runtime_bindings.dispatcher,
     effect_name: runtime_bindings.effect,
     emit_types,
+    next_helper_name(hint?: string) {
+      return name_allocator.reserve(make_generated_name(hint ?? "helper", ""));
+    },
     next_temp_name(hint?: string) {
       const suffix = temp_counter === 0 ? "" : `_${temp_counter}`;
       const name = make_generated_name(hint ?? String(temp_counter), suffix);
@@ -165,6 +172,10 @@ export function transform_script_effect(
     }
 
     effect_blocks.push(...lowered.effect_blocks);
+    uses_dispatcher_promise ||= lowered.uses_dispatcher_promise ?? false;
+    uses_effect_types ||= lowered.temps.some((temp) =>
+      temp.type?.includes(`${runtime_bindings.effect}.Success`) ?? false
+    );
   }
 
   if (!has_effect) {
@@ -179,24 +190,34 @@ export function transform_script_effect(
     has_dispatcher_import,
     has_untrack_import,
     runtime_bindings,
+    {
+      needs_dispatcher: effect_blocks.length > 0 || uses_dispatcher_promise,
+      needs_effect: effect_blocks.length > 0 || uses_effect_types,
+      needs_untrack: effect_blocks.length > 0,
+    },
   );
 
   const last_import = [...source_file.statements]
     .reverse()
     .find(ts.isImportDeclaration);
 
-  if (last_import) {
-    magic.appendRight(last_import.end, "\n" + imports);
-  } else {
-    magic.prepend(imports + "\n");
+  if (imports) {
+    if (last_import) {
+      magic.appendRight(last_import.end, "\n" + imports);
+    } else {
+      magic.prepend(imports + "\n");
+    }
   }
 
   /** Phase 4: append the runtime program and lifecycle wiring. */
-  const runtime_block = make_runtime_block_with_bindings(
-    effect_blocks,
-    runtime_bindings,
-  );
-  magic.append("\n" + runtime_block);
+  if (effect_blocks.length > 0) {
+    const runtime_block = make_runtime_block_with_bindings(
+      effect_blocks,
+      runtime_bindings,
+    );
+
+    magic.append("\n" + runtime_block);
+  }
 
   block_refs.push({ id: filename, kind: "script" });
 

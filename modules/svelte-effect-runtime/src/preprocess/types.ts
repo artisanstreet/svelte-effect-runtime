@@ -44,8 +44,10 @@ export interface TempBinding {
 export interface LoweredStatement {
   /** `$state` bindings to emit at component scope. */
   temps: TempBinding[];
-  /** Helper declarations used only for generated temp types. */
+  /** Helper declarations to emit before the rewritten statement. */
   type_helpers?: string[];
+  /** Whether the rewritten statement directly awaits a dispatcher promise. */
+  uses_dispatcher_promise?: boolean;
   /** The rewritten statement text with yield* replaced by temp refs. */
   rewritten_text: string;
   /** Effect bodies to emit in dependency-tracked runtime blocks. */
@@ -85,9 +87,14 @@ export interface LoweredExpression {
  * @since 2.0.0
  */
 export interface ScriptLoweringContext {
+  /** Source filename used for stable generated runtime ids. */
+  filename: string;
+  /** Binding name used for the dispatcher factory in generated code. */
+  dispatcher_name: string;
   effect_name: string;
   /** Whether generated state placeholders should carry TypeScript types. */
   emit_types: boolean;
+  next_helper_name(hint?: string): string;
   next_temp_name(hint?: string): string;
   next_type_helper_name(hint?: string): string;
 }

@@ -64,6 +64,7 @@ function lower_variable_statement(
   const decl_list = stmt.declarationList;
   const kind = (decl_list.flags & ts.NodeFlags.Let) !== 0 ? "let" : "const";
   let has_bare_yield = false;
+  let uses_dispatcher_promise = false;
 
   for (const decl of decl_list.declarations) {
     if (!decl.initializer || !contains_top_level_yield_star(decl.initializer)) {
@@ -94,6 +95,20 @@ function lower_variable_statement(
       const original_name = binding_text;
 
       if (is_yield_star_expression(decl.initializer)) {
+        if (kind === "const") {
+          const awaited = make_awaited_yield_initializer(
+            decl.initializer,
+            content,
+            original_name,
+            context,
+          );
+
+          type_helpers.push(awaited.declaration);
+          rewritten_decls.push(`${original_name} = ${awaited.expression}`);
+          uses_dispatcher_promise = true;
+          continue;
+        }
+
         const temp_name = context.next_temp_name(original_name);
         const yield_text = extract_yield_star_full_text(
           decl.initializer,
@@ -226,6 +241,7 @@ function lower_variable_statement(
     effect_blocks: statements.length === 0
       ? []
       : [make_effect_block(statements, deps)],
+    uses_dispatcher_promise,
     range: { start: stmt.getStart(), end: stmt.end },
   };
 }
@@ -420,6 +436,30 @@ function lower_expression_yields(
   };
 }
 
+function make_awaited_yield_initializer(
+  expr: ts.Expression,
+  content: string,
+  hint: string,
+  context: ScriptLoweringContext,
+): { declaration: string; expression: string } {
+  const yield_text = extract_yield_star_full_text(expr, content);
+  const helper_name = context.next_helper_name(`effect_${hint}`);
+  const helper_id = make_script_effect_id(expr, context);
+  const deps = collect_deps(yield_text);
+  const deps_text = `[${deps.join(", ")}]`;
+
+  return {
+    declaration: `function* ${helper_name}() { return (${yield_text}); }`,
+    expression: [
+      `await ${context.dispatcher_name}().promise({`,
+      `id: ${JSON.stringify(helper_id)}, `,
+      `deps: ${deps_text}, `,
+      `factory: () => ${helper_name}()`,
+      `})`,
+    ].join(""),
+  };
+}
+
 function make_yield_type_helper(
   yield_text: string,
   hint: string,
@@ -467,6 +507,13 @@ function make_state_placeholder(
 
 function strip_yield_star(yield_text: string): string {
   return yield_text.replace(/^yield\*\s*/, "");
+}
+
+function make_script_effect_id(
+  expr: ts.Expression,
+  context: ScriptLoweringContext,
+): string {
+  return `${context.filename}:${expr.getStart()}:${expr.end}`;
 }
 
 function rewrite_state_rune_as_derived(expression: string): string {
