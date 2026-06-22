@@ -1,5 +1,5 @@
-import { transform_markup_effect } from "$/markup/transform.ts";
 import { transform_script_effect } from "$/preprocess.ts";
+import { transform_svelte_effect } from "./transform.ts";
 
 /**
  * Result returned by the Svelte markup preprocessor hook.
@@ -41,61 +41,11 @@ export function preprocess(): PreprocessGroup {
 
     markup({ content, filename }: { content: string; filename?: string }) {
       const resolved_filename = filename ?? "unknown.svelte";
-      const script = find_script(content);
-
-      let combined = content;
-
-      if (script?.has_effect) {
-        const result = transform_script_effect(script.text, resolved_filename);
-
-        combined = content.slice(0, script.effect_attr_start) +
-          content.slice(script.effect_attr_end, script.open_end) +
-          result.code +
-          content.slice(script.close_start);
-      }
-
-      const result = transform_markup_effect(combined, resolved_filename);
+      const result = transform_svelte_effect(content, resolved_filename);
 
       return { code: result.code };
     },
   };
-}
-
-function find_script(content: string):
-  | {
-    text: string;
-    open_end: number;
-    close_start: number;
-    has_effect: boolean;
-    effect_attr_start: number;
-    effect_attr_end: number;
-  }
-  | undefined {
-  const pattern = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi;
-
-  for (const match of content.matchAll(pattern)) {
-    if (match.index === undefined || /\bmodule\b/.test(match[1] ?? "")) {
-      continue;
-    }
-
-    const attrs = match[1] ?? "";
-    const effect_match = /\s+effect(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?/
-      .exec(attrs);
-    const open_end = match.index + match[0].indexOf(">") + 1;
-    const attr_start = effect_match?.index ?? attrs.length;
-    const attr_end = attr_start + (effect_match?.[0].length ?? 0);
-
-    return {
-      text: match[2],
-      open_end,
-      close_start: match.index + match[0].lastIndexOf("<"),
-      has_effect: effect_match !== null,
-      effect_attr_start: match.index + "<script".length + attr_start,
-      effect_attr_end: match.index + "<script".length + attr_end,
-    };
-  }
-
-  return undefined;
 }
 
 export {
@@ -108,3 +58,8 @@ export {
   type MarkupTransformResult,
   transform_markup_effect,
 } from "$/markup/transform.ts";
+
+export {
+  type SvelteTransformResult,
+  transform_svelte_effect,
+} from "./transform.ts";

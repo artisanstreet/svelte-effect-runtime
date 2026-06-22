@@ -1,4 +1,4 @@
-import { preprocess } from "./runtime/preprocess.ts";
+import { transform_svelte_effect } from "./runtime/transform.ts";
 import type { Plugin } from "vite";
 
 /**
@@ -30,17 +30,15 @@ export interface EffectOptions {
  */
 export function effect(options?: EffectOptions): Plugin[] {
   return [
-    make_svelte_preprocess_plugin(),
+    make_svelte_transform_plugin(),
     make_server_rewrite_plugin(),
     make_remote_client_wrapper_plugin(options),
   ];
 }
 
-function make_svelte_preprocess_plugin(): Plugin {
-  const group = preprocess();
-
+function make_svelte_transform_plugin(): Plugin {
   return {
-    name: "svelte-effect-runtime:svelte-preprocess",
+    name: "svelte-effect-runtime:svelte-transform",
     enforce: "pre",
 
     transform: {
@@ -50,7 +48,7 @@ function make_svelte_preprocess_plugin(): Plugin {
           return undefined;
         }
 
-        const result = group.markup({ content: code, filename: id });
+        const result = transform_svelte_effect(code, id);
 
         if (result.code === code) {
           return undefined;
