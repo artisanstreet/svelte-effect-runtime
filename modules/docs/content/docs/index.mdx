@@ -25,11 +25,9 @@ Skip it for components that only need simple local state. Plain Svelte is still 
 
 ## Three-minute setup
 
-Install the package, add the Svelte preprocessor, and add the Vite plugin before `sveltekit()`:
+Install the package, enable Svelte async rendering, and add the Vite plugin before `sveltekit()`:
 
 ```js
-import { preprocess } from "svelte-effect-runtime";
-
 export default {
   compilerOptions: {
     experimental: {
@@ -41,7 +39,6 @@ export default {
       remoteFunctions: true,
     },
   },
-  preprocess: [preprocess()],
 };
 ```
 
@@ -103,7 +100,7 @@ export const get_profile = Query(ProfileInput, ({ user_id }) =>
 
 ## Common mistakes
 
-- Add `preprocess: [preprocess()]` in `svelte.config.js`; that is what lowers component `yield*`.
+- Add `effect()` in `vite.config.ts`; that is what lowers component `yield*`.
 - Put `effect()` before `sveltekit()` in `vite.config.ts`; the plugin wraps server and remote-client code.
 - Add the `effect` attribute to any component script that uses top-level `yield*`.
 - Use remote functions for server work instead of importing server-only services into browser components.

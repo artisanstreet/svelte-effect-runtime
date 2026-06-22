@@ -154,7 +154,7 @@ export const get_snapshot = Prerender(
 );
 `;
 
-const vite_config = `import { effect, preprocess } from "svelte-effect-runtime";
+const vite_config = `import { effect } from "svelte-effect-runtime";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig } from "vite";
 
@@ -173,7 +173,6 @@ export default defineConfig({
       experimental: {
         remoteFunctions: true,
       },
-      preprocess: [preprocess()],
     }),
   ],
 });

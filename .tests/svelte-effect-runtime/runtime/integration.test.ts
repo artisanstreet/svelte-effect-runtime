@@ -1,16 +1,16 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import {
-  preprocess,
   transform_markup_effect,
   transform_script_effect,
-} from "../../../modules/svelte-effect-runtime/src/runtime/preprocess.ts";
+  transform_svelte_effect,
+} from "../../../modules/svelte-effect-runtime/src/runtime/transform.ts";
 import {
   effect,
   rewrite_remote_client_exports,
 } from "../../../modules/svelte-effect-runtime/src/vite.ts";
 import { parse } from "svelte/compiler";
 
-// ─── Full pipeline ─────────────────────────────────────────────
+/** Full pipeline. */
 
 Deno.test("full pipeline: script lowered output feeds into markup pass", () => {
   const script_content = `
@@ -50,7 +50,7 @@ Deno.test("full pipeline: script lowered output feeds into markup pass", () => {
   if (!result.has_yield) throw new Error("markup pass should detect yield*");
 });
 
-Deno.test("full pipeline: both preprocessors agree on has_yield", () => {
+Deno.test("full pipeline: script and markup transforms agree on has_yield", () => {
   const script = `
     const x = $state(yield* compute());
   `.trim();
@@ -93,8 +93,7 @@ Deno.test("full pipeline: markup-only passes through script unchanged", () => {
   if (result.code !== markup) throw new Error("expected identity output");
 });
 
-Deno.test("preprocess hook only lowers script effect and removes effect attribute", () => {
-  const group = preprocess();
+Deno.test("direct svelte transform lowers script effect and removes effect attribute", () => {
   const source = [
     `<script lang="ts" effect>`,
     `  let value = $state(yield* loadValue());`,
@@ -102,7 +101,7 @@ Deno.test("preprocess hook only lowers script effect and removes effect attribut
     `<p>{value}</p>`,
   ].join("\n");
 
-  const result = group.markup({ content: source, filename: "Test.svelte" });
+  const result = transform_svelte_effect(source, "Test.svelte");
 
   assertStringIncludes(result.code, `<script lang="ts">`);
   assertStringIncludes(result.code, `__SER___program`);
@@ -111,11 +110,10 @@ Deno.test("preprocess hook only lowers script effect and removes effect attribut
   }
 });
 
-Deno.test("preprocess hook accepts optional filename", () => {
-  const group = preprocess();
+Deno.test("direct svelte transform accepts optional filename", () => {
   const source = `<p>{yield* loadValue()}</p>`;
 
-  const result = group.markup({ content: source });
+  const result = transform_svelte_effect(source);
 
   assertStringIncludes(result.code, `__SER___markup_value`);
 });
@@ -246,7 +244,7 @@ Deno.test("root entry exposes server helpers for rewritten server imports", asyn
   assertEquals(typeof root.RequestEvent, "function");
 });
 
-Deno.test("package manifests expose vite entrypoint", async () => {
+Deno.test("package manifests expose vite and transform entrypoints", async () => {
   const package_manifest = JSON.parse(
     await Deno.readTextFile(
       "../../modules/svelte-effect-runtime/package.json",
@@ -262,7 +260,18 @@ Deno.test("package manifests expose vite entrypoint", async () => {
     types: "./.dist/vite.d.ts",
     default: "./.dist/vite.js",
   });
+  assertEquals(package_manifest.exports["./runtime/transform"], {
+    types: "./.dist/runtime/transform.d.ts",
+    default: "./.dist/runtime/transform.js",
+  });
+  assertEquals(package_manifest.exports["./runtime/preprocess"], undefined);
+
   assertEquals(deno_manifest.exports["./vite"], "./src/vite.ts");
+  assertEquals(
+    deno_manifest.exports["./runtime/transform"],
+    "./src/runtime/transform.ts",
+  );
+  assertEquals(deno_manifest.exports["./runtime/preprocess"], undefined);
 });
 
 Deno.test("vite entrypoint defers svelte transformer import until transform hook", async () => {

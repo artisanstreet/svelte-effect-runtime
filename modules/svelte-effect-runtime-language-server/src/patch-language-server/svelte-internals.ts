@@ -87,7 +87,7 @@ function resolve_runtime_import_root(package_root: string) {
   if (
     typeof Deno !== "undefined" &&
     existsSync(
-      path.join(workspace_runtime_source_root, "runtime", "preprocess.ts"),
+      path.join(workspace_runtime_source_root, "runtime", "transform.ts"),
     )
   ) {
     return workspace_runtime_source_root;

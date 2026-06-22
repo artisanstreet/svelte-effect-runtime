@@ -19,14 +19,10 @@ Check the script tag and plugin order:
 plugins: [effect(), sveltekit()]
 ```
 
-Also check that `svelte.config.js` includes the preprocessor:
+If another Vite plugin parses Svelte files, make sure `effect()` runs first:
 
-```js
-import { preprocess } from "svelte-effect-runtime";
-
-export default {
-  preprocess: [preprocess()],
-};
+```ts
+plugins: [effect(), otherParserPlugin(), sveltekit()]
 ```
 
 ## Remote functions do not resolve

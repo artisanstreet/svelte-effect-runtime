@@ -6,7 +6,7 @@
     ".": "./src/mod.ts",
     "./server": "./src/server.ts",
     "./vite": "./src/vite.ts",
-    "./runtime/preprocess": "./src/runtime/preprocess.ts",
+    "./runtime/transform": "./src/runtime/transform.ts",
     "./internal/generators": "./src/internal/generators.ts",
     "./internal/remote-client": "./src/internal/remote-client.ts",
     "./internal/remote-server": "./src/internal/remote-server.ts"
@@ -16,7 +16,7 @@
   },
   "tasks": {
     "build": "deno task clean && deno run -A ../../build/runtime.ts && deno run -A npm:typescript@^6.0.0/tsc -p tsconfig.build.json --emitDeclarationOnly && deno run -A ../../build/rewrite-runtime-dts.ts",
-    "check": "deno check --node-modules-dir=auto src/mod.ts src/runtime/preprocess.ts src/internal/generators.ts src/internal/remote-client.ts src/internal/remote-server.ts src/detect.ts src/dispatcher.ts src/generators.ts src/preprocess.ts src/vite.ts src/remote/shared.ts src/remote/server.ts src/remote/client.ts src/markup/transform.ts src/markup/value.ts src/markup/promise.ts src/markup/run.ts",
+    "check": "deno check --node-modules-dir=auto src/mod.ts src/runtime/transform.ts src/internal/generators.ts src/internal/remote-client.ts src/internal/remote-server.ts src/detect.ts src/dispatcher.ts src/generators.ts src/preprocess.ts src/vite.ts src/remote/shared.ts src/remote/server.ts src/remote/client.ts src/markup/transform.ts src/markup/value.ts src/markup/promise.ts src/markup/run.ts",
     "clean": "rm -rf ../../.dist/svelte-effect-runtime",
     "test": "cd ../../.tests/svelte-effect-runtime && deno test --no-check -A runtime",
     "fmt": "deno fmt",

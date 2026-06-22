@@ -13,7 +13,7 @@ import { ClientRuntime } from "svelte-effect-runtime";
 
 `ClientRuntime.make(...)` is the only symbol most apps need. The
 `get_effect_runtime_or_throw`, `run_component_effect`, and
-`run_inline_effect` helpers are emitted by the preprocessor; they are
+`run_inline_effect` helpers are emitted by the Vite transform; they are
 exported for completeness but are **not** intended for hand-written
 imports.
 
@@ -84,7 +84,7 @@ again disposes the previous runtime and installs the new one.
 
 ## Internal helpers
 
-These are emitted by the preprocessor; they exist on the public surface
+These are emitted by the Vite transform; they exist on the public surface
 only so generated code can import them.
 
 ```ts
