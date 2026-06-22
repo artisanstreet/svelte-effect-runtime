@@ -281,7 +281,7 @@ Deno.test("preserves surrounding assignment RHS expressions", () => {
   assertStringIncludes(result.code, `let __SER___value = $state(undefined);`);
   assertStringIncludes(result.code, `__SER___value = yield* loadValue();`);
   assertStringIncludes(result.code, `value = (__SER___value) + 1;`);
-  assertNotMatch(result.code, /^    value = yield\* loadValue\(\);$/m);
+  assertNotMatch(result.code, /^\s{4}value = yield\* loadValue\(\);$/m);
 });
 
 Deno.test("runs compound assignments after yielded operands resolve", () => {
