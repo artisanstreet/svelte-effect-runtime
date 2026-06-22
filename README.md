@@ -24,10 +24,12 @@ Write effectful code without any hassle. Seriously!
 </script>
 
 <ScrollArea>
+  {const currency = getUser().preferredCurrency}
+  
   {#each yield* GetAllStocks as stock}
     {const liveQuery = yield* GetLivePrice(stock.ticker);
     {const price = liveQuery.current ?? stock.initialPrice}
-    {const currency = getUser().preferredCurrency}
+
     <StockCard.Root>
       <StockCard.Header>{stock.name}</StockCard.Header>
       <StockCard.Price>{price} {currency.displayName}</StockCard.Price>
