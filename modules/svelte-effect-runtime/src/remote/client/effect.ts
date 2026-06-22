@@ -18,9 +18,9 @@ import {
  * @param run - Promise-producing operation that invokes a native remote helper.
  * @returns Effect that maps thrown values into remote failures.
  */
-export function make_effect_from_promise<Output>(
+export function make_effect_from_promise<Output, ErrorType = never>(
   run: () => Promise<Output>,
-): Effect.Effect<Output, RemoteFailure<unknown>> {
+): Effect.Effect<Output, RemoteFailure<ErrorType>> {
   return Effect.tryPromise({
     try: run,
     catch: (error: unknown) => {
@@ -28,7 +28,7 @@ export function make_effect_from_promise<Output>(
         return error;
       }
 
-      return normalize_native_error(error);
+      return normalize_native_error<ErrorType>(error);
     },
-  }) as Effect.Effect<Output, RemoteFailure<unknown>>;
+  }) as Effect.Effect<Output, RemoteFailure<ErrorType>>;
 }

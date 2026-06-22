@@ -31,14 +31,11 @@
     "npm:rolldown@*": "1.0.3",
     "npm:rolldown@^1.0.0-rc.13": "1.0.3",
     "npm:svelte-language-server@~0.17.30": "0.17.30_prettier@3.3.3_svelte@4.2.20_typescript@5.9.3",
-    "npm:svelte@*": "5.56.0",
-    "npm:svelte@^5.55.1": "5.56.0",
     "npm:svelte@^5.56.0": "5.56.0",
     "npm:tailwindcss@4": "4.3.0",
     "npm:typescript@*": "6.0.3",
     "npm:typescript@6": "6.0.3",
     "npm:typescript@^5.8.0": "5.9.3",
-    "npm:typescript@^5.9.2": "5.9.3",
     "npm:vite@8": "8.0.16_@types+node@24.12.2_esbuild@0.28.0",
     "npm:vscode-languageclient@9.0.1": "9.0.1",
     "npm:vscode-languageserver@9.0.1": "9.0.1"
@@ -1245,6 +1242,9 @@
       "integrity": "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="
     },
     "@sveltejs/acorn-typescript@1.0.10_acorn@8.16.0": {
+      "integrity": "sha512-4WfKk68eTih+MiJD4fSbxN7E8kVBmTMPWHUPYjvl2N0rMs53YLTT8/YjKU5Dtnz5LqDjl7LEw4U7lXR2W3J5WA=="
+    },
+    "@sveltejs/acorn-typescript@1.0.10_acorn@8.17.0": {
       "integrity": "sha512-4WfKk68eTih+MiJD4fSbxN7E8kVBmTMPWHUPYjvl2N0rMs53YLTT8/YjKU5Dtnz5LqDjl7LEw4U7lXR2W3J5WA==",
       "dependencies": [
         "acorn"
@@ -1254,7 +1254,7 @@
       "integrity": "sha512-dcEulvtFYFqCRUpLLSB9AT+S0tjsLjAkr69qfxkvdK9RU+AmL1PvzP4b/jk+9xQUW7CuCSLC3XDa84lHHW8G9A==",
       "dependencies": [
         "@standard-schema/spec",
-        "@sveltejs/acorn-typescript",
+        "@sveltejs/acorn-typescript@1.0.10_acorn@8.16.0",
         "@sveltejs/vite-plugin-svelte",
         "acorn",
         "cookie",
@@ -1476,14 +1476,14 @@
     "@vscode/l10n@0.0.18": {
       "integrity": "sha512-KYSIHVmslkaCDyw013pphY+d7x1qV8IZupYfeIfzNA+nsaWHbn5uPuQRvdRFsa9zFzGeudPuoGoZ1Op4jrJXIQ=="
     },
-    "acorn-jsx@5.3.2_acorn@8.16.0": {
+    "acorn-jsx@5.3.2_acorn@8.17.0": {
       "integrity": "sha512-rq9s+JNhf0IChjtDXxllJ7g41oZk5SlXtp0LHwyA5cejwn7vKmKp4pPri6YEePv2PU65sAsegbXtIinmDFDXgQ==",
       "dependencies": [
         "acorn"
       ]
     },
-    "acorn@8.16.0": {
-      "integrity": "sha512-UVJyE9MttOsBQIDKw1skb9nAwQuR5wuGD3+82K6JgJlm/Y+KI92oNsMNGZCYdDsVtRHSak0pcV5Dno5+4jh9sw==",
+    "acorn@8.17.0": {
+      "integrity": "sha512-xRQbDb9BnwDafYNn6Vwl839DYVjqXYb1XVGtWAZ1kcDc6iwAL4hg3B1dZlRiuENFeO2H53gFG3in621AdERVAg==",
       "bin": true
     },
     "argparse@2.0.1": {
@@ -3000,7 +3000,7 @@
         "vfile"
       ]
     },
-    "recma-jsx@1.0.1_acorn@8.16.0": {
+    "recma-jsx@1.0.1_acorn@8.17.0": {
       "integrity": "sha512-huSIy7VU2Z5OLv6oFLosQGGDqPqdO1iq6bWNAdhzMxSJP7RAso4fCZ1cKu8j9YHCZf3TPrq4dw3okhrylgcd7w==",
       "dependencies": [
         "acorn",
@@ -3304,7 +3304,7 @@
       "dependencies": [
         "@jridgewell/remapping",
         "@jridgewell/sourcemap-codec",
-        "@sveltejs/acorn-typescript",
+        "@sveltejs/acorn-typescript@1.0.10_acorn@8.17.0",
         "@types/estree",
         "@types/trusted-types",
         "acorn",
@@ -3722,6 +3722,8 @@
             "npm:magic-string@~0.30.21",
             "npm:rolldown@^1.0.0-rc.13",
             "npm:svelte-language-server@~0.17.30",
+            "npm:svelte@^5.56.0",
+            "npm:typescript@6",
             "npm:vscode-languageserver@9.0.1"
           ]
         }
@@ -3732,8 +3734,8 @@
             "npm:@jridgewell/trace-mapping@~0.3.31",
             "npm:magic-string@~0.30.21",
             "npm:svelte-language-server@~0.17.30",
-            "npm:svelte@^5.55.1",
-            "npm:typescript@^5.9.2",
+            "npm:svelte@^5.56.0",
+            "npm:typescript@6",
             "npm:vscode-languageclient@9.0.1",
             "npm:vscode-languageserver@9.0.1"
           ]

@@ -22,15 +22,18 @@ import type {
   EffectRemoteBatchHandler,
   EffectRemoteCommand,
   EffectRemoteForm,
+  EffectRemoteFunction,
   EffectRemoteLiveQuery,
   EffectRemoteLiveQueryFunction,
   EffectRemoteLiveQueryResource,
-  EffectRemoteLiveSource,
   EffectRemoteQuery,
   EffectRemoteQueryFunction,
   PrerenderOptions,
+  QueryFactory,
   RemoteFormHandler,
   RemoteHandler,
+  RemoteLiveHandler,
+  SchemaEncodedInput,
   SchemaInput,
 } from "./types.ts";
 
@@ -63,37 +66,13 @@ type OptionalFormKeys<Value> = {
 
 type NativeQueryLike<Input = unknown> = (input: Input) => unknown;
 
-type EffectRemoteResource<Output> =
+type EffectRemoteResource<Output, ErrorType = never> =
   | EffectRemoteLiveQueryResource<Output>
-  | EffectRemoteQuery<Output>;
+  | EffectRemoteQuery<Output, ErrorType>;
 
-type RemoteLiveHandler<Input = unknown, A = unknown> =
-  | EffectLike<EffectRemoteLiveSource<A>>
-  | EffectRemoteLiveSource<A>
-  | ((input: Input) =>
-    | EffectLike<EffectRemoteLiveSource<A>>
-    | EffectRemoteLiveSource<A>);
-
-interface QueryFactory {
-  <A>(
-    validate_or_handler: EffectLike<A> | RemoteHandler<void, A>,
-  ): EffectRemoteQueryFunction<void, A>;
-  <Input, A>(
-    validate_or_handler: "unchecked",
-    maybe_handler: RemoteHandler<Input, A>,
-  ): EffectRemoteQueryFunction<Input, A>;
-  <S extends Schema.Schema<unknown>, A>(
-    validate_or_handler: S,
-    maybe_handler: RemoteHandler<SchemaInput<S>, A>,
-  ): EffectRemoteQueryFunction<SchemaInput<S>, A>;
-
-  readonly batch: typeof QueryBatch;
-  readonly live: typeof QueryLive;
-}
-
-function to_effect_query<Input, Output>(
+function to_effect_query<Input, Output, ErrorType = never>(
   native: NativeQueryLike<Input>,
-): EffectRemoteQueryFunction<Input, Output> {
+): EffectRemoteQueryFunction<Input, Output, ErrorType> {
   const wrapped = ((input: Input) => {
     if (is_current_remote_request()) {
       return (native as (input: Input) => unknown)(input);
@@ -103,12 +82,12 @@ function to_effect_query<Input, Output>(
     const effect = Effect.tryPromise({
       try: () => Promise.resolve(resource),
       catch: (error: unknown) => error,
-    }) as unknown as EffectRemoteQuery<Output>;
+    }) as unknown as EffectRemoteQuery<Output, ErrorType>;
 
     attach_query_resource_methods(resource, effect);
 
     return effect;
-  }) as unknown as EffectRemoteQueryFunction<Input, Output>;
+  }) as unknown as EffectRemoteQueryFunction<Input, Output, ErrorType>;
 
   copy_property_descriptors(native, wrapped);
 
@@ -129,23 +108,25 @@ function is_current_remote_request(): boolean {
   }
 }
 
-function to_effect_live_query<Input, Output>(
+function to_effect_live_query<Input, Output, ErrorType = never>(
   native: NativeQueryLike<Input>,
-): EffectRemoteLiveQueryFunction<Input, Output> {
-  const wrapped = ((input: Input) =>
-    Effect.try({
+): EffectRemoteLiveQueryFunction<Input, Output, ErrorType> {
+  const wrapped = ((input: Input) => {
+    const effect = Effect.try({
       try: () => {
         const resource = (native as (input: Input) => unknown)(input);
 
         return make_live_resource<Output>(resource);
       },
       catch: (error: unknown) => error,
-    }) as unknown as EffectRemoteLiveQuery<
-      Output
-    >) as unknown as EffectRemoteLiveQueryFunction<
-      Input,
-      Output
-    >;
+    }) as unknown as EffectRemoteLiveQuery<Output, ErrorType>;
+
+    return effect;
+  }) as unknown as EffectRemoteLiveQueryFunction<
+    Input,
+    Output,
+    ErrorType
+  >;
 
   copy_property_descriptors(native, wrapped);
 
@@ -196,9 +177,9 @@ function is_live_resource<Output>(
   );
 }
 
-function attach_remote_resource_getters<Output>(
+function attach_remote_resource_getters<Output, ErrorType = never>(
   resource: unknown,
-  effect: EffectRemoteResource<Output>,
+  effect: EffectRemoteResource<Output, ErrorType>,
 ): void {
   const methods = is_query_resource<Output>(resource) ? resource : undefined;
   const keys = ["current", "error", "loading", "ready"] as const;
@@ -219,9 +200,9 @@ function attach_remote_resource_getters<Output>(
   }
 }
 
-function attach_query_resource_methods<Output>(
+function attach_query_resource_methods<Output, ErrorType = never>(
   resource: unknown,
-  effect: EffectRemoteQuery<Output>,
+  effect: EffectRemoteQuery<Output, ErrorType>,
 ): void {
   const methods = is_query_resource<Output>(resource) ? resource : undefined;
   const refresh = methods?.refresh;
@@ -336,17 +317,17 @@ function make_live_resource<Output>(
  * @param maybe_handler - Handler used when a validator is supplied.
  * @returns A SvelteKit query function.
  */
-function QueryRoot<A>(
-  validate_or_handler: EffectLike<A> | RemoteHandler<void, A>,
-): EffectRemoteQueryFunction<void, A>;
-function QueryRoot<Input, A>(
+function QueryRoot<A, E = never, R = never>(
+  validate_or_handler: EffectLike<A, E, R> | RemoteHandler<void, A, E, R>,
+): EffectRemoteQueryFunction<void, A, E>;
+function QueryRoot<Input, A, E = never, R = never>(
   validate_or_handler: "unchecked",
-  maybe_handler: RemoteHandler<Input, A>,
-): EffectRemoteQueryFunction<Input, A>;
-function QueryRoot<S extends Schema.Schema<unknown>, A>(
+  maybe_handler: RemoteHandler<Input, A, E, R>,
+): EffectRemoteQueryFunction<Input, A, E>;
+function QueryRoot<S extends Schema.Schema<unknown>, A, E = never, R = never>(
   validate_or_handler: S,
-  maybe_handler: RemoteHandler<SchemaInput<S>, A>,
-): EffectRemoteQueryFunction<SchemaInput<S>, A>;
+  maybe_handler: RemoteHandler<SchemaInput<S>, A, E, R>,
+): EffectRemoteQueryFunction<SchemaEncodedInput<S>, A, E>;
 function QueryRoot(
   validate_or_handler: unknown,
   maybe_handler?: RemoteHandler,
@@ -384,14 +365,14 @@ function QueryRoot(
  * @param maybe_handler - Handler receiving validated inputs as one batch.
  * @returns A SvelteKit batch query function.
  */
-function QueryBatch<Input, A>(
+function QueryBatch<Input, A, E = never, R = never>(
   validate_or_handler: "unchecked",
-  maybe_handler: EffectRemoteBatchHandler<Input, A>,
-): EffectRemoteQueryFunction<Input, A>;
-function QueryBatch<S extends Schema.Schema<unknown>, A>(
+  maybe_handler: EffectRemoteBatchHandler<Input, A, E, R>,
+): EffectRemoteQueryFunction<Input, A, E>;
+function QueryBatch<S extends Schema.Schema<unknown>, A, E = never, R = never>(
   validate_or_handler: S,
-  maybe_handler: EffectRemoteBatchHandler<SchemaInput<S>, A>,
-): EffectRemoteQueryFunction<SchemaInput<S>, A>;
+  maybe_handler: EffectRemoteBatchHandler<SchemaInput<S>, A, E, R>,
+): EffectRemoteQueryFunction<SchemaEncodedInput<S>, A, E>;
 function QueryBatch(
   validate_or_handler: unknown,
   maybe_handler?: EffectRemoteBatchHandler,
@@ -423,17 +404,17 @@ function QueryBatch(
  * @param maybe_handler - Handler used when a validator is supplied.
  * @returns A SvelteKit live query function.
  */
-function QueryLive<A>(
-  validate_or_handler: RemoteLiveHandler<void, A>,
-): EffectRemoteLiveQueryFunction<void, A>;
-function QueryLive<Input, A>(
+function QueryLive<A, E = never, R = never>(
+  validate_or_handler: RemoteLiveHandler<void, A, E, R>,
+): EffectRemoteLiveQueryFunction<void, A, E>;
+function QueryLive<Input, A, E = never, R = never>(
   validate_or_handler: "unchecked",
-  maybe_handler: RemoteLiveHandler<Input, A>,
-): EffectRemoteLiveQueryFunction<Input, A>;
-function QueryLive<S extends Schema.Schema<unknown>, A>(
+  maybe_handler: RemoteLiveHandler<Input, A, E, R>,
+): EffectRemoteLiveQueryFunction<Input, A, E>;
+function QueryLive<S extends Schema.Schema<unknown>, A, E = never, R = never>(
   validate_or_handler: S,
-  maybe_handler: RemoteLiveHandler<SchemaInput<S>, A>,
-): EffectRemoteLiveQueryFunction<SchemaInput<S>, A>;
+  maybe_handler: RemoteLiveHandler<SchemaInput<S>, A, E, R>,
+): EffectRemoteLiveQueryFunction<SchemaEncodedInput<S>, A, E>;
 function QueryLive(
   validate_or_handler: unknown,
   maybe_handler?: RemoteLiveHandler,
@@ -495,17 +476,22 @@ export const Query: QueryFactory = Object.assign(QueryRoot, {
  * @param maybe_handler - Handler used when a validator is supplied.
  * @returns A SvelteKit command function.
  */
-export function Command<A>(
-  validate_or_handler: EffectLike<A> | RemoteHandler<void, A>,
-): EffectRemoteCommand<void, A>;
-export function Command<Input, A>(
+export function Command<A, E = never, R = never>(
+  validate_or_handler: EffectLike<A, E, R> | RemoteHandler<void, A, E, R>,
+): EffectRemoteCommand<void, A, E>;
+export function Command<Input, A, E = never, R = never>(
   validate_or_handler: "unchecked",
-  maybe_handler: RemoteHandler<Input, A>,
-): EffectRemoteCommand<Input, A>;
-export function Command<S extends Schema.Schema<unknown>, A>(
+  maybe_handler: RemoteHandler<Input, A, E, R>,
+): EffectRemoteCommand<Input, A, E>;
+export function Command<
+  S extends Schema.Schema<unknown>,
+  A,
+  E = never,
+  R = never,
+>(
   validate_or_handler: S,
-  maybe_handler: RemoteHandler<SchemaInput<S>, A>,
-): EffectRemoteCommand<SchemaInput<S>, A>;
+  maybe_handler: RemoteHandler<SchemaInput<S>, A, E, R>,
+): EffectRemoteCommand<SchemaEncodedInput<S>, A, E>;
 export function Command(
   validate_or_handler: unknown,
   maybe_handler?: RemoteHandler,
@@ -556,20 +542,20 @@ export function Command(
  * @param maybe_handler - Handler used when a validator is supplied.
  * @returns A SvelteKit form function.
  */
-export function Form<A>(
-  validate_or_handler: EffectLike<A> | RemoteFormHandler<void, A>,
-): EffectRemoteForm<void, A>;
-export function Form<Input extends RemoteFormInput, A>(
+export function Form<A, E = never, R = never>(
+  validate_or_handler: EffectLike<A, E, R> | RemoteFormHandler<void, A, E, R>,
+): EffectRemoteForm<void, A, E>;
+export function Form<Input extends RemoteFormInput, A, E = never, R = never>(
   validate_or_handler: "unchecked",
-  maybe_handler: RemoteFormHandler<Input, A>,
-): EffectRemoteForm<Input, A>;
-export function Form<S extends Schema.Top, A>(
+  maybe_handler: RemoteFormHandler<Input, A, E, R>,
+): EffectRemoteForm<Input, A, E>;
+export function Form<S extends Schema.Top, A, E = never, R = never>(
   validate_or_handler: S,
-  maybe_handler: RemoteFormHandler<SchemaInput<S>, A>,
-): EffectRemoteForm<FormSchemaEncodedInput<S>, A>;
+  maybe_handler: RemoteFormHandler<SchemaInput<S>, A, E, R>,
+): EffectRemoteForm<FormSchemaEncodedInput<S>, A, E>;
 export function Form(
   validate_or_handler: unknown,
-  maybe_handler?: RemoteFormHandler<never, unknown>,
+  maybe_handler?: RemoteFormHandler<unknown, unknown, unknown, unknown>,
 ): unknown {
   try {
     if (maybe_handler) {
@@ -612,11 +598,30 @@ export function Form(
  * @param maybe_options - Prerender options used with a validator.
  * @returns A SvelteKit prerender function.
  */
+export function Prerender<A, E = never, R = never>(
+  validate_or_handler: EffectLike<A, E, R> | RemoteHandler<void, A, E, R>,
+  maybe_options?: PrerenderOptions,
+): EffectRemoteFunction<void, A, E>;
+export function Prerender<Input, A, E = never, R = never>(
+  validate_or_handler: "unchecked",
+  maybe_handler: RemoteHandler<Input, A, E, R>,
+  maybe_options?: PrerenderOptions,
+): EffectRemoteFunction<Input, A, E>;
+export function Prerender<
+  S extends Schema.Schema<unknown>,
+  A,
+  E = never,
+  R = never,
+>(
+  validate_or_handler: S,
+  maybe_handler: RemoteHandler<SchemaInput<S>, A, E, R>,
+  maybe_options?: PrerenderOptions,
+): EffectRemoteFunction<SchemaEncodedInput<S>, A, E>;
 export function Prerender(
   validate_or_handler: unknown,
   maybe_handler_or_options?: RemoteHandler | PrerenderOptions,
   maybe_options?: PrerenderOptions,
-): ReturnType<typeof native_prerender> {
+): unknown {
   try {
     if (is_handler(maybe_handler_or_options)) {
       return native_prerender(

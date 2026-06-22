@@ -11,6 +11,7 @@ export {
 } from "./server/index.ts";
 
 export type {
+  CommandFactory,
   EffectLike,
   EffectRemoteBatchHandler,
   EffectRemoteCommand,
@@ -25,13 +26,21 @@ export type {
   ErrorEffectFactory,
   ErrorStatus,
   ErrorStatusName,
+  FormFactory,
   FormInvalid,
+  PrerenderFactory,
   PrerenderOptions,
+  QueryBatchFactory,
+  QueryFactory,
+  QueryLiveFactory,
   RedirectEffectFactory,
   RedirectStatus,
   RedirectStatusName,
   RemoteFormHandler,
   RemoteHandler,
+  RemoteLiveHandler,
+  SchemaEncodedInput,
   SchemaInput,
+  ServerRuntimeFactory,
   StandardSchema,
 } from "./server/index.ts";

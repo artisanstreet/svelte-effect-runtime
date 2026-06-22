@@ -1,13 +1,16 @@
 import type MagicString from "magic-string";
 
+import { collect_top_level_binding_names } from "$/preprocess/imports.ts";
 import { HELPERS } from "./constants.ts";
 import type {
   HelperDeclaration,
   Insertion,
+  MarkupHelperBindings,
   MarkupRelocation,
   PendingRelocation,
   Replacement,
 } from "./types.ts";
+import ts from "typescript";
 
 export function create_source_map(
   magic: MagicString,
@@ -36,11 +39,8 @@ export function inject_helpers(
   magic: MagicString,
   content: string,
   helpers: HelperDeclaration[] = [],
+  bindings: MarkupHelperBindings = HELPERS,
 ): Insertion | undefined {
-  if (content.includes(HELPERS.value)) {
-    return undefined;
-  }
-
   const import_helpers = unique_import_helpers(helpers);
   const local_helpers = helpers.filter((helper) => !is_import_helper(helper));
 
@@ -48,9 +48,9 @@ export function inject_helpers(
     text: string;
     relocation?: PendingRelocation;
   }> = [
-    `import { value as ${HELPERS.value} } from "svelte-effect-runtime/internal/generators";`,
-    `import { promise as ${HELPERS.promise} } from "svelte-effect-runtime/internal/generators";`,
-    `import { run as ${HELPERS.run} } from "svelte-effect-runtime/internal/generators";`,
+    `import { value as ${bindings.value} } from "svelte-effect-runtime/internal/generators";`,
+    `import { promise as ${bindings.promise} } from "svelte-effect-runtime/internal/generators";`,
+    `import { run as ${bindings.run} } from "svelte-effect-runtime/internal/generators";`,
     ...import_helpers,
     ...local_helpers,
   ].map((helper) => typeof helper === "string" ? { text: helper } : helper);
@@ -82,6 +82,30 @@ export function inject_helpers(
       relocations: make_insertion_relocations(helper_segments, "<script>\n"),
     };
   }
+}
+
+export function make_markup_helper_bindings(
+  content: string,
+): {
+  bindings: MarkupHelperBindings;
+  name_allocator: { reserve(name: string): string };
+} {
+  const script_tag = find_instance_script_tag(content);
+  const binding_names = script_tag
+    ? collect_script_binding_names(
+      content.slice(script_tag.start, script_tag.end),
+    )
+    : [];
+  const name_allocator = make_name_allocator(binding_names);
+
+  return {
+    bindings: {
+      value: name_allocator.reserve(HELPERS.value),
+      promise: name_allocator.reserve(HELPERS.promise),
+      run: name_allocator.reserve(HELPERS.run),
+    },
+    name_allocator,
+  };
 }
 
 export function create_relocations(
@@ -221,4 +245,38 @@ function unique_import_helpers(
 
 function is_import_helper(helper: HelperDeclaration): boolean {
   return helper.text.trimStart().startsWith("import ");
+}
+
+function collect_script_binding_names(script_content: string): string[] {
+  const source_file = ts.createSourceFile(
+    "markup-script.ts",
+    script_content,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+
+  return collect_top_level_binding_names(source_file);
+}
+
+function make_name_allocator(initial_names: readonly string[]): {
+  reserve(name: string): string;
+} {
+  const used_names = new Set(initial_names);
+
+  return {
+    reserve(name: string): string {
+      let candidate = name;
+      let suffix = 1;
+
+      while (used_names.has(candidate)) {
+        candidate = `${name}_${suffix}`;
+        suffix += 1;
+      }
+
+      used_names.add(candidate);
+
+      return candidate;
+    },
+  };
 }

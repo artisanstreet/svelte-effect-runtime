@@ -244,6 +244,36 @@ Deno.test("value keeps symbols with the same description separate", () => {
   d.dispose();
 });
 
+Deno.test("value cache ids do not collide with promise cache ids", async () => {
+  const d = make_dispatcher();
+
+  const promise = d.promise({
+    id: "shared",
+    deps: [],
+    factory: function* () {
+      yield* Effect.sleep("60 seconds");
+
+      return "promise-result";
+    },
+  });
+
+  const result = d.value({
+    id: "promise:shared",
+    deps: [],
+    fallback: "value-fallback",
+    factory: function* () {
+      yield* Effect.sleep("60 seconds");
+
+      return "value-result";
+    },
+  });
+
+  assertEquals(result, "value-fallback");
+
+  d.dispose();
+  await promise.catch(() => undefined);
+});
+
 Deno.test("value starts a new fiber when deps change", async () => {
   const d = make_dispatcher();
   let call_count = 0;
@@ -407,6 +437,74 @@ Deno.test("promise rejects with the effect's failure", async () => {
     () => promise,
     "expected reject",
   );
+});
+
+Deno.test({
+  name: "promise is interrupted when dispatcher is disposed",
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async () => {
+    const d = make_dispatcher();
+
+    let completed = false;
+
+    const promise = d.promise({
+      id: "pending-promise",
+      deps: [],
+      factory: function* () {
+        yield* Effect.sleep("60 seconds");
+        completed = true;
+
+        return "done";
+      },
+    });
+
+    d.dispose();
+
+    await promise.catch(() => undefined);
+    await sleep(30);
+
+    assertEquals(completed, false);
+  },
+});
+
+Deno.test({
+  name: "promise interrupts stale work when deps change",
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async () => {
+    const d = make_dispatcher();
+
+    let stale_completed = false;
+
+    const stale = d.promise({
+      id: "dynamic-promise",
+      deps: ["old"],
+      factory: function* () {
+        yield* Effect.sleep("60 seconds");
+        stale_completed = true;
+
+        return "old";
+      },
+    });
+
+    const fresh = d.promise({
+      id: "dynamic-promise",
+      deps: ["new"],
+      factory: function* () {
+        return yield* Effect.succeed("new");
+      },
+    });
+
+    assertEquals(await fresh, "new");
+
+    await stale.catch(() => undefined);
+    await sleep(30);
+
+    assertEquals(stale_completed, false);
+
+    d.dispose();
+  },
 });
 
 // ─── run ─────────────────────────────────────────────────────

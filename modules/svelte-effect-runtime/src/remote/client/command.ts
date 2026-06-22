@@ -6,6 +6,14 @@ import { make_effect_from_promise } from "./effect.ts";
 import { copy_property_descriptors, has_method } from "./utils.ts";
 import type { NativeMethod, Pending } from "./types.ts";
 
+type EffectRemoteCommandAdapter<Input, Output, ErrorType = never> =
+  & ((
+    input: undefined extends Input ? Input | void : Input,
+  ) => Effect.Effect<Output, RemoteFailure<ErrorType>>)
+  & {
+    readonly pending: number;
+  };
+
 /**
  * Creates a remote command adapter. The adapter preserves the native
  * pending getter and turns each invocation into an Effect.
@@ -19,12 +27,16 @@ import type { NativeMethod, Pending } from "./types.ts";
  * @returns A function returning an Effect of the response.
  * @internal
  */
-export function create_remote_command_adapter<Input, Output>(
+export function create_remote_command_adapter<
+  Input,
+  Output,
+  ErrorType = never,
+>(
   native_factory: unknown,
   decode_payload: (value: unknown) => unknown,
   _base = "",
   pending?: Pending,
-): (input: Input) => Effect.Effect<Output, RemoteFailure<unknown>> {
+): EffectRemoteCommandAdapter<Input, Output, ErrorType> {
   const invoke = has_method(native_factory, "invoke")
     ? native_factory.invoke
     : undefined;
@@ -37,8 +49,8 @@ export function create_remote_command_adapter<Input, Output>(
 
   const count = pending ?? { value: 0 };
 
-  const adapter = (input: Input) =>
-    make_effect_from_promise(async () => {
+  const adapter = (input: undefined extends Input ? Input | void : Input) =>
+    make_effect_from_promise<Output, ErrorType>(async () => {
       count.value += 1;
 
       try {
@@ -46,7 +58,10 @@ export function create_remote_command_adapter<Input, Output>(
           ? await invoke(input)
           : await (native_factory as NativeMethod)(input);
 
-        return await decode_response_or_value<Output>(result, decode_payload);
+        return await decode_response_or_value<Output, ErrorType>(
+          result,
+          decode_payload,
+        );
       } finally {
         count.value -= 1;
       }
@@ -60,5 +75,5 @@ export function create_remote_command_adapter<Input, Output>(
     });
   }
 
-  return adapter;
+  return adapter as EffectRemoteCommandAdapter<Input, Output, ErrorType>;
 }

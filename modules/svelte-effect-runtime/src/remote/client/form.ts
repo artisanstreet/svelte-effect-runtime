@@ -5,7 +5,13 @@ import { make_effect_from_promise } from "./effect.ts";
 import { get_remote_action_id, submit_remote_form } from "./form-transport.ts";
 import { copy_property_descriptors, has_method } from "./utils.ts";
 import { wrap_enhance_callback } from "./form-enhance.ts";
-import type { EffectRemoteForm, NativeFormRecord } from "./types.ts";
+import type {
+  EffectRemoteForm,
+  NativeFormRecord,
+  NativeMethod,
+} from "./types.ts";
+
+type RemoteInput<Input> = undefined extends Input ? Input | void : Input;
 
 /**
  * Creates a remote form adapter. The callable preserves SvelteKit's native
@@ -28,15 +34,16 @@ import type { EffectRemoteForm, NativeFormRecord } from "./types.ts";
 export function create_remote_form_adapter<
   Input extends RemoteFormInput | void,
   Output,
+  ErrorType = never,
 >(
   native_factory: unknown,
   decode_payload: (value: unknown) => unknown,
   remote_base = "",
-): EffectRemoteForm<Input, Output> {
+): EffectRemoteForm<Input, Output, ErrorType> {
   const form_obj = native_factory as NativeFormRecord;
 
-  const submit_effect = (input: Input) =>
-    make_effect_from_promise(async () => {
+  const submit_effect = (input?: RemoteInput<Input>) =>
+    make_effect_from_promise<Output, ErrorType>(async () => {
       const can_use_remote_endpoint = remote_base.length > 0 &&
         get_remote_action_id(form_obj) !== undefined;
 
@@ -54,10 +61,12 @@ export function create_remote_form_adapter<
       );
     });
 
-  const callable = ((input: Input) => submit_effect(input)) as EffectRemoteForm<
-    Input,
-    Output
-  >;
+  const callable =
+    ((input?: RemoteInput<Input>) => submit_effect(input)) as EffectRemoteForm<
+      Input,
+      Output,
+      ErrorType
+    >;
 
   copy_property_descriptors(
     form_obj,
@@ -76,7 +85,7 @@ export function create_remote_form_adapter<
       configurable: true,
       enumerable: false,
       value: (options?: Record<string, unknown>) =>
-        make_effect_from_promise(async () => {
+        make_effect_from_promise<void, ErrorType>(async () => {
           await form_obj.validate(options);
         }),
     });
@@ -86,8 +95,10 @@ export function create_remote_form_adapter<
     Object.defineProperty(callable, "enhance", {
       configurable: true,
       enumerable: false,
-      value: (callback?: Parameters<typeof wrap_enhance_callback>[0]) =>
-        form_obj.enhance(wrap_enhance_callback(callback)),
+      value: (callback?: NativeMethod) =>
+        form_obj.enhance(
+          wrap_enhance_callback<Output, ErrorType>(callback),
+        ),
     });
   }
 
@@ -96,7 +107,7 @@ export function create_remote_form_adapter<
       configurable: true,
       enumerable: false,
       value: (key: string | number | boolean) =>
-        create_remote_form_adapter<Input, Output>(
+        create_remote_form_adapter<Input, Output, ErrorType>(
           form_obj.for(key),
           decode_payload,
           remote_base,

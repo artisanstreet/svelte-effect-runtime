@@ -42,7 +42,13 @@ export interface MarkupCandidate {
   key: TagKind;
 }
 
-export type TagKind = "plain" | "each" | "await" | "event" | "render";
+export type TagKind =
+  | "plain"
+  | "each"
+  | "await"
+  | "event"
+  | "render"
+  | "render_argument";
 
 export interface Replacement {
   start: number;
@@ -68,4 +74,14 @@ export interface Insertion {
   start: number;
   text: string;
   relocations?: PendingRelocation[];
+}
+
+export interface MarkupHelperBindings {
+  value: string;
+  promise: string;
+  run: string;
+}
+
+export interface MarkupNameAllocator {
+  reserve(name: string): string;
 }

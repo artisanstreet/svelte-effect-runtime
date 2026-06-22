@@ -20,7 +20,9 @@ export function is_unchecked(value: unknown): value is "unchecked" {
  * @param value - Value to inspect.
  * @returns Whether the value is callable as a handler.
  */
-export function is_handler(value: unknown): value is RemoteHandler {
+export function is_handler(
+  value: unknown,
+): value is RemoteHandler<unknown, unknown, unknown, unknown> {
   return typeof value === "function";
 }
 

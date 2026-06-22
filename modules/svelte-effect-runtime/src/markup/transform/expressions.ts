@@ -148,15 +148,17 @@ export function collect_free_identifiers(expr_text: string): string[] {
   }
 
   const ids: string[] = [];
+  const locals = new Set<string>();
   const seen = new Set<string>();
 
-  visit_ids(fn.body, seen, ids);
+  visit_ids(fn.body, locals, seen, ids);
 
   return ids;
 }
 
 function visit_ids(
   node: ts.Node,
+  locals: Set<string>,
   seen: Set<string>,
   ids: string[],
 ): void {
@@ -165,6 +167,34 @@ function visit_ids(
     ts.isFunctionExpression(node) ||
     ts.isFunctionDeclaration(node)
   ) {
+    const scoped = new Set(locals);
+
+    if (ts.isFunctionDeclaration(node) && node.name) {
+      scoped.add(node.name.text);
+    }
+
+    for (const parameter of node.parameters) {
+      add_binding_names(parameter.name, scoped);
+    }
+
+    if (node.body) {
+      visit_ids(node.body, scoped, seen, ids);
+    }
+
+    return;
+  }
+
+  if (ts.isVariableDeclaration(node)) {
+    if (node.initializer) {
+      visit_ids(node.initializer, locals, seen, ids);
+    }
+
+    add_binding_names(node.name, locals);
+
+    return;
+  }
+
+  if (ts.isTypeReferenceNode(node)) {
     return;
   }
 
@@ -184,14 +214,29 @@ function visit_ids(
       return;
     }
 
-    if (!seen.has(node.text)) {
+    if (!locals.has(node.text) && !seen.has(node.text)) {
       seen.add(node.text);
       ids.push(node.text);
     }
     return;
   }
 
-  node.forEachChild((child) => visit_ids(child, seen, ids));
+  node.forEachChild((child) => visit_ids(child, locals, seen, ids));
+}
+
+function add_binding_names(name: ts.BindingName, locals: Set<string>): void {
+  if (ts.isIdentifier(name)) {
+    locals.add(name.text);
+    return;
+  }
+
+  for (const element of name.elements) {
+    if (ts.isOmittedExpression(element)) {
+      continue;
+    }
+
+    add_binding_names(element.name, locals);
+  }
 }
 
 type EventYieldContext = "top_level" | "nested_generator" | "nested_invalid";

@@ -38,6 +38,7 @@ export type {
   RemoteFormHandler,
   RemoteHandler,
   RemoteLiveHandler,
+  SchemaEncodedInput,
   SchemaInput,
   ServerRuntimeFactory,
   StandardSchema,

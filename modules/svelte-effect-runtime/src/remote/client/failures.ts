@@ -21,21 +21,21 @@ import { parse } from "devalue";
  * @param decode - Optional devalue decoder for custom error payloads.
  * @returns The decoded failure/value, or a transport error when decoding fails.
  */
-export function decode_remote_error(
+export function decode_remote_error<ErrorType = never>(
   raw: unknown,
   decode?: (encoded: string) => unknown,
-): RemoteFailure<unknown> | unknown {
+): RemoteFailure<ErrorType> | unknown {
   const embedded = parse_embedded_remote_failure(raw);
 
   if (embedded !== raw) {
-    return decode_remote_error(embedded, decode);
+    return decode_remote_error<ErrorType>(embedded, decode);
   }
 
   if (is_serialized_remote_failure_envelope(raw)) {
     try {
       const decoded = decode ? decode(raw.encoded) : parse(raw.encoded);
 
-      return decoded as RemoteFailure<unknown>;
+      return decoded as RemoteFailure<ErrorType>;
     } catch {
       return create_remote_transport_error(
         new Error(
@@ -91,7 +91,7 @@ function parse_json_or_original(value: string): unknown {
  */
 export function is_decoded_remote_failure(
   value: unknown,
-): value is RemoteFailure<unknown> {
+): value is RemoteFailure<never> {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -133,9 +133,11 @@ export function is_validation_body(
  * @param error - Unknown value thrown by a native remote helper.
  * @returns A typed remote failure.
  */
-export function normalize_native_error(error: unknown): RemoteFailure<unknown> {
+export function normalize_native_error<ErrorType = never>(
+  error: unknown,
+): RemoteFailure<ErrorType> {
   const body = get_error_body(error);
-  const decoded = decode_remote_error(body);
+  const decoded = decode_remote_error<ErrorType>(body);
   const status = get_error_status(error);
 
   if (is_decoded_remote_failure(decoded)) {

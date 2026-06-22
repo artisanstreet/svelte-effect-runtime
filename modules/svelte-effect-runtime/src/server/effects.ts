@@ -13,7 +13,7 @@ type ResolvedLiveSource<A> =
   | Iterator<A>;
 
 type LiveHandlerResult<A> =
-  | EffectLike<EffectRemoteLiveSource<A>>
+  | EffectLike<EffectRemoteLiveSource<A>, unknown, unknown>
   | EffectRemoteLiveSource<A>;
 
 /**
@@ -40,11 +40,11 @@ export function is_generator_result<A>(
  * @param value - Effect or generator return value.
  * @returns Normalized Effect.
  */
-export function to_effect<A>(
-  value: EffectLike<A>,
-): Effect.Effect<A, unknown, unknown> {
+export function to_effect<A, E, R>(
+  value: EffectLike<A, E, R>,
+): Effect.Effect<A, E, R> {
   if (is_generator_result<A>(value)) {
-    return Effect.gen(() => value);
+    return Effect.gen(() => value) as Effect.Effect<A, E, R>;
   }
 
   return value;
@@ -151,7 +151,7 @@ function is_native_live_source<A>(
  * @returns Promise resolving with the handler output.
  */
 export function run_handler_effect<A>(
-  value: EffectLike<A>,
+  value: EffectLike<A, unknown, unknown>,
   event: RequestEventShape,
 ): Promise<A> {
   const runtime = get_server_runtime_or_throw();

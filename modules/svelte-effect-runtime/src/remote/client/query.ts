@@ -2,12 +2,22 @@ import { copy_property_descriptors, has_method } from "./utils.ts";
 import { normalize_native_error } from "./failures.ts";
 import { resolve_query_result } from "./query-result.ts";
 import { make_effect_from_promise } from "./effect.ts";
+import type { EffectRemoteQueryUpdateBrand, NativeMethod } from "./types.ts";
 import type { RemoteFailure } from "$/remote/shared.ts";
-import type { NativeMethod } from "./types.ts";
 import { Effect } from "effect";
 
-type RemoteResourceEffect<Output> =
-  & Effect.Effect<Output, RemoteFailure<unknown>>
+type RemoteInput<Input> = undefined extends Input ? Input | void : Input;
+
+type DecodePayload<Output> = (value: unknown) => Output;
+
+type NativeQueryFactory<Input> =
+  | ((input: RemoteInput<Input>) => unknown)
+  | {
+    readonly load: (input: RemoteInput<Input>) => unknown;
+  };
+
+type RemoteResourceEffect<Output, ErrorType = never> =
+  & Effect.Effect<Output, RemoteFailure<ErrorType>>
   & {
     readonly current: Output | undefined;
     readonly error: unknown;
@@ -15,12 +25,12 @@ type RemoteResourceEffect<Output> =
     readonly ready: boolean;
   };
 
-type RemoteResourceLike<Output> =
-  | RemoteResourceEffect<Output>
+type RemoteResourceLike<Output, ErrorType = never> =
+  | RemoteResourceEffect<Output, ErrorType>
   | RemoteLiveQueryResource<Output>;
 
-type RemoteQueryEffect<Output> =
-  & RemoteResourceEffect<Output>
+type RemoteQueryEffect<Output, ErrorType = never> =
+  & RemoteResourceEffect<Output, ErrorType>
   & {
     readonly refresh: () => Effect.Effect<void, unknown, never>;
     readonly set: (value: Output) => void;
@@ -29,9 +39,9 @@ type RemoteQueryEffect<Output> =
     ) => unknown;
   };
 
-type RemoteLiveQueryEffect<Output> = Effect.Effect<
+type RemoteLiveQueryEffect<Output, ErrorType = never> = Effect.Effect<
   RemoteLiveQueryResource<Output>,
-  RemoteFailure<unknown>
+  RemoteFailure<ErrorType>
 >;
 
 type RemoteLiveQueryResource<Output> =
@@ -78,11 +88,39 @@ type NativeRemoteResource<Output> = {
  * @returns A function returning an Effect of the response.
  * @internal
  */
-export function create_remote_query_adapter<Input, Output>(
-  native_factory: unknown,
+export function create_remote_query_adapter<
+  Input,
+  Output,
+  ErrorType = never,
+>(
+  native_factory: NativeQueryFactory<Input>,
+  decode_payload: DecodePayload<Output>,
+  _base?: string,
+):
+  & EffectRemoteQueryUpdateBrand
+  & ((input: RemoteInput<Input>) => RemoteQueryEffect<Output, ErrorType>);
+export function create_remote_query_adapter<
+  Input,
+  Output,
+  ErrorType = never,
+>(
+  native_factory: NativeQueryFactory<Input>,
   decode_payload: (value: unknown) => unknown,
+  _base?: string,
+):
+  & EffectRemoteQueryUpdateBrand
+  & ((input: RemoteInput<Input>) => RemoteQueryEffect<Output, ErrorType>);
+export function create_remote_query_adapter<
+  Input,
+  Output,
+  ErrorType = never,
+>(
+  native_factory: unknown,
+  decode_payload: DecodePayload<Output>,
   _base = "",
-): (input: Input) => RemoteQueryEffect<Output> {
+):
+  & EffectRemoteQueryUpdateBrand
+  & ((input: RemoteInput<Input>) => RemoteQueryEffect<Output, ErrorType>) {
   const load = has_method(native_factory, "load")
     ? native_factory.load
     : undefined;
@@ -96,24 +134,26 @@ export function create_remote_query_adapter<Input, Output>(
     );
   }
 
-  const wrapped = ((input: Input) => {
+  const wrapped = ((input: RemoteInput<Input>) => {
     if (!query) {
-      return make_effect_from_promise(async () => {
+      return make_effect_from_promise<Output, ErrorType>(async () => {
         const result = await load?.(input);
 
         return await resolve_query_result<Output>(result, decode_payload);
-      }) as RemoteQueryEffect<Output>;
+      }) as RemoteQueryEffect<Output, ErrorType>;
     }
 
     const resource = query(input);
-    const effect = make_effect_from_promise(async () =>
+    const effect = make_effect_from_promise<Output, ErrorType>(async () =>
       await resolve_query_result<Output>(resource, decode_payload)
-    ) as RemoteQueryEffect<Output>;
+    ) as RemoteQueryEffect<Output, ErrorType>;
 
     attach_query_resource(resource, effect);
 
     return effect;
-  }) as (input: Input) => RemoteQueryEffect<Output>;
+  }) as
+    & EffectRemoteQueryUpdateBrand
+    & ((input: RemoteInput<Input>) => RemoteQueryEffect<Output, ErrorType>);
 
   copy_property_descriptors(native_factory, wrapped);
 
@@ -140,11 +180,17 @@ export function create_remote_query_adapter<Input, Output>(
  * @returns A function returning an Effect-backed live query resource.
  * @internal
  */
-export function create_remote_live_query_adapter<Input, Output>(
+export function create_remote_live_query_adapter<
+  Input,
+  Output,
+  ErrorType = never,
+>(
   native_factory: unknown,
   _decode_payload: (value: unknown) => unknown,
   _base = "",
-): (input: Input) => RemoteLiveQueryEffect<Output> {
+):
+  & EffectRemoteQueryUpdateBrand
+  & ((input: RemoteInput<Input>) => RemoteLiveQueryEffect<Output, ErrorType>) {
   const query = typeof native_factory === "function"
     ? native_factory as NativeMethod
     : undefined;
@@ -163,9 +209,11 @@ export function create_remote_live_query_adapter<Input, Output>(
         return make_live_query_resource<Output>(resource);
       },
       catch: normalize_native_error,
-    }) as RemoteLiveQueryEffect<Output>) as (
-      input: Input,
-    ) => RemoteLiveQueryEffect<Output>;
+    }) as RemoteLiveQueryEffect<Output>) as
+      & EffectRemoteQueryUpdateBrand
+      & ((
+        input: RemoteInput<Input>,
+      ) => RemoteLiveQueryEffect<Output, ErrorType>);
 
   copy_property_descriptors(native_factory, wrapped);
 
@@ -183,9 +231,9 @@ function is_resource<Output>(
   );
 }
 
-function attach_resource_getters<Output>(
+function attach_resource_getters<Output, ErrorType = never>(
   resource: unknown,
-  effect: RemoteResourceLike<Output>,
+  effect: RemoteResourceLike<Output, ErrorType>,
 ): void {
   const methods = is_resource<Output>(resource) ? resource : undefined;
   const keys = ["current", "error", "loading", "ready"] as const;
@@ -206,9 +254,9 @@ function attach_resource_getters<Output>(
   }
 }
 
-function attach_query_resource<Output>(
+function attach_query_resource<Output, ErrorType = never>(
   resource: unknown,
-  effect: RemoteQueryEffect<Output>,
+  effect: RemoteQueryEffect<Output, ErrorType>,
 ): void {
   const methods = is_resource<Output>(resource) ? resource : undefined;
   const refresh = methods?.refresh;

@@ -49,7 +49,7 @@ Effect.gen(function* () {
   );
 });
 
-Deno.test("remote form enhance submit keeps native success types", async () => {
+Deno.test("remote form enhance submit keeps form result types", async () => {
   await assert_type_checks(
     "enhance-submit-types.ts",
     `
@@ -68,12 +68,12 @@ form.enhance(({ result, submit }) =>
     const matched = yield* submit().pipe(
       Effect.matchCause({
         onSuccess: (value) => {
-          const success: boolean = value;
+          const success: { id: string } | undefined = value;
 
           return success;
         },
         onFailure: (cause) => {
-          const failure_cause: Cause.Cause<RemoteFailure<unknown>> = cause;
+          const failure_cause: Cause.Cause<RemoteFailure<never>> = cause;
 
           return false;
         },
@@ -86,6 +86,337 @@ form.enhance(({ result, submit }) =>
     void matched;
   })
 );
+`,
+  );
+});
+
+Deno.test("remote client adapters keep structured remote failure types", async () => {
+  await assert_type_checks(
+    "remote-failure-types.ts",
+    `
+import { Cause, Effect } from "effect";
+import {
+  create_remote_form_adapter,
+  create_remote_query_adapter,
+} from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
+import type { RemoteFailure } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/shared.ts";
+
+type Equal<Left, Right> =
+  (<Type>() => Type extends Left ? 1 : 2) extends
+  (<Type>() => Type extends Right ? 1 : 2) ? true : false;
+type Assert<Type extends true> = Type;
+
+const form = create_remote_form_adapter<{ title: string }, { id: string }>(
+  {},
+  (value) => value,
+);
+const query = create_remote_query_adapter<void, { id: string }>(
+  () => Promise.resolve({ id: "one" }),
+  (value) => value,
+);
+
+const form_submit = form.submit({ title: "draft" });
+type FormSubmit = Assert<
+  Equal<typeof form_submit, Effect.Effect<{ id: string }, RemoteFailure<never>>>
+>;
+
+form.submit({ title: "draft" }).pipe(
+  Effect.matchCause({
+    onFailure: (cause) => {
+      const typed_cause: Cause.Cause<RemoteFailure<never>> = cause;
+
+      return typed_cause;
+    },
+    onSuccess: (value) => value.id,
+  }),
+);
+
+query().pipe(
+  Effect.catchTag("RemoteHttpError", (failure) =>
+    Effect.succeed(failure.status)
+  ),
+);
+`,
+  );
+});
+
+Deno.test("remote form updates accepts Effect query wrappers", async () => {
+  await assert_type_checks(
+    "remote-updates-query-wrapper.ts",
+    `
+import { Effect } from "effect";
+import {
+  create_remote_form_adapter,
+  create_remote_live_query_adapter,
+  create_remote_query_adapter,
+} from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
+
+const posts = create_remote_query_adapter<void, string[]>(
+  () => Promise.resolve(["one"]),
+  (value) => value,
+);
+
+const clock = create_remote_live_query_adapter<void, number>(
+  () => ({
+    connected: true,
+    current: 1,
+    done: false,
+    error: undefined,
+    loading: false,
+    ready: true,
+    reconnect: () => Promise.resolve(),
+    [Symbol.asyncIterator]: async function* () {
+      yield 1;
+    },
+  }),
+  (value) => value,
+);
+
+const form = create_remote_form_adapter<{ title: string }, { id: string }>(
+  {},
+  (value) => value,
+);
+
+const post_result = posts();
+const clock_result = clock();
+
+form.enhance(({ submit }) =>
+  Effect.gen(function* () {
+    yield* submit().updates(posts);
+    yield* submit().updates(clock);
+  })
+);
+
+void post_result;
+void clock_result;
+`,
+  );
+});
+
+Deno.test("remote form types reject invalid preflight and command updates", async () => {
+  await assert_type_checks(
+    "remote-form-negative-boundaries.ts",
+    `
+import { Effect } from "effect";
+import {
+  create_remote_command_adapter,
+  create_remote_form_adapter,
+  create_remote_query_adapter,
+} from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
+import type { RemoteFormInput } from "@sveltejs/kit";
+
+declare const schema: {
+  "~standard": {
+    validate(value: unknown): { value: RemoteFormInput };
+    vendor: "test";
+    version: 1;
+  };
+};
+
+const form = create_remote_form_adapter<RemoteFormInput | undefined, { id: string }>(
+  {},
+  (value) => value,
+);
+const posts = create_remote_query_adapter<void, string[]>(
+  () => Promise.resolve(["one"]),
+  (value) => value as string[],
+);
+const command = create_remote_command_adapter<void, string>(
+  () => Promise.resolve("done"),
+  (value) => value,
+);
+
+form();
+form.submit();
+form.preflight(schema);
+// @ts-expect-error preflight expects a Standard Schema
+form.preflight(123);
+
+form.enhance(({ submit }) =>
+  Effect.gen(function* () {
+    yield* submit().updates(posts);
+    // @ts-expect-error command adapters are not query update targets
+    yield* submit().updates(command);
+  })
+);
+`,
+  );
+});
+
+Deno.test("remote query adapter infers decoder output", async () => {
+  await assert_type_checks(
+    "remote-query-adapter-inference.ts",
+    `
+import { Effect } from "effect";
+import { create_remote_query_adapter } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
+
+type Equal<Left, Right> =
+  (<Type>() => Type extends Left ? 1 : 2) extends
+  (<Type>() => Type extends Right ? 1 : 2) ? true : false;
+type Assert<Type extends true> = Type;
+
+const get_post = create_remote_query_adapter(
+  (input: { id: string }) => Promise.resolve({ id: input.id }),
+  (value): { id: string } => value as { id: string },
+);
+
+const post = get_post({ id: "one" });
+type Post = Assert<Equal<Effect.Success<typeof post>, { id: string }>>;
+
+// @ts-expect-error input shape is inferred from the native query
+get_post({ slug: "one" });
+`,
+  );
+});
+
+Deno.test("markup value helper infers yielded value types", async () => {
+  await assert_type_checks(
+    "markup-value-helper-inference.ts",
+    `
+import { Effect } from "effect";
+import { value } from "__RUNTIME__/modules/svelte-effect-runtime/src/markup/value.ts";
+
+const loaded = value("count", [], 0, function* () {
+  return yield* Effect.succeed(42);
+});
+const count: number = loaded;
+
+void count;
+`,
+  );
+});
+
+Deno.test("server type exports include factory helper types", async () => {
+  await assert_type_checks(
+    "server-type-exports.ts",
+    `
+import type {
+  CommandFactory,
+  FormFactory,
+  PrerenderFactory,
+  QueryBatchFactory,
+  QueryFactory,
+  QueryLiveFactory,
+  RemoteLiveHandler,
+  SchemaEncodedInput,
+  ServerRuntimeFactory,
+} from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
+
+type Exports = [
+  CommandFactory,
+  FormFactory,
+  PrerenderFactory,
+  QueryBatchFactory,
+  QueryFactory,
+  QueryLiveFactory,
+  RemoteLiveHandler,
+  SchemaEncodedInput<never>,
+  ServerRuntimeFactory,
+];
+
+const exports_tuple: Exports | undefined = undefined;
+
+void exports_tuple;
+`,
+  );
+});
+
+Deno.test("server schema remotes preserve encoded input and domain errors", async () => {
+  await assert_type_checks(
+    "server-schema-remote-types.ts",
+    `
+import { Effect, Schema } from "effect";
+import { Command, Form, Prerender, Query } from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
+
+type Equal<Left, Right> =
+  (<Type>() => Type extends Left ? 1 : 2) extends
+  (<Type>() => Type extends Right ? 1 : 2) ? true : false;
+type Assert<Type extends true> = Type;
+
+class DomainError {
+  readonly _tag = "DomainError";
+}
+
+const ReadNumber = Query(Schema.NumberFromString, (value) =>
+  Effect.gen(function* () {
+    const decoded: number = value;
+
+    yield* Effect.fail(new DomainError());
+
+    return decoded;
+  })
+);
+
+const BatchNumber = Query.batch(Schema.NumberFromString, (values) =>
+  Effect.succeed((value, index) => {
+    const decoded: number = value;
+    const known: boolean = values.includes(value);
+
+    return { decoded, index, known };
+  })
+);
+
+const WatchNumber = Query.live(Schema.NumberFromString, (value) =>
+  Effect.succeed([value])
+);
+
+const SaveNumber = Command(Schema.NumberFromString, (value) =>
+  Effect.gen(function* () {
+    const decoded: number = value;
+
+    yield* Effect.fail(new DomainError());
+
+    return decoded;
+  })
+);
+
+const PreloadNumber = Prerender(Schema.NumberFromString, (value) =>
+  Effect.gen(function* () {
+    const decoded: number = value;
+
+    yield* Effect.fail(new DomainError());
+
+    return decoded;
+  })
+);
+
+const SignIn = Form(
+  Schema.Struct({
+    email: Schema.NonEmptyString,
+  }),
+  ({ data, invalid }) =>
+    Effect.gen(function* () {
+      const email: string = data.email;
+
+      yield* invalid.email("Required");
+      // @ts-expect-error unknown form fields are rejected
+      yield* invalid.missing("Missing");
+      // @ts-expect-error scalar form fields do not have nested invalid paths
+      yield* invalid.email.deep("Deep");
+
+      return { email };
+    }),
+);
+
+type ReadNumberParameters = Assert<Equal<Parameters<typeof ReadNumber>, [input: string]>>;
+type BatchNumberParameters = Assert<Equal<Parameters<typeof BatchNumber>, [input: string]>>;
+type WatchNumberParameters = Assert<Equal<Parameters<typeof WatchNumber>, [input: string]>>;
+type SaveNumberParameters = Assert<Equal<Parameters<typeof SaveNumber>, [input: string]>>;
+type PreloadNumberParameters = Assert<Equal<Parameters<typeof PreloadNumber>, [input: string]>>;
+type SignInParameters = Assert<Equal<Parameters<typeof SignIn>, [input: { readonly email: string }]>>;
+type ReadNumberError = Assert<Equal<Extract<Effect.Error<ReturnType<typeof ReadNumber>>, DomainError>, DomainError>>;
+type SaveNumberError = Assert<Equal<Extract<Effect.Error<ReturnType<typeof SaveNumber>>, DomainError>, DomainError>>;
+type PreloadNumberError = Assert<Equal<Extract<Effect.Error<ReturnType<typeof PreloadNumber>>, DomainError>, DomainError>>;
+
+ReadNumber("1");
+BatchNumber("1");
+WatchNumber("1");
+SaveNumber("1");
+PreloadNumber("1");
+SignIn({ email: "hi@example.com" });
+
+// @ts-expect-error schema call input uses the encoded type
+ReadNumber(1);
 `,
   );
 });
