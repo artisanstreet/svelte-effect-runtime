@@ -115,7 +115,8 @@ Deno.test("passes through types, interfaces, enums, classes untouched", () => {
 Deno.test("preserves $state(yield* expr) as writable state", () => {
   const source = `let user = $state(yield* getUser(id));`;
   assert_transform(source, [
-    `let user = $state(undefined);`,
+    `function __SER___type_user() { return (getUser(id)); }`,
+    `let user = $state<Effect.Success<ReturnType<typeof __SER___type_user>> | undefined>(undefined);`,
     `user = yield* getUser(id);`,
     `  getUser;`,
     `  id;`,
@@ -129,7 +130,7 @@ Deno.test("preserves $state expressions with multiple yield points", () => {
     `let label = $state(\`\${yield* getFirst()} \${yield* getLast()}\`);`;
   const result = transform_script_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `let label = $state(undefined);`);
+  assertStringIncludes(result.code, `let label = $state<unknown>(undefined);`);
   assertStringIncludes(
     result.code,
     "label = `${yield* getFirst()} ${yield* getLast()}`;",
@@ -143,7 +144,10 @@ Deno.test("preserves $state.raw(yield* expr) as raw state", () => {
   const source = `let raw = $state.raw(yield* getRaw(id));`;
   const result = transform_script_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `let raw = $state.raw(undefined);`);
+  assertStringIncludes(
+    result.code,
+    `let raw = $state.raw<Effect.Success<ReturnType<typeof __SER___type_raw>> | undefined>(undefined);`,
+  );
   assertStringIncludes(result.code, `raw = yield* getRaw(id);`);
   assertStringIncludes(result.code, `  getRaw;`);
   assertStringIncludes(result.code, `  id;`);
@@ -154,7 +158,7 @@ Deno.test("extracts bare yield const sugar into a derived value", () => {
   const source = `const user = yield* getUser(id);`;
   assert_transform(source, [
     `let __SER___`,
-    `= $state(undefined);`,
+    `= $state<`,
     `let user = $derived(__SER___`,
     `= yield* getUser(id);`,
     `import { Effect } from "effect"`,
@@ -204,9 +208,9 @@ Deno.test("extracts destructuring yield* into temp binding", () => {
   const result = transform_script_effect(source, "Test.svelte");
 
   assertStringIncludes(result.code, `let __SER___`);
-  assertStringIncludes(result.code, `= $state(undefined);`);
-  assertStringIncludes(result.code, `let title = $state(undefined);`);
-  assertStringIncludes(result.code, `let body = $state(undefined);`);
+  assertStringIncludes(result.code, `= $state<`);
+  assertStringIncludes(result.code, `let title = $state<unknown>(undefined);`);
+  assertStringIncludes(result.code, `let body = $state<unknown>(undefined);`);
   assertStringIncludes(result.code, `= yield* getPost(id);`);
   assertStringIncludes(result.code, `({ title, body }`);
   assertNotMatch(
@@ -223,7 +227,7 @@ Deno.test("extracts $derived(yield* expr) into a temp binding", () => {
   const result = transform_script_effect(source, "Test.svelte");
 
   assertStringIncludes(result.code, `let __SER___`);
-  assertStringIncludes(result.code, `= $state(undefined);`);
+  assertStringIncludes(result.code, `= $state<`);
   assertStringIncludes(result.code, `let msg = $derived(__SER___`);
   assertStringIncludes(result.code, `+ "!"`);
   assertStringIncludes(result.code, `= yield* format(user);`);
@@ -236,7 +240,7 @@ Deno.test("extracts $inspect(yield* expr) into a temp binding", () => {
   const result = transform_script_effect(source, "Test.svelte");
 
   assertStringIncludes(result.code, `let __SER___`);
-  assertStringIncludes(result.code, `= $state(undefined);`);
+  assertStringIncludes(result.code, `= $state<`);
   assertStringIncludes(result.code, `$inspect(__SER___`);
   assertStringIncludes(result.code, `= yield* debugInfo();`);
 });
@@ -278,7 +282,7 @@ Deno.test("preserves surrounding assignment RHS expressions", () => {
   ].join("\n");
   const result = transform_script_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `let __SER___value = $state(undefined);`);
+  assertStringIncludes(result.code, `let __SER___value = $state<`);
   assertStringIncludes(result.code, `__SER___value = yield* loadValue();`);
   assertStringIncludes(result.code, `value = (__SER___value) + 1;`);
   assertNotMatch(result.code, /^\s{4}value = yield\* loadValue\(\);$/m);
@@ -291,7 +295,7 @@ Deno.test("runs compound assignments after yielded operands resolve", () => {
   ].join("\n");
   const result = transform_script_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `let __SER___count = $state(undefined);`);
+  assertStringIncludes(result.code, `let __SER___count = $state<`);
   assertStringIncludes(result.code, `__SER___count = yield* getDelta();`);
   assertStringIncludes(result.code, `count += __SER___count;`);
   assertNotMatch(result.code, /count \+= __SER___count;\n\n\$effect/);
@@ -301,7 +305,7 @@ Deno.test("runs ordinary call statements after yielded arguments resolve", () =>
   const source = `recordValue(yield* loadValue());`;
   const result = transform_script_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `let __SER___call = $state(undefined);`);
+  assertStringIncludes(result.code, `let __SER___call = $state<`);
   assertStringIncludes(result.code, `__SER___call = yield* loadValue();`);
   assertStringIncludes(result.code, `recordValue(__SER___call);`);
   assertNotMatch(result.code, /^recordValue\(__SER___call\);/m);
@@ -562,7 +566,7 @@ Deno.test("plain compound declarations become derived from yielded temps", () =>
   const source = `const value = (yield* loadValue()) + 1;`;
   const result = transform_script_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `let __SER___value = $state(undefined);`);
+  assertStringIncludes(result.code, `let __SER___value = $state<`);
   assertStringIncludes(
     result.code,
     `let value = $derived((__SER___value) + 1);`,
@@ -579,7 +583,7 @@ Deno.test("destructuring defaults with yield are assigned inside the effect body
   const result = transform_script_effect(source, "Test.svelte");
 
   assertStringIncludes(result.code, `const post = { title: undefined };`);
-  assertStringIncludes(result.code, `let title = $state(undefined);`);
+  assertStringIncludes(result.code, `let title = $state<unknown>(undefined);`);
   assertStringIncludes(
     result.code,
     `({ title = yield* getTitle() } = post);`,
@@ -608,7 +612,7 @@ Deno.test("handles ternary with yield* in condition position", () => {
   const result = transform_script_effect(source, "Test.svelte");
 
   assertStringIncludes(result.code, `? "a" : "b"`);
-  assertStringIncludes(result.code, `let flag = $state(undefined);`);
+  assertStringIncludes(result.code, `let flag = $state<`);
   assertStringIncludes(result.code, `flag = yield* check() ? "a" : "b";`);
 });
 

@@ -449,9 +449,9 @@ function analyze_event_yield(
 } {
   const event = strip_arrow_function(inner);
   const analysis = analyze_event_body_yield_star(event.body);
-  const generated_run = `${HELPERS.run}(function*`;
+  const generated_run = new RegExp(`${HELPERS.run}(?:_\\d+)?\\(function\\*`);
 
-  if (event.body.includes(generated_run)) {
+  if (generated_run.test(event.body)) {
     return {
       has_top_level_yield_star: false,
     };

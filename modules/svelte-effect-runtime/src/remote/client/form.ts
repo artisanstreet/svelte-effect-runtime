@@ -7,6 +7,8 @@ import { copy_property_descriptors, has_method } from "./utils.ts";
 import { wrap_enhance_callback } from "./form-enhance.ts";
 import type { EffectRemoteForm, NativeFormRecord } from "./types.ts";
 
+type RemoteInput<Input> = undefined extends Input ? Input | void : Input;
+
 /**
  * Creates a remote form adapter. The callable preserves SvelteKit's native
  * form descriptors while wrapping `validate`, `enhance`, and programmatic
@@ -36,7 +38,7 @@ export function create_remote_form_adapter<
 ): EffectRemoteForm<Input, Output, ErrorType> {
   const form_obj = native_factory as NativeFormRecord;
 
-  const submit_effect = (input: Input) =>
+  const submit_effect = (input?: RemoteInput<Input>) =>
     make_effect_from_promise<Output, ErrorType>(async () => {
       const can_use_remote_endpoint = remote_base.length > 0 &&
         get_remote_action_id(form_obj) !== undefined;
@@ -55,11 +57,12 @@ export function create_remote_form_adapter<
       );
     });
 
-  const callable = ((input: Input) => submit_effect(input)) as EffectRemoteForm<
-    Input,
-    Output,
-    ErrorType
-  >;
+  const callable =
+    ((input?: RemoteInput<Input>) => submit_effect(input)) as EffectRemoteForm<
+      Input,
+      Output,
+      ErrorType
+    >;
 
   copy_property_descriptors(
     form_obj,

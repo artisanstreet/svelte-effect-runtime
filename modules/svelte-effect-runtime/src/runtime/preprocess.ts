@@ -46,7 +46,9 @@ export function preprocess(): PreprocessGroup {
       let combined = content;
 
       if (script?.has_effect) {
-        const result = transform_script_effect(script.text, resolved_filename);
+        const result = transform_script_effect(script.text, resolved_filename, {
+          emit_types: script.is_typescript,
+        });
 
         combined = content.slice(0, script.effect_attr_start) +
           content.slice(script.effect_attr_end, script.open_end) +
@@ -69,6 +71,7 @@ function find_script(content: string):
     has_effect: boolean;
     effect_attr_start: number;
     effect_attr_end: number;
+    is_typescript: boolean;
   }
   | undefined {
   const pattern = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi;
@@ -92,10 +95,21 @@ function find_script(content: string):
       has_effect: effect_match !== null,
       effect_attr_start: match.index + "<script".length + attr_start,
       effect_attr_end: match.index + "<script".length + attr_end,
+      is_typescript: has_typescript_lang(attrs),
     };
   }
 
   return undefined;
+}
+
+function has_typescript_lang(attrs: string): boolean {
+  const lang_match = /\blang\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(
+    attrs,
+  );
+  const lang = (lang_match?.[1] ?? lang_match?.[2] ?? lang_match?.[3] ?? "")
+    .toLowerCase();
+
+  return lang === "ts" || lang === "typescript";
 }
 
 export {

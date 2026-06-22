@@ -9,10 +9,11 @@ import {
   is_callback_function_expression,
 } from "./expressions.ts";
 import { normalize_effect_callback_yields } from "./effect-callbacks.ts";
-import { HELPERS } from "./constants.ts";
 import type {
   HelperDeclaration,
   MarkupCandidate,
+  MarkupHelperBindings,
+  MarkupNameAllocator,
   PendingRelocation,
   Replacement,
   TagKind,
@@ -30,9 +31,17 @@ import type {
 export function emit_replacements(
   classified: Array<{ candidate: MarkupCandidate; kind: TagKind }>,
   effect_context: EffectCallbackRewriteContext,
+  helper_bindings: MarkupHelperBindings,
+  name_allocator: MarkupNameAllocator,
 ): Replacement[] {
   return classified.map(({ candidate, kind }) =>
-    emit_replacement(candidate, kind, effect_context)
+    emit_replacement(
+      candidate,
+      kind,
+      effect_context,
+      helper_bindings,
+      name_allocator,
+    )
   );
 }
 
@@ -40,6 +49,8 @@ function emit_replacement(
   candidate: MarkupCandidate,
   kind: TagKind,
   effect_context: EffectCallbackRewriteContext,
+  helper_bindings: MarkupHelperBindings,
+  name_allocator: MarkupNameAllocator,
 ): Replacement {
   const normalized = normalize_effect_callback_yields(
     candidate.expr_text,
@@ -51,7 +62,7 @@ function emit_replacement(
   };
   const id = make_cache_id(candidate);
   const id_text = JSON.stringify(id);
-  const helper_name = make_helper_name(candidate);
+  const helper_name = make_helper_name(candidate, name_allocator);
 
   let replacement_text: string;
   let helpers: HelperDeclaration[];
@@ -60,25 +71,34 @@ function emit_replacement(
   if (kind === "await") {
     const effect = make_effect_helper(normalized_candidate, helper_name);
 
-    replacement_text = emit_promise_expression(id_text, effect);
+    replacement_text = emit_promise_expression(
+      id_text,
+      effect,
+      helper_bindings,
+    );
     helpers = [...normalized.helpers, effect.helper];
   } else if (kind === "render") {
     const effect = make_effect_helper(normalized_candidate, helper_name);
 
-    replacement_text = emit_render_expression(id_text, effect, candidate);
+    replacement_text = emit_render_expression(
+      id_text,
+      effect,
+      candidate,
+      helper_bindings,
+    );
     helpers = [...normalized.helpers, effect.helper];
   } else if (kind === "render_argument") {
     const effect = make_effect_helper(normalized_candidate, helper_name);
 
-    replacement_text = emit_each_expression(id_text, effect);
+    replacement_text = emit_each_expression(id_text, effect, helper_bindings);
     helpers = [...normalized.helpers, effect.helper];
   } else if (kind === "each") {
     const effect = make_effect_helper(normalized_candidate, helper_name);
 
-    replacement_text = emit_each_expression(id_text, effect);
+    replacement_text = emit_each_expression(id_text, effect, helper_bindings);
     helpers = [...normalized.helpers, effect.helper];
   } else if (kind === "event") {
-    const event = make_event_handler(normalized_candidate);
+    const event = make_event_handler(normalized_candidate, helper_bindings);
 
     replacement_text = event.text;
     helpers = normalized.helpers;
@@ -90,7 +110,7 @@ function emit_replacement(
   } else {
     const effect = make_effect_helper(normalized_candidate, helper_name);
 
-    replacement_text = emit_each_expression(id_text, effect);
+    replacement_text = emit_each_expression(id_text, effect, helper_bindings);
     helpers = [...normalized.helpers, effect.helper];
   }
 
@@ -105,6 +125,7 @@ function emit_replacement(
 
 function make_event_handler(
   candidate: MarkupCandidate,
+  helper_bindings: MarkupHelperBindings,
 ): { text: string; expr_text: string } {
   const expr_text = candidate.expr_text;
 
@@ -126,23 +147,26 @@ function make_event_handler(
 
   return {
     expr_text,
-    text: `(event) => { ${HELPERS.run}(function* () { ${expr_text}; }); }`,
+    text:
+      `(event) => { ${helper_bindings.run}(function* () { ${expr_text}; }); }`,
   };
 }
 
 function emit_promise_expression(
   id_text: string,
   effect: EffectHelper,
+  helper_bindings: MarkupHelperBindings,
 ): string {
-  return `${HELPERS.promise}(${id_text}, ${effect.deps_text}, () => ${effect.call})`;
+  return `${helper_bindings.promise}(${id_text}, ${effect.deps_text}, () => ${effect.call})`;
 }
 
 function emit_render_expression(
   id_text: string,
   effect: EffectHelper,
   candidate: MarkupCandidate,
+  helper_bindings: MarkupHelperBindings,
 ): string {
-  const expression = emit_promise_expression(id_text, effect);
+  const expression = emit_promise_expression(id_text, effect, helper_bindings);
 
   if (/^\s*yield\s*\*/.test(candidate.expr_text)) {
     return `(await ${expression})()`;
@@ -154,8 +178,9 @@ function emit_render_expression(
 function emit_each_expression(
   id_text: string,
   effect: EffectHelper,
+  helper_bindings: MarkupHelperBindings,
 ): string {
-  return `await ${emit_promise_expression(id_text, effect)}`;
+  return `await ${emit_promise_expression(id_text, effect, helper_bindings)}`;
 }
 
 interface EffectHelper {
@@ -169,12 +194,11 @@ function make_effect_helper(
   helper_name: string,
 ): EffectHelper {
   const deps = collect_free_identifiers(candidate.expr_text);
-  const params_text = deps.join(", ");
   const args_text = deps.join(", ");
   const deps_text = deps.length === 0 ? "[]" : `[${args_text}]`;
-  const call = `${helper_name}(${args_text})`;
+  const call = `${helper_name}()`;
   const text =
-    `function* ${helper_name}(${params_text}) { return (${candidate.expr_text}); }`;
+    `function* ${helper_name}() { return (${candidate.expr_text}); }`;
   const generated_start = text.indexOf(candidate.expr_text);
 
   return {
@@ -199,8 +223,13 @@ function make_cache_id(candidate: MarkupCandidate): string {
   return `${normalized_filename}:${candidate.start}:${candidate.end}`;
 }
 
-function make_helper_name(candidate: MarkupCandidate): string {
-  return `__SER___markup_effect_${candidate.start}_${candidate.end}`;
+function make_helper_name(
+  candidate: MarkupCandidate,
+  name_allocator: MarkupNameAllocator,
+): string {
+  return name_allocator.reserve(
+    `__SER___markup_effect_${candidate.start}_${candidate.end}`,
+  );
 }
 
 function make_relocation(

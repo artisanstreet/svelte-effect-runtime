@@ -7,17 +7,10 @@ import { is_handler } from "./schema.ts";
 import type { RequestEvent } from "./runtime.ts";
 import type {
   EffectLike,
-  EffectRemoteLiveSource,
   RemoteFormHandler,
   RemoteHandler,
+  RemoteLiveHandler,
 } from "./types.ts";
-
-type RemoteLiveHandler<Input = unknown, A = unknown> =
-  | EffectLike<EffectRemoteLiveSource<A>>
-  | EffectRemoteLiveSource<A>
-  | ((input: Input) =>
-    | EffectLike<EffectRemoteLiveSource<A>>
-    | EffectRemoteLiveSource<A>);
 
 let running_remote_effect_handlers = 0;
 
@@ -48,7 +41,7 @@ export function is_running_remote_effect_handler(): boolean {
  * @returns Native SvelteKit handler wrapper.
  */
 export function make_remote_wrapper(
-  handler: RemoteHandler | EffectLike,
+  handler: RemoteHandler<unknown, unknown, unknown, unknown> | EffectLike,
   helper_name: string,
 ): (input: unknown) => Promise<unknown> {
   return async (input: unknown) => {
@@ -81,7 +74,7 @@ export function make_remote_wrapper(
  * @returns Native SvelteKit live query wrapper.
  */
 export function make_remote_live_wrapper<Input, A>(
-  handler: RemoteLiveHandler<Input, A>,
+  handler: RemoteLiveHandler<Input, A, unknown, unknown>,
   helper_name: string,
 ): (input: unknown) => Promise<unknown> {
   return async (input: unknown) => {
@@ -116,7 +109,7 @@ export function make_remote_live_wrapper<Input, A>(
  * @returns Native SvelteKit form handler wrapper.
  */
 export function make_remote_form_wrapper<Input, A>(
-  handler: RemoteFormHandler<Input, A>,
+  handler: RemoteFormHandler<Input, A, unknown, unknown>,
   helper_name: string,
 ): (data: unknown, issue: unknown) => Promise<unknown> {
   return async (data: unknown, issue: unknown) => {
@@ -129,7 +122,7 @@ export function make_remote_form_wrapper<Input, A>(
     }
 
     return await run_inside_remote_effect_handler(() => {
-      const invalid_proxy = make_invalid_proxy();
+      const invalid_proxy = make_invalid_proxy<Input>();
 
       try {
         const result = handler({

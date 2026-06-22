@@ -56,6 +56,7 @@ function lower_variable_statement(
   context: ScriptLoweringContext,
 ): LoweredStatement {
   const temps: TempBinding[] = [];
+  const type_helpers: string[] = [];
   const rewritten_decls: string[] = [];
   const statements: string[] = [];
   const deps: string[] = [];
@@ -76,7 +77,7 @@ function lower_variable_statement(
         const names = extract_binding_names(decl.name);
         const statement = `(${binding_text} = ${initializer_text});`;
 
-        temps.push(...names.map((name) => ({ name })));
+        temps.push(...names.map((name) => make_unknown_temp(name, context)));
         statements.push(statement);
         deps.push(...collect_deps(statement, names));
 
@@ -94,15 +95,25 @@ function lower_variable_statement(
 
       if (is_yield_star_expression(decl.initializer)) {
         const temp_name = context.next_temp_name(original_name);
-
-        temps.push({ name: temp_name });
-        has_bare_yield = true;
-        rewritten_decls.push(`${original_name} = $derived(${temp_name})`);
-
         const yield_text = extract_yield_star_full_text(
           decl.initializer,
           content,
         );
+        const type_helper = make_yield_type_helper(
+          yield_text,
+          original_name,
+          context,
+        );
+
+        if (type_helper) {
+          type_helpers.push(type_helper.declaration);
+          temps.push({ name: temp_name, type: type_helper.type });
+        } else {
+          temps.push({ name: temp_name });
+        }
+
+        has_bare_yield = true;
+        rewritten_decls.push(`${original_name} = $derived(${temp_name})`);
 
         statements.push(`${temp_name} = ${yield_text};`);
         deps.push(...collect_deps(yield_text));
@@ -113,9 +124,31 @@ function lower_variable_statement(
         );
 
         if (state_rune) {
+          const direct_yield_text = extract_yield_star_full_text(
+            decl.initializer,
+            content,
+          );
+          const state_type = direct_yield_text === state_rune.value_text
+            ? make_yield_type_helper(
+              state_rune.value_text,
+              original_name,
+              context,
+            )
+            : undefined;
+
+          if (state_type) {
+            type_helpers.push(state_type.declaration);
+          }
+
           has_bare_yield = true;
           rewritten_decls.push(
-            `${original_name} = ${state_rune.rune_name}(undefined)`,
+            `${original_name} = ${
+              make_state_placeholder(
+                state_rune.rune_name,
+                state_type?.type,
+                context,
+              )
+            }`,
           );
           statements.push(`${original_name} = ${state_rune.value_text};`);
           deps.push(...collect_deps(state_rune.value_text));
@@ -130,6 +163,7 @@ function lower_variable_statement(
         );
 
         temps.push(...lowered.temps);
+        type_helpers.push(...(lowered.type_helpers ?? []));
         for (const block of lowered.effect_blocks) {
           statements.push(...block.statements);
           deps.push(...block.deps);
@@ -156,14 +190,24 @@ function lower_variable_statement(
 
       const temp_name = context.next_temp_name("destructure");
       const names = extract_binding_names(decl.name);
-
-      temps.push({ name: temp_name });
-      temps.push(...names.map((name) => ({ name })));
-
       const yield_text = extract_yield_star_full_text(
         decl.initializer,
         content,
       );
+      const type_helper = make_yield_type_helper(
+        yield_text,
+        "destructure",
+        context,
+      );
+
+      if (type_helper) {
+        type_helpers.push(type_helper.declaration);
+        temps.push({ name: temp_name, type: type_helper.type });
+      } else {
+        temps.push({ name: temp_name });
+      }
+
+      temps.push(...names.map((name) => make_unknown_temp(name, context)));
 
       statements.push(`${temp_name} = ${yield_text};`);
       statements.push(`(${binding_text} = ${temp_name});`);
@@ -177,6 +221,7 @@ function lower_variable_statement(
 
   return {
     temps,
+    type_helpers,
     rewritten_text,
     effect_blocks: statements.length === 0
       ? []
@@ -248,6 +293,7 @@ function lower_expression_statement(
 
     return {
       temps: lowered.temps,
+      type_helpers: lowered.type_helpers,
       rewritten_text: "",
       effect_blocks: [
         make_effect_block(
@@ -278,6 +324,7 @@ function lower_expression_statement(
   if (is_top_level_rune_call(expr)) {
     return {
       temps: lowered.temps,
+      type_helpers: lowered.type_helpers,
       rewritten_text: lowered.rewritten_expr + ";",
       effect_blocks: lowered.effect_blocks,
       range: { start: stmt.getStart(), end: stmt.end },
@@ -288,6 +335,7 @@ function lower_expression_statement(
 
   return {
     temps: lowered.temps,
+    type_helpers: lowered.type_helpers,
     rewritten_text: "",
     effect_blocks: [
       make_effect_block(
@@ -318,14 +366,22 @@ function lower_expression_yields(
   }> = [];
 
   const temps: TempBinding[] = [];
+  const type_helpers: string[] = [];
   const statements: string[] = [];
   const deps: string[] = [];
 
   collect_yield_star_nodes(expr, (node) => {
     const temp_name = context.next_temp_name(hint);
     const yield_text = slice_start(content, node).trim();
+    const type_helper = make_yield_type_helper(yield_text, hint, context);
 
-    temps.push({ name: temp_name });
+    if (type_helper) {
+      type_helpers.push(type_helper.declaration);
+      temps.push({ name: temp_name, type: type_helper.type });
+    } else {
+      temps.push({ name: temp_name });
+    }
+
     statements.push(`${temp_name} = ${yield_text};`);
     deps.push(...collect_deps(yield_text));
     replacements.push({
@@ -338,6 +394,7 @@ function lower_expression_yields(
   if (replacements.length === 0) {
     return {
       temps,
+      type_helpers,
       rewritten_expr: slice(content, expr).trim(),
       effect_blocks: [],
     };
@@ -357,9 +414,59 @@ function lower_expression_yields(
 
   return {
     temps,
+    type_helpers,
     rewritten_expr: text.trim(),
     effect_blocks: [make_effect_block(statements, deps)],
   };
+}
+
+function make_yield_type_helper(
+  yield_text: string,
+  hint: string,
+  context: ScriptLoweringContext,
+): { declaration: string; type: string } | undefined {
+  if (!context.emit_types) {
+    return undefined;
+  }
+
+  const helper_name = context.next_type_helper_name(hint);
+  const effect_text = strip_yield_star(yield_text);
+
+  return {
+    declaration: `function ${helper_name}() { return (${effect_text}); }`,
+    type:
+      `${context.effect_name}.Success<ReturnType<typeof ${helper_name}>> | undefined`,
+  };
+}
+
+function make_unknown_temp(
+  name: string,
+  context: ScriptLoweringContext,
+): TempBinding {
+  return {
+    name,
+    type: context.emit_types ? "unknown" : undefined,
+  };
+}
+
+function make_state_placeholder(
+  rune_name: string,
+  type: string | undefined,
+  context: ScriptLoweringContext,
+): string {
+  if (type) {
+    return `${rune_name}<${type}>(undefined)`;
+  }
+
+  if (context.emit_types) {
+    return `${rune_name}<unknown>(undefined)`;
+  }
+
+  return `${rune_name}(undefined)`;
+}
+
+function strip_yield_star(yield_text: string): string {
+  return yield_text.replace(/^yield\*\s*/, "");
 }
 
 function rewrite_state_rune_as_derived(expression: string): string {

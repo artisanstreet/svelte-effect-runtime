@@ -75,3 +75,13 @@ export interface Insertion {
   text: string;
   relocations?: PendingRelocation[];
 }
+
+export interface MarkupHelperBindings {
+  value: string;
+  promise: string;
+  run: string;
+}
+
+export interface MarkupNameAllocator {
+  reserve(name: string): string;
+}

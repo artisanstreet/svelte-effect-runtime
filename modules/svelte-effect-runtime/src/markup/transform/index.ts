@@ -7,6 +7,7 @@ import {
   create_relocations,
   create_source_map,
   inject_helpers,
+  make_markup_helper_bindings,
 } from "./apply.ts";
 import { classify_candidates } from "./classify.ts";
 import { collect_effect_callback_bindings } from "./effect-bindings.ts";
@@ -44,6 +45,7 @@ export function transform_markup_effect(
   /** Find all brace expressions containing yield* and replace with placeholders. */
   const work = sanitize_markup(content, filename);
   const effect_context = collect_effect_callback_bindings(content);
+  const helper_context = make_markup_helper_bindings(content);
 
   if (work.candidates.length === 0) {
     return { code: content, has_yield: false };
@@ -73,7 +75,12 @@ export function transform_markup_effect(
     );
   }
 
-  const replacements = emit_replacements(classified, effect_context);
+  const replacements = emit_replacements(
+    classified,
+    effect_context,
+    helper_context.bindings,
+    helper_context.name_allocator,
+  );
   const helpers = replacements.flatMap((replacement) =>
     replacement.helpers ?? []
   );
@@ -86,7 +93,12 @@ export function transform_markup_effect(
     magic.overwrite(r.start, r.end, r.text);
   }
 
-  const helper_insertion = inject_helpers(magic, content, helpers);
+  const helper_insertion = inject_helpers(
+    magic,
+    content,
+    helpers,
+    helper_context.bindings,
+  );
   const relocations = create_relocations(replacements, helper_insertion);
 
   return {

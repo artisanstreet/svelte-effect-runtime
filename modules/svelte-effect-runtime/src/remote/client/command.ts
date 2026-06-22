@@ -6,6 +6,14 @@ import { make_effect_from_promise } from "./effect.ts";
 import { copy_property_descriptors, has_method } from "./utils.ts";
 import type { NativeMethod, Pending } from "./types.ts";
 
+type EffectRemoteCommandAdapter<Input, Output, ErrorType = never> =
+  & ((
+    input: undefined extends Input ? Input | void : Input,
+  ) => Effect.Effect<Output, RemoteFailure<ErrorType>>)
+  & {
+    readonly pending: number;
+  };
+
 /**
  * Creates a remote command adapter. The adapter preserves the native
  * pending getter and turns each invocation into an Effect.
@@ -28,9 +36,7 @@ export function create_remote_command_adapter<
   decode_payload: (value: unknown) => unknown,
   _base = "",
   pending?: Pending,
-): (
-  input: undefined extends Input ? Input | void : Input,
-) => Effect.Effect<Output, RemoteFailure<ErrorType>> {
+): EffectRemoteCommandAdapter<Input, Output, ErrorType> {
   const invoke = has_method(native_factory, "invoke")
     ? native_factory.invoke
     : undefined;
@@ -69,5 +75,5 @@ export function create_remote_command_adapter<
     });
   }
 
-  return adapter;
+  return adapter as EffectRemoteCommandAdapter<Input, Output, ErrorType>;
 }

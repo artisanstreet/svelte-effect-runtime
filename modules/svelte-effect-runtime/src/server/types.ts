@@ -12,29 +12,39 @@ import type { Effect, Layer, ManagedRuntime, Schema, Stream } from "effect";
  *
  * @since 2.0.0
  */
-export type EffectLike<A = unknown> =
-  | Effect.Effect<A, unknown, unknown>
-  | Effect.gen.Return<A, unknown, unknown>;
+export type EffectLike<A = unknown, E = unknown, R = unknown> =
+  | Effect.Effect<A, E, R>
+  | Effect.gen.Return<A, E, R>;
 
 /**
  * Handler shape accepted by query, command, and prerender helpers.
  *
  * @since 2.0.0
  */
-export type RemoteHandler<Input = unknown, A = unknown> = (
+export type RemoteHandler<
+  Input = unknown,
+  A = unknown,
+  E = unknown,
+  R = unknown,
+> = (
   input: Input,
-) => EffectLike<A>;
+) => EffectLike<A, E, R>;
 
 /**
  * Handler or source shape accepted by live query helpers.
  *
  * @since 2.0.0
  */
-export type RemoteLiveHandler<Input = unknown, A = unknown> =
-  | EffectLike<EffectRemoteLiveSource<A>>
+export type RemoteLiveHandler<
+  Input = unknown,
+  A = unknown,
+  E = unknown,
+  R = unknown,
+> =
+  | EffectLike<EffectRemoteLiveSource<A>, E, R>
   | EffectRemoteLiveSource<A>
   | ((input: Input) =>
-    | EffectLike<EffectRemoteLiveSource<A>>
+    | EffectLike<EffectRemoteLiveSource<A>, E, R>
     | EffectRemoteLiveSource<A>);
 
 /**
@@ -44,35 +54,62 @@ export type RemoteLiveHandler<Input = unknown, A = unknown> =
  *
  * @since 2.0.0
  */
-export type EffectRemoteBatchHandler<Input = unknown, A = unknown> = (
+export type EffectRemoteBatchHandler<
+  Input = unknown,
+  A = unknown,
+  E = unknown,
+  R = unknown,
+> = (
   inputs: readonly Input[],
-) => EffectLike<(input: Input, index: number) => A>;
+) => EffectLike<(input: Input, index: number) => A, E, R>;
 
 /**
  * Handler shape accepted by the form helper.
  *
  * @since 2.0.0
  */
-export type RemoteFormHandler<Input = unknown, A = unknown> = (
+export type RemoteFormHandler<
+  Input = unknown,
+  A = unknown,
+  E = unknown,
+  R = unknown,
+> = (
   input: {
     readonly data: Input;
-    readonly invalid: FormInvalid;
+    readonly invalid: FormInvalid<Input>;
     readonly issue: unknown;
   },
-) => EffectLike<A>;
+) => EffectLike<A, E, R>;
 
 /**
  * Proxy callable used to create typed form validation failures.
  *
  * @since 2.0.0
  */
-export type FormInvalid =
+export type FormInvalid<Input = unknown> =
+  & FormInvalidChildren<Input>
   & {
+    (
+      message: string,
+    ): Effect.Effect<never, ReturnType<typeof create_form_error>>;
+  };
+
+type FormInvalidChildren<Input> = IsUnknown<Input> extends true ? {
     readonly [key: string]: FormInvalid;
   }
-  & ((
-    message: string,
-  ) => Effect.Effect<never, ReturnType<typeof create_form_error>>);
+  : NonNullable<Input> extends readonly (infer Item)[] ? {
+      readonly [index: number]: FormInvalid<Item>;
+    }
+  : NonNullable<Input> extends object ? {
+      readonly [Key in keyof NonNullable<Input>]-?: FormInvalid<
+        NonNullable<Input>[Key]
+      >;
+    }
+  : Record<never, never>;
+
+type IsUnknown<Value> = unknown extends Value
+  ? [Value] extends [unknown] ? true : false
+  : false;
 
 /**
  * Options accepted by the prerender helper.
@@ -104,6 +141,14 @@ export type SchemaInput<S> = S extends Schema.Top ? Schema.Schema.Type<S>
   : unknown;
 
 /**
+ * Extracts the encoded caller input type from an Effect Schema.
+ *
+ * @since 2.4.2
+ */
+export type SchemaEncodedInput<S> = S extends Schema.Top ? S["Encoded"]
+  : unknown;
+
+/**
  * Root and server export shape for building the server-side runtime.
  *
  * @since 2.0.0
@@ -120,17 +165,17 @@ export interface ServerRuntimeFactory {
  * @since 2.0.0
  */
 export interface QueryFactory {
-  <A>(
-    validate_or_handler: EffectLike<A> | RemoteHandler<void, A>,
-  ): EffectRemoteQueryFunction<void, A>;
-  <Input, A>(
+  <A, E = never, R = never>(
+    validate_or_handler: EffectLike<A, E, R> | RemoteHandler<void, A, E, R>,
+  ): EffectRemoteQueryFunction<void, A, E>;
+  <Input, A, E = never, R = never>(
     validate_or_handler: "unchecked",
-    maybe_handler: RemoteHandler<Input, A>,
-  ): EffectRemoteQueryFunction<Input, A>;
-  <S extends Schema.Schema<unknown>, A>(
+    maybe_handler: RemoteHandler<Input, A, E, R>,
+  ): EffectRemoteQueryFunction<Input, A, E>;
+  <S extends Schema.Schema<unknown>, A, E = never, R = never>(
     validate_or_handler: S,
-    maybe_handler: RemoteHandler<SchemaInput<S>, A>,
-  ): EffectRemoteQueryFunction<SchemaInput<S>, A>;
+    maybe_handler: RemoteHandler<SchemaInput<S>, A, E, R>,
+  ): EffectRemoteQueryFunction<SchemaEncodedInput<S>, A, E>;
 
   readonly batch: QueryBatchFactory;
   readonly live: QueryLiveFactory;
@@ -142,14 +187,14 @@ export interface QueryFactory {
  * @since 2.0.0
  */
 export interface QueryBatchFactory {
-  <Input, A>(
+  <Input, A, E = never, R = never>(
     validate_or_handler: "unchecked",
-    maybe_handler: EffectRemoteBatchHandler<Input, A>,
-  ): EffectRemoteQueryFunction<Input, A>;
-  <S extends Schema.Schema<unknown>, A>(
+    maybe_handler: EffectRemoteBatchHandler<Input, A, E, R>,
+  ): EffectRemoteQueryFunction<Input, A, E>;
+  <S extends Schema.Schema<unknown>, A, E = never, R = never>(
     validate_or_handler: S,
-    maybe_handler: EffectRemoteBatchHandler<SchemaInput<S>, A>,
-  ): EffectRemoteQueryFunction<SchemaInput<S>, A>;
+    maybe_handler: EffectRemoteBatchHandler<SchemaInput<S>, A, E, R>,
+  ): EffectRemoteQueryFunction<SchemaEncodedInput<S>, A, E>;
 }
 
 /**
@@ -158,17 +203,17 @@ export interface QueryBatchFactory {
  * @since 2.0.0
  */
 export interface QueryLiveFactory {
-  <A>(
-    validate_or_handler: RemoteLiveHandler<void, A>,
-  ): EffectRemoteLiveQueryFunction<void, A>;
-  <Input, A>(
+  <A, E = never, R = never>(
+    validate_or_handler: RemoteLiveHandler<void, A, E, R>,
+  ): EffectRemoteLiveQueryFunction<void, A, E>;
+  <Input, A, E = never, R = never>(
     validate_or_handler: "unchecked",
-    maybe_handler: RemoteLiveHandler<Input, A>,
-  ): EffectRemoteLiveQueryFunction<Input, A>;
-  <S extends Schema.Schema<unknown>, A>(
+    maybe_handler: RemoteLiveHandler<Input, A, E, R>,
+  ): EffectRemoteLiveQueryFunction<Input, A, E>;
+  <S extends Schema.Schema<unknown>, A, E = never, R = never>(
     validate_or_handler: S,
-    maybe_handler: RemoteLiveHandler<SchemaInput<S>, A>,
-  ): EffectRemoteLiveQueryFunction<SchemaInput<S>, A>;
+    maybe_handler: RemoteLiveHandler<SchemaInput<S>, A, E, R>,
+  ): EffectRemoteLiveQueryFunction<SchemaEncodedInput<S>, A, E>;
 }
 
 /**
@@ -177,17 +222,17 @@ export interface QueryLiveFactory {
  * @since 2.0.0
  */
 export interface CommandFactory {
-  <A>(
-    validate_or_handler: EffectLike<A> | RemoteHandler<void, A>,
-  ): EffectRemoteCommand<void, A>;
-  <Input, A>(
+  <A, E = never, R = never>(
+    validate_or_handler: EffectLike<A, E, R> | RemoteHandler<void, A, E, R>,
+  ): EffectRemoteCommand<void, A, E>;
+  <Input, A, E = never, R = never>(
     validate_or_handler: "unchecked",
-    maybe_handler: RemoteHandler<Input, A>,
-  ): EffectRemoteCommand<Input, A>;
-  <S extends Schema.Schema<unknown>, A>(
+    maybe_handler: RemoteHandler<Input, A, E, R>,
+  ): EffectRemoteCommand<Input, A, E>;
+  <S extends Schema.Schema<unknown>, A, E = never, R = never>(
     validate_or_handler: S,
-    maybe_handler: RemoteHandler<SchemaInput<S>, A>,
-  ): EffectRemoteCommand<SchemaInput<S>, A>;
+    maybe_handler: RemoteHandler<SchemaInput<S>, A, E, R>,
+  ): EffectRemoteCommand<SchemaEncodedInput<S>, A, E>;
 }
 
 /**
@@ -196,17 +241,17 @@ export interface CommandFactory {
  * @since 2.0.0
  */
 export interface FormFactory {
-  <A>(
-    validate_or_handler: EffectLike<A> | RemoteFormHandler<void, A>,
-  ): EffectRemoteForm<void, A>;
-  <Input extends RemoteFormInput, A>(
+  <A, E = never, R = never>(
+    validate_or_handler: EffectLike<A, E, R> | RemoteFormHandler<void, A, E, R>,
+  ): EffectRemoteForm<void, A, E>;
+  <Input extends RemoteFormInput, A, E = never, R = never>(
     validate_or_handler: "unchecked",
-    maybe_handler: RemoteFormHandler<Input, A>,
-  ): EffectRemoteForm<Input, A>;
-  <S extends Schema.Top, A>(
+    maybe_handler: RemoteFormHandler<Input, A, E, R>,
+  ): EffectRemoteForm<Input, A, E>;
+  <S extends Schema.Top, A, E = never, R = never>(
     validate_or_handler: S,
-    maybe_handler: RemoteFormHandler<SchemaInput<S>, A>,
-  ): EffectRemoteForm<FormSchemaEncodedInput<S>, A>;
+    maybe_handler: RemoteFormHandler<SchemaInput<S>, A, E, R>,
+  ): EffectRemoteForm<FormSchemaEncodedInput<S>, A, E>;
 }
 
 /**
@@ -215,11 +260,20 @@ export interface FormFactory {
  * @since 2.0.0
  */
 export interface PrerenderFactory {
-  (
-    validate_or_handler: unknown,
-    maybe_handler_or_options?: RemoteHandler | PrerenderOptions,
+  <A, E = never, R = never>(
+    validate_or_handler: EffectLike<A, E, R> | RemoteHandler<void, A, E, R>,
     maybe_options?: PrerenderOptions,
-  ): unknown;
+  ): EffectRemoteFunction<void, A, E>;
+  <Input, A, E = never, R = never>(
+    validate_or_handler: "unchecked",
+    maybe_handler: RemoteHandler<Input, A, E, R>,
+    maybe_options?: PrerenderOptions,
+  ): EffectRemoteFunction<Input, A, E>;
+  <S extends Schema.Schema<unknown>, A, E = never, R = never>(
+    validate_or_handler: S,
+    maybe_handler: RemoteHandler<SchemaInput<S>, A, E, R>,
+    maybe_options?: PrerenderOptions,
+  ): EffectRemoteFunction<SchemaEncodedInput<S>, A, E>;
 }
 
 /**
@@ -252,11 +306,11 @@ export type EffectRemoteLiveSource<A> =
  *
  * @since 2.0.0
  */
-export type EffectRemoteFunction<Input, A> = [Input] extends [void]
-  ? () => Effect.Effect<A, RemoteFailure<unknown>, unknown>
+export type EffectRemoteFunction<Input, A, E = never> = [Input] extends [void]
+  ? () => Effect.Effect<A, RemoteFailure<E>, never>
   : undefined extends Input
-    ? (input?: Input) => Effect.Effect<A, RemoteFailure<unknown>, unknown>
-  : (input: Input) => Effect.Effect<A, RemoteFailure<unknown>, unknown>;
+    ? (input?: Input) => Effect.Effect<A, RemoteFailure<E>, never>
+  : (input: Input) => Effect.Effect<A, RemoteFailure<E>, never>;
 
 /**
  * Effect-returning query resource with SvelteKit cache update methods
@@ -270,8 +324,8 @@ export type EffectRemoteFunction<Input, A> = [Input] extends [void]
  *
  * @since 2.0.0
  */
-export type EffectRemoteQuery<A> =
-  & Effect.Effect<A, RemoteFailure<unknown>, never>
+export type EffectRemoteQuery<A, E = never> =
+  & Effect.Effect<A, RemoteFailure<E>, never>
   & Pick<RemoteQuery<A>, "set">
   & {
     readonly current: A | undefined;
@@ -297,10 +351,10 @@ export type EffectRemoteQuery<A> =
  *
  * @since 2.0.0
  */
-export type EffectRemoteQueryFunction<Input, A> = [Input] extends [void]
-  ? () => EffectRemoteQuery<A>
-  : undefined extends Input ? (input?: Input) => EffectRemoteQuery<A>
-  : (input: Input) => EffectRemoteQuery<A>;
+export type EffectRemoteQueryFunction<Input, A, E = never> = [Input] extends
+  [void] ? () => EffectRemoteQuery<A, E>
+  : undefined extends Input ? (input?: Input) => EffectRemoteQuery<A, E>
+  : (input: Input) => EffectRemoteQuery<A, E>;
 
 /**
  * Live query resource with SvelteKit live stream state and reconnect controls
@@ -341,9 +395,9 @@ export type EffectRemoteLiveQueryResource<A> =
  *
  * @since 2.2.0
  */
-export type EffectRemoteLiveQuery<A> = Effect.Effect<
+export type EffectRemoteLiveQuery<A, E = never> = Effect.Effect<
   EffectRemoteLiveQueryResource<A>,
-  RemoteFailure<unknown>,
+  RemoteFailure<E>,
   never
 >;
 
@@ -358,10 +412,10 @@ export type EffectRemoteLiveQuery<A> = Effect.Effect<
  *
  * @since 2.2.0
  */
-export type EffectRemoteLiveQueryFunction<Input, A> = [Input] extends [void]
-  ? () => EffectRemoteLiveQuery<A>
-  : undefined extends Input ? (input?: Input) => EffectRemoteLiveQuery<A>
-  : (input: Input) => EffectRemoteLiveQuery<A>;
+export type EffectRemoteLiveQueryFunction<Input, A, E = never> = [Input] extends
+  [void] ? () => EffectRemoteLiveQuery<A, E>
+  : undefined extends Input ? (input?: Input) => EffectRemoteLiveQuery<A, E>
+  : (input: Input) => EffectRemoteLiveQuery<A, E>;
 
 /**
  * Effect-returning command type with SvelteKit's pending counter preserved.
@@ -376,8 +430,8 @@ export type EffectRemoteLiveQueryFunction<Input, A> = [Input] extends [void]
  *
  * @since 2.0.0
  */
-export type EffectRemoteCommand<Input, A> =
-  & EffectRemoteFunction<Input, A>
+export type EffectRemoteCommand<Input, A, E = never> =
+  & EffectRemoteFunction<Input, A, E>
   & {
     readonly pending: number;
   };
@@ -397,8 +451,11 @@ export type EffectRemoteCommand<Input, A> =
  * @template Input - Data shape submitted by the remote form.
  * @template A - Successful value produced by the form handler.
  */
-export type EffectRemoteForm<Input extends RemoteFormInput | void, A> =
-  ClientEffectRemoteForm<Input, A>;
+export type EffectRemoteForm<
+  Input extends RemoteFormInput | void,
+  A,
+  E = never,
+> = ClientEffectRemoteForm<Input, A, E>;
 
 type FormSchemaEncodedInput<S> = S extends Schema.Top
   ? FormRemoteInput<S["Encoded"]>

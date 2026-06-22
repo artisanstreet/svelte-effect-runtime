@@ -33,6 +33,7 @@ export interface ScriptTransformResult {
  */
 export interface TempBinding {
   name: string;
+  type?: string;
 }
 
 /**
@@ -43,6 +44,8 @@ export interface TempBinding {
 export interface LoweredStatement {
   /** `$state` bindings to emit at component scope. */
   temps: TempBinding[];
+  /** Helper declarations used only for generated temp types. */
+  type_helpers?: string[];
   /** The rewritten statement text with yield* replaced by temp refs. */
   rewritten_text: string;
   /** Effect bodies to emit in dependency-tracked runtime blocks. */
@@ -71,6 +74,7 @@ export interface EffectBlock {
  */
 export interface LoweredExpression {
   temps: TempBinding[];
+  type_helpers?: string[];
   rewritten_expr: string;
   effect_blocks: EffectBlock[];
 }
@@ -81,7 +85,11 @@ export interface LoweredExpression {
  * @since 2.0.0
  */
 export interface ScriptLoweringContext {
+  effect_name: string;
+  /** Whether generated state placeholders should carry TypeScript types. */
+  emit_types: boolean;
   next_temp_name(hint?: string): string;
+  next_type_helper_name(hint?: string): string;
 }
 
 /**
@@ -92,4 +100,14 @@ export interface ScriptLoweringContext {
 export interface RuntimeImportBindings {
   /** Binding name used for the Effect namespace in generated code. */
   effect: string;
+  /** Binding name used for the dispatcher factory in generated code. */
+  dispatcher: string;
+  /** Binding name used for the active dispatcher local. */
+  dispatcher_value: string;
+  /** Binding name used for the generated Effect program local. */
+  program: string;
+  /** Binding name used for the generated cancel function local. */
+  cancel: string;
+  /** Binding name used for Svelte's untrack helper. */
+  untrack: string;
 }

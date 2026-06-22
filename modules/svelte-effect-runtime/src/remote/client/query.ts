@@ -2,11 +2,19 @@ import { copy_property_descriptors, has_method } from "./utils.ts";
 import { normalize_native_error } from "./failures.ts";
 import { resolve_query_result } from "./query-result.ts";
 import { make_effect_from_promise } from "./effect.ts";
-import type { NativeMethod } from "./types.ts";
+import type { EffectRemoteQueryUpdateBrand, NativeMethod } from "./types.ts";
 import type { RemoteFailure } from "$/remote/shared.ts";
 import { Effect } from "effect";
 
 type RemoteInput<Input> = undefined extends Input ? Input | void : Input;
+
+type DecodePayload<Output> = (value: unknown) => Output;
+
+type NativeQueryFactory<Input> =
+  | ((input: RemoteInput<Input>) => unknown)
+  | {
+    readonly load: (input: RemoteInput<Input>) => unknown;
+  };
 
 type RemoteResourceEffect<Output, ErrorType = never> =
   & Effect.Effect<Output, RemoteFailure<ErrorType>>
@@ -85,10 +93,34 @@ export function create_remote_query_adapter<
   Output,
   ErrorType = never,
 >(
-  native_factory: unknown,
+  native_factory: NativeQueryFactory<Input>,
+  decode_payload: DecodePayload<Output>,
+  _base?: string,
+):
+  & EffectRemoteQueryUpdateBrand
+  & ((input: RemoteInput<Input>) => RemoteQueryEffect<Output, ErrorType>);
+export function create_remote_query_adapter<
+  Input,
+  Output,
+  ErrorType = never,
+>(
+  native_factory: NativeQueryFactory<Input>,
   decode_payload: (value: unknown) => unknown,
+  _base?: string,
+):
+  & EffectRemoteQueryUpdateBrand
+  & ((input: RemoteInput<Input>) => RemoteQueryEffect<Output, ErrorType>);
+export function create_remote_query_adapter<
+  Input,
+  Output,
+  ErrorType = never,
+>(
+  native_factory: unknown,
+  decode_payload: DecodePayload<Output>,
   _base = "",
-): (input: RemoteInput<Input>) => RemoteQueryEffect<Output, ErrorType> {
+):
+  & EffectRemoteQueryUpdateBrand
+  & ((input: RemoteInput<Input>) => RemoteQueryEffect<Output, ErrorType>) {
   const load = has_method(native_factory, "load")
     ? native_factory.load
     : undefined;
@@ -119,7 +151,9 @@ export function create_remote_query_adapter<
     attach_query_resource(resource, effect);
 
     return effect;
-  }) as (input: RemoteInput<Input>) => RemoteQueryEffect<Output, ErrorType>;
+  }) as
+    & EffectRemoteQueryUpdateBrand
+    & ((input: RemoteInput<Input>) => RemoteQueryEffect<Output, ErrorType>);
 
   copy_property_descriptors(native_factory, wrapped);
 
@@ -154,7 +188,9 @@ export function create_remote_live_query_adapter<
   native_factory: unknown,
   _decode_payload: (value: unknown) => unknown,
   _base = "",
-): (input: RemoteInput<Input>) => RemoteLiveQueryEffect<Output, ErrorType> {
+):
+  & EffectRemoteQueryUpdateBrand
+  & ((input: RemoteInput<Input>) => RemoteLiveQueryEffect<Output, ErrorType>) {
   const query = typeof native_factory === "function"
     ? native_factory as NativeMethod
     : undefined;
@@ -173,9 +209,11 @@ export function create_remote_live_query_adapter<
         return make_live_query_resource<Output>(resource);
       },
       catch: normalize_native_error,
-    }) as RemoteLiveQueryEffect<Output>) as (
-      input: RemoteInput<Input>,
-    ) => RemoteLiveQueryEffect<Output, ErrorType>;
+    }) as RemoteLiveQueryEffect<Output>) as
+      & EffectRemoteQueryUpdateBrand
+      & ((
+        input: RemoteInput<Input>,
+      ) => RemoteLiveQueryEffect<Output, ErrorType>);
 
   copy_property_descriptors(native_factory, wrapped);
 

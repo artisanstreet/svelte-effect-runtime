@@ -15,8 +15,23 @@ export function make_imports(
   has_effect_import: boolean,
   has_dispatcher_import: boolean,
   has_untrack_import: boolean,
-  bindings: RuntimeImportBindings = { effect: "Effect" },
+  bindings: RuntimeImportBindings = {
+    cancel: "__SER___cancel",
+    dispatcher: "get_dispatcher",
+    dispatcher_value: "__SER___dispatcher",
+    effect: "Effect",
+    program: "__SER___program",
+    untrack: "untrack",
+  },
 ): string {
+  const dispatcher_import = bindings.dispatcher === "get_dispatcher"
+    ? `import { get_dispatcher } from "svelte-effect-runtime/internal/generators";`
+    : `import { get_dispatcher as ${bindings.dispatcher} } from "svelte-effect-runtime/internal/generators";`;
+
+  const untrack_import = bindings.untrack === "untrack"
+    ? `import { untrack } from "svelte";`
+    : `import { untrack as ${bindings.untrack} } from "svelte";`;
+
   const effect_import = has_effect_import
     ? false
     : bindings.effect === "Effect"
@@ -24,9 +39,8 @@ export function make_imports(
     : `import { Effect as ${bindings.effect} } from "effect";`;
 
   return [
-    !has_dispatcher_import &&
-    `import { get_dispatcher } from "svelte-effect-runtime/internal/generators";`,
-    !has_untrack_import && `import { untrack } from "svelte";`,
+    !has_dispatcher_import && dispatcher_import,
+    !has_untrack_import && untrack_import,
     effect_import,
   ]
     .filter(Boolean)
@@ -95,12 +109,23 @@ export function has_top_level_binding(
   source_file: ts.SourceFile,
   local_name: string,
 ): boolean {
-  return source_file.statements.some((stmt) =>
-    collect_top_level_binding_names(stmt).includes(local_name)
-  );
+  return collect_top_level_binding_names(source_file).includes(local_name);
 }
 
-function collect_top_level_binding_names(stmt: ts.Statement): string[] {
+/**
+ * Collects every local binding declared at module top level.
+ *
+ * @since 2.4.2
+ * @param source_file - Parsed TypeScript source file to inspect.
+ * @returns Top-level names declared by imports, declarations, and variables.
+ */
+export function collect_top_level_binding_names(
+  source_file: ts.SourceFile,
+): string[] {
+  return source_file.statements.flatMap(collect_statement_binding_names);
+}
+
+function collect_statement_binding_names(stmt: ts.Statement): string[] {
   if (ts.isImportDeclaration(stmt)) {
     return collect_import_binding_names(stmt);
   }

@@ -1,7 +1,7 @@
 import { contains_top_level_yield_star } from "$/detect.ts";
 import {
+  collect_top_level_binding_names,
   has_local_import_binding,
-  has_top_level_binding,
   make_imports,
 } from "./imports.ts";
 import { create_source_map, slice } from "./source.ts";
@@ -14,6 +14,7 @@ import type {
   BlockRef,
   EffectBlock,
   RuntimeImportBindings,
+  ScriptLoweringContext,
   ScriptTransformResult,
 } from "./types.ts";
 
@@ -21,6 +22,10 @@ import MagicString from "magic-string";
 import ts from "typescript";
 
 export type { BlockRef, ScriptTransformResult } from "./types.ts";
+
+interface ScriptTransformOptions {
+  emit_types?: boolean;
+}
 
 /**
  * Transforms a `<script effect>` body by extracting top-level `yield*`
@@ -38,11 +43,13 @@ export type { BlockRef, ScriptTransformResult } from "./types.ts";
  * @since 2.0.0
  * @param content - The raw `<script effect>` body content.
  * @param filename - The source filename, used in error messages.
+ * @param options - Optional transform settings for generated script code.
  * @returns The transformed code and any block references.
  */
 export function transform_script_effect(
   content: string,
   filename: string,
+  options: ScriptTransformOptions = {},
 ): ScriptTransformResult {
   let temp_counter = 0;
 
@@ -57,21 +64,12 @@ export function transform_script_effect(
   const magic = new MagicString(content);
   const effect_blocks: EffectBlock[] = [];
   const block_refs: BlockRef[] = [];
+  const top_level_binding_names = collect_top_level_binding_names(source_file);
+  const top_level_binding_names_set = new Set(top_level_binding_names);
+  const name_allocator = make_name_allocator(top_level_binding_names);
+  const emit_types = options.emit_types ?? true;
 
   let has_effect = false;
-
-  const context = {
-    next_temp_name(hint?: string) {
-      const suffix = temp_counter === 0 ? "" : `_${temp_counter}`;
-      const name = hint
-        ? `__SER___${hint}${suffix}`
-        : `__SER___${temp_counter}`;
-
-      temp_counter += 1;
-
-      return name;
-    },
-  };
 
   /** Phase 1: detect imports already provided by the user. */
   const has_effect_import = has_local_import_binding(
@@ -92,10 +90,38 @@ export function transform_script_effect(
     "untrack",
   );
 
+  const reserve_runtime_import = (name: string) =>
+    top_level_binding_names_set.has(name)
+      ? name_allocator.reserve(make_generated_name(name, ""))
+      : name_allocator.reserve(name);
+
   const runtime_bindings: RuntimeImportBindings = {
-    effect: has_effect_import || !has_top_level_binding(source_file, "Effect")
-      ? "Effect"
-      : "__SER___Effect",
+    cancel: name_allocator.reserve("__SER___cancel"),
+    dispatcher: has_dispatcher_import
+      ? "get_dispatcher"
+      : reserve_runtime_import("get_dispatcher"),
+    dispatcher_value: name_allocator.reserve("__SER___dispatcher"),
+    effect: has_effect_import ? "Effect" : reserve_runtime_import("Effect"),
+    program: name_allocator.reserve("__SER___program"),
+    untrack: has_untrack_import ? "untrack" : reserve_runtime_import("untrack"),
+  };
+
+  const context: ScriptLoweringContext = {
+    effect_name: runtime_bindings.effect,
+    emit_types,
+    next_temp_name(hint?: string) {
+      const suffix = temp_counter === 0 ? "" : `_${temp_counter}`;
+      const name = make_generated_name(hint ?? String(temp_counter), suffix);
+
+      temp_counter += 1;
+
+      return name_allocator.reserve(name);
+    },
+    next_type_helper_name(hint?: string) {
+      return name_allocator.reserve(
+        make_generated_name(`type_${hint ?? "effect"}`, ""),
+      );
+    },
   };
 
   /** Phase 2: lower every top-level statement that contains `yield*`. */
@@ -123,10 +149,17 @@ export function transform_script_effect(
       lowered.rewritten_text,
     );
 
-    if (lowered.temps.length > 0) {
-      const prefix = lowered.temps
-        .map((temp) => `let ${temp.name} = $state(undefined);`)
-        .join("\n");
+    if (lowered.temps.length > 0 || lowered.type_helpers?.length) {
+      const temp_declarations = lowered.temps.map((temp) =>
+        temp.type
+          ? `let ${temp.name} = $state<${temp.type}>(undefined);`
+          : `let ${temp.name} = $state(undefined);`
+      );
+
+      const prefix = [
+        ...(lowered.type_helpers ?? []),
+        ...temp_declarations,
+      ].join("\n");
 
       magic.appendLeft(lowered.range.start, prefix + "\n");
     }
@@ -222,4 +255,35 @@ function find_class_member_with_yield_star(
   visit(stmt);
 
   return found;
+}
+
+function make_name_allocator(initial_names: readonly string[]): {
+  reserve(name: string): string;
+} {
+  const used_names = new Set(initial_names);
+
+  return {
+    reserve(name: string): string {
+      let candidate = name;
+      let suffix = 1;
+
+      while (used_names.has(candidate)) {
+        candidate = `${name}_${suffix}`;
+        suffix += 1;
+      }
+
+      used_names.add(candidate);
+
+      return candidate;
+    },
+  };
+}
+
+function make_generated_name(hint: string, suffix: string): string {
+  const normalized_hint = hint.replace(/[^A-Za-z0-9_$]/g, "_");
+  const safe_hint = /^[A-Za-z_$]/.test(normalized_hint)
+    ? normalized_hint
+    : `temp_${normalized_hint}`;
+
+  return `__SER___${safe_hint}${suffix}`;
 }
