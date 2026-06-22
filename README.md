@@ -20,16 +20,17 @@ Write effectful code without any hassle. Seriously!
 <script lang="ts" effect>
   import * as StockCard from "./ticker-card.ts";
   import { GetAllStocks, GetLivePrice } from "./tickers.remote.ts";
+  import { getUser } from "user.ts";
 </script>
 
 <ScrollArea>
   {#each yield* GetAllStocks as stock}
     {const liveQuery = yield* GetLivePrice(stock.ticker);
     {const price = liveQuery.current ?? stock.initialPrice}
-    
+    {const currency = getUser().preferredCurrency}
     <StockCard.Root>
       <StockCard.Header>{stock.name}</StockCard.Header>
-      <StockCard.Price>${price}</StockCard.Price>
+      <StockCard.Price>{price} {currency.displayName}</StockCard.Price>
     </StockCard.Root>
   {/each}
 </ScrollArea>
