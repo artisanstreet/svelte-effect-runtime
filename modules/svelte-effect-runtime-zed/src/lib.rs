@@ -13,8 +13,13 @@ const LANGUAGE_SERVER_BINARY_NAME: &str = "svelte-effect-runtime-language-server
 const LANGUAGE_SERVER_PACKAGE_NAME: &str = "svelte-effect-runtime-language-server";
 const MANAGED_LANGUAGE_SERVER_SCRIPT_PATH: &str =
     "node_modules/svelte-effect-runtime-language-server/.dist/server.cjs";
-const MANAGED_LANGUAGE_SERVER_RUNTIME_PATH: &str =
+const MANAGED_LANGUAGE_SERVER_RUNTIME_MANIFEST_PATH: &str =
     "node_modules/svelte-effect-runtime-language-server/runtime/package.json";
+const MANAGED_LANGUAGE_SERVER_RUNTIME_ENTRY_PATH: &str =
+    "node_modules/svelte-effect-runtime-language-server/runtime/transform.js";
+const MANAGED_LANGUAGE_SERVER_NESTED_RUNTIME_ENTRY_PATH: &str =
+    "node_modules/svelte-effect-runtime-language-server/runtime/runtime/transform.js";
+const RUNTIME_ENTRYPOINT_COMPATIBILITY_SHIM: &str = "export * from \"./runtime/transform.js\";\n";
 const TS_PLUGIN_PACKAGE_NAME: &str = "typescript-svelte-plugin";
 
 fn package_path(package_name: &str) -> Result<PathBuf> {
@@ -36,6 +41,28 @@ fn extension_path(relative_path: &str) -> Result<PathBuf> {
 
 fn is_file(path: &PathBuf) -> bool {
     fs::metadata(path).map_or(false, |metadata| metadata.is_file())
+}
+
+fn ensure_runtime_entrypoint(runtime_entry_path: &PathBuf) -> Result<()> {
+    if is_file(runtime_entry_path) {
+        return Ok(());
+    }
+
+    let nested_runtime_entry_path =
+        extension_path(MANAGED_LANGUAGE_SERVER_NESTED_RUNTIME_ENTRY_PATH)?;
+
+    if !is_file(&nested_runtime_entry_path) {
+        return Ok(());
+    }
+
+    if let Some(parent_dir) = runtime_entry_path.parent() {
+        fs::create_dir_all(parent_dir).map_err(|error| error.to_string())?;
+    }
+
+    fs::write(runtime_entry_path, RUNTIME_ENTRYPOINT_COMPATIBILITY_SHIM)
+        .map_err(|error| error.to_string())?;
+
+    Ok(())
 }
 
 impl SvelteEffectRuntimeExtension {
@@ -113,9 +140,16 @@ impl SvelteEffectRuntimeExtension {
 
     fn installed_server_script_path(&self) -> Result<Option<String>> {
         let script_path = extension_path(MANAGED_LANGUAGE_SERVER_SCRIPT_PATH)?;
-        let runtime_path = extension_path(MANAGED_LANGUAGE_SERVER_RUNTIME_PATH)?;
+        let runtime_manifest_path = extension_path(MANAGED_LANGUAGE_SERVER_RUNTIME_MANIFEST_PATH)?;
+        let runtime_entry_path = extension_path(MANAGED_LANGUAGE_SERVER_RUNTIME_ENTRY_PATH)?;
 
-        if is_file(&script_path) && is_file(&runtime_path) {
+        if !is_file(&script_path) || !is_file(&runtime_manifest_path) {
+            return Ok(None);
+        }
+
+        ensure_runtime_entrypoint(&runtime_entry_path)?;
+
+        if is_file(&runtime_entry_path) {
             return Ok(Some(script_path.to_string_lossy().to_string()));
         }
 
@@ -131,7 +165,7 @@ impl SvelteEffectRuntimeExtension {
 
         self.installed_server_script_path()?.ok_or_else(|| {
             format!(
-                "npm package '{}' did not contain .dist/server.cjs and runtime/package.json",
+                "npm package '{}' did not contain .dist/server.cjs and runtime/transform.js",
                 LANGUAGE_SERVER_PACKAGE_NAME,
             )
         })

@@ -79,4 +79,13 @@ for (const dirname of ["chunks", "internal", "markup", "remote", "runtime"]) {
   }
 }
 
+await Deno.writeTextFile(
+  join(runtime_dir, "transform.js"),
+  `export * from "./runtime/transform.js";\n`,
+);
+await Deno.writeTextFile(
+  join(runtime_dir, "transform.d.ts"),
+  `export * from "./runtime/transform";\n`,
+);
+
 await copy(runtime_dir, package_runtime_dir, { overwrite: true });
