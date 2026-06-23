@@ -20,11 +20,11 @@ Write effectful code without any hassle. Seriously!
 <script lang="ts" effect>
   import * as StockCard from "./ticker-card.ts";
   import { GetAllStocks, GetLivePrice } from "./tickers.remote.ts";
-  import { getUser } from "user.ts";
+  import { GetUser } from "user.ts";
 </script>
 
 <ScrollArea>
-  {const currency = getUser().preferredCurrency}
+  {const currency = $derived(yield* GetUser().preferredCurrency}
   
   {#each yield* GetAllStocks as stock}
     {const liveQuery = yield* GetLivePrice(stock.ticker);
