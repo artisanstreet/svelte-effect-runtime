@@ -14,8 +14,8 @@ interface MarkupPromiseOptions {
 /**
  * Runtime helper emitted by the markup transform for
  * `{#await yield* expr}` blocks. Delegates to the dispatcher's
- * promise mechanism in the browser. During SSR it returns a fallback promise
- * without starting the client dispatcher.
+ * promise mechanism. During SSR it can return a fallback promise without
+ * starting the dispatcher.
  *
  * @since 2.0.0
  * @param id - Stable identifier generated from the expression's source
@@ -40,7 +40,9 @@ export function promise<A, E, R>(
       return new Promise<A>(() => {});
     }
 
-    return Promise.resolve(ssr_fallback as A);
+    if (arguments.length >= 4) {
+      return Promise.resolve(ssr_fallback as A);
+    }
   }
 
   return get_dispatcher().promise({ id, deps, factory });
