@@ -22,6 +22,16 @@ but disable its language server:
 }
 ```
 
+For local development, install a fresh local copy with one command:
+
+```sh
+deno task install:zed-local
+```
+
+That builds the sibling language-server package, builds the Zed WASM extension,
+copies both into Zed's local `installed/svelte-effect-runtime` directory, and
+updates Zed's local extension index.
+
 For local development, point Zed at your local language-server binary with
 `lsp.svelte-effect-runtime-language-server.binary.path`:
 
