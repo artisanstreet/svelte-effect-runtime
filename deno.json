@@ -33,6 +33,7 @@
     "build:zed": "cd modules/svelte-effect-runtime-zed && deno task build",
     "build:lsp": "cd modules/svelte-effect-runtime-language-server && deno task build",
     "build:extension": "cd modules/svelte-effect-runtime-vsix && deno task build",
+    "install:zed-local": "deno task build:lsp && deno task build:zed && deno run -A build/install-zed-local.ts",
     "check": "deno task check:runtime",
     "check:runtime": "cd modules/svelte-effect-runtime && deno task check",
     "check:zed": "cd modules/svelte-effect-runtime-zed && deno task check",

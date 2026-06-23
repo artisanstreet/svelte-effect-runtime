@@ -1,5 +1,5 @@
-id = "svelte-effect-runtime-language-server"
-name = "Svelte Effect Runtime Language Server"
+id = "svelte-effect-runtime"
+name = "Svelte Effect Runtime"
 description = "Svelte Effect Runtime language-server support for Svelte files."
 version = "2.4.0"
 schema_version = 1

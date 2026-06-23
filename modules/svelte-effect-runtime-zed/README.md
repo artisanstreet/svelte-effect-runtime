@@ -22,19 +22,24 @@ but disable its language server:
 }
 ```
 
-For local development, build the sibling language-server package first:
+For local development, install a fresh local copy with one command:
 
 ```sh
-cd modules/svelte-effect-runtime-language-server
-deno task build
+deno task install:zed-local
 ```
+
+That builds the sibling language-server package, builds the Zed WASM extension,
+copies both into Zed's local `installed/svelte-effect-runtime` directory, and
+updates Zed's local extension index.
 
 The extension resolves the server in this order:
 
 1. `node_modules/svelte-effect-runtime-language-server/.dist/server.cjs` in the
    open worktree.
 2. `../svelte-effect-runtime-language-server/.dist/server.cjs` for this repo.
-3. `node_modules/svelte-effect-runtime-language-server/.dist/server.cjs`
+3. `node_modules/svelte-effect-runtime-language-server/.dist/server.cjs` copied
+   beside the locally installed extension.
+4. `node_modules/svelte-effect-runtime-language-server/.dist/server.cjs`
    installed beside the extension by Zed.
 
 Each path is only used when the package also contains its bundled

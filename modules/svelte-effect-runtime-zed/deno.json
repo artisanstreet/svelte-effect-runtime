@@ -1,6 +1,7 @@
 {
   "tasks": {
     "build": "cargo build --target wasm32-wasip2 --release",
-    "check": "cargo check --target wasm32-wasip2"
+    "check": "cargo check --target wasm32-wasip2",
+    "install:local": "cd ../.. && deno task install:zed-local"
   }
 }
