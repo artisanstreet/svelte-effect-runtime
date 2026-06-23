@@ -44,9 +44,9 @@ The extension resolves the server in this order:
 2. `svelte-effect-runtime-language-server` on the worktree `PATH`.
 3. `node_modules/svelte-effect-runtime-language-server/.dist/server.cjs` beside
    the extension.
-4. A GitHub release asset matching this extension's `extension.toml` version.
+4. The `svelte-effect-runtime-language-server` package installed from npm by
+   Zed.
 
-When the release asset path is used, the extension installs the public Node
-dependencies that the bundled server needs beside the extension. The language
-server package itself is private and is not resolved through npm. Local testing
-should use the Zed settings override above.
+The npm package carries its compiled server, runtime assets, and Node
+dependencies, so published Zed installs do not need GitHub release downloads.
+Local testing can still use the Zed settings override above.
