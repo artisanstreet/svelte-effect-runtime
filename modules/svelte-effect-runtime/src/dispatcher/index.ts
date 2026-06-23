@@ -2,6 +2,7 @@ import { Cause, Effect, Exit, Layer, ManagedRuntime } from "effect";
 import type { Fiber as FiberType } from "effect/Fiber";
 import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime";
 
+import { DispatcherDisposedError } from "$/errors.ts";
 import { interrupt_fiber, watch_fiber_exit } from "./fibers.ts";
 import { hash_deps } from "./deps.ts";
 import type { Dispose, PromiseOptions, ValueOptions } from "./types.ts";
@@ -173,7 +174,7 @@ export class Dispatcher {
    */
   promise<A>(options: PromiseOptions<A>): Promise<A> {
     if (this.#disposed) {
-      return Promise.reject(new Error("Dispatcher has been disposed"));
+      return Promise.reject(new DispatcherDisposedError());
     }
 
     const cache_key = `promise:${options.id}::${hash_deps(options.deps)}`;
@@ -220,7 +221,7 @@ export class Dispatcher {
    */
   run<A, E, R>(effect: Effect.Effect<A, E, R>): Promise<A> {
     if (this.#disposed) {
-      return Promise.reject(new Error("Dispatcher has been disposed"));
+      return Promise.reject(new DispatcherDisposedError());
     }
 
     const exit_effect = Effect.exit(effect) as Effect.Effect<

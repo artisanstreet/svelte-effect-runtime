@@ -1,3 +1,5 @@
+import { SvelteKitServerExportUnavailableError } from "$/errors.ts";
+
 /**
  * Publish-time shim for SvelteKit's virtual `$app/server` module.
  *
@@ -53,8 +55,5 @@ export function getRequestEvent(): never {
 }
 
 function make_sveltekit_server_error(name: string): Error {
-  return new Error(
-    `SvelteKit virtual $app/server export ${name} is only available ` +
-      `inside a SvelteKit server module.`,
-  );
+  return new SvelteKitServerExportUnavailableError(name);
 }

@@ -1,12 +1,20 @@
 import {
+  BatchQueryHandlerMissingError,
+  UncheckedCommandHandlerMissingError,
+  UncheckedFormHandlerMissingError,
+  UncheckedLiveQueryHandlerMissingError,
+  UncheckedPrerenderHandlerMissingError,
+  UncheckedQueryHandlerMissingError,
+} from "$/errors.ts";
+import { copy_property_descriptors } from "$/internal/descriptors.ts";
+import { normalize_remote_helper_error } from "$/remote/server.ts";
+import {
   command as native_command,
   form as native_form,
   getRequestEvent as get_native_request_event,
   prerender as native_prerender,
   query as native_query,
 } from "$app/server";
-import { copy_property_descriptors } from "$/internal/descriptors.ts";
-import { normalize_remote_helper_error } from "$/remote/server.ts";
 import type { RemoteFormInput } from "@sveltejs/kit";
 import { Effect, type Schema } from "effect";
 
@@ -367,7 +375,7 @@ function QueryRoot(
     }
 
     if (is_unchecked(validate_or_handler)) {
-      throw new Error("Query('unchecked', handler) requires a handler");
+      throw new UncheckedQueryHandlerMissingError();
     }
 
     return to_effect_query(native_query(
@@ -407,7 +415,7 @@ function QueryBatch(
 ): unknown {
   try {
     if (!maybe_handler) {
-      throw new Error("Query.batch requires a handler");
+      throw new BatchQueryHandlerMissingError();
     }
 
     return to_effect_query(native_query.batch(
@@ -461,7 +469,7 @@ function QueryLive(
     }
 
     if (is_unchecked(validate_or_handler)) {
-      throw new Error("Query.live('unchecked', handler) requires a handler");
+      throw new UncheckedLiveQueryHandlerMissingError();
     }
 
     return to_effect_live_query(native_query.live(
@@ -537,7 +545,7 @@ export function Command(
     }
 
     if (is_unchecked(validate_or_handler)) {
-      throw new Error("Command('unchecked', handler) requires a handler");
+      throw new UncheckedCommandHandlerMissingError();
     }
 
     return native_command(
@@ -605,7 +613,7 @@ export function Form(
     }
 
     if (is_unchecked(validate_or_handler)) {
-      throw new Error("Form('unchecked', handler) requires a handler");
+      throw new UncheckedFormHandlerMissingError();
     }
 
     const inputless_handler: RemoteFormHandler<void, unknown> = (
@@ -674,7 +682,7 @@ export function Prerender(
     }
 
     if (is_unchecked(validate_or_handler)) {
-      throw new Error("Prerender('unchecked', handler) requires a handler");
+      throw new UncheckedPrerenderHandlerMissingError();
     }
 
     return native_prerender(

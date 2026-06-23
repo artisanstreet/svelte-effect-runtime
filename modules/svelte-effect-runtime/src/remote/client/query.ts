@@ -1,6 +1,10 @@
 import type { RemoteFailure } from "$/remote/shared.ts";
 import type { Effect } from "effect";
 
+import {
+  InvalidLiveQueryFactoryError,
+  InvalidQueryFactoryError,
+} from "$/errors.ts";
 import { resolve_query_result } from "./query-result.ts";
 import { make_effect_from_promise } from "./effect.ts";
 import { copy_property_descriptors, has_method } from "./utils.ts";
@@ -79,7 +83,7 @@ export function create_remote_query_adapter<Input, Output>(
     : undefined;
 
   if (!query && !load) {
-    throw new Error("Invalid query factory: expected a function");
+    throw new InvalidQueryFactoryError();
   }
 
   const wrapped = ((input: Input) => {
@@ -134,7 +138,7 @@ export function create_remote_live_query_adapter<Input, Output>(
     : undefined;
 
   if (!query) {
-    throw new Error("Invalid live query factory: expected a function");
+    throw new InvalidLiveQueryFactoryError();
   }
 
   const wrapped = ((input: Input) => {
