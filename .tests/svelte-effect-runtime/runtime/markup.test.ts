@@ -309,6 +309,40 @@ Deno.test("rewrites native-style form validation handlers only when marked with 
   if (!result.has_yield) throw new Error("has_yield should be true");
 });
 
+Deno.test("injects missing event run helper when another markup helper already exists", () => {
+  const source = [
+    `<script>`,
+    `  import { value as __ser_markup_value } from "svelte-effect-runtime/internal/generators";`,
+    `  import { Effect } from "effect";`,
+    `</script>`,
+    `<input oninput={yield* Effect.gen(function* () {`,
+    `  const file = event.currentTarget.files?.[0];`,
+    `  if (!file) return;`,
+    `  console.log(file);`,
+    `})} />`,
+  ].join("\n");
+
+  const result = transform_markup_effect(source, "Test.svelte");
+  const value_imports =
+    [...result.code.matchAll(/\bvalue as __ser_markup_value\b/g)].length;
+
+  assertEquals(value_imports, 1);
+  assertStringIncludes(
+    result.code,
+    `import { run as __ser_markup_run } from "svelte-effect-runtime/internal/generators";`,
+  );
+  assertStringIncludes(
+    result.code,
+    `void __ser_markup_run(function* () { yield* Effect.gen(function* () {`,
+  );
+
+  compile(result.code, {
+    filename: "Test.svelte",
+    generate: "client",
+    experimental: { async: true },
+  });
+});
+
 Deno.test("leaves non-Effect event handlers untouched", () => {
   const source =
     `<form {...formSnap} oninput={() => formSnap.validate()}></form>`;

@@ -37,21 +37,27 @@ export function inject_helpers(
   content: string,
   helpers: HelperDeclaration[] = [],
 ): Insertion | undefined {
-  if (content.includes(HELPERS.value)) {
+  const helper_segments = [
+    make_import_helper(
+      content,
+      `import { value as ${HELPERS.value} } from "svelte-effect-runtime/internal/generators";`,
+    ),
+    make_import_helper(
+      content,
+      `import { promise as ${HELPERS.promise} } from "svelte-effect-runtime/internal/generators";`,
+    ),
+    make_import_helper(
+      content,
+      `import { run as ${HELPERS.run} } from "svelte-effect-runtime/internal/generators";`,
+    ),
+    ...helpers,
+  ].filter((helper): helper is string | HelperDeclaration =>
+    helper !== undefined
+  ).map((helper) => typeof helper === "string" ? { text: helper } : helper);
+
+  if (helper_segments.length === 0) {
     return undefined;
   }
-
-  const helper_segments: Array<{
-    text: string;
-    relocation?: PendingRelocation;
-  }> = [
-    `import { value as ${HELPERS.value} } from "svelte-effect-runtime/internal/generators";`,
-    `import { promise as ${HELPERS.promise} } from "svelte-effect-runtime/internal/generators";`,
-    `import { run as ${HELPERS.run} } from "svelte-effect-runtime/internal/generators";`,
-    ...helpers,
-  ].map((helper) =>
-    typeof helper === "string" ? { text: helper } : helper
-  );
 
   const helper_block = helper_segments.map((segment) => segment.text).join(
     "\n",
@@ -141,6 +147,17 @@ export function create_relocations(
     ...replacement_relocations,
     ...helper_relocations,
   ];
+}
+
+function make_import_helper(
+  content: string,
+  import_text: string,
+): string | undefined {
+  if (content.includes(import_text)) {
+    return undefined;
+  }
+
+  return import_text;
 }
 
 function make_insertion_relocations(
