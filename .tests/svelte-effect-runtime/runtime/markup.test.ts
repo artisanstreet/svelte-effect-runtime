@@ -7,6 +7,36 @@ import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
 import { compile } from "svelte/compiler";
 import { Effect } from "effect";
 
+type DocumentHost = typeof globalThis & { document?: unknown };
+
+async function with_browser_document<A>(
+  run_test: () => A | Promise<A>,
+): Promise<A> {
+  const global = globalThis as DocumentHost;
+  const had_document = "document" in global;
+  const previous_document = global.document;
+
+  Object.defineProperty(global, "document", {
+    configurable: true,
+    value: {},
+  });
+
+  try {
+    const result = await run_test();
+
+    return result;
+  } finally {
+    if (had_document) {
+      Object.defineProperty(global, "document", {
+        configurable: true,
+        value: previous_document,
+      });
+    } else {
+      Reflect.deleteProperty(global, "document");
+    }
+  }
+}
+
 // ─── Identity / pass-through ─────────────────────────────────
 
 Deno.test("passes through markup with no yield* unchanged", () => {
@@ -1060,40 +1090,114 @@ Deno.test("normalizes HMR query strings out of markup cache ids", () => {
 });
 
 Deno.test("markup promise and run helpers preserve success values", async () => {
-  reset_dispatcher();
+  await with_browser_document(async () => {
+    reset_dispatcher();
 
+    try {
+      const loaded = await promise("markup-promise", [], function* () {
+        return yield* Effect.succeed("loaded");
+      });
+      const saved = await run(function* () {
+        return yield* Effect.succeed(42);
+      });
+
+      assertEquals(loaded, "loaded");
+      assertEquals(saved, 42);
+    } finally {
+      reset_dispatcher();
+    }
+  });
+});
+
+Deno.test("markup value starts effects when a browser document exists", async () => {
+  await with_browser_document(async () => {
+    reset_dispatcher();
+
+    try {
+      let called = false;
+
+      const result = value("browser-hydratable", [], "fallback", function* () {
+        return yield* Effect.sync(() => {
+          called = true;
+
+          return "resolved";
+        });
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      assertEquals(["fallback", "resolved"].includes(result as string), true);
+      assertEquals(called, true);
+    } finally {
+      reset_dispatcher();
+    }
+  });
+});
+
+Deno.test("markup value returns fallback during SSR without starting effects", () => {
   try {
-    const loaded = await promise("markup-promise", [], function* () {
-      return yield* Effect.succeed("loaded");
-    });
-    const saved = await run(function* () {
-      return yield* Effect.succeed(42);
+    reset_dispatcher();
+
+    let called = false;
+
+    const result = value("ssr-fallback", [], "fallback", function* () {
+      return yield* Effect.sync(() => {
+        called = true;
+
+        return "resolved";
+      });
     });
 
-    assertEquals(loaded, "loaded");
-    assertEquals(saved, 42);
+    assertEquals(result, "fallback");
+    assertEquals(called, false);
   } finally {
     reset_dispatcher();
   }
 });
 
-Deno.test("markup value starts effects during SSR to register hydratables", async () => {
-  reset_dispatcher();
+Deno.test("markup promise returns SSR fallback without starting effects", async () => {
+  try {
+    reset_dispatcher();
 
-  let called = false;
+    let called = false;
 
-  const result = value("ssr-hydratable", [], "fallback", function* () {
-    return yield* Effect.sync(() => {
+    const result = await promise("ssr-promise", [], function* () {
       called = true;
 
-      return "resolved";
-    });
-  });
+      return yield* Effect.succeed("resolved");
+    }, "fallback");
 
-  await new Promise((resolve) => setTimeout(resolve, 0));
+    assertEquals(result, "fallback");
+    assertEquals(called, false);
+  } finally {
+    reset_dispatcher();
+  }
+});
 
-  assertEquals(["fallback", "resolved"].includes(result as string), true);
-  assertEquals(called, true);
+Deno.test("markup promise can stay pending during SSR await blocks", async () => {
+  try {
+    reset_dispatcher();
 
-  reset_dispatcher();
+    let called = false;
+
+    const result = await Promise.race([
+      promise(
+        "ssr-await-pending",
+        [],
+        function* () {
+          called = true;
+
+          return yield* Effect.succeed("resolved");
+        },
+        undefined,
+        { ssr: "pending" },
+      ).then(() => "resolved"),
+      new Promise((resolve) => setTimeout(() => resolve("pending"), 0)),
+    ]);
+
+    assertEquals(result, "pending");
+    assertEquals(called, false);
+  } finally {
+    reset_dispatcher();
+  }
 });

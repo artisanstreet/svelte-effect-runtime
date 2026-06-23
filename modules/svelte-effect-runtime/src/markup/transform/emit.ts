@@ -75,6 +75,8 @@ function emit_replacement(
       id_text,
       effect,
       helper_bindings,
+      "undefined",
+      `{ ssr: "pending" }`,
     );
     helpers = [...normalized.helpers, effect.helper];
   } else if (kind === "render") {
@@ -95,7 +97,12 @@ function emit_replacement(
   } else if (kind === "each") {
     const effect = make_effect_helper(normalized_candidate, helper_name);
 
-    replacement_text = emit_each_expression(id_text, effect, helper_bindings);
+    replacement_text = emit_each_expression(
+      id_text,
+      effect,
+      helper_bindings,
+      "[]",
+    );
     helpers = [...normalized.helpers, effect.helper];
   } else if (kind === "event") {
     const event = make_event_handler(normalized_candidate, helper_bindings);
@@ -156,8 +163,18 @@ function emit_promise_expression(
   id_text: string,
   effect: EffectHelper,
   helper_bindings: MarkupHelperBindings,
+  ssr_fallback?: string,
+  options?: string,
 ): string {
-  return `${helper_bindings.promise}(${id_text}, ${effect.deps_text}, () => ${effect.call})`;
+  const args = [
+    id_text,
+    effect.deps_text,
+    `() => ${effect.call}`,
+    ssr_fallback,
+    options,
+  ].filter((arg): arg is string => arg !== undefined);
+
+  return `${helper_bindings.promise}(${args.join(", ")})`;
 }
 
 function emit_render_expression(
@@ -179,8 +196,16 @@ function emit_each_expression(
   id_text: string,
   effect: EffectHelper,
   helper_bindings: MarkupHelperBindings,
+  ssr_fallback?: string,
 ): string {
-  return `await ${emit_promise_expression(id_text, effect, helper_bindings)}`;
+  return `await ${
+    emit_promise_expression(
+      id_text,
+      effect,
+      helper_bindings,
+      ssr_fallback,
+    )
+  }`;
 }
 
 interface EffectHelper {
