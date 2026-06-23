@@ -29,9 +29,36 @@ export interface EffectOptions {
  */
 export function effect(options?: EffectOptions): Plugin[] {
   return [
+    make_svelte_component_transform_plugin(),
     make_server_rewrite_plugin(),
     make_remote_client_wrapper_plugin(options),
   ];
+}
+
+function make_svelte_component_transform_plugin(): Plugin {
+  return {
+    name: "svelte-effect-runtime:component-syntax",
+    enforce: "pre",
+
+    async transform(code: string, id: string) {
+      if (
+        !is_svelte_component_module(id) || !has_component_effect_syntax(code)
+      ) {
+        return undefined;
+      }
+
+      const runtime = await import("./runtime/preprocess.ts");
+      const group = runtime.preprocess();
+      const clean_id = id.split("?")[0] ?? id;
+      const result = group.markup({ content: code, filename: clean_id });
+
+      if (result.code === code) {
+        return undefined;
+      }
+
+      return { code: result.code, map: null };
+    },
+  };
 }
 
 function make_server_rewrite_plugin(): Plugin {
@@ -111,6 +138,16 @@ function make_remote_client_wrapper_plugin(options?: EffectOptions): Plugin {
       return { code: rewritten, map: null };
     },
   };
+}
+
+function is_svelte_component_module(id: string): boolean {
+  const clean_id = id.split("?")[0] ?? id;
+
+  return clean_id.endsWith(".svelte");
+}
+
+function has_component_effect_syntax(code: string): boolean {
+  return code.includes("yield*") || /<script\b[^>]*\beffect\b/.test(code);
 }
 
 function is_server_runtime_module(id: string): boolean {

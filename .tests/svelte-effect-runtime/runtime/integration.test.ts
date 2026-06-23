@@ -121,12 +121,19 @@ Deno.test("preprocess hook accepts optional filename", () => {
 
 Deno.test("vite plugin keeps runtime package transformable in SSR builds", () => {
   const plugins = effect();
+  const component_plugin = plugins.find((plugin) =>
+    plugin.name === "svelte-effect-runtime:component-syntax"
+  );
   const server_plugin = plugins.find((plugin) =>
     plugin.name === "svelte-effect-runtime:server-imports"
   );
   const client_plugin = plugins.find((plugin) =>
     plugin.name === "svelte-effect-runtime:remote-client"
   );
+
+  if (!component_plugin || component_plugin.enforce !== "pre") {
+    throw new Error("component syntax plugin should run before Svelte compile");
+  }
 
   if (!server_plugin || typeof server_plugin.config !== "function") {
     throw new Error("server rewrite plugin should expose a config hook");
@@ -174,6 +181,40 @@ Deno.test("vite plugin keeps runtime package transformable in SSR builds", () =>
     "svelte",
     "svelte-effect-runtime",
   ]);
+});
+
+Deno.test("vite component plugin lowers script effect before Svelte compile", async () => {
+  const plugins = effect();
+  const component_plugin = plugins.find((plugin) =>
+    plugin.name === "svelte-effect-runtime:component-syntax"
+  );
+  const source = [
+    `<script effect lang="ts">`,
+    `  const value = yield* loadValue();`,
+    `</script>`,
+    ``,
+    `<p>{value}</p>`,
+  ].join("\n");
+
+  if (!component_plugin || typeof component_plugin.transform !== "function") {
+    throw new Error("component syntax plugin should expose a transform hook");
+  }
+
+  const result = await component_plugin.transform(
+    source,
+    "src/routes/+page.svelte",
+  );
+
+  if (!result || typeof result === "string") {
+    throw new Error("component syntax plugin should return transformed code");
+  }
+
+  assertStringIncludes(result.code, `<script lang="ts">`);
+  assertStringIncludes(result.code, `__SER__program`);
+
+  if (result.code.includes(`<script effect`)) {
+    throw new Error("effect attribute should be removed before Svelte compile");
+  }
 });
 
 Deno.test("root entry exposes server helpers for rewritten server imports", async () => {
