@@ -5,9 +5,9 @@ import type { Effect } from "effect";
  * Runtime helper emitted by the markup preprocessor for `{yield* expr}`
  * expressions in Svelte templates. Delegates to the dispatcher's
  * cached reactive value mechanism — returns the fallback synchronously,
- * then the resolved value once the effect completes. The effect is still
- * started during SSR so SvelteKit remote queries can register hydratable
- * data before the HTML is sent.
+ * then the resolved value once the effect completes in the browser. During
+ * SSR the client dispatcher is not touched, so browser-only layers cannot
+ * turn server rendering into a 500.
  *
  * @since 2.0.0
  * @param id - Stable identifier generated from the expression's source
@@ -25,5 +25,13 @@ export function value<A, E, R>(
   fallback: A,
   factory: () => Effect.gen.Return<A, E, R>,
 ): A {
+  if (is_server_render()) {
+    return fallback;
+  }
+
   return get_dispatcher().value({ id, deps, fallback, factory });
+}
+
+function is_server_render(): boolean {
+  return typeof document === "undefined";
 }

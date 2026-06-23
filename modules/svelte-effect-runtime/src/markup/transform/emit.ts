@@ -47,7 +47,12 @@ function emit_replacement(
   if (kind === "await") {
     const effect = make_effect_helper(candidate, helper_name);
 
-    replacement_text = emit_promise_expression(id_text, effect);
+    replacement_text = emit_promise_expression(
+      id_text,
+      effect,
+      "undefined",
+      `{ ssr: "pending" }`,
+    );
     helpers = [effect.helper];
   } else if (kind === "render") {
     const effect = make_effect_helper(candidate, helper_name);
@@ -57,7 +62,7 @@ function emit_replacement(
   } else if (kind === "each") {
     const effect = make_effect_helper(candidate, helper_name);
 
-    replacement_text = emit_each_expression(id_text, effect);
+    replacement_text = emit_each_expression(id_text, effect, "[]");
     helpers = [effect.helper];
   } else if (kind === "event") {
     const event = make_event_handler(candidate);
@@ -115,8 +120,18 @@ function make_event_handler(
 function emit_promise_expression(
   id_text: string,
   effect: EffectHelper,
+  ssr_fallback?: string,
+  options?: string,
 ): string {
-  return `${HELPERS.promise}(${id_text}, ${effect.deps_text}, () => ${effect.call})`;
+  const args = [
+    id_text,
+    effect.deps_text,
+    `() => ${effect.call}`,
+    ssr_fallback,
+    options,
+  ].filter((arg): arg is string => arg !== undefined);
+
+  return `${HELPERS.promise}(${args.join(", ")})`;
 }
 
 function emit_render_expression(
@@ -129,8 +144,9 @@ function emit_render_expression(
 function emit_each_expression(
   id_text: string,
   effect: EffectHelper,
+  ssr_fallback?: string,
 ): string {
-  return `await ${emit_promise_expression(id_text, effect)}`;
+  return `await ${emit_promise_expression(id_text, effect, ssr_fallback)}`;
 }
 
 interface EffectHelper {
