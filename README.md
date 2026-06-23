@@ -3,7 +3,9 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/svelte-effect-runtime">npm</a>
+  <a href="https://www.npmjs.com/package/svelte-effect-runtime">Runtime npm</a>
+  •
+  <a href="https://www.npmjs.com/package/svelte-effect-runtime-language-server">Language Server npm</a>
   •
   <a href="https://jsr.io/@barekey/svelte-effect-runtime">JSR</a>
   •
@@ -40,11 +42,11 @@ Write effectful code without any hassle. Seriously!
 
 ## Packages
 
-| Package                                                                                    | Description                                                            |
-| ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
-| [`svelte-effect-runtime`](./modules/svelte-effect-runtime)                                 | Core module that houses the Vite plugin to enable effectful execution. |
-| [`svelte-effect-runtime-language-server`](./modules/svelte-effect-runtime-language-server) | The lower level standalone server that houses the LSP contract.        |
-| [`svelte-effect-runtime-vsix`](./modules/svelte-effect-runtime-vsix)                       | Higher level VSIX extension that has the LSP bundled.                  |
-| [`svelte-effect-runtime-zed`](./modules/svelte-effect-runtime-zed)                         | Higher level Zed extension that has the LSP bundled.                   |
+| Package                                                                                    | Description                                                               |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| [`svelte-effect-runtime`](./modules/svelte-effect-runtime)                                 | Core module that houses the Vite plugin to enable effectful execution.    |
+| [`svelte-effect-runtime-language-server`](./modules/svelte-effect-runtime-language-server) | Standalone npm package for the SER language server used by editor tools.  |
+| [`svelte-effect-runtime-vsix`](./modules/svelte-effect-runtime-vsix)                       | VS Code extension that launches the SER language server for Svelte files. |
+| [`svelte-effect-runtime-zed`](./modules/svelte-effect-runtime-zed)                         | Zed extension that installs and runs the SER language server from npm.    |
 
 Visit the **[docs](https://ser.barekey.dev)** for guides and API reference.
