@@ -1,8 +1,8 @@
-import { get_dispatcher } from "$/dispatcher.ts";
+import { get_dispatcher } from "$/generated/dispatcher.ts";
 import type { Effect } from "effect";
 
 /**
- * Runtime helper emitted by the markup preprocessor for
+ * Runtime helper emitted by the markup transform for
  * `{#await yield* expr}` blocks. Delegates to the dispatcher's
  * promise mechanism — returns a Promise that resolves when the effect
  * completes.

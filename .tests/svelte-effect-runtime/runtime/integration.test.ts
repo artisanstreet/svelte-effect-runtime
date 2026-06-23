@@ -8,6 +8,9 @@ import {
   effect,
   rewrite_remote_client_exports,
 } from "../../../modules/svelte-effect-runtime/src/vite.ts";
+import { ServerRuntime } from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
+import { promise } from "../../../modules/svelte-effect-runtime/src/markup/promise.ts";
+import { Context, Layer } from "effect";
 import { parse } from "svelte/compiler";
 
 async function run_svelte_transform(
@@ -249,6 +252,24 @@ Deno.test("vite plugin lowers svelte yield through its transform hook", async ()
   if (result.code.includes(`onclick={yield*`)) {
     throw new Error("markup yield should be lowered");
   }
+});
+
+Deno.test("generated promise helpers use ServerRuntime services during SSR", async () => {
+  const ReproService = Context.Service<{ readonly value: string }>(
+    "ReproService",
+  );
+
+  ServerRuntime.make(
+    Layer.succeed(ReproService, { value: "server-service" }),
+  );
+
+  const result = await promise("server-service", [], function* () {
+    return yield* ReproService;
+  });
+
+  assertEquals(result.value, "server-service");
+
+  ServerRuntime.make();
 });
 
 Deno.test("root entry exposes server helpers for rewritten server imports", async () => {

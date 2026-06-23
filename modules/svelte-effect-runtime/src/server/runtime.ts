@@ -1,5 +1,7 @@
 import type { RequestEvent as SvelteKitRequestEvent } from "@sveltejs/kit";
 import { Context, Layer, ManagedRuntime } from "effect";
+import { Dispatcher as InternalDispatcher } from "$/dispatcher.ts";
+import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime";
 
 /**
  * Subset of SvelteKit's `RequestEvent` that remote handlers typically access.
@@ -67,6 +69,10 @@ export class ServerRuntime {
       unknown,
       never
     >;
+    current_server_dispatcher?.dispose();
+    current_server_dispatcher = new InternalDispatcher(
+      runtime as unknown as ManagedRuntimeType<unknown, unknown>,
+    );
 
     return runtime;
   }
@@ -75,6 +81,7 @@ export class ServerRuntime {
 let current_server_runtime:
   | ManagedRuntime.ManagedRuntime<unknown, never>
   | undefined;
+let current_server_dispatcher: InternalDispatcher | undefined;
 
 /**
  * Returns the active server runtime, creating a default one if needed.
@@ -98,4 +105,27 @@ export function get_server_runtime_or_throw(): ManagedRuntime.ManagedRuntime<
   }
 
   return current_server_runtime;
+}
+
+/**
+ * Returns a dispatcher backed by the active server runtime.
+ *
+ * @example
+ * ```ts
+ * const dispatcher = get_server_dispatcher();
+ * ```
+ *
+ * @since 3.0.1
+ * @returns The cached server dispatcher, creating one from the current server
+ *   runtime when needed.
+ */
+export function get_server_dispatcher(): InternalDispatcher {
+  current_server_dispatcher ??= new InternalDispatcher(
+    get_server_runtime_or_throw() as unknown as ManagedRuntimeType<
+      unknown,
+      unknown
+    >,
+  );
+
+  return current_server_dispatcher;
 }

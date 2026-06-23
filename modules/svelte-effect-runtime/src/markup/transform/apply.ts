@@ -1,6 +1,6 @@
 import type MagicString from "magic-string";
 
-import { collect_top_level_binding_names } from "$/preprocess/imports.ts";
+import { collect_top_level_binding_names } from "$/script-transform/imports.ts";
 import { HELPERS } from "./constants.ts";
 import type {
   HelperDeclaration,

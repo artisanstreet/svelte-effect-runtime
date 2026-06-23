@@ -1,5 +1,5 @@
 import { transform_markup_effect } from "$/markup/transform.ts";
-import { transform_script_effect } from "$/preprocess.ts";
+import { transform_script_effect } from "$/script-transform/index.ts";
 
 /**
  * Result returned by the direct whole-file Svelte transform.
@@ -19,7 +19,7 @@ export interface SvelteTransformResult {
 
 /**
  * Lowers SER syntax in a complete Svelte component without using Svelte's
- * preprocessor adapter API.
+ * adapter API.
  *
  * @example
  * ```ts
@@ -118,4 +118,4 @@ export {
   type BlockRef,
   type ScriptTransformResult,
   transform_script_effect,
-} from "$/preprocess.ts";
+} from "$/script-transform/index.ts";

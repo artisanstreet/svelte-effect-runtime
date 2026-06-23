@@ -2,7 +2,7 @@
   "name": "svelte-effect-runtime-vscode",
   "displayName": "Svelte Effect Runtime",
   "description": "Higher level VSIX extension that has the SER LSP bundled.",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "publisher": "barekey",
   "license": "BSD-3-Clause",
   "type": "module",

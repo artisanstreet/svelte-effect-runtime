@@ -16,7 +16,7 @@ export function make_error_message(code: string, message: string): string {
 }
 
 /**
- * Base error class for all preprocessor errors emitted during script and
+ * Base error class for all transform errors emitted during script and
  * markup transformation. Carries the source filename so error messages can
  * reference the affected file.
  *

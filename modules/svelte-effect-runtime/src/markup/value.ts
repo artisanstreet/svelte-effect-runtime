@@ -1,8 +1,8 @@
-import { get_dispatcher } from "$/dispatcher.ts";
+import { get_dispatcher } from "$/generated/dispatcher.ts";
 import type { Effect } from "effect";
 
 /**
- * Runtime helper emitted by the markup preprocessor for `{yield* expr}`
+ * Runtime helper emitted by the markup transform for `{yield* expr}`
  * expressions in Svelte templates. Delegates to the dispatcher's
  * cached reactive value mechanism — returns the fallback synchronously,
  * then the resolved value once the effect completes. The effect is still

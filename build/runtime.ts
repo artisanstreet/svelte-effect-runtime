@@ -37,7 +37,6 @@ await build({
     "internal/remote-server": join(src_dir, "internal", "remote-server.ts"),
     detect: join(src_dir, "detect.ts"),
     dispatcher: join(src_dir, "dispatcher.ts"),
-    preprocess: join(src_dir, "preprocess.ts"),
     "remote/shared": join(src_dir, "remote", "shared.ts"),
     "remote/server": join(src_dir, "remote", "server.ts"),
     "remote/client": join(src_dir, "remote", "client.ts"),

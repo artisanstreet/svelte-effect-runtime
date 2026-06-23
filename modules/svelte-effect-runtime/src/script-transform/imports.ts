@@ -9,7 +9,7 @@ interface RuntimeImportOptions {
 }
 
 /**
- * Builds the import statements injected by the script preprocessor.
+ * Builds the import statements injected by the script transform.
  *
  * @since 2.0.0
  * @param has_effect_import - Whether the user already imports `Effect`.

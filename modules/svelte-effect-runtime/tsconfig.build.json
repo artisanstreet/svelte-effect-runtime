@@ -29,7 +29,6 @@
     "./src/detect.ts",
     "./src/dispatcher.ts",
     "./src/generators.ts",
-    "./src/preprocess.ts",
     "./src/server.ts",
     "./src/vite.ts",
     "./src/remote/shared.ts",

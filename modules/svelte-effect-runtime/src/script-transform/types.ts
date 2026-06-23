@@ -1,5 +1,5 @@
 /**
- * Block reference emitted by the preprocessor to track what blocks were
+ * Block reference emitted by the script transform to track what blocks were
  * generated in a given file.
  *
  * @since 2.0.0
@@ -12,7 +12,7 @@ export interface BlockRef {
 }
 
 /**
- * Result of the script preprocessor pass.
+ * Result of the script transform pass.
  *
  * @since 2.0.0
  */

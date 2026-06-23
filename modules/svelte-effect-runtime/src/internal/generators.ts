@@ -1,5 +1,5 @@
 /**
- * Internal generated-code helpers used by the Svelte Effect preprocessor.
+ * Internal generated-code helpers used by the Svelte Effect transform.
  *
  * @module
  */

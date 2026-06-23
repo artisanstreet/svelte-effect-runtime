@@ -1,4 +1,4 @@
-import { collect_yield_star_nodes } from "$/preprocess/ast.ts";
+import { collect_yield_star_nodes } from "$/script-transform/ast.ts";
 import { contains_top_level_yield_star } from "$/detect.ts";
 import MagicString from "magic-string";
 import ts from "typescript";

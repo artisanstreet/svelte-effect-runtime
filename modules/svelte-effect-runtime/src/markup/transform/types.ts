@@ -1,5 +1,5 @@
 /**
- * Result of the markup preprocessor pass.
+ * Result of the markup transform pass.
  *
  * @since 2.0.0
  */

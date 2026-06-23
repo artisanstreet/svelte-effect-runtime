@@ -947,7 +947,7 @@ Deno.test("skips module context script tags", () => {
 
 // ─── Idempotency ─────────────────────────────────────────────
 
-Deno.test("is idempotent across repeated preprocess passes", () => {
+Deno.test("is idempotent across repeated transform passes", () => {
   const source = `<p>{yield* getValue()}</p>`;
   const first = transform_markup_effect(source, "Test.svelte");
   const second = transform_markup_effect(first.code, "Test.svelte");
