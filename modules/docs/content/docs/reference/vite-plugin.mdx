@@ -22,6 +22,9 @@ export default defineConfig({
 - The plugin is required for `<script effect>`, markup `yield*`, remote client wrappers, and server runtime import rewrites.
 - Remote functions also require SvelteKit's `kit.experimental.remoteFunctions` flag.
 - Keep plugin configuration close to the default unless you are debugging transform behavior.
+- Parser-style Vite plugins that run their `.svelte` transform with
+  `transform.order = "pre"` can be incompatible because they may parse SER
+  syntax before normal source transforms run.
 
 ## Related pages
 

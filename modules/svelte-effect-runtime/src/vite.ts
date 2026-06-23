@@ -38,26 +38,22 @@ export function effect(options?: EffectOptions): Plugin[] {
 function make_svelte_transform_plugin(): Plugin {
   return {
     name: "svelte-effect-runtime:svelte-transform",
-    enforce: "pre",
 
-    transform: {
-      order: "pre",
-      async handler(code: string, id: string) {
-        if (!is_svelte_component_module(id)) {
-          return undefined;
-        }
+    async transform(code: string, id: string) {
+      if (!is_svelte_component_module(id)) {
+        return undefined;
+      }
 
-        const { transform_svelte_effect } = await import(
-          "./runtime/transform.ts"
-        );
-        const result = transform_svelte_effect(code, id);
+      const { transform_svelte_effect } = await import(
+        "./runtime/transform.ts"
+      );
+      const result = transform_svelte_effect(code, id);
 
-        if (result.code === code) {
-          return undefined;
-        }
+      if (result.code === code) {
+        return undefined;
+      }
 
-        return { code: result.code, map: null };
-      },
+      return { code: result.code, map: null };
     },
   };
 }

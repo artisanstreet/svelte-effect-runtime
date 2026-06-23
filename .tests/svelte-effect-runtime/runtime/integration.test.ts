@@ -10,6 +10,36 @@ import {
 } from "../../../modules/svelte-effect-runtime/src/vite.ts";
 import { parse } from "svelte/compiler";
 
+async function run_svelte_transform(
+  plugin: ReturnType<typeof effect>[number],
+  source: string,
+  id: string,
+): Promise<{ code: string }> {
+  const transform = plugin.transform;
+
+  if (typeof transform === "function") {
+    const result = await transform.call({} as never, source, id);
+
+    if (!result || typeof result === "string") {
+      throw new Error("svelte transform should return code output");
+    }
+
+    return result;
+  }
+
+  if (typeof transform === "object" && transform?.handler) {
+    const result = await transform.handler(source, id);
+
+    if (!result || typeof result === "string") {
+      throw new Error("svelte transform should return code output");
+    }
+
+    return result;
+  }
+
+  throw new Error("svelte transform plugin should expose a transform hook");
+}
+
 /** Full pipeline. */
 
 Deno.test("full pipeline: script lowered output feeds into markup pass", () => {
@@ -130,12 +160,8 @@ Deno.test("vite plugin keeps runtime package transformable in SSR builds", () =>
     plugin.name === "svelte-effect-runtime:remote-client"
   );
 
-  if (!transform_plugin || typeof transform_plugin.transform !== "object") {
-    throw new Error("svelte transform plugin should expose a pre transform");
-  }
-
-  if (transform_plugin.transform.order !== "pre") {
-    throw new Error("svelte transform should run before parsers");
+  if (!transform_plugin || !transform_plugin.transform) {
+    throw new Error("svelte transform plugin should expose a transform hook");
   }
 
   if (!server_plugin || typeof server_plugin.config !== "function") {
@@ -186,14 +212,14 @@ Deno.test("vite plugin keeps runtime package transformable in SSR builds", () =>
   ]);
 });
 
-Deno.test("vite plugin lowers svelte yield before parser-style plugins", async () => {
+Deno.test("vite plugin lowers svelte yield through its transform hook", async () => {
   const plugins = effect();
   const plugin = plugins.find((candidate) =>
     candidate.name === "svelte-effect-runtime:svelte-transform"
   );
 
-  if (!plugin || typeof plugin.transform !== "object") {
-    throw new Error("svelte transform plugin should expose a pre transform");
+  if (!plugin) {
+    throw new Error("svelte transform plugin should exist");
   }
 
   const source = [
@@ -204,14 +230,11 @@ Deno.test("vite plugin lowers svelte yield before parser-style plugins", async (
     `<button onclick={yield* save(value)}>Save</button>`,
   ].join("\n");
 
-  const result = await plugin.transform.handler(
+  const result = await run_svelte_transform(
+    plugin,
     source,
     "C:/src/routes/Test.svelte",
   );
-
-  if (!result || typeof result === "string") {
-    throw new Error("svelte transform should return code output");
-  }
 
   assertStringIncludes(result.code, `<script>`);
   assertStringIncludes(result.code, `__SER___program`);
@@ -220,11 +243,11 @@ Deno.test("vite plugin lowers svelte yield before parser-style plugins", async (
   parse(result.code, { filename: "Test.svelte" });
 
   if (result.code.includes(`<script effect>`)) {
-    throw new Error("effect attribute should be removed before parser plugins");
+    throw new Error("effect attribute should be removed");
   }
 
   if (result.code.includes(`onclick={yield*`)) {
-    throw new Error("markup yield should be lowered before parser plugins");
+    throw new Error("markup yield should be lowered");
   }
 });
 
