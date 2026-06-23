@@ -1,13 +1,13 @@
 ---
 title: Install
-description: Add the package, Vite plugin, Svelte config flag, and editor notes.
+description: Add the package, Vite plugin, Svelte async flag, and editor notes.
 ---
 
-Installation has three parts: install the package, add the Svelte preprocessor, and add the Vite plugin. If you plan to use remote functions, also enable SvelteKit's remote function flag.
+Installation has two parts: install the package and add the Vite plugin. If you plan to use remote functions, also enable SvelteKit's remote function flag.
 
 ## When to use this
 
-Use this page when starting a new SvelteKit app or when adding Effect support to an existing app. The setup is intentionally small, but the Svelte preprocessor is required for component `yield*`.
+Use this page when starting a new SvelteKit app or when adding Effect support to an existing app. The setup is intentionally small, but the Vite plugin is required for component `yield*`.
 
 ## Minimal working example
 
@@ -48,11 +48,10 @@ deno add npm:svelte-effect-runtime npm:effect
   </CodeBlockTab>
 </CodeBlockTabs>
 
-Wire the Svelte preprocessor in `svelte.config.js`:
+Enable Svelte async rendering in `svelte.config.js`:
 
 ```js
 import adapter from "@sveltejs/adapter-auto";
-import { preprocess } from "svelte-effect-runtime";
 
 const config = {
   compilerOptions: {
@@ -63,7 +62,6 @@ const config = {
   kit: {
     adapter: adapter(),
   },
-  preprocess: [preprocess()],
 };
 
 export default config;
@@ -85,7 +83,6 @@ Enable remote functions in the same Svelte config when you use `Query`, `Command
 
 ```js
 import adapter from "@sveltejs/adapter-auto";
-import { preprocess } from "svelte-effect-runtime";
 
 const config = {
   compilerOptions: {
@@ -99,7 +96,6 @@ const config = {
       remoteFunctions: true,
     },
   },
-  preprocess: [preprocess()],
 };
 
 export default config;
@@ -125,11 +121,11 @@ Put client runtime setup in `src/hooks.client.ts` and server runtime setup in `s
 
 ## Why both hooks are needed
 
-The Svelte preprocessor lowers `<script effect>` and markup `yield*` before Svelte parses the component. The Vite plugin handles server import rewrites and wraps SvelteKit's generated remote client exports in Effect-returning adapters.
+The Vite plugin lowers `<script effect>` and markup `yield*` before Svelte parses the component. It also handles server import rewrites and wraps SvelteKit's generated remote client exports in Effect-returning adapters.
 
 ## Common mistakes
 
-- Forgetting `preprocess: [preprocess()]` in `svelte.config.js`.
+- Forgetting `effect()` in `vite.config.ts`.
 - Placing `effect()` after `sveltekit()` in the Vite plugin list.
 - Enabling remote functions only after writing remote files, then debugging missing routes.
 - Installing the runtime package but forgetting the peer Effect package in package managers that do not hoist it for you.

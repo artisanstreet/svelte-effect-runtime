@@ -108,3 +108,14 @@ function has_typescript_lang(attrs: string): boolean {
 
   return lang === "ts" || lang === "typescript";
 }
+
+export {
+  type MarkupTransformResult,
+  transform_markup_effect,
+} from "$/markup/transform.ts";
+
+export {
+  type BlockRef,
+  type ScriptTransformResult,
+  transform_script_effect,
+} from "$/preprocess.ts";

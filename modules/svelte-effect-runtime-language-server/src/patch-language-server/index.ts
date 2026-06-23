@@ -15,9 +15,9 @@ export async function bootstrap_language_server() {
     return;
   }
 
-  const runtime_module = await import_runtime_module("runtime/preprocess.js");
+  const runtime_module = await import_runtime_module("runtime/transform.js");
 
-  patch_svelte_compiler_path(runtime_module.preprocess);
+  patch_svelte_compiler_path(runtime_module.transform_svelte_effect);
   patch_typescript_snapshot_path({
     transformEffectMarkup: (code, options) =>
       normalize_transform_result(

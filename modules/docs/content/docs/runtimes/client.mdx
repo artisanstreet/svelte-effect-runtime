@@ -65,7 +65,7 @@ That lets you compose remote calls with normal Effect operators on the client:
 </button>
 ```
 
-`yield*` is only rewritten by the preprocessor at the top level of
+`yield*` is only rewritten by the Vite transform at the top level of
 `<script effect>`, inside `Effect.gen`, and inside **inline arrow**
 event handlers. Wrapping it in a `function refresh() { yield* ... }`
 declaration will not work — the parser rejects it as a reserved-word

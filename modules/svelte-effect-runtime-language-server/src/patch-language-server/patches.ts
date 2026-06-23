@@ -12,12 +12,23 @@ import { prepare_virtual_document } from "./virtual-document.ts";
 import { rebind_snapshot_to_original_document } from "./snapshot.ts";
 import type { TransformSet } from "./types.ts";
 
-export function patch_svelte_compiler_path(effectPreprocess: () => any) {
+type TransformSvelteEffect = (
+  code: string,
+  filename?: string,
+) => { code: string };
+
+export function patch_svelte_compiler_path(
+  transform_svelte_effect: TransformSvelteEffect,
+) {
+  const effect_preprocessor = create_effect_transform_preprocessor(
+    transform_svelte_effect,
+  );
+
   patch_static_factory(TranspiledSvelteDocument, (originalCreate: any) => {
     return function create(this: unknown, document: unknown, config: any) {
       const preprocess = merge_preprocessors(
         config?.preprocess,
-        effectPreprocess,
+        effect_preprocessor,
       );
       return originalCreate.call(this, document, {
         ...config,
@@ -37,7 +48,7 @@ export function patch_svelte_compiler_path(effectPreprocess: () => any) {
         return originalCreate.call(
           this,
           document,
-          merge_preprocessors(preprocessors, effectPreprocess),
+          merge_preprocessors(preprocessors, effect_preprocessor),
         );
       };
     },
@@ -139,22 +150,39 @@ export function patch_typescript_code_actions() {
   CodeActionsProviderImpl.prototype.applyQuickfix[patch_marker] = true;
 }
 
-function merge_preprocessors(existing: any, effectPreprocess: () => any) {
+function merge_preprocessors(existing: any, effect_preprocessor: any) {
   if (contains_effect_preprocessor(existing)) {
     return existing;
   }
 
-  const next = effectPreprocess();
-
   if (!existing) {
-    return [next, create_typescript_fallback_preprocessor()];
+    return [effect_preprocessor, create_typescript_fallback_preprocessor()];
   }
 
   if (Array.isArray(existing)) {
-    return [next, ...existing];
+    return [effect_preprocessor, ...existing];
   }
 
-  return [next, existing];
+  return [effect_preprocessor, existing];
+}
+
+function create_effect_transform_preprocessor(
+  transform_svelte_effect: TransformSvelteEffect,
+) {
+  return {
+    name: "svelte-effect-runtime",
+    markup: ({ content, filename }: {
+      content: string;
+      filename?: string;
+    }) => {
+      const result = transform_svelte_effect(
+        content,
+        filename ?? "unknown.svelte",
+      );
+
+      return { code: result.code };
+    },
+  };
 }
 
 function create_typescript_fallback_preprocessor() {

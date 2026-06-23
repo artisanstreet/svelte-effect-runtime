@@ -22,7 +22,7 @@
   },
   "include": [
     "./src/mod.ts",
-    "./src/runtime/preprocess.ts",
+    "./src/runtime/transform.ts",
     "./src/internal/generators.ts",
     "./src/internal/remote-client.ts",
     "./src/internal/remote-server.ts",

@@ -78,7 +78,7 @@ Inside `<script effect>`, all remote calls return `Effect`s. Use
 <script lang="ts" effect>
   import { get_posts } from "$lib/posts.remote";
 
-  // ✅ correct — top-level yield* is rewritten by the preprocessor
+  // ✅ correct — top-level yield* is rewritten by the Vite transform
   const posts = yield* get_posts();
 
   // ❌ wrong — Effects are not awaitable
@@ -90,10 +90,10 @@ The `yield*` rewrite only fires in three places: top-level statements
 of `<script effect>`, bodies of `Effect.gen(function* () { ... })`, and
 **inline-arrow** event handlers. Wrapping it in
 `function foo() { yield* ... }` will hit a JS parser error before the
-preprocessor even sees it.
+transform even sees it.
 
 ```svelte
-<!-- ✅ inline arrow — preprocessor lowers the yield* -->
+<!-- ✅ inline arrow — the transform lowers the yield* -->
 <button onclick={() => { yield* increment(1); }}>+1</button>
 
 <!-- ✅ explicit Effect.gen — works because gen accepts yield* -->

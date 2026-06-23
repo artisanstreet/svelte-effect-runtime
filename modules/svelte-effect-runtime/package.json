@@ -31,9 +31,9 @@
       "types": "./.dist/vite.d.ts",
       "default": "./.dist/vite.js"
     },
-    "./runtime/preprocess": {
-      "types": "./.dist/runtime/preprocess.d.ts",
-      "default": "./.dist/runtime/preprocess.js"
+    "./runtime/transform": {
+      "types": "./.dist/runtime/transform.d.ts",
+      "default": "./.dist/runtime/transform.js"
     },
     "./internal/generators": {
       "types": "./.dist/internal/generators.d.ts",
