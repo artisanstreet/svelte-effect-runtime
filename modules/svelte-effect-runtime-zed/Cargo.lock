@@ -751,7 +751,7 @@ dependencies = [
 
 [[package]]
 name = "zed_svelte_effect_runtime"
-version = "3.0.1"
+version = "3.0.2"
 dependencies = [
  "zed_extension_api",
 ]

@@ -1,7 +1,7 @@
 id = "svelte-effect-runtime"
 name = "Svelte Effect Runtime"
 description = "Svelte Effect Runtime language-server support for Svelte files."
-version = "3.0.1"
+version = "3.0.2"
 schema_version = 1
 authors = ["Barekey"]
 repository = "https://github.com/usebarekey/svelte-effect-runtime"
