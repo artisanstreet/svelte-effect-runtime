@@ -44,11 +44,11 @@ export type NativeFormRecord = Record<PropertyKey, unknown>;
  * @since 2.0.0
  */
 export type EffectRemoteFormSubmit =
-  & Effect.Effect<unknown, RemoteFailure<unknown>>
+  & Effect.Effect<boolean, RemoteFailure<unknown>>
   & {
     updates: (
       ...updates: unknown[]
-    ) => Effect.Effect<unknown, RemoteFailure<unknown>>;
+    ) => Effect.Effect<boolean, RemoteFailure<unknown>>;
   };
 
 /**
@@ -94,8 +94,12 @@ export type EffectRemoteFormEnhanceOptions<
  *
  * @since 2.0.0
  */
-export type EffectRemoteForm<Input extends RemoteFormInput | void, Output> =
-  & ((input: Input) => Effect.Effect<Output, RemoteFailure<unknown>>)
+export type EffectRemoteForm<
+  Input extends RemoteFormInput | void,
+  Output,
+  ErrorType = unknown,
+> =
+  & ((input: Input) => Effect.Effect<Output, RemoteFailure<ErrorType>>)
   & Omit<
     RemoteForm<Input, Output>,
     "enhance" | "for" | "preflight" | "submit" | "validate"
@@ -107,11 +111,11 @@ export type EffectRemoteForm<Input extends RemoteFormInput | void, Output> =
       ) => void | Promise<void> | Effect.Effect<void, unknown, unknown>,
     ): ReturnType<RemoteForm<Input, Output>["enhance"]>;
     for(id: Parameters<RemoteForm<Input, Output>["for"]>[0]): Omit<
-      EffectRemoteForm<Input, Output>,
+      EffectRemoteForm<Input, Output, ErrorType>,
       "for"
     >;
-    preflight(schema: unknown): EffectRemoteForm<Input, Output>;
-    submit(input: Input): Effect.Effect<Output, RemoteFailure<unknown>>;
+    preflight(schema: unknown): EffectRemoteForm<Input, Output, ErrorType>;
+    submit(input: Input): Effect.Effect<Output, RemoteFailure<ErrorType>>;
     validate(
       options?: Parameters<RemoteForm<Input, Output>["validate"]>[0],
     ): Effect.Effect<void, RemoteFailure<unknown>>;

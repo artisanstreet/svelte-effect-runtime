@@ -244,6 +244,56 @@ Deno.test("value keeps symbols with the same description separate", () => {
   d.dispose();
 });
 
+Deno.test("value keeps primitive and object dependency shapes distinct", () => {
+  const d = make_dispatcher();
+  const shared_object = { id: 1 };
+  let call_count = 0;
+
+  const make_options = (
+    deps: readonly unknown[],
+    value: string,
+  ): ValueOptions<string> => ({
+    id: "dependency-shapes",
+    deps,
+    fallback: "loading",
+    factory: function* () {
+      call_count += 1;
+
+      return yield* Effect.succeed(value);
+    },
+  });
+
+  const cases: Array<[readonly unknown[], string]> = [
+    [[null], "null"],
+    [[undefined], "undefined"],
+    [[1n], "bigint"],
+    [[true], "true"],
+    [[false], "false"],
+    [[shared_object], "object"],
+  ];
+
+  for (const [deps, value] of cases) {
+    const options = make_options(deps, value);
+
+    d.value(options);
+
+    assertEquals(d.value(options), value);
+  }
+
+  const shared_again = make_options([shared_object], "object-again");
+
+  assertEquals(d.value(shared_again), "object");
+
+  const distinct_object = make_options([{ id: 1 }], "distinct-object");
+
+  d.value(distinct_object);
+
+  assertEquals(d.value(distinct_object), "distinct-object");
+  assertEquals(call_count, 7);
+
+  d.dispose();
+});
+
 Deno.test("value starts a new fiber when deps change", async () => {
   const d = make_dispatcher();
   let call_count = 0;
@@ -440,6 +490,25 @@ Deno.test({
       (globalThis as Record<string, unknown>).queueMicrotask = original_queue;
     }
   },
+});
+
+Deno.test("run suppresses interrupt-only exits", async () => {
+  const d = make_dispatcher();
+  const errors: unknown[] = [];
+  const original_queue = queueMicrotask;
+  (globalThis as Record<string, unknown>).queueMicrotask = (fn: () => void) =>
+    errors.push(fn);
+
+  try {
+    const result = await d.run(
+      Effect.interrupt as Effect.Effect<never, never, never>,
+    );
+
+    assertEquals(result, undefined);
+    assertEquals(errors, []);
+  } finally {
+    (globalThis as Record<string, unknown>).queueMicrotask = original_queue;
+  }
 });
 
 Deno.test("run rejects without executing after dispose", async () => {

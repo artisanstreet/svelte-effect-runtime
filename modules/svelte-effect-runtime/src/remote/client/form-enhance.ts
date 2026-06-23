@@ -58,7 +58,7 @@ function wrap_submit_callback(event: unknown): unknown {
 
 function make_submit_effect(
   original_submit: NativeMethod,
-): Effect.Effect<unknown, RemoteFailure<unknown>> & Record<string, unknown> {
+): Effect.Effect<boolean, RemoteFailure<unknown>> & Record<string, unknown> {
   let updates_args: unknown[] | undefined;
 
   const effect = make_effect_from_promise(async () => {
@@ -70,7 +70,7 @@ function make_submit_effect(
 
     return await Promise.resolve(result);
   }) as
-    & Effect.Effect<unknown, RemoteFailure<unknown>>
+    & Effect.Effect<boolean, RemoteFailure<unknown>>
     & Record<string, unknown>;
 
   Object.defineProperty(effect, "updates", {

@@ -4,6 +4,7 @@ import {
   assertFalse,
   assertRejects,
   assertStringIncludes,
+  assertThrows,
 } from "@std/assert";
 import {
   error as svelte_error,
@@ -31,6 +32,7 @@ import {
   throw_form_error,
 } from "../../../modules/svelte-effect-runtime/src/remote/server.ts";
 import { create_form_error } from "../../../modules/svelte-effect-runtime/src/remote/shared.ts";
+import * as sveltekit_server from "../../../modules/svelte-effect-runtime/src/internal/sveltekit-server.ts";
 
 // ─── normalize_remote_helper_error ─────────────────────────────
 
@@ -57,6 +59,23 @@ Deno.test("normalize_remote_helper_error wraps non-Error values", () => {
 
   assert(result instanceof Error);
   assertEquals(result.message, "raw string");
+});
+
+Deno.test("SvelteKit server fallback exports throw clear boundary errors", () => {
+  const exports = [
+    ["query", () => sveltekit_server.query()],
+    ["command", () => sveltekit_server.command()],
+    ["form", () => sveltekit_server.form()],
+    ["prerender", () => sveltekit_server.prerender()],
+    ["getRequestEvent", () => sveltekit_server.getRequestEvent()],
+  ] as const;
+
+  for (const [name, call] of exports) {
+    const error = assertThrows(call, Error);
+
+    assertStringIncludes(error.message, name);
+    assertStringIncludes(error.message, "inside a SvelteKit server module");
+  }
 });
 
 // ─── throw_form_error ──────────────────────────────────────────
@@ -133,6 +152,42 @@ Deno.test("encode_remote_failure serialises Effect tagged error instances", asyn
   assertEquals(parsed._tag, "AuthenticationError");
   assertEquals(parsed.message, "OAuth is currently disabled");
   assertEquals(parsed.reason, "development");
+});
+
+Deno.test("encode_remote_failure serialises cyclic failure records safely", () => {
+  const failure: Record<string, unknown> = {
+    _tag: "CircularError",
+    message: "loop",
+  };
+
+  failure.self = failure;
+  failure.fn = () => {};
+  failure.token = Symbol("token");
+
+  const encoded = encode_remote_failure({
+    reasons: [{ _tag: "Fail", error: failure }],
+  } as never);
+  const parsed = parse(encoded);
+
+  assertEquals(parsed._tag, "CircularError");
+  assertEquals(parsed.message, "loop");
+  assertEquals(parsed.self, undefined);
+  assertEquals(parsed.fn, undefined);
+  assertEquals(parsed.token, undefined);
+});
+
+Deno.test("encode_remote_failure preserves Error messages and fields", () => {
+  const failure = new Error("boom") as Error & { code?: string };
+
+  failure.code = "E_BOOM";
+
+  const encoded = encode_remote_failure({
+    reasons: [{ _tag: "Fail", error: failure }],
+  } as never);
+  const parsed = parse(encoded);
+
+  assertEquals(parsed.message, "boom");
+  assertEquals(parsed.code, "E_BOOM");
 });
 
 Deno.test("encode_remote_failure handles cause with no failures gracefully", () => {
@@ -311,6 +366,38 @@ Deno.test("run_remote_effect throws error on non-FormError failure", async () =>
 
   assertEquals(body.__svelte_effect_remote__, true);
   assertEquals(parsed._tag, "DbError");
+});
+
+Deno.test("run_remote_effect rethrows interrupt-only causes outside remote envelopes", async () => {
+  class TestRuntime {
+    runPromise(
+      effect: Effect.Effect<unknown, unknown, unknown>,
+    ): Promise<unknown> {
+      return Effect.runPromise(effect);
+    }
+  }
+
+  const runtime = new TestRuntime();
+  let invalid_called = false;
+  let error_called = false;
+
+  await assertRejects(() =>
+    run_remote_effect(
+      Effect.interrupt as Effect.Effect<never, unknown, unknown>,
+      runtime,
+      () => {
+        invalid_called = true;
+        throw new Error("invalid");
+      },
+      () => {
+        error_called = true;
+        throw new Error("error");
+      },
+    )
+  );
+
+  assertFalse(invalid_called);
+  assertFalse(error_called);
 });
 
 Deno.test("run_remote_effect rethrows SvelteKit redirect defects", async () => {

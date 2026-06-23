@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
 import {
   preprocess,
   transform_markup_effect,
@@ -190,6 +190,46 @@ Deno.test("root entry exposes server helpers for rewritten server imports", asyn
   assertEquals(typeof root.Prerender, "function");
   assertEquals(typeof root.get_server_runtime_or_throw, "function");
   assertEquals(typeof root.RequestEvent, "function");
+});
+
+Deno.test("root preprocess lazily delegates to runtime preprocess", async () => {
+  const root = await import(
+    "../../../modules/svelte-effect-runtime/src/mod.ts"
+  );
+  const group = root.preprocess();
+  const result = await group.markup({
+    content: `<p>{yield* loadValue()}</p>`,
+    filename: "Test.svelte",
+  });
+
+  assertStringIncludes(result.code, `__ser_markup_value`);
+  assertEquals(group.name, "svelte-effect-runtime");
+});
+
+Deno.test("root server-only exports throw before Vite rewrites imports", async () => {
+  const root = await import(
+    "../../../modules/svelte-effect-runtime/src/mod.ts"
+  );
+  const exports = [
+    ["ServerRuntime", () => root.ServerRuntime.make()],
+    ["Query", () => root.Query()],
+    ["Query.batch", () => root.Query.batch()],
+    ["Query.live", () => root.Query.live()],
+    ["Command", () => root.Command()],
+    ["Error", () => root.Error(500, "boom")],
+    ["Form", () => root.Form()],
+    ["Prerender", () => root.Prerender()],
+    ["Redirect", () => root.Redirect(303, "/done")],
+    ["RequestEvent", () => root.RequestEvent()],
+    ["get_server_runtime_or_throw", () => root.get_server_runtime_or_throw()],
+  ] as const;
+
+  for (const [name, call] of exports) {
+    const error = assertThrows(call, Error);
+
+    assertStringIncludes(error.message, name);
+    assertStringIncludes(error.message, "Vite plugin");
+  }
 });
 
 Deno.test("package manifests expose vite entrypoint", async () => {

@@ -1,4 +1,4 @@
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Cause, Effect, Exit, Layer, ManagedRuntime } from "effect";
 import type { Fiber as FiberType } from "effect/Fiber";
 import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime";
 
@@ -223,15 +223,33 @@ export class Dispatcher {
       return Promise.reject(new Error("Dispatcher has been disposed"));
     }
 
+    const exit_effect = Effect.exit(effect) as Effect.Effect<
+      unknown,
+      unknown,
+      unknown
+    >;
+
     return this.#runtime
-      .runPromise(effect as Effect.Effect<unknown, unknown, unknown>)
-      .catch((error: unknown) => {
+      .runPromise(exit_effect)
+      .then((exit: unknown) => {
+        const result = exit as Exit.Exit<A, E>;
+
+        if (Exit.isSuccess(result)) {
+          return result.value;
+        }
+
+        if (Cause.hasInterruptsOnly(result.cause)) {
+          return undefined as A;
+        }
+
+        const error = Cause.squash(result.cause);
+
         queueMicrotask(() => {
           throw error;
         });
 
         throw error;
-      }) as Promise<A>;
+      });
   }
 
   /**

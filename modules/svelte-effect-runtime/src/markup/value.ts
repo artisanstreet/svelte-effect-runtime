@@ -19,11 +19,11 @@ import type { Effect } from "effect";
  * @param factory - Generator function that yields the effect to run.
  * @returns The cached value if resolved, or the fallback.
  */
-export function value(
+export function value<A, E, R>(
   id: string,
   deps: readonly unknown[],
-  fallback: unknown,
-  factory: () => Effect.gen.Return<unknown, unknown, unknown>,
-): unknown {
+  fallback: A,
+  factory: () => Effect.gen.Return<A, E, R>,
+): A {
   return get_dispatcher().value({ id, deps, fallback, factory });
 }

@@ -108,8 +108,7 @@ function make_event_handler(
 
   return {
     expr_text,
-    text:
-      `(event) => { void ${HELPERS.run}(function* () { ${expr_text}; }); }`,
+    text: `(event) => { void ${HELPERS.run}(function* () { ${expr_text}; }); }`,
   };
 }
 
@@ -124,7 +123,7 @@ function emit_render_expression(
   id_text: string,
   effect: EffectHelper,
 ): string {
-  return `(await ${emit_promise_expression(id_text, effect)})()`;
+  return `${HELPERS.value}(${id_text}, ${effect.deps_text}, undefined, () => ${effect.call})?.()`;
 }
 
 function emit_each_expression(
