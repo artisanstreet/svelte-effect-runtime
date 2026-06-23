@@ -24,10 +24,10 @@ Write effectful code without any hassle. Seriously!
 </script>
 
 <ScrollArea>
-  {const currency = $derived(yield* GetUser().preferredCurrency}
-  
-  {#each yield* GetAllStocks as stock}
-    {const liveQuery = yield* GetLivePrice(stock.ticker);
+  {const currency = $derived((yield* GetUser()).preferredCurrency)}
+
+  {#each yield* GetAllStocks() as stock}
+    {const liveQuery = yield* GetLivePrice(stock.ticker)}
     {const price = liveQuery.current ?? stock.initialPrice}
 
     <StockCard.Root>
