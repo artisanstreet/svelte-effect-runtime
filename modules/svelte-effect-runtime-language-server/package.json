@@ -1,13 +1,29 @@
 {
   "name": "svelte-effect-runtime-language-server",
-  "private": true,
   "version": "3.0.1",
+  "description": "Language server for Svelte Effect Runtime syntax in Svelte files.",
   "license": "BSD-3-Clause",
   "type": "commonjs",
   "main": "./.dist/server.cjs",
   "bin": {
     "svelte-effect-runtime-language-server": "./.dist/server.cjs"
   },
+  "engines": {
+    "node": "^22.12.0 || >=24.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/usebarekey/svelte-effect-runtime.git",
+    "directory": "modules/svelte-effect-runtime-language-server"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    ".dist",
+    "runtime",
+    "README.md"
+  ],
   "scripts": {
     "build": "deno task build",
     "clean": "deno task clean",
