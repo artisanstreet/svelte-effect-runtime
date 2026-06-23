@@ -363,11 +363,11 @@ Deno.test("injects missing event run helper when another markup helper already e
   assertEquals(value_imports, 1);
   assertStringIncludes(
     result.code,
-    `import { run as __ser_markup_run } from "svelte-effect-runtime/internal/generators";`,
+    `import { run as __SER___markup_run } from "svelte-effect-runtime/internal/generators";`,
   );
   assertStringIncludes(
     result.code,
-    `void __ser_markup_run(function* () { yield* Effect.gen(function* () {`,
+    `__SER___markup_run(function* () { yield* Effect.gen(function* () {`,
   );
 
   compile(result.code, {

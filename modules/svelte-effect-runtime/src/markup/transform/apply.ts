@@ -273,17 +273,6 @@ function is_import_helper(helper: HelperDeclaration): boolean {
   return helper.text.trimStart().startsWith("import ");
 }
 
-function make_import_helper(
-  content: string,
-  import_text: string,
-): string | undefined {
-  if (content.includes(import_text)) {
-    return undefined;
-  }
-
-  return import_text;
-}
-
 function collect_script_binding_names(script_content: string): string[] {
   const source_file = ts.createSourceFile(
     "markup-script.ts",

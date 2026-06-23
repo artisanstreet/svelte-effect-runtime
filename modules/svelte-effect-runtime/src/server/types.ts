@@ -87,12 +87,22 @@ export type RemoteFormHandler<
  * @since 2.0.0
  */
 export type FormInvalid<Input = unknown> =
+  & FormInvalidFunctionChildren
   & FormInvalidChildren<Input>
   & {
     (
       message: string,
     ): Effect.Effect<never, ReturnType<typeof create_form_error>>;
   };
+
+type FormInvalidFunctionChildren = {
+  readonly apply: FormInvalid;
+  readonly bind: FormInvalid;
+  readonly call: FormInvalid;
+  readonly length: FormInvalid;
+  readonly name: FormInvalid;
+  readonly toString: FormInvalid;
+};
 
 type FormInvalidChildren<Input> = IsUnknown<Input> extends true ? {
     readonly [key: string]: FormInvalid;

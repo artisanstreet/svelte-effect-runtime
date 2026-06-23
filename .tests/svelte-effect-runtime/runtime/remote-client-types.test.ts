@@ -793,18 +793,21 @@ void generated_value;
   );
 });
 
-Deno.test("remote form enhance submit exposes boolean Effects", async () => {
+Deno.test("remote form enhance submit exposes form result Effects", async () => {
   await assert_type_checks(
-    "remote-form-submit-boolean.ts",
+    "remote-form-submit-result.ts",
     `
 import { Effect } from "effect";
 import type { RemoteFormInput } from "@sveltejs/kit";
 import type { EffectRemoteFormEnhanceOptions } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
 
-declare const options: EffectRemoteFormEnhanceOptions<RemoteFormInput>;
+type SaveResult = { readonly ok: true };
 
-const submit_effect: Effect.Effect<boolean, unknown, unknown> = options.submit();
-const updates_effect: Effect.Effect<boolean, unknown, unknown> =
+declare const options: EffectRemoteFormEnhanceOptions<RemoteFormInput, SaveResult>;
+
+const submit_effect: Effect.Effect<SaveResult | undefined, unknown, unknown> =
+  options.submit();
+const updates_effect: Effect.Effect<SaveResult | undefined, unknown, unknown> =
   options.submit().updates();
 
 void submit_effect;
