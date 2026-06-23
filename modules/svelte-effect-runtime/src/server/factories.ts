@@ -35,6 +35,9 @@ import type {
   RemoteLiveHandler,
   SchemaEncodedInput,
   SchemaInput,
+  StandardSchema,
+  StandardSchemaInput,
+  StandardSchemaOutput,
 } from "./types.ts";
 
 type FormSchemaEncodedInput<S> = S extends Schema.Top
@@ -44,6 +47,10 @@ type FormSchemaEncodedInput<S> = S extends Schema.Top
 type FormRemoteInput<Input> = NormalizeFormEncoded<Input> extends
   RemoteFormInput ? NormalizeFormEncoded<Input>
   : never;
+
+type FormStandardSchemaInput<S> = StandardSchemaInput<S> extends RemoteFormInput
+  ? StandardSchemaInput<S>
+  : RemoteFormInput;
 
 type FormScalar = string | number | boolean | File;
 
@@ -328,15 +335,19 @@ function QueryRoot<S extends Schema.Schema<unknown>, A, E = never, R = never>(
   validate_or_handler: S,
   maybe_handler: RemoteHandler<SchemaInput<S>, A, E, R>,
 ): EffectRemoteQueryFunction<SchemaEncodedInput<S>, A, E>;
+function QueryRoot<S extends StandardSchema, A, E = never, R = never>(
+  validate_or_handler: S,
+  maybe_handler: RemoteHandler<StandardSchemaOutput<S>, A, E, R>,
+): EffectRemoteQueryFunction<StandardSchemaInput<S>, A, E>;
 function QueryRoot(
   validate_or_handler: unknown,
-  maybe_handler?: RemoteHandler,
+  maybe_handler?: unknown,
 ): unknown {
   try {
     if (maybe_handler) {
       return to_effect_query(native_query(
         normalize_validator(validate_or_handler) as never,
-        make_remote_wrapper(maybe_handler, "Query") as never,
+        make_remote_wrapper(maybe_handler as RemoteHandler, "Query") as never,
       ) as ReturnType<typeof native_query>);
     }
 
@@ -373,9 +384,13 @@ function QueryBatch<S extends Schema.Schema<unknown>, A, E = never, R = never>(
   validate_or_handler: S,
   maybe_handler: EffectRemoteBatchHandler<SchemaInput<S>, A, E, R>,
 ): EffectRemoteQueryFunction<SchemaEncodedInput<S>, A, E>;
+function QueryBatch<S extends StandardSchema, A, E = never, R = never>(
+  validate_or_handler: S,
+  maybe_handler: EffectRemoteBatchHandler<StandardSchemaOutput<S>, A, E, R>,
+): EffectRemoteQueryFunction<StandardSchemaInput<S>, A, E>;
 function QueryBatch(
   validate_or_handler: unknown,
-  maybe_handler?: EffectRemoteBatchHandler,
+  maybe_handler?: unknown,
 ): unknown {
   try {
     if (!maybe_handler) {
@@ -415,16 +430,20 @@ function QueryLive<S extends Schema.Schema<unknown>, A, E = never, R = never>(
   validate_or_handler: S,
   maybe_handler: RemoteLiveHandler<SchemaInput<S>, A, E, R>,
 ): EffectRemoteLiveQueryFunction<SchemaEncodedInput<S>, A, E>;
+function QueryLive<S extends StandardSchema, A, E = never, R = never>(
+  validate_or_handler: S,
+  maybe_handler: RemoteLiveHandler<StandardSchemaOutput<S>, A, E, R>,
+): EffectRemoteLiveQueryFunction<StandardSchemaInput<S>, A, E>;
 function QueryLive(
   validate_or_handler: unknown,
-  maybe_handler?: RemoteLiveHandler,
+  maybe_handler?: unknown,
 ): unknown {
   try {
     if (maybe_handler) {
       return to_effect_live_query(native_query.live(
         normalize_validator(validate_or_handler) as never,
         make_remote_live_wrapper(
-          maybe_handler,
+          maybe_handler as RemoteLiveHandler,
           "Query.live",
         ) as never,
       ) as NativeQueryLike);
@@ -492,15 +511,19 @@ export function Command<
   validate_or_handler: S,
   maybe_handler: RemoteHandler<SchemaInput<S>, A, E, R>,
 ): EffectRemoteCommand<SchemaEncodedInput<S>, A, E>;
+export function Command<S extends StandardSchema, A, E = never, R = never>(
+  validate_or_handler: S,
+  maybe_handler: RemoteHandler<StandardSchemaOutput<S>, A, E, R>,
+): EffectRemoteCommand<StandardSchemaInput<S>, A, E>;
 export function Command(
   validate_or_handler: unknown,
-  maybe_handler?: RemoteHandler,
+  maybe_handler?: unknown,
 ): unknown {
   try {
     if (maybe_handler) {
       return native_command(
         normalize_validator(validate_or_handler) as never,
-        make_remote_wrapper(maybe_handler, "Command") as never,
+        make_remote_wrapper(maybe_handler as RemoteHandler, "Command") as never,
       );
     }
 
@@ -553,15 +576,22 @@ export function Form<S extends Schema.Top, A, E = never, R = never>(
   validate_or_handler: S,
   maybe_handler: RemoteFormHandler<SchemaInput<S>, A, E, R>,
 ): EffectRemoteForm<FormSchemaEncodedInput<S>, A, E>;
+export function Form<S extends StandardSchema, A, E = never, R = never>(
+  validate_or_handler: S,
+  maybe_handler: RemoteFormHandler<StandardSchemaOutput<S>, A, E, R>,
+): EffectRemoteForm<FormStandardSchemaInput<S>, A, E>;
 export function Form(
   validate_or_handler: unknown,
-  maybe_handler?: RemoteFormHandler<unknown, unknown, unknown, unknown>,
+  maybe_handler?: unknown,
 ): unknown {
   try {
     if (maybe_handler) {
       return native_form(
         normalize_validator(validate_or_handler) as never,
-        make_remote_form_wrapper(maybe_handler, "Form") as never,
+        make_remote_form_wrapper(
+          maybe_handler as RemoteFormHandler,
+          "Form",
+        ) as never,
       );
     }
 
@@ -617,9 +647,14 @@ export function Prerender<
   maybe_handler: RemoteHandler<SchemaInput<S>, A, E, R>,
   maybe_options?: PrerenderOptions,
 ): EffectRemoteFunction<SchemaEncodedInput<S>, A, E>;
+export function Prerender<S extends StandardSchema, A, E = never, R = never>(
+  validate_or_handler: S,
+  maybe_handler: RemoteHandler<StandardSchemaOutput<S>, A, E, R>,
+  maybe_options?: PrerenderOptions,
+): EffectRemoteFunction<StandardSchemaInput<S>, A, E>;
 export function Prerender(
   validate_or_handler: unknown,
-  maybe_handler_or_options?: RemoteHandler | PrerenderOptions,
+  maybe_handler_or_options?: unknown,
   maybe_options?: PrerenderOptions,
 ): unknown {
   try {

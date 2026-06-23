@@ -222,15 +222,33 @@ export class Dispatcher {
       );
     }
 
+    const exit_effect = Effect.exit(effect) as Effect.Effect<
+      unknown,
+      unknown,
+      unknown
+    >;
+
     return this.#runtime
-      .runPromise(effect as Effect.Effect<unknown, unknown, unknown>)
-      .catch((error: unknown) => {
+      .runPromise(exit_effect)
+      .then((exit: unknown) => {
+        const result = exit as Exit.Exit<A, E>;
+
+        if (Exit.isSuccess(result)) {
+          return result.value;
+        }
+
+        if (Cause.hasInterruptsOnly(result.cause)) {
+          return undefined as A;
+        }
+
+        const error = Cause.squash(result.cause);
+
         queueMicrotask(() => {
           throw error;
         });
 
         throw error;
-      }) as Promise<A>;
+      });
   }
 
   /**
@@ -255,6 +273,12 @@ export class Dispatcher {
     this.#values.clear();
     this.#value_ids.clear();
     this.#promise_ids.clear();
+
+    void this.#runtime.dispose().catch((error: unknown) => {
+      queueMicrotask(() => {
+        throw error;
+      });
+    });
   }
 
   #make_value_cache_key(id: string, deps: readonly unknown[]): string {

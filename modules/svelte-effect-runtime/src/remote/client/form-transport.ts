@@ -107,6 +107,7 @@ function decode_form_response<Output>(
   }
 
   const response = envelope as {
+    data?: unknown;
     type: string;
     result?: unknown;
     error?: unknown;
@@ -126,7 +127,13 @@ function decode_form_response<Output>(
     );
   }
 
-  if (response.type !== "result" || typeof response.result !== "string") {
+  const result_text = typeof response.result === "string"
+    ? response.result
+    : typeof response.data === "string"
+    ? response.data
+    : undefined;
+
+  if (response.type !== "result" || result_text === undefined) {
     throw create_remote_transport_error(
       new Error(
         "[REMOTE_FORM_RESPONSE_UNSUPPORTED]: Unsupported remote form response",
@@ -135,7 +142,7 @@ function decode_form_response<Output>(
     );
   }
 
-  const parsed = parse(response.result);
+  const parsed = parse(result_text);
   const decoded = decode_payload(parsed) as {
     issues?: readonly FormIssue[];
     result?: Output;

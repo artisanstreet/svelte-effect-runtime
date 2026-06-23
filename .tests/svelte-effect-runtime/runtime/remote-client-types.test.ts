@@ -18,8 +18,21 @@ declare const schema: {
 };
 
 const form = create_remote_form_adapter<RemoteFormInput, void>({}, (value) => value);
+const returning_form = create_remote_form_adapter<
+  RemoteFormInput,
+  { ok: boolean }
+>({}, (value) => value);
 
 form.preflight(schema).enhance(() => Effect.void);
+form.preflight(schema).enhance(({ submit }) => submit());
+form.preflight(schema).enhance(({ submit }) => submit().updates());
+form.preflight(schema).enhance(({ submit }) =>
+  Effect.gen(function* () {
+    yield* submit().updates();
+  })
+);
+returning_form.preflight(schema).enhance(({ submit }) => submit());
+returning_form.preflight(schema).enhance(({ submit }) => submit().updates());
 `,
   );
 });
@@ -626,6 +639,176 @@ async function check_generated_markup_helpers() {
 }
 
 void check_generated_markup_helpers;
+`,
+  );
+});
+
+Deno.test("server remote helpers preserve domain error and Standard Schema types", async () => {
+  await assert_type_checks(
+    "server-remote-domain-types.ts",
+    `
+import { Effect, Schema, Stream } from "effect";
+import { Command, Form, Prerender, Query } from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
+import type { FormInvalid } from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
+import type { RemoteFailure } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/shared.ts";
+import { value } from "__RUNTIME__/modules/svelte-effect-runtime/src/markup/value.ts";
+
+type Equal<Left, Right> =
+  (<Type>() => Type extends Left ? 1 : 2) extends
+  (<Type>() => Type extends Right ? 1 : 2) ? true : false;
+type Assert<Type extends true> = Type;
+type ErrorOf<Type> = Type extends Effect.Effect<unknown, infer Error, unknown>
+  ? Error
+  : never;
+
+type DomainError = {
+  readonly _tag: "DomainError";
+  readonly message: string;
+};
+
+const domain_error: DomainError = {
+  _tag: "DomainError",
+  message: "nope",
+};
+
+const standard_string = {
+  "~standard": {
+    types: undefined as unknown as {
+      input: string;
+      output: string;
+    },
+    validate(input: unknown) {
+      return { value: String(input) };
+    },
+  },
+};
+
+const standard_form = {
+  "~standard": {
+    types: undefined as unknown as {
+      input: {
+        name: string;
+      };
+      output: {
+        name: string;
+      };
+    },
+    validate(input: unknown) {
+      return { value: input as { name: string } };
+    },
+  },
+};
+
+function maybe_fail(value: string) {
+  return Effect.gen(function* () {
+    if (value.length === 0) {
+      yield* Effect.fail(domain_error);
+    }
+
+    return value;
+  });
+}
+
+declare const invalid: FormInvalid;
+
+const QueryBySchema = Query(standard_string, (value) => maybe_fail(value));
+const BatchBySchema = Query.batch(standard_string, (values) =>
+  Effect.succeed((value, index) => value.length + values.length + index)
+);
+const LiveBySchema = Query.live(standard_string, (value) =>
+  Stream.make(value)
+);
+const CommandBySchema = Command(standard_string, (value) => maybe_fail(value));
+const FormBySchema = Form(standard_form, ({ data }) => maybe_fail(data.name));
+const PrerenderBySchema = Prerender(standard_string, (value) =>
+  maybe_fail(value)
+);
+const PrerenderWithoutInput = Prerender(() => Effect.succeed("ready"));
+const generated_value: number = value("count", [], 0, function* () {
+  return yield* Effect.succeed(1);
+});
+
+type QueryParameters = Parameters<typeof QueryBySchema>;
+type BatchParameters = Parameters<typeof BatchBySchema>;
+type LiveParameters = Parameters<typeof LiveBySchema>;
+type CommandParameters = Parameters<typeof CommandBySchema>;
+type FormParameters = Parameters<typeof FormBySchema>;
+type PrerenderParameters = Parameters<typeof PrerenderBySchema>;
+type QueryError = ErrorOf<ReturnType<typeof QueryBySchema>>;
+type CommandError = ErrorOf<ReturnType<typeof CommandBySchema>>;
+type FormError = ErrorOf<ReturnType<typeof FormBySchema>>;
+type PrerenderError = ErrorOf<ReturnType<typeof PrerenderBySchema>>;
+type QueryHasDomainError = Assert<
+  Equal<Extract<QueryError, DomainError>, DomainError>
+>;
+type CommandHasDomainError = Assert<
+  Equal<Extract<CommandError, DomainError>, DomainError>
+>;
+type FormHasDomainError = Assert<
+  Equal<Extract<FormError, DomainError>, DomainError>
+>;
+type PrerenderHasDomainError = Assert<
+  Equal<Extract<PrerenderError, DomainError>, DomainError>
+>;
+type QueryTakesStandardInput = Assert<Equal<QueryParameters, [input: string]>>;
+type BatchTakesStandardInput = Assert<Equal<BatchParameters, [input: string]>>;
+type LiveTakesStandardInput = Assert<Equal<LiveParameters, [input: string]>>;
+type CommandTakesStandardInput = Assert<
+  Equal<CommandParameters, [input: string]>
+>;
+type FormTakesStandardInput = Assert<
+  Equal<FormParameters, [input: { name: string }]>
+>;
+type PrerenderTakesStandardInput = Assert<
+  Equal<PrerenderParameters, [input: string]>
+>;
+
+const query_effect: Effect.Effect<
+  string,
+  RemoteFailure<DomainError>,
+  unknown
+> = QueryBySchema("id");
+const prerender_effect: Effect.Effect<
+  string,
+  RemoteFailure<DomainError>,
+  unknown
+> = PrerenderBySchema("id");
+const prerender_without_input_effect: Effect.Effect<
+  string,
+  RemoteFailure<never>,
+  unknown
+> = PrerenderWithoutInput();
+const invalid_name = invalid.name("Name is required");
+const invalid_length = invalid.length("Length is required");
+
+void Query.batch;
+void Schema.String;
+void query_effect;
+void prerender_effect;
+void prerender_without_input_effect;
+void invalid_name;
+void invalid_length;
+void generated_value;
+`,
+  );
+});
+
+Deno.test("remote form enhance submit exposes boolean Effects", async () => {
+  await assert_type_checks(
+    "remote-form-submit-boolean.ts",
+    `
+import { Effect } from "effect";
+import type { RemoteFormInput } from "@sveltejs/kit";
+import type { EffectRemoteFormEnhanceOptions } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
+
+declare const options: EffectRemoteFormEnhanceOptions<RemoteFormInput>;
+
+const submit_effect: Effect.Effect<boolean, unknown, unknown> = options.submit();
+const updates_effect: Effect.Effect<boolean, unknown, unknown> =
+  options.submit().updates();
+
+void submit_effect;
+void updates_effect;
 `,
   );
 });

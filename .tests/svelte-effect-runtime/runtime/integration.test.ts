@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
 import {
   transform_markup_effect,
   transform_script_effect,
@@ -223,7 +223,7 @@ Deno.test("vite plugin lowers svelte yield through its transform hook", async ()
   }
 
   const source = [
-    `<script effect>`,
+    `<script effect lang="ts">`,
     `  let value = $state(yield* loadValue());`,
     `</script>`,
     ``,
@@ -236,13 +236,13 @@ Deno.test("vite plugin lowers svelte yield through its transform hook", async ()
     "C:/src/routes/Test.svelte",
   );
 
-  assertStringIncludes(result.code, `<script>`);
+  assertStringIncludes(result.code, `<script lang="ts">`);
   assertStringIncludes(result.code, `__SER___program`);
   assertStringIncludes(result.code, `__SER___markup_run`);
 
   parse(result.code, { filename: "Test.svelte" });
 
-  if (result.code.includes(`<script effect>`)) {
+  if (/script[^>]*\beffect\b/.test(result.code)) {
     throw new Error("effect attribute should be removed");
   }
 
@@ -265,6 +265,32 @@ Deno.test("root entry exposes server helpers for rewritten server imports", asyn
   assertEquals(typeof root.Prerender, "function");
   assertEquals(typeof root.get_server_runtime_or_throw, "function");
   assertEquals(typeof root.RequestEvent, "function");
+});
+
+Deno.test("root server-only exports throw before Vite rewrites imports", async () => {
+  const root = await import(
+    "../../../modules/svelte-effect-runtime/src/mod.ts"
+  );
+  const exports = [
+    ["ServerRuntime", () => root.ServerRuntime.make()],
+    ["Query", () => root.Query()],
+    ["Query.batch", () => root.Query.batch()],
+    ["Query.live", () => root.Query.live()],
+    ["Command", () => root.Command()],
+    ["Error", () => root.Error(500, "boom")],
+    ["Form", () => root.Form()],
+    ["Prerender", () => root.Prerender()],
+    ["Redirect", () => root.Redirect(303, "/done")],
+    ["RequestEvent", () => root.RequestEvent()],
+    ["get_server_runtime_or_throw", () => root.get_server_runtime_or_throw()],
+  ] as const;
+
+  for (const [name, call] of exports) {
+    const error = assertThrows(call, Error);
+
+    assertStringIncludes(error.message, name);
+    assertStringIncludes(error.message, "Vite plugin");
+  }
 });
 
 Deno.test("package manifests expose vite and transform entrypoints", async () => {

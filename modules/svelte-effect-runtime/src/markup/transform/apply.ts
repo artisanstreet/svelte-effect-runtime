@@ -48,12 +48,27 @@ export function inject_helpers(
     text: string;
     relocation?: PendingRelocation;
   }> = [
-    `import { value as ${bindings.value} } from "svelte-effect-runtime/internal/generators";`,
-    `import { promise as ${bindings.promise} } from "svelte-effect-runtime/internal/generators";`,
-    `import { run as ${bindings.run} } from "svelte-effect-runtime/internal/generators";`,
+    make_import_helper(
+      content,
+      `import { value as ${bindings.value} } from "svelte-effect-runtime/internal/generators";`,
+    ),
+    make_import_helper(
+      content,
+      `import { promise as ${bindings.promise} } from "svelte-effect-runtime/internal/generators";`,
+    ),
+    make_import_helper(
+      content,
+      `import { run as ${bindings.run} } from "svelte-effect-runtime/internal/generators";`,
+    ),
     ...import_helpers,
     ...local_helpers,
-  ].map((helper) => typeof helper === "string" ? { text: helper } : helper);
+  ].filter((helper): helper is string | HelperDeclaration =>
+    helper !== undefined
+  ).map((helper) => typeof helper === "string" ? { text: helper } : helper);
+
+  if (helper_segments.length === 0) {
+    return undefined;
+  }
 
   const helper_block = helper_segments.map((segment) => segment.text).join(
     "\n",
@@ -169,6 +184,17 @@ export function create_relocations(
   ];
 }
 
+function make_import_helper(
+  content: string,
+  import_text: string,
+): string | undefined {
+  if (content.includes(import_text)) {
+    return undefined;
+  }
+
+  return import_text;
+}
+
 function make_insertion_relocations(
   segments: Array<{
     text: string;
@@ -245,6 +271,17 @@ function unique_import_helpers(
 
 function is_import_helper(helper: HelperDeclaration): boolean {
   return helper.text.trimStart().startsWith("import ");
+}
+
+function make_import_helper(
+  content: string,
+  import_text: string,
+): string | undefined {
+  if (content.includes(import_text)) {
+    return undefined;
+  }
+
+  return import_text;
 }
 
 function collect_script_binding_names(script_content: string): string[] {

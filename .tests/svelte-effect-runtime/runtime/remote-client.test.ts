@@ -2,10 +2,12 @@ import { assertEquals, assertRejects } from "@std/assert";
 import { Effect } from "effect";
 import { stringify } from "devalue";
 import {
+  create_remote_command_adapter,
   create_remote_form_adapter,
   create_remote_live_query_adapter,
   create_remote_query_adapter,
 } from "../../../modules/svelte-effect-runtime/src/remote/client.ts";
+import { to_form_data } from "../../../modules/svelte-effect-runtime/src/remote/client/form-data.ts";
 import { normalize_native_error } from "../../../modules/svelte-effect-runtime/src/remote/client/failures.ts";
 import { create_serialized_remote_failure_envelope } from "../../../modules/svelte-effect-runtime/src/remote/shared.ts";
 
@@ -328,6 +330,105 @@ Deno.test("remote live query adapter preserves state and wraps reconnect", async
   assertEquals(reconnect_called, true);
 });
 
+Deno.test("remote command adapter resolves callable responses and tracks pending", async () => {
+  let release: (() => void) | undefined;
+  let pending_while_running = 0;
+  let command:
+    | ReturnType<
+      typeof create_remote_command_adapter<{ title: string }, { ok: string }>
+    >
+    | undefined;
+
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  const native = async (input: { title: string }) => {
+    pending_while_running = command?.pending as number;
+
+    await gate;
+
+    return new Response(JSON.stringify({ ok: input.title }));
+  };
+
+  command = create_remote_command_adapter(native, (value) => value);
+
+  const promise = Effect.runPromise(command({ title: "publish" }));
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assertEquals(command.pending, 1);
+  assertEquals(pending_while_running, 1);
+
+  release?.();
+
+  const result = await promise;
+
+  assertEquals(result, { ok: "publish" });
+  assertEquals(command.pending, 0);
+});
+
+Deno.test("remote command adapter decodes empty successful responses", async () => {
+  const native = () => Promise.resolve(new Response(null, { status: 204 }));
+  const command = create_remote_command_adapter<void, void>(
+    native,
+    (value) => value,
+  );
+
+  const result = await Effect.runPromise(command(undefined));
+
+  assertEquals(result, undefined);
+});
+
+Deno.test("remote command adapter supports invoke objects and rejects invalid factories", async () => {
+  const native = {
+    invoke(input: { id: number }) {
+      return Promise.resolve({ id: input.id, source: "invoke" });
+    },
+  };
+
+  const command = create_remote_command_adapter<
+    { id: number },
+    { id: number; source: string }
+  >(native, (value) => value);
+
+  const result = await Effect.runPromise(command({ id: 7 }));
+
+  assertEquals(result, { id: 7, source: "invoke" });
+  assertRejects(
+    async () => {
+      create_remote_command_adapter({}, (value) => value);
+    },
+    Error,
+    "Invalid command factory",
+  );
+});
+
+Deno.test("remote form data encodes nested scalar, array, blob, and empty values", () => {
+  const blob = new Blob(["avatar"]);
+  const form_data = to_form_data({
+    active: true,
+    avatar: blob,
+    count: 2,
+    draft: false,
+    nested: {
+      missing: undefined,
+      nil: null,
+    },
+    tags: ["svelte", "effect"],
+    title: "Hello",
+  });
+
+  assertEquals(form_data.get("title"), "Hello");
+  assertEquals(form_data.get("n:count"), "2");
+  assertEquals(form_data.get("b:active"), "on");
+  assertEquals(form_data.has("b:draft"), false);
+  assertEquals(form_data.getAll("tags[]"), ["svelte", "effect"]);
+  assertEquals(form_data.get("nested.nil"), "");
+  assertEquals(form_data.has("nested.missing"), false);
+  assertEquals(form_data.get("avatar") instanceof Blob, true);
+});
+
 Deno.test("remote form adapter preserves descriptors and wraps validate in an Effect", async () => {
   const attach = Symbol("attach");
   let validate_called = false;
@@ -407,6 +508,40 @@ Deno.test("remote form adapter posts explicit input when native submit is form-b
     assertEquals(native_submit_called, false);
     assertEquals(requested_url, "/_app/remote/abc/create");
     assertEquals(posted_title, "hello");
+  } finally {
+    globalThis.fetch = original_fetch;
+  }
+});
+
+Deno.test("remote form adapter decodes SvelteKit data result envelopes", async () => {
+  const original_fetch = globalThis.fetch;
+
+  globalThis.fetch = (() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          type: "result",
+          data: stringify({ result: { ok: true } }),
+        }),
+      ),
+    )) as typeof fetch;
+
+  try {
+    const form = create_remote_form_adapter<
+      { title: string },
+      { ok: boolean }
+    >(
+      {
+        method: "POST",
+        action: "?/remote=abc%2Fcreate",
+      },
+      (value) => value,
+      "/_app/remote",
+    );
+
+    const result = await Effect.runPromise(form({ title: "hello" }));
+
+    assertEquals(result, { ok: true });
   } finally {
     globalThis.fetch = original_fetch;
   }

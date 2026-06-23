@@ -273,6 +273,8 @@ export type {
   SchemaInput,
   ServerRuntimeFactory,
   StandardSchema,
+  StandardSchemaInput,
+  StandardSchemaOutput,
 } from "$/server/types.ts";
 
 function make_server_only_class(name: string): unknown {

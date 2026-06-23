@@ -1,6 +1,8 @@
 import { transform_markup_effect } from "../../../modules/svelte-effect-runtime/src/markup/transform.ts";
 import { reset_dispatcher } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
+import { promise } from "../../../modules/svelte-effect-runtime/src/markup/promise.ts";
 import { value } from "../../../modules/svelte-effect-runtime/src/markup/value.ts";
+import { run } from "../../../modules/svelte-effect-runtime/src/markup/run.ts";
 import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
 import { compile } from "svelte/compiler";
 import { Effect } from "effect";
@@ -107,7 +109,7 @@ Deno.test("rewrites {#await yield* expr} with :catch clause", () => {
   if (!result.has_yield) throw new Error("has_yield should be true");
 });
 
-Deno.test("rewrites {@render yield* fn()} as awaited snippet call", () => {
+Deno.test("rewrites {@render yield* fn()} as cached optional snippet call", () => {
   const source = `{@render yield* getSnippet()}`;
   const result = transform_markup_effect(source, "Test.svelte");
 
@@ -115,6 +117,15 @@ Deno.test("rewrites {@render yield* fn()} as awaited snippet call", () => {
   assertStringIncludes(result.code, `(`);
   assertStringIncludes(result.code, `)()`);
   if (!result.has_yield) throw new Error("has_yield should be true");
+
+  compile(result.code, {
+    generate: "client",
+    experimental: { async: true },
+  });
+  compile(result.code, {
+    generate: "server",
+    experimental: { async: true },
+  });
 });
 
 Deno.test("rewrites yield inside render tag arguments without double-calling snippet output", () => {
@@ -332,6 +343,40 @@ Deno.test("rewrites native-style form validation handlers only when marked with 
   if (!result.has_yield) throw new Error("has_yield should be true");
 });
 
+Deno.test("injects missing event run helper when another markup helper already exists", () => {
+  const source = [
+    `<script>`,
+    `  import { value as __ser_markup_value } from "svelte-effect-runtime/internal/generators";`,
+    `  import { Effect } from "effect";`,
+    `</script>`,
+    `<input oninput={yield* Effect.gen(function* () {`,
+    `  const file = event.currentTarget.files?.[0];`,
+    `  if (!file) return;`,
+    `  console.log(file);`,
+    `})} />`,
+  ].join("\n");
+
+  const result = transform_markup_effect(source, "Test.svelte");
+  const value_imports =
+    [...result.code.matchAll(/\bvalue as __ser_markup_value\b/g)].length;
+
+  assertEquals(value_imports, 1);
+  assertStringIncludes(
+    result.code,
+    `import { run as __ser_markup_run } from "svelte-effect-runtime/internal/generators";`,
+  );
+  assertStringIncludes(
+    result.code,
+    `void __ser_markup_run(function* () { yield* Effect.gen(function* () {`,
+  );
+
+  compile(result.code, {
+    filename: "Test.svelte",
+    generate: "client",
+    experimental: { async: true },
+  });
+});
+
 Deno.test("leaves non-Effect event handlers untouched", () => {
   const source =
     `<form {...formSnap} oninput={() => formSnap.validate()}></form>`;
@@ -429,6 +474,72 @@ Deno.test("rewrites nested yield* in Effect.matchCause event handlers", () => {
     result.code,
     `onFailure: (cause) => Effect.sync(() => ("failed"))`,
   );
+
+  compile(result.code, {
+    filename: "Test.svelte",
+    generate: "server",
+    experimental: { async: true },
+  });
+});
+
+Deno.test("preserves plain matchCause success callback values when upgrading", () => {
+  const source = [
+    `<button onclick={yield* savePost().pipe(Effect.matchCause({`,
+    `  onSuccess: (result) => result.id,`,
+    `  onFailure: (cause) => { return yield* recover(cause); }`,
+    `}))}>save</button>`,
+  ].join("\n");
+
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `Effect.matchCauseEffect`);
+  assertStringIncludes(
+    result.code,
+    `onSuccess: (result) => Effect.sync(() => (result.id))`,
+  );
+
+  if (result.code.includes(`onSuccess: (result) => true`)) {
+    throw new Error("matchCauseEffect success callbacks must preserve values");
+  }
+
+  if (result.code.includes(`onSuccess: (result) => false`)) {
+    throw new Error("matchCauseEffect success callbacks must preserve values");
+  }
+
+  compile(result.code, {
+    filename: "Test.svelte",
+    generate: "server",
+    experimental: { async: true },
+  });
+});
+
+Deno.test("preserves function-expression match callback values when upgrading", () => {
+  const source = [
+    `<button onclick={yield* savePost().pipe(Effect.match({`,
+    `  onSuccess: function (result) { return result.id; },`,
+    `  onFailure: function (error) { return yield* recover(error); }`,
+    `}))}>save</button>`,
+  ].join("\n");
+
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `Effect.matchEffect`);
+  assertStringIncludes(
+    result.code,
+    `onSuccess: function (result) { return Effect.sync(() => { return result.id; }); }`,
+  );
+  assertStringIncludes(
+    result.code,
+    `onFailure: function (error) { return Effect.gen(function* () { return yield* recover(error); }); }`,
+  );
+
+  if (result.code.includes(`onSuccess: function (result) { return true; }`)) {
+    throw new Error("matchEffect success callbacks must preserve values");
+  }
+
+  if (result.code.includes(`onSuccess: function (result) { return false; }`)) {
+    throw new Error("matchEffect success callbacks must preserve values");
+  }
 
   compile(result.code, {
     filename: "Test.svelte",
@@ -945,6 +1056,24 @@ Deno.test("normalizes HMR query strings out of markup cache ids", () => {
   assertStringIncludes(result.code, `"Page.svelte:`);
   if (result.code.includes("Page.svelte?t=12345:")) {
     throw new Error("cache id should not include HMR query string");
+  }
+});
+
+Deno.test("markup promise and run helpers preserve success values", async () => {
+  reset_dispatcher();
+
+  try {
+    const loaded = await promise("markup-promise", [], function* () {
+      return yield* Effect.succeed("loaded");
+    });
+    const saved = await run(function* () {
+      return yield* Effect.succeed(42);
+    });
+
+    assertEquals(loaded, "loaded");
+    assertEquals(saved, 42);
+  } finally {
+    reset_dispatcher();
   }
 });
 

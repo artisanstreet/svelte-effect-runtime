@@ -43,4 +43,6 @@ export type {
   SchemaInput,
   ServerRuntimeFactory,
   StandardSchema,
+  StandardSchemaInput,
+  StandardSchemaOutput,
 } from "./server/index.ts";

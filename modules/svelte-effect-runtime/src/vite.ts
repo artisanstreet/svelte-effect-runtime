@@ -142,6 +142,16 @@ function make_remote_client_wrapper_plugin(options?: EffectOptions): Plugin {
   };
 }
 
+function is_svelte_component_module(id: string): boolean {
+  const clean_id = id.split("?")[0] ?? id;
+
+  return clean_id.endsWith(".svelte");
+}
+
+function has_component_effect_syntax(code: string): boolean {
+  return code.includes("yield*") || /<script\b[^>]*\beffect\b/.test(code);
+}
+
 function is_server_runtime_module(id: string): boolean {
   return (
     id.endsWith(".server.ts") ||

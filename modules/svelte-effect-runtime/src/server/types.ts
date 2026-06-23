@@ -128,6 +128,10 @@ export type PrerenderOptions = {
  */
 export type StandardSchema = {
   readonly "~standard": {
+    readonly types?: {
+      readonly input: unknown;
+      readonly output: unknown;
+    };
     readonly validate: (input: unknown) => unknown;
   };
 };
@@ -147,6 +151,34 @@ export type SchemaInput<S> = S extends Schema.Top ? Schema.Schema.Type<S>
  */
 export type SchemaEncodedInput<S> = S extends Schema.Top ? S["Encoded"]
   : unknown;
+
+/**
+ * Extracts the encoded input type from a Standard Schema.
+ *
+ * @since 3.0.0
+ */
+export type StandardSchemaInput<S> = S extends {
+  readonly "~standard": {
+    readonly types: {
+      readonly input: infer Input;
+    };
+  };
+} ? Input
+  : unknown;
+
+/**
+ * Extracts the decoded handler input type from a Standard Schema.
+ *
+ * @since 3.0.0
+ */
+export type StandardSchemaOutput<S> = S extends {
+  readonly "~standard": {
+    readonly types: {
+      readonly output: infer Output;
+    };
+  };
+} ? Output
+  : StandardSchemaInput<S>;
 
 /**
  * Root and server export shape for building the server-side runtime.
@@ -176,6 +208,10 @@ export interface QueryFactory {
     validate_or_handler: S,
     maybe_handler: RemoteHandler<SchemaInput<S>, A, E, R>,
   ): EffectRemoteQueryFunction<SchemaEncodedInput<S>, A, E>;
+  <S extends StandardSchema, A, E = never, R = never>(
+    validate_or_handler: S,
+    maybe_handler: RemoteHandler<StandardSchemaOutput<S>, A, E, R>,
+  ): EffectRemoteQueryFunction<StandardSchemaInput<S>, A, E>;
 
   readonly batch: QueryBatchFactory;
   readonly live: QueryLiveFactory;
@@ -195,6 +231,10 @@ export interface QueryBatchFactory {
     validate_or_handler: S,
     maybe_handler: EffectRemoteBatchHandler<SchemaInput<S>, A, E, R>,
   ): EffectRemoteQueryFunction<SchemaEncodedInput<S>, A, E>;
+  <S extends StandardSchema, A, E = never, R = never>(
+    validate_or_handler: S,
+    maybe_handler: EffectRemoteBatchHandler<StandardSchemaOutput<S>, A, E, R>,
+  ): EffectRemoteQueryFunction<StandardSchemaInput<S>, A, E>;
 }
 
 /**
@@ -214,6 +254,10 @@ export interface QueryLiveFactory {
     validate_or_handler: S,
     maybe_handler: RemoteLiveHandler<SchemaInput<S>, A, E, R>,
   ): EffectRemoteLiveQueryFunction<SchemaEncodedInput<S>, A, E>;
+  <S extends StandardSchema, A, E = never, R = never>(
+    validate_or_handler: S,
+    maybe_handler: RemoteLiveHandler<StandardSchemaOutput<S>, A, E, R>,
+  ): EffectRemoteLiveQueryFunction<StandardSchemaInput<S>, A, E>;
 }
 
 /**
@@ -233,6 +277,10 @@ export interface CommandFactory {
     validate_or_handler: S,
     maybe_handler: RemoteHandler<SchemaInput<S>, A, E, R>,
   ): EffectRemoteCommand<SchemaEncodedInput<S>, A, E>;
+  <S extends StandardSchema, A, E = never, R = never>(
+    validate_or_handler: S,
+    maybe_handler: RemoteHandler<StandardSchemaOutput<S>, A, E, R>,
+  ): EffectRemoteCommand<StandardSchemaInput<S>, A, E>;
 }
 
 /**
@@ -252,6 +300,10 @@ export interface FormFactory {
     validate_or_handler: S,
     maybe_handler: RemoteFormHandler<SchemaInput<S>, A, E, R>,
   ): EffectRemoteForm<FormSchemaEncodedInput<S>, A, E>;
+  <S extends StandardSchema, A, E = never, R = never>(
+    validate_or_handler: S,
+    maybe_handler: RemoteFormHandler<StandardSchemaOutput<S>, A, E, R>,
+  ): EffectRemoteForm<FormStandardSchemaInput<S>, A, E>;
 }
 
 /**
@@ -274,6 +326,11 @@ export interface PrerenderFactory {
     maybe_handler: RemoteHandler<SchemaInput<S>, A, E, R>,
     maybe_options?: PrerenderOptions,
   ): EffectRemoteFunction<SchemaEncodedInput<S>, A, E>;
+  <S extends StandardSchema, A, E = never, R = never>(
+    validate_or_handler: S,
+    maybe_handler: RemoteHandler<StandardSchemaOutput<S>, A, E, R>,
+    maybe_options?: PrerenderOptions,
+  ): EffectRemoteFunction<StandardSchemaInput<S>, A, E>;
 }
 
 /**
@@ -464,6 +521,10 @@ type FormSchemaEncodedInput<S> = S extends Schema.Top
 type FormRemoteInput<Input> = NormalizeFormEncoded<Input> extends
   RemoteFormInput ? NormalizeFormEncoded<Input>
   : never;
+
+type FormStandardSchemaInput<S> = StandardSchemaInput<S> extends RemoteFormInput
+  ? StandardSchemaInput<S>
+  : RemoteFormInput;
 
 type FormScalar = string | number | boolean | File;
 

@@ -72,7 +72,14 @@ function handle_failure(
   }
 
   /**
-   * Phase 2 — preserve typed form validation failures.
+   * Phase 2 — let cancellation escape without becoming a remote failure.
+   */
+  if (Cause.hasInterruptsOnly(cause)) {
+    throw Cause.squash(cause);
+  }
+
+  /**
+   * Phase 3 — preserve typed form validation failures.
    */
   for (const reason of reasons) {
     if (Cause.isFailReason(reason as never)) {
@@ -90,7 +97,7 @@ function handle_failure(
   }
 
   /**
-   * Phase 3 — encode all other failures for the remote client.
+   * Phase 4 — encode all other failures for the remote client.
    */
   const encoded = encode_remote_failure(cause);
   const envelope = create_serialized_remote_failure_envelope(encoded);

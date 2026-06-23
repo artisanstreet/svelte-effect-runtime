@@ -61,10 +61,26 @@ export async function decode_response_or_value<Output, ErrorType = never>(
       throw await decode_response_failure<ErrorType>(value);
     }
 
-    const data = await value.json();
+    const data = await decode_success_response_body(value);
 
     return decode_payload(data) as Output;
   }
 
   return decode_payload(value) as Output;
+}
+
+async function decode_success_response_body(
+  response: Response,
+): Promise<unknown> {
+  if (response.status === 204 || response.status === 205) {
+    return undefined;
+  }
+
+  const text = await response.text();
+
+  if (text.length === 0) {
+    return undefined;
+  }
+
+  return JSON.parse(text);
 }
