@@ -1,4 +1,5 @@
 import { Dispatcher as InternalDispatcher } from "$/dispatcher.ts";
+import { ServerOnlyImportError } from "$/errors.ts";
 import type {
   ErrorEffectFactory,
   RedirectEffectFactory,
@@ -226,6 +227,36 @@ export type {
 } from "$/remote/shared.ts";
 
 export {
+  AsyncEffectInEventCallbackError,
+  AsyncEffectInSyncRuneError,
+  AwaitInEffectWorkError,
+  BatchQueryHandlerMissingError,
+  DispatcherDisposedError,
+  InvalidCommandFactoryError,
+  InvalidLiveQueryFactoryError,
+  InvalidLiveQueryReturnError,
+  InvalidQueryFactoryError,
+  InvalidRemoteFormResponseError,
+  PreprocessError,
+  RemoteErrorDecodeError,
+  RemoteFormEndpointMissingError,
+  RemoteHelperContextError,
+  RequestEventUnavailableError,
+  RuntimeError,
+  ServerOnlyImportError,
+  SvelteKitServerExportUnavailableError,
+  UncheckedCommandHandlerMissingError,
+  UncheckedFormHandlerMissingError,
+  UncheckedLiveQueryHandlerMissingError,
+  UncheckedPrerenderHandlerMissingError,
+  UncheckedQueryHandlerMissingError,
+  UnknownRuntimeError,
+  UnsupportedMarkupEffectPositionError,
+  UnsupportedRemoteFormResponseError,
+  YieldStarInEventCallbackError,
+} from "$/errors.ts";
+
+export {
   is_form_error,
   is_remote_http_error,
   is_remote_transport_error,
@@ -294,9 +325,5 @@ function make_server_only_function(
 }
 
 function make_server_only_error(name: string): globalThis.Error {
-  return new globalThis.Error(
-    `[SERVER_ONLY_IMPORT]: ${name} is only available in SvelteKit server files. ` +
-      `Ensure the SER Vite plugin is enabled so root imports are rewritten ` +
-      `to \`svelte-effect-runtime/server\` before evaluation.`,
-  );
+  return new ServerOnlyImportError(name);
 }

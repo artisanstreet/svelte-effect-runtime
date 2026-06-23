@@ -5,7 +5,7 @@ import {
   make_imports,
 } from "./imports.ts";
 import { create_source_map, slice } from "./source.ts";
-import { AwaitInEffectWorkError, PreprocessError } from "$/error.ts";
+import { AwaitInEffectWorkError, PreprocessError } from "$/errors.ts";
 import { make_runtime_block_with_bindings } from "./runtime-block.ts";
 import { contains_top_level_await } from "./ast.ts";
 import { lower_statement } from "./lower.ts";

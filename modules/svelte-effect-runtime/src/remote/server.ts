@@ -1,5 +1,6 @@
 import { create_serialized_remote_failure_envelope } from "$/remote/shared.ts";
 import type { FormIssue } from "$/remote/shared.ts";
+import { RemoteHelperContextError, UnknownRuntimeError } from "$/errors.ts";
 import { isHttpError, isRedirect, isValidationError } from "@sveltejs/kit";
 import { Cause, Effect, Exit } from "effect";
 import { stringify } from "devalue";
@@ -267,13 +268,8 @@ export function normalize_remote_helper_error(
   const message = err instanceof Error ? err.message : String(err);
 
   if (message.includes("Cannot use") || message.includes("outside a route")) {
-    return new globalThis.Error(
-      `[REMOTE_HELPER_CONTEXT]: ${helper_name} was called outside a .remote.ts file. ` +
-        `Ensure the file is named \`*.remote.ts\` and is located in a route directory.`,
-    );
+    return new RemoteHelperContextError(helper_name);
   }
 
-  return err instanceof Error
-    ? err
-    : new globalThis.Error(`[REMOTE_HELPER_ERROR]: ${message}`);
+  return err instanceof Error ? err : new UnknownRuntimeError(err);
 }

@@ -3,6 +3,11 @@ import {
   create_remote_transport_error,
   create_remote_validation_error,
 } from "$/remote/shared.ts";
+import {
+  InvalidRemoteFormResponseError,
+  RemoteFormEndpointMissingError,
+  UnsupportedRemoteFormResponseError,
+} from "$/errors.ts";
 import type { FormIssue } from "$/remote/shared.ts";
 import { parse } from "devalue";
 
@@ -31,9 +36,7 @@ export async function submit_remote_form<Output>(
 
   if (!action_id || remote_base.length === 0) {
     throw create_remote_transport_error(
-      new Error(
-        "[REMOTE_FORM_ENDPOINT_MISSING]: Form has no submit method or remote endpoint",
-      ),
+      new RemoteFormEndpointMissingError(),
     );
   }
 
@@ -99,9 +102,7 @@ function decode_form_response<Output>(
     !("type" in envelope)
   ) {
     throw create_remote_transport_error(
-      new Error(
-        "[REMOTE_FORM_RESPONSE_INVALID]: Invalid remote form response",
-      ),
+      new InvalidRemoteFormResponseError(envelope),
       envelope,
     );
   }
@@ -135,9 +136,7 @@ function decode_form_response<Output>(
 
   if (response.type !== "result" || result_text === undefined) {
     throw create_remote_transport_error(
-      new Error(
-        "[REMOTE_FORM_RESPONSE_UNSUPPORTED]: Unsupported remote form response",
-      ),
+      new UnsupportedRemoteFormResponseError(envelope),
       envelope,
     );
   }

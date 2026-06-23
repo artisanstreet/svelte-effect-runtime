@@ -1,7 +1,7 @@
 import {
   AsyncEffectInEventCallbackError,
   YieldStarInEventCallbackError,
-} from "$/error.ts";
+} from "$/errors.ts";
 import type { EffectCallbackRewriteContext } from "./effect-bindings.ts";
 import {
   analyze_event_body_yield_star,

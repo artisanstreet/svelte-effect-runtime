@@ -3,6 +3,8 @@ import { Context, Layer, ManagedRuntime } from "effect";
 import { Dispatcher as InternalDispatcher } from "$/dispatcher.ts";
 import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime";
 
+import { RequestEventUnavailableError } from "$/errors.ts";
+
 /**
  * Subset of SvelteKit's `RequestEvent` that remote handlers typically access.
  *
@@ -34,9 +36,7 @@ export interface RequestEvent extends
 export const RequestEvent: Context.Reference<RequestEvent> = Context
   .Reference<RequestEvent>("@ser/RequestEvent", {
     defaultValue: () => {
-      throw new Error(
-        "[REQUEST_EVENT_UNAVAILABLE]: RequestEvent is only available during a remote call",
-      );
+      throw new RequestEventUnavailableError();
     },
   });
 

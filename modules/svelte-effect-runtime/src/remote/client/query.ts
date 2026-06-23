@@ -1,3 +1,7 @@
+import {
+  InvalidLiveQueryFactoryError,
+  InvalidQueryFactoryError,
+} from "$/errors.ts";
 import { copy_property_descriptors, has_method } from "./utils.ts";
 import { normalize_native_error } from "./failures.ts";
 import { resolve_query_result } from "./query-result.ts";
@@ -129,9 +133,7 @@ export function create_remote_query_adapter<
     : undefined;
 
   if (!query && !load) {
-    throw new Error(
-      "[INVALID_QUERY_FACTORY]: Invalid query factory: expected a function",
-    );
+    throw new InvalidQueryFactoryError();
   }
 
   const wrapped = ((input: RemoteInput<Input>) => {
@@ -196,9 +198,7 @@ export function create_remote_live_query_adapter<
     : undefined;
 
   if (!query) {
-    throw new Error(
-      "[INVALID_LIVE_QUERY_FACTORY]: Invalid live query factory: expected a function",
-    );
+    throw new InvalidLiveQueryFactoryError();
   }
 
   const wrapped = ((input: Input) =>

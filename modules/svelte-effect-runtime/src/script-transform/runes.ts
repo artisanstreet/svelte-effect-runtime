@@ -1,5 +1,5 @@
 import { contains_top_level_yield_star } from "$/detect.ts";
-import { AsyncEffectInSyncRuneError } from "$/error.ts";
+import { AsyncEffectInSyncRuneError } from "$/errors.ts";
 import { slice } from "./source.ts";
 
 import ts from "typescript";

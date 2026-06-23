@@ -5,6 +5,7 @@ import {
   is_serialized_remote_failure_envelope,
 } from "$/remote/shared.ts";
 import type { FormIssue, RemoteFailure } from "$/remote/shared.ts";
+import { RemoteErrorDecodeError } from "$/errors.ts";
 import { parse } from "devalue";
 
 /**
@@ -38,9 +39,7 @@ export function decode_remote_error<ErrorType = never>(
       return decoded as RemoteFailure<ErrorType>;
     } catch {
       return create_remote_transport_error(
-        new Error(
-          "[REMOTE_ERROR_DECODE_FAILED]: Failed to decode remote error payload",
-        ),
+        new RemoteErrorDecodeError(raw),
         raw,
       );
     }

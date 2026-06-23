@@ -1,6 +1,7 @@
 import type { RemoteFailure } from "$/remote/shared.ts";
 import type { Effect } from "effect";
 
+import { InvalidCommandFactoryError } from "$/errors.ts";
 import { decode_response_or_value } from "./responses.ts";
 import { make_effect_from_promise } from "./effect.ts";
 import { copy_property_descriptors, has_method } from "./utils.ts";
@@ -42,9 +43,7 @@ export function create_remote_command_adapter<
     : undefined;
 
   if (typeof native_factory !== "function" && !invoke) {
-    throw new Error(
-      "[INVALID_COMMAND_FACTORY]: Invalid command factory: expected a function",
-    );
+    throw new InvalidCommandFactoryError();
   }
 
   const count = pending ?? { value: 0 };

@@ -13,7 +13,7 @@ import { classify_candidates } from "./classify.ts";
 import { collect_effect_callback_bindings } from "./effect-bindings.ts";
 import { emit_replacements } from "./emit.ts";
 import { sanitize_markup } from "./scan.ts";
-import { UnsupportedMarkupEffectPositionError } from "$/error.ts";
+import { UnsupportedMarkupEffectPositionError } from "$/errors.ts";
 import type { MarkupTransformResult } from "./types.ts";
 
 export type { MarkupRelocation, MarkupTransformResult } from "./types.ts";

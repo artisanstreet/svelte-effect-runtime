@@ -1,4 +1,5 @@
 import { run_remote_effect } from "$/remote/server.ts";
+import { InvalidLiveQueryReturnError } from "$/errors.ts";
 import { error as svelte_error, invalid } from "@sveltejs/kit";
 import { Effect, Stream } from "effect";
 
@@ -123,11 +124,7 @@ function to_live_source_effect<A>(
   }
 
   if (!Effect.isEffect(value)) {
-    return Effect.fail(
-      new Error(
-        "[INVALID_LIVE_QUERY_SOURCE]: Query.live handler must return an Effect Stream, Iterable, or AsyncIterable",
-      ),
-    );
+    return Effect.fail(new InvalidLiveQueryReturnError());
   }
 
   return Effect.flatMap(
