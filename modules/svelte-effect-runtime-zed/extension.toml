@@ -6,6 +6,10 @@ schema_version = 1
 authors = ["Barekey"]
 repository = "https://github.com/usebarekey/svelte-effect-runtime"
 
+[lib]
+kind = "Rust"
+version = "0.7.0"
+
 [language_servers.svelte-effect-runtime-language-server]
 name = "Svelte Effect Runtime Language Server"
 language = "Svelte"
