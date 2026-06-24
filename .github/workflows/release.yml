@@ -195,6 +195,11 @@ jobs:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         shell: bash
         run: |
+          if npx -y npm@11.5.1 view "svelte-effect-runtime-language-server@${RELEASE_VERSION}" version >/dev/null 2>&1; then
+            echo "svelte-effect-runtime-language-server@${RELEASE_VERSION} is already published. Skipping npm publish."
+            exit 0
+          fi
+
           if [ -n "${NPM_TOKEN}" ]; then
             printf '//registry.npmjs.org/:_authToken=%s\n' "${NPM_TOKEN}" > "${HOME}/.npmrc"
           fi

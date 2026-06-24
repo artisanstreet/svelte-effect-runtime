@@ -3731,13 +3731,7 @@
       "modules/svelte-effect-runtime-vsix": {
         "packageJson": {
           "dependencies": [
-            "npm:@jridgewell/trace-mapping@~0.3.31",
-            "npm:magic-string@~0.30.21",
-            "npm:svelte-language-server@~0.17.30",
-            "npm:svelte@^5.56.0",
-            "npm:typescript@6",
-            "npm:vscode-languageclient@9.0.1",
-            "npm:vscode-languageserver@9.0.1"
+            "npm:vscode-languageclient@9.0.1"
           ]
         }
       }

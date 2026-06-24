@@ -1,8 +1,8 @@
 {
   "name": "svelte-effect-runtime-vscode",
   "displayName": "Svelte Effect Runtime",
-  "description": "Higher level VSIX extension that has the SER LSP bundled.",
-  "version": "3.0.2",
+  "description": "VS Code extension that installs and launches the SER LSP from npm.",
+  "version": "3.1.0",
   "publisher": "barekey",
   "license": "BSD-3-Clause",
   "type": "module",
@@ -24,7 +24,6 @@
   "files": [
     ".dist",
     "node_modules",
-    "runtime",
     "README.md"
   ],
   "main": "./.dist/extension.js",
@@ -65,7 +64,7 @@
         "svelte-effect-runtime.languageServer.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Start the bundled Svelte Effect Runtime language server automatically for Svelte files."
+          "description": "Start the npm-installed Svelte Effect Runtime language server automatically for Svelte files."
         },
         "svelte-effect-runtime.languageServer.client": {
           "type": "string",
@@ -80,18 +79,12 @@
         "svelte-effect-runtime.languageServer.path": {
           "type": "string",
           "default": "",
-          "description": "Absolute path to a custom svelte-effect-runtime-language-server script. Leave empty to use the bundled server."
+          "description": "Absolute path to a custom svelte-effect-runtime-language-server script. Leave empty to install the server from npm."
         }
       }
     }
   },
   "dependencies": {
-    "@jridgewell/trace-mapping": "^0.3.31",
-    "magic-string": "^0.30.21",
-    "svelte": "^5.56.0",
-    "svelte-language-server": "^0.17.30",
-    "typescript": "^6.0.0",
-    "vscode-languageclient": "9.0.1",
-    "vscode-languageserver": "9.0.1"
+    "vscode-languageclient": "9.0.1"
   }
 }

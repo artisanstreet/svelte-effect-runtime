@@ -15,14 +15,6 @@ const output_dir = join(
   "svelte-effect-runtime-vsix",
 );
 const package_dist = join(package_dir, ".dist");
-const package_runtime_dir = join(package_dir, "runtime");
-const output_runtime_dir = join(output_dir, "runtime");
-const language_server_dist = join(
-  repo_root,
-  "modules",
-  "svelte-effect-runtime-language-server",
-  ".dist",
-);
 
 await Deno.remove(output_dir, { recursive: true }).catch(() => undefined);
 await Deno.mkdir(output_dir, { recursive: true });
@@ -50,17 +42,4 @@ await build({
   ],
 });
 
-await Deno.copyFile(
-  join(language_server_dist, "server.cjs"),
-  join(output_dir, "server.cjs"),
-);
-await Deno.copyFile(
-  join(language_server_dist, "server.cjs.map"),
-  join(output_dir, "server.cjs.map"),
-).catch((error) => {
-  if (!(error instanceof Deno.errors.NotFound)) {
-    throw error;
-  }
-});
-await copy(package_runtime_dir, output_runtime_dir, { overwrite: true });
 await copy(output_dir, package_dist, { overwrite: true });
