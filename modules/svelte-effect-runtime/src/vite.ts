@@ -30,10 +30,57 @@ export interface EffectOptions {
  */
 export function effect(options?: EffectOptions): Plugin[] {
   return [
+    make_diagnostics_plugin(),
     make_svelte_component_transform_plugin(),
     make_server_rewrite_plugin(),
     make_remote_client_wrapper_plugin(options),
   ];
+}
+
+function make_diagnostics_plugin(): Plugin {
+  const warned_diagnostics = new Set<string>();
+
+  return {
+    name: "svelte-effect-runtime:diagnostics",
+
+    transform(code: string, id: string) {
+      if (!is_svelte_component_module(id) || !code.includes("Effect.")) {
+        return undefined;
+      }
+
+      const clean_id = id.split("?")[0] ?? id;
+      const diagnostics = find_effect_event_handler_diagnostics(
+        code,
+        clean_id,
+      );
+
+      for (const diagnostic of diagnostics) {
+        const diagnostic_key = [
+          clean_id,
+          diagnostic.line,
+          diagnostic.column,
+          diagnostic.message,
+        ].join(":");
+
+        if (warned_diagnostics.has(diagnostic_key)) {
+          continue;
+        }
+
+        warned_diagnostics.add(diagnostic_key);
+
+        this.warn({
+          id: clean_id,
+          message: diagnostic.message,
+          loc: {
+            line: diagnostic.line,
+            column: diagnostic.column,
+          },
+        });
+      }
+
+      return undefined;
+    },
+  };
 }
 
 function make_svelte_component_transform_plugin(): Plugin {
@@ -73,6 +120,206 @@ function make_svelte_component_transform_plugin(): Plugin {
       return { code: result.code, map: null };
     },
   };
+}
+
+interface EffectEventHandlerDiagnostic {
+  message: string;
+  line: number;
+  column: number;
+}
+
+function find_effect_event_handler_diagnostics(
+  code: string,
+  filename: string,
+): EffectEventHandlerDiagnostic[] {
+  const diagnostics: EffectEventHandlerDiagnostic[] = [];
+  const pattern = /\b(on(?::[A-Za-z_$][\w$-]*|[a-z][\w$-]*))\s*=\s*\{/g;
+
+  for (const match of code.matchAll(pattern)) {
+    if (match.index === undefined) {
+      continue;
+    }
+
+    const open = match.index + match[0].lastIndexOf("{");
+
+    if (is_inside_svelte_excluded_block(code, open)) {
+      continue;
+    }
+
+    const close = find_closing_brace(code, open + 1);
+
+    if (close === -1) {
+      continue;
+    }
+
+    const expression_text = code.slice(open + 1, close).trim();
+
+    if (!is_potential_misused_effect_event_expression(expression_text)) {
+      continue;
+    }
+
+    const loc = get_line_column(code, match.index);
+    const attribute_name = match[1];
+
+    diagnostics.push({
+      line: loc.line,
+      column: loc.column,
+      message: make_effect_event_handler_warning(
+        filename,
+        attribute_name,
+        expression_text,
+      ),
+    });
+  }
+
+  return diagnostics;
+}
+
+function is_potential_misused_effect_event_expression(
+  expression_text: string,
+): boolean {
+  if (/^yield\s*\*/.test(expression_text)) {
+    return false;
+  }
+
+  if (/\bEffect\.run(?:Promise|Sync|Fork)\b/.test(expression_text)) {
+    return false;
+  }
+
+  return /\bEffect\.(?:gen|succeed|fail|try|tryPromise|promise|sync|all|void|log)\b/
+    .test(expression_text);
+}
+
+function make_effect_event_handler_warning(
+  filename: string,
+  attribute_name: string,
+  expression_text: string,
+): string {
+  const problematic = `${attribute_name}={${expression_text}}`;
+  const fixed = `${attribute_name}={yield* ${expression_text}}`;
+
+  return [
+    `[svelte-effect-runtime] Detected an event attribute that looks like an Effect but is not written with yield*.`,
+    `${filename}: ${problematic}`,
+    `If you are trying to use Effect in this event handler, use yield* at the beginning.`,
+    `Use: ${fixed}`,
+  ].join("\n");
+}
+
+function is_inside_svelte_excluded_block(code: string, pos: number): boolean {
+  const script = find_svelte_tag_range(code, "script", pos);
+  const style = find_svelte_tag_range(code, "style", pos);
+
+  return (
+    (script !== undefined && pos < script.end && pos > script.start) ||
+    (style !== undefined && pos < style.end && pos > style.start)
+  );
+}
+
+function find_svelte_tag_range(
+  code: string,
+  tag: string,
+  after_pos: number,
+): { start: number; end: number } | undefined {
+  const pattern = new RegExp(
+    `<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}\\s*>`,
+    "gi",
+  );
+
+  for (const match of code.matchAll(pattern)) {
+    if (match.index === undefined) {
+      continue;
+    }
+
+    const end = match.index + match[0].length;
+
+    if (match.index <= after_pos && after_pos < end) {
+      return { start: match.index, end };
+    }
+  }
+
+  return undefined;
+}
+
+function find_closing_brace(code: string, start: number): number {
+  let depth = 0;
+
+  for (let i = start; i < code.length; i += 1) {
+    const ch = code[i];
+
+    if (ch === "{" && code[i - 1] !== "$") {
+      depth += 1;
+    } else if (ch === "}") {
+      if (depth === 0) {
+        return i;
+      }
+
+      depth -= 1;
+    } else if (ch === "'" || ch === '"' || ch === "`") {
+      i = skip_string(code, i, ch);
+
+      if (i === -1) {
+        return -1;
+      }
+    } else if (ch === "/" && code[i + 1] === "/") {
+      i = skip_line_comment(code, i);
+    } else if (ch === "/" && code[i + 1] === "*") {
+      i = skip_block_comment(code, i);
+
+      if (i === -1) {
+        return -1;
+      }
+    }
+  }
+
+  return -1;
+}
+
+function skip_string(code: string, start: number, quote: string): number {
+  for (let i = start + 1; i < code.length; i += 1) {
+    if (code[i] === "\\") {
+      i += 1;
+      continue;
+    }
+
+    if (code[i] === quote) {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+function skip_line_comment(code: string, start: number): number {
+  for (let i = start + 2; i < code.length; i += 1) {
+    if (code[i] === "\n") {
+      return i;
+    }
+  }
+
+  return code.length;
+}
+
+function skip_block_comment(code: string, start: number): number {
+  for (let i = start + 2; i < code.length; i += 1) {
+    if (code[i] === "*" && code[i + 1] === "/") {
+      return i + 1;
+    }
+  }
+
+  return -1;
+}
+
+function get_line_column(
+  code: string,
+  position: number,
+): { line: number; column: number } {
+  const before = code.slice(0, position);
+  const lines = before.split("\n");
+  const line = lines.length;
+  const column = lines.at(-1)?.length ?? 0;
+
+  return { line, column };
 }
 
 function find_pre_transform_plugin_names(plugins: readonly Plugin[]): string[] {
