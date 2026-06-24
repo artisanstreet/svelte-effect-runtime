@@ -241,6 +241,7 @@ export {
   RemoteErrorDecodeError,
   RemoteFormEndpointMissingError,
   RemoteHelperContextError,
+  RemoteHelperError,
   RequestEventUnavailableError,
   RuntimeError,
   ServerOnlyImportError,

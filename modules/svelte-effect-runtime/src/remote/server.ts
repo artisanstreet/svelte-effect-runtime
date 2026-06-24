@@ -1,6 +1,6 @@
 import { create_serialized_remote_failure_envelope } from "$/remote/shared.ts";
 import type { FormIssue } from "$/remote/shared.ts";
-import { RemoteHelperContextError, UnknownRuntimeError } from "$/errors.ts";
+import { RemoteHelperContextError, RemoteHelperError } from "$/errors.ts";
 import { isHttpError, isRedirect, isValidationError } from "@sveltejs/kit";
 import { Cause, Effect, Exit } from "effect";
 import { stringify } from "devalue";
@@ -271,5 +271,5 @@ export function normalize_remote_helper_error(
     return new RemoteHelperContextError(helper_name);
   }
 
-  return err instanceof Error ? err : new UnknownRuntimeError(err);
+  return err instanceof Error ? err : new RemoteHelperError(err);
 }

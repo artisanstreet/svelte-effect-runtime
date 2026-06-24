@@ -736,10 +736,40 @@ export class RemoteHelperContextError extends RuntimeError {
 
   constructor(helper_name: string) {
     super(
-      `${helper_name} was called outside a .remote.ts file. Ensure the file is named \`*.remote.ts\` and is located in a route directory so SvelteKit can bind remote helper context.`,
+      make_error_message(
+        "REMOTE_HELPER_CONTEXT",
+        `${helper_name} was called outside a .remote.ts file. Ensure the file is named \`*.remote.ts\` and is located in a route directory so SvelteKit can bind remote helper context.`,
+      ),
     );
     this.name = "RemoteHelperContextError";
     this.helper_name = helper_name;
+  }
+}
+
+/**
+ * Thrown when a SvelteKit remote helper normalizes a non-Error thrown value.
+ *
+ * @example
+ * ```ts
+ * throw new RemoteHelperError("raw failure");
+ * ```
+ *
+ * @since 2.4.0
+ * @param value - Non-Error value thrown while creating a remote helper.
+ * @returns An Error preserving the remote helper failure value.
+ */
+export class RemoteHelperError extends RuntimeError {
+  /**
+   * Non-Error value that was normalized.
+   *
+   * @since 2.4.0
+   */
+  readonly value: unknown;
+
+  constructor(value: unknown) {
+    super(make_error_message("REMOTE_HELPER_ERROR", String(value)));
+    this.name = "RemoteHelperError";
+    this.value = value;
   }
 }
 
