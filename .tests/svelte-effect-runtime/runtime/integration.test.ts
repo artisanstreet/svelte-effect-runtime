@@ -191,12 +191,9 @@ Deno.test("vite plugin keeps runtime package transformable in SSR builds", () =>
   ]);
 });
 
-Deno.test("vite diagnostics plugin warns for Effect event handlers without yield", async () => {
+Deno.test("vite diagnostics plugin warns for bare Effect.gen event handlers", async () => {
   const warnings: string[] = [];
-  const plugins = effect();
-  const diagnostics_plugin = plugins.find((plugin) =>
-    plugin.name === "svelte-effect-runtime:diagnostics"
-  );
+  const diagnostics_plugin = get_diagnostics_plugin();
   const source = [
     `<script lang="ts">`,
     `  import { Effect } from "effect";`,
@@ -204,12 +201,6 @@ Deno.test("vite diagnostics plugin warns for Effect event handlers without yield
     ``,
     `<button onclick={Effect.gen}>save</button>`,
   ].join("\n");
-
-  if (
-    !diagnostics_plugin || typeof diagnostics_plugin.transform !== "function"
-  ) {
-    throw new Error("diagnostics plugin should expose a transform hook");
-  }
 
   await diagnostics_plugin.transform.call(
     make_warning_context(warnings),
@@ -219,31 +210,23 @@ Deno.test("vite diagnostics plugin warns for Effect event handlers without yield
 
   assertEquals(warnings.length, 1);
   assertStringIncludes(warnings[0], "onclick={Effect.gen}");
-  assertStringIncludes(warnings[0], "yield* at the beginning");
-  assertStringIncludes(warnings[0], "onclick={yield* Effect.gen}");
+  assertStringIncludes(warnings[0], "Effect.gen is a constructor");
+  assertStringIncludes(
+    warnings[0],
+    "onclick={yield* Effect.gen(function* () { ... })}",
+  );
 });
 
-Deno.test("vite diagnostics plugin ignores yielded and explicitly run Effect event handlers", async () => {
+Deno.test("vite diagnostics plugin ignores yielded Effect handlers", async () => {
   const warnings: string[] = [];
-  const plugins = effect();
-  const diagnostics_plugin = plugins.find((plugin) =>
-    plugin.name === "svelte-effect-runtime:diagnostics"
-  );
+  const diagnostics_plugin = get_diagnostics_plugin();
   const source = [
     `<script lang="ts">`,
     `  import { Effect } from "effect";`,
     `</script>`,
     ``,
     `<button onclick={yield* Effect.gen(function* () {})}>save</button>`,
-    `<button onclick={() => Effect.runPromise(Effect.gen(function* () {}))}>run</button>`,
-    `<p>{Effect.gen(function* () {})}</p>`,
   ].join("\n");
-
-  if (
-    !diagnostics_plugin || typeof diagnostics_plugin.transform !== "function"
-  ) {
-    throw new Error("diagnostics plugin should expose a transform hook");
-  }
 
   await diagnostics_plugin.transform.call(
     make_warning_context(warnings),
@@ -256,10 +239,7 @@ Deno.test("vite diagnostics plugin ignores yielded and explicitly run Effect eve
 
 Deno.test("vite diagnostics plugin warns for directive event Effect callbacks", async () => {
   const warnings: string[] = [];
-  const plugins = effect();
-  const diagnostics_plugin = plugins.find((plugin) =>
-    plugin.name === "svelte-effect-runtime:diagnostics"
-  );
+  const diagnostics_plugin = get_diagnostics_plugin();
   const source = [
     `<script lang="ts">`,
     `  import { Effect } from "effect";`,
@@ -267,12 +247,6 @@ Deno.test("vite diagnostics plugin warns for directive event Effect callbacks", 
     ``,
     `<button on:click={() => Effect.sync(() => save())}>save</button>`,
   ].join("\n");
-
-  if (
-    !diagnostics_plugin || typeof diagnostics_plugin.transform !== "function"
-  ) {
-    throw new Error("diagnostics plugin should expose a transform hook");
-  }
 
   await diagnostics_plugin.transform.call(
     make_warning_context(warnings),
@@ -283,14 +257,128 @@ Deno.test("vite diagnostics plugin warns for directive event Effect callbacks", 
   assertEquals(warnings.length, 1);
   assertStringIncludes(warnings[0], "on:click");
   assertStringIncludes(warnings[0], "Effect.sync");
+  assertStringIncludes(warnings[0], "returns an Effect but does not run it");
+});
+
+Deno.test("vite diagnostics plugin warns for hidden event callback yield", async () => {
+  const warnings: string[] = [];
+  const diagnostics_plugin = get_diagnostics_plugin();
+  const source = [
+    `<script lang="ts">`,
+    `  import { Effect } from "effect";`,
+    `</script>`,
+    ``,
+    `<button onclick={() => yield* Effect.gen(function* () {})}>save</button>`,
+  ].join("\n");
+
+  await diagnostics_plugin.transform.call(
+    make_warning_context(warnings),
+    source,
+    "src/routes/+page.svelte",
+  );
+
+  assertEquals(warnings.length, 1);
+  assertStringIncludes(warnings[0], "yield* hidden inside an event callback");
+  assertStringIncludes(warnings[0], "event attribute boundary");
+});
+
+Deno.test("vite diagnostics plugin warns for explicit Effect runners", async () => {
+  const warnings: string[] = [];
+  const diagnostics_plugin = get_diagnostics_plugin();
+  const source = [
+    `<script lang="ts">`,
+    `  import { Effect } from "effect";`,
+    `</script>`,
+    ``,
+    `<button onclick={() => Effect.runPromise(Effect.gen(function* () {}))}>run</button>`,
+  ].join("\n");
+
+  await diagnostics_plugin.transform.call(
+    make_warning_context(warnings),
+    source,
+    "src/routes/+page.svelte",
+  );
+
+  assertEquals(warnings.length, 1);
+  assertStringIncludes(warnings[0], "explicit Effect runner");
+  assertStringIncludes(warnings[0], "bypass SER cancellation");
+});
+
+Deno.test("vite diagnostics plugin warns for non-event Effect attributes", async () => {
+  const warnings: string[] = [];
+  const diagnostics_plugin = get_diagnostics_plugin();
+  const source = [
+    `<script lang="ts">`,
+    `  import { Effect } from "effect";`,
+    `</script>`,
+    ``,
+    `<input disabled={Effect.sync(() => true)} />`,
+    `<p class:active={Effect.succeed(true)}>active</p>`,
+  ].join("\n");
+
+  await diagnostics_plugin.transform.call(
+    make_warning_context(warnings),
+    source,
+    "src/routes/+page.svelte",
+  );
+
+  assertEquals(warnings.length, 2);
+  assertStringIncludes(warnings[0], "attribute value");
+  assertStringIncludes(warnings[0], "disabled={yield* Effect.sync");
+  assertStringIncludes(warnings[1], "class:active={yield* Effect.succeed");
+});
+
+Deno.test("vite diagnostics plugin warns for sync markup Effect expressions", async () => {
+  const warnings: string[] = [];
+  const diagnostics_plugin = get_diagnostics_plugin();
+  const source = [
+    `<script lang="ts">`,
+    `  import { Effect } from "effect";`,
+    `</script>`,
+    ``,
+    `{@const status = Effect.succeed("ready")}`,
+    `{#if Effect.succeed(true)}ready{/if}`,
+    `<p>{Effect.gen(function* () {})}</p>`,
+  ].join("\n");
+
+  await diagnostics_plugin.transform.call(
+    make_warning_context(warnings),
+    source,
+    "src/routes/+page.svelte",
+  );
+
+  assertEquals(warnings.length, 3);
+  assertStringIncludes(warnings[0], "will produce an Effect value");
+  assertStringIncludes(warnings[0], "@const status = Effect.succeed");
+  assertStringIncludes(warnings[1], "#if Effect.succeed");
+  assertStringIncludes(warnings[2], "Effect.gen");
+});
+
+Deno.test("vite diagnostics plugin recognizes Effect import aliases", async () => {
+  const warnings: string[] = [];
+  const diagnostics_plugin = get_diagnostics_plugin();
+  const source = [
+    `<script lang="ts">`,
+    `  import { Effect as E } from "effect";`,
+    `</script>`,
+    ``,
+    `<button onclick={E.gen}>save</button>`,
+  ].join("\n");
+
+  await diagnostics_plugin.transform.call(
+    make_warning_context(warnings),
+    source,
+    "src/routes/+page.svelte",
+  );
+
+  assertEquals(warnings.length, 1);
+  assertStringIncludes(warnings[0], "onclick={E.gen}");
+  assertStringIncludes(warnings[0], "E.gen is a constructor");
 });
 
 Deno.test("vite diagnostics plugin deduplicates repeated warnings", async () => {
   const warnings: string[] = [];
-  const plugins = effect();
-  const diagnostics_plugin = plugins.find((plugin) =>
-    plugin.name === "svelte-effect-runtime:diagnostics"
-  );
+  const diagnostics_plugin = get_diagnostics_plugin();
   const source = [
     `<script lang="ts">`,
     `  import { Effect } from "effect";`,
@@ -298,12 +386,6 @@ Deno.test("vite diagnostics plugin deduplicates repeated warnings", async () => 
     ``,
     `<button onclick={Effect.gen}>save</button>`,
   ].join("\n");
-
-  if (
-    !diagnostics_plugin || typeof diagnostics_plugin.transform !== "function"
-  ) {
-    throw new Error("diagnostics plugin should expose a transform hook");
-  }
 
   await diagnostics_plugin.transform.call(
     make_warning_context(warnings),
@@ -414,6 +496,33 @@ function make_warning_context(warnings: string[]): {
         typeof warning === "string" ? warning : warning.message ?? "",
       );
     },
+  };
+}
+
+function get_diagnostics_plugin(): {
+  transform: (
+    this: { warn(warning: string | { message?: string }): void },
+    code: string,
+    id: string,
+  ) => unknown | Promise<unknown>;
+} {
+  const plugins = effect();
+  const diagnostics_plugin = plugins.find((plugin) =>
+    plugin.name === "svelte-effect-runtime:diagnostics"
+  );
+
+  if (
+    !diagnostics_plugin || typeof diagnostics_plugin.transform !== "function"
+  ) {
+    throw new Error("diagnostics plugin should expose a transform hook");
+  }
+
+  return diagnostics_plugin as {
+    transform: (
+      this: { warn(warning: string | { message?: string }): void },
+      code: string,
+      id: string,
+    ) => unknown | Promise<unknown>;
   };
 }
 

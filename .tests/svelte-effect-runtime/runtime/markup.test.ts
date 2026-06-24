@@ -87,6 +87,25 @@ Deno.test("rewrites {yield* expr} with free identifier deps", () => {
   assertStringIncludes(result.code, `[format, user]`);
 });
 
+Deno.test("rewrites yielded markup expressions using Effect import aliases", () => {
+  const source = [
+    `<script>import { Effect as E } from "effect";</script>`,
+    `<span>{yield* E.succeed(42)}</span>`,
+  ].join("\n");
+
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `await __ser_markup_promise`);
+  assertStringIncludes(result.code, `yield* E.succeed(42)`);
+  assertStringIncludes(result.code, `import { Effect as E } from "effect";`);
+
+  compile(result.code, {
+    filename: "Test.svelte",
+    generate: "server",
+    experimental: { async: true },
+  });
+});
+
 // ─── Block expressions ───────────────────────────────────────
 
 Deno.test("rewrites {#if yield* expr} in condition", () => {

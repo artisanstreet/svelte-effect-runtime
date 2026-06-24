@@ -306,6 +306,20 @@ Deno.test("reuses existing Effect import when already present", () => {
   }
 });
 
+Deno.test("supports Effect import aliases in yielded expressions", () => {
+  const source = [
+    `import { Effect as E } from "effect";`,
+    `let x = $state(yield* E.succeed(42));`,
+  ].join("\n");
+
+  const result = transform_script_effect(source, "Test.svelte");
+
+  assertStringIncludes(result.code, `import { Effect as E } from "effect";`);
+  assertStringIncludes(result.code, `import { Effect } from "effect";`);
+  assertStringIncludes(result.code, `yield* E.succeed(42)`);
+  assertStringIncludes(result.code, `Effect.gen(function* () {`);
+});
+
 Deno.test("injects Effect when effect module import lacks Effect binding", () => {
   const source = [
     `import { pipe } from "effect";`,
