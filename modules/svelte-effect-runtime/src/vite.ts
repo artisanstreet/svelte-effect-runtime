@@ -1,3 +1,4 @@
+import { VitePreTransformPluginConflictError } from "./errors.ts";
 import type { Plugin } from "vite";
 
 /**
@@ -38,7 +39,20 @@ export function effect(options?: EffectOptions): Plugin[] {
 function make_svelte_component_transform_plugin(): Plugin {
   return {
     name: "svelte-effect-runtime:component-syntax",
-    enforce: "pre",
+
+    configResolved(config) {
+      const conflicting_plugin_names = find_pre_transform_plugin_names(
+        config.plugins,
+      );
+
+      if (conflicting_plugin_names.length === 0) {
+        return;
+      }
+
+      throw new VitePreTransformPluginConflictError(
+        conflicting_plugin_names,
+      );
+    },
 
     async transform(code: string, id: string) {
       if (
@@ -59,6 +73,37 @@ function make_svelte_component_transform_plugin(): Plugin {
       return { code: result.code, map: null };
     },
   };
+}
+
+function find_pre_transform_plugin_names(plugins: readonly Plugin[]): string[] {
+  return plugins
+    .filter((plugin) =>
+      !plugin.name.startsWith("svelte-effect-runtime:") &&
+      !is_known_framework_pre_transform_plugin(plugin.name) &&
+      has_pre_transform_priority(plugin)
+    )
+    .map((plugin) => plugin.name);
+}
+
+function is_known_framework_pre_transform_plugin(name: string): boolean {
+  return name.startsWith("vite:") || name === "vite-plugin-svelte:preprocess";
+}
+
+function has_pre_transform_priority(plugin: Plugin): boolean {
+  if (plugin.enforce === "pre" && plugin.transform) {
+    return true;
+  }
+
+  if (
+    typeof plugin.transform === "object" &&
+    plugin.transform !== null &&
+    "order" in plugin.transform &&
+    plugin.transform.order === "pre"
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 function make_server_rewrite_plugin(): Plugin {

@@ -8,6 +8,7 @@ import {
   effect,
   rewrite_remote_client_exports,
 } from "../../../modules/svelte-effect-runtime/src/vite.ts";
+import { VitePreTransformPluginConflictError } from "../../../modules/svelte-effect-runtime/src/errors.ts";
 
 // ─── Full pipeline ─────────────────────────────────────────────
 
@@ -131,8 +132,8 @@ Deno.test("vite plugin keeps runtime package transformable in SSR builds", () =>
     plugin.name === "svelte-effect-runtime:remote-client"
   );
 
-  if (!component_plugin || component_plugin.enforce !== "pre") {
-    throw new Error("component syntax plugin should run before Svelte compile");
+  if (!component_plugin || component_plugin.enforce !== undefined) {
+    throw new Error("component syntax plugin should use normal Vite ordering");
   }
 
   if (!server_plugin || typeof server_plugin.config !== "function") {
@@ -181,6 +182,58 @@ Deno.test("vite plugin keeps runtime package transformable in SSR builds", () =>
     "svelte",
     "svelte-effect-runtime",
   ]);
+});
+
+Deno.test("vite component plugin errors for conflicting pre transform plugins", () => {
+  const plugins = effect();
+  const component_plugin = plugins.find((plugin) =>
+    plugin.name === "svelte-effect-runtime:component-syntax"
+  );
+
+  if (
+    !component_plugin || typeof component_plugin.configResolved !== "function"
+  ) {
+    throw new Error("component syntax plugin should expose a config hook");
+  }
+
+  const error = assertThrows(
+    () =>
+      component_plugin.configResolved?.({
+        plugins: [
+          ...plugins,
+          {
+            name: "vite-plugin-svelte:preprocess",
+            enforce: "pre",
+            transform() {
+              return undefined;
+            },
+          },
+          {
+            name: "pre-parser",
+            enforce: "pre",
+            transform() {
+              return undefined;
+            },
+          },
+          {
+            name: "wuchale",
+            transform: {
+              order: "pre",
+              handler() {
+                return undefined;
+              },
+            },
+          },
+        ],
+      } as never),
+    VitePreTransformPluginConflictError,
+  );
+
+  assertEquals(error.plugin_names, ["pre-parser", "wuchale"]);
+  assertStringIncludes(error.message, "pre-parser");
+  assertStringIncludes(error.message, "wuchale");
+  assertStringIncludes(error.message, "transform.order");
+  assertStringIncludes(error.message, "yield");
 });
 
 Deno.test("vite component plugin lowers script effect before Svelte compile", async () => {
