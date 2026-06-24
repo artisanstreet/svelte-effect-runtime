@@ -29,6 +29,21 @@ export default {
 };
 ```
 
+## VitePreTransformPluginConflictError
+
+SER lowers `<script effect>` and `yield*` before normal Svelte parsing. A Vite
+plugin with `enforce: "pre"` or `transform.order: "pre"` can parse `.svelte`
+files first and crash on raw SER syntax.
+
+The error names the conflicting plugin:
+
+```txt
+VitePreTransformPluginConflictError: SER detected Vite plugin(s) using pre-transform priority before component syntax lowering: wuchale.
+```
+
+Remove the plugin's pre-transform priority or upgrade to a version that uses
+normal Vite transform ordering.
+
 ## Remote functions do not resolve
 
 Enable SvelteKit remote functions:
