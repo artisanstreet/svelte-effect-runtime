@@ -1,4 +1,4 @@
-import { assertEquals, assertRejects } from "@std/assert";
+import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { Effect } from "effect";
 import { stringify } from "devalue";
 import {
@@ -334,25 +334,20 @@ Deno.test("remote live query adapter preserves state and wraps reconnect", async
 Deno.test("remote command adapter resolves callable responses and tracks pending", async () => {
   let release: (() => void) | undefined;
   let pending_while_running = 0;
-  let command:
-    | ReturnType<
-      typeof create_remote_command_adapter<{ title: string }, { ok: string }>
-    >
-    | undefined;
 
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
 
   const native = async (input: { title: string }) => {
-    pending_while_running = command?.pending as number;
+    pending_while_running = command.pending;
 
     await gate;
 
     return new Response(JSON.stringify({ ok: input.title }));
   };
 
-  command = create_remote_command_adapter(native, (value) => value);
+  const command = create_remote_command_adapter(native, (value) => value);
 
   const promise = Effect.runPromise(command({ title: "publish" }));
 
@@ -396,8 +391,8 @@ Deno.test("remote command adapter supports invoke objects and rejects invalid fa
   const result = await Effect.runPromise(command({ id: 7 }));
 
   assertEquals(result, { id: 7, source: "invoke" });
-  assertRejects(
-    async () => {
+  assertThrows(
+    () => {
       create_remote_command_adapter({}, (value) => value);
     },
     Error,

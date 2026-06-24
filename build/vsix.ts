@@ -17,13 +17,7 @@ const staging_dir = await Deno.makeTempDir({
 });
 const staging_dist_dir = join(staging_dir, ".dist");
 const required_runtime_dependencies = [
-  "@jridgewell/trace-mapping",
-  "magic-string",
-  "svelte",
-  "svelte-language-server",
-  "typescript",
   "vscode-languageclient",
-  "vscode-languageserver",
 ];
 
 await Deno.mkdir(staging_dist_dir, { recursive: true });
@@ -40,8 +34,6 @@ for (
   const filename of [
     "extension.js",
     "extension.js.map",
-    "server.cjs",
-    "server.cjs.map",
   ]
 ) {
   await Deno.copyFile(
@@ -54,9 +46,6 @@ for (
       }
     });
 }
-await copy(join(output_dir, "runtime"), join(staging_dir, "runtime"), {
-  overwrite: true,
-});
 await Deno.copyFile(
   join(package_dir, "README.md"),
   join(staging_dir, "README.md"),

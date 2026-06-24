@@ -4,7 +4,7 @@ import {
   type LanguageClientOptions,
   type ServerOptions,
   TransportKind,
-} from "vscode-languageclient/node";
+} from "vscode-languageclient/node.js";
 import { create_initialization_options } from "./initialization-options.ts";
 import { CLIENT_ID, CLIENT_NAME } from "./constants.ts";
 

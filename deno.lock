@@ -31,13 +31,10 @@
     "npm:rolldown@*": "1.0.3",
     "npm:rolldown@^1.0.0-rc.13": "1.0.3",
     "npm:svelte-language-server@~0.17.30": "0.17.30_prettier@3.3.3_svelte@4.2.20_typescript@5.9.3",
-    "npm:svelte@*": "5.56.0",
     "npm:svelte@^5.48.0": "5.56.0",
-    "npm:svelte@^5.55.1": "5.56.0",
     "npm:svelte@^5.56.0": "5.56.0",
     "npm:tailwindcss@4": "4.3.0",
     "npm:typescript@^5.8.0": "5.9.3",
-    "npm:typescript@^5.9.2": "5.9.3",
     "npm:typescript@^5.9.3": "5.9.3",
     "npm:vite@8": "8.0.16_@types+node@24.12.2_esbuild@0.28.0",
     "npm:vscode-languageclient@9.0.1": "9.0.1",
@@ -3727,13 +3724,7 @@
       "modules/svelte-effect-runtime-vsix": {
         "packageJson": {
           "dependencies": [
-            "npm:@jridgewell/trace-mapping@~0.3.31",
-            "npm:magic-string@~0.30.21",
-            "npm:svelte-language-server@~0.17.30",
-            "npm:svelte@^5.55.1",
-            "npm:typescript@^5.9.2",
-            "npm:vscode-languageclient@9.0.1",
-            "npm:vscode-languageserver@9.0.1"
+            "npm:vscode-languageclient@9.0.1"
           ]
         }
       }

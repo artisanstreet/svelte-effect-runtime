@@ -135,7 +135,7 @@ async function sync_language_server_state(
   context: vscode.ExtensionContext,
   output_channel: vscode.OutputChannel,
 ): Promise<LanguageServerSyncState> {
-  const server_path = get_server_path(context);
+  const server_path = await get_server_path(context, output_channel);
 
   if (!is_language_server_enabled()) {
     await stop_language_server();
