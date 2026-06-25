@@ -1,9 +1,9 @@
 import {
   TextMate,
-  TreesitterQuery,
   textmate,
   textmate_language,
   tree_sitter,
+  TreesitterQuery,
 } from "../../../modules/svelte-effect-runtime/src/grammars.ts";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { createHighlighter } from "shiki";

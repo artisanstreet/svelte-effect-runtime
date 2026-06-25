@@ -228,15 +228,15 @@ export type {
 
 export {
   TextMate,
-  TreesitterQuery,
   textmate,
   textmate_language,
-  tree_sitter,
   type TextMateCaptureMap,
   type TextMateGrammarBundle,
   type TextMateLanguageRegistration,
   type TextMateRawRule,
   type TextMateRepository,
+  tree_sitter,
+  TreesitterQuery,
   type TreeSitterQueryBundle,
 } from "./grammars.ts";
 
