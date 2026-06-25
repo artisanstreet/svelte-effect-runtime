@@ -4,6 +4,7 @@
   "license": "BSD-3-Clause",
   "exports": {
     ".": "./src/mod.ts",
+    "./grammars": "./src/grammars.ts",
     "./server": "./src/server.ts",
     "./vite": "./src/vite.ts",
     "./runtime/preprocess": "./src/runtime/preprocess.ts",
@@ -16,7 +17,7 @@
   },
   "tasks": {
     "build": "deno task clean && deno run -A ../../build/runtime.ts && tsc -p tsconfig.build.json --emitDeclarationOnly && deno run -A ../../build/rewrite-runtime-dts.ts",
-    "check": "deno check --node-modules-dir=auto src/mod.ts src/runtime/preprocess.ts src/internal/generators.ts src/internal/remote-client.ts src/internal/remote-server.ts src/detect.ts src/dispatcher.ts src/generators.ts src/preprocess.ts src/vite.ts src/remote/shared.ts src/remote/server.ts src/remote/client.ts src/markup/transform.ts src/markup/value.ts src/markup/promise.ts src/markup/run.ts",
+    "check": "deno check --node-modules-dir=auto src/mod.ts src/grammars.ts src/runtime/preprocess.ts src/internal/generators.ts src/internal/remote-client.ts src/internal/remote-server.ts src/detect.ts src/dispatcher.ts src/generators.ts src/preprocess.ts src/vite.ts src/remote/shared.ts src/remote/server.ts src/remote/client.ts src/markup/transform.ts src/markup/value.ts src/markup/promise.ts src/markup/run.ts",
     "clean": "rm -rf ../../.dist/svelte-effect-runtime",
     "test": "cd ../../.tests/svelte-effect-runtime && deno test --no-check -A runtime",
     "fmt": "deno fmt",

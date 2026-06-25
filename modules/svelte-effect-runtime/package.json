@@ -23,6 +23,10 @@
       "types": "./.dist/mod.d.ts",
       "default": "./.dist/mod.js"
     },
+    "./grammars": {
+      "types": "./.dist/grammars.d.ts",
+      "default": "./.dist/grammars.js"
+    },
     "./server": {
       "types": "./.dist/server.d.ts",
       "default": "./.dist/server.js"

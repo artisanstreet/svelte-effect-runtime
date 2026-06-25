@@ -8,6 +8,7 @@
     "effect": "npm:effect@beta",
     "effect/": "npm:/effect@beta/",
     "magic-string": "npm:magic-string@^0.30.21",
+    "shiki": "npm:shiki@4.1.0",
     "devalue": "npm:devalue@^5.5.0",
     "typescript": "npm:typescript@^5.9.3",
     "svelte": "npm:svelte@^5.56.0",

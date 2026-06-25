@@ -29,6 +29,7 @@ const external = [
 await build({
   input: {
     mod: join(src_dir, "mod.ts"),
+    grammars: join(src_dir, "grammars.ts"),
     server: join(src_dir, "server.ts"),
     vite: join(src_dir, "vite.ts"),
     "runtime/preprocess": join(src_dir, "runtime", "preprocess.ts"),

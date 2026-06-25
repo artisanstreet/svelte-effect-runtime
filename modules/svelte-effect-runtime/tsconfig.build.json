@@ -21,6 +21,7 @@
   },
   "include": [
     "./src/mod.ts",
+    "./src/grammars.ts",
     "./src/runtime/preprocess.ts",
     "./src/internal/generators.ts",
     "./src/internal/remote-client.ts",
