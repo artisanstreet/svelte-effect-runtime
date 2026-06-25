@@ -334,6 +334,11 @@ Deno.test("package manifests expose vite and transform entrypoints", async () =>
     types: "./.dist/runtime/transform.d.ts",
     default: "./.dist/runtime/transform.js",
   });
+  assertEquals(package_manifest.exports["./grammars"], {
+    types: "./.dist/grammars.d.ts",
+    import: "./.dist/grammars.js",
+    default: "./.dist/grammars.js",
+  });
   assertEquals(package_manifest.exports["./runtime/preprocess"], undefined);
 
   assertEquals(deno_manifest.exports["./vite"], "./src/vite.ts");
@@ -341,6 +346,7 @@ Deno.test("package manifests expose vite and transform entrypoints", async () =>
     deno_manifest.exports["./runtime/transform"],
     "./src/runtime/transform.ts",
   );
+  assertEquals(deno_manifest.exports["./grammars"], "./src/grammars.ts");
   assertEquals(deno_manifest.exports["./runtime/preprocess"], undefined);
 });
 

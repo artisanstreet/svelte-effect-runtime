@@ -1,6 +1,6 @@
 {
   "name": "svelte-effect-runtime",
-  "version": "3.2.1",
+  "version": "3.2.2",
   "description": "Core module that houses the Vite plugin to enable effectful execution.",
   "license": "BSD-3-Clause",
   "type": "module",
@@ -21,7 +21,6 @@
   "exports": {
     ".": {
       "types": "./.dist/mod.d.ts",
-      "import": "./.dist/mod.js",
       "default": "./.dist/mod.js"
     },
     "./grammars": {
@@ -31,32 +30,26 @@
     },
     "./server": {
       "types": "./.dist/server.d.ts",
-      "import": "./.dist/server.js",
       "default": "./.dist/server.js"
     },
     "./vite": {
       "types": "./.dist/vite.d.ts",
-      "import": "./.dist/vite.js",
       "default": "./.dist/vite.js"
     },
     "./runtime/transform": {
       "types": "./.dist/runtime/transform.d.ts",
-      "import": "./.dist/runtime/transform.js",
       "default": "./.dist/runtime/transform.js"
     },
     "./internal/generators": {
       "types": "./.dist/internal/generators.d.ts",
-      "import": "./.dist/internal/generators.js",
       "default": "./.dist/internal/generators.js"
     },
     "./internal/remote-client": {
       "types": "./.dist/internal/remote-client.d.ts",
-      "import": "./.dist/internal/remote-client.js",
       "default": "./.dist/internal/remote-client.js"
     },
     "./internal/remote-server": {
       "types": "./.dist/internal/remote-server.d.ts",
-      "import": "./.dist/internal/remote-server.js",
       "default": "./.dist/internal/remote-server.js"
     }
   },
