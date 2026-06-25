@@ -22,6 +22,7 @@
   },
   "include": [
     "./src/mod.ts",
+    "./src/grammars.ts",
     "./src/runtime/transform.ts",
     "./src/internal/generators.ts",
     "./src/internal/remote-client.ts",

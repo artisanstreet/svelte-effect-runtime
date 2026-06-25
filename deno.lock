@@ -30,6 +30,7 @@
     "npm:react@19": "19.2.6",
     "npm:rolldown@*": "1.0.3",
     "npm:rolldown@^1.0.0-rc.13": "1.0.3",
+    "npm:shiki@4.1.0": "4.1.0",
     "npm:svelte-language-server@~0.17.30": "0.17.30_prettier@3.3.3_svelte@4.2.20_typescript@5.9.3",
     "npm:svelte@^5.56.0": "5.56.0",
     "npm:tailwindcss@4": "4.3.0",
@@ -3667,6 +3668,7 @@
           "npm:devalue@^5.5.0",
           "npm:effect@beta",
           "npm:magic-string@~0.30.21",
+          "npm:shiki@4.1.0",
           "npm:svelte@^5.56.0",
           "npm:typescript@6",
           "npm:vite@8"
