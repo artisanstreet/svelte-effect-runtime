@@ -53,6 +53,8 @@ Deno.test("TextMate grammar is applied by Shiki to SER syntax", async () => {
     `  import { GetUser } from "user.ts";`,
     `</script>`,
     ``,
+    `<p>side effect text</p>`,
+    ``,
     `<ScrollArea>`,
     `  {const currency = $derived((yield* GetUser()).preferredCurrency)}`,
     ``,
@@ -73,11 +75,26 @@ Deno.test("TextMate grammar is applied by Shiki to SER syntax", async () => {
       part.scopes.map((scope) => scope.scopeName)
     ) ?? []
   );
+  const tokens = result.tokens.flat();
+  const scope_names = (token: typeof tokens[number]) =>
+    token.explanation?.flatMap((part) =>
+      part.scopes.map((scope) => scope.scopeName)
+    ) ?? [];
+  const import_token = tokens.find((token) => token.content === "import");
+  const text_token = tokens.find((token) =>
+    token.content === "side effect text"
+  );
 
   assert(scopes.includes("storage.modifier.effect.ser.svelte"));
   assert(scopes.includes("meta.embedded.declaration.ser.svelte"));
   assert(scopes.includes("meta.embedded.directive.block.ser.svelte"));
   assert(scopes.includes("keyword.control.yield.ser.svelte"));
+  assert(import_token);
+  assert(scope_names(import_token).includes("keyword.control.import.ts"));
+  assert(text_token);
+  assert(
+    !scope_names(text_token).includes("storage.modifier.effect.ser.svelte"),
+  );
 
   highlighter.dispose();
 });

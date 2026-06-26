@@ -138,10 +138,9 @@ export const textmate_language: TextMateLanguageRegistration = {
   ],
   repository: {
     "ser-script-effect-attribute": {
-      match:
-        "(<script\\b(?=[^>]*\\s+effect(?:\\s*=|\\s|>|$))[^>]*?)(\\s+)(effect)(?=(?:\\s*=|\\s|>|$))",
+      match: "(?<=<script\\b[^>]*\\s)(effect)(?=(?:\\s*=|\\s|>|$))",
       captures: {
-        "3": { name: "storage.modifier.effect.ser.svelte" },
+        "1": { name: "storage.modifier.effect.ser.svelte" },
       },
     },
 
