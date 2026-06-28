@@ -39,7 +39,7 @@ function make_svelte_transform_plugin(): Plugin {
   return {
     name: "svelte-effect-runtime:svelte-transform",
 
-    async transform(code: string, id: string) {
+    async transform(code: string, id: string, options?: { ssr?: boolean }) {
       if (!is_svelte_component_module(id)) {
         return undefined;
       }
@@ -47,7 +47,9 @@ function make_svelte_transform_plugin(): Plugin {
       const { transform_svelte_effect } = await import(
         "./runtime/transform.ts"
       );
-      const result = transform_svelte_effect(code, id);
+      const result = transform_svelte_effect(code, id, {
+        target: options?.ssr ? "server" : "client",
+      });
 
       if (result.code === code) {
         return undefined;

@@ -21,7 +21,9 @@ export async function bootstrap_language_server() {
   patch_typescript_snapshot_path({
     transformEffectMarkup: (code, options) =>
       normalize_transform_result(
-        runtime_module.transform_markup_effect(code, options.filename),
+        runtime_module.transform_markup_effect(code, options.filename, {
+          target: "editor",
+        }),
         code,
         options.filename,
       ),

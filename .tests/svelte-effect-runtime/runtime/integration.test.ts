@@ -17,11 +17,12 @@ async function run_svelte_transform(
   plugin: ReturnType<typeof effect>[number],
   source: string,
   id: string,
+  options?: { ssr?: boolean },
 ): Promise<{ code: string }> {
   const transform = plugin.transform;
 
   if (typeof transform === "function") {
-    const result = await transform.call({} as never, source, id);
+    const result = await transform.call({} as never, source, id, options);
 
     if (!result || typeof result === "string") {
       throw new Error("svelte transform should return code output");
@@ -31,7 +32,7 @@ async function run_svelte_transform(
   }
 
   if (typeof transform === "object" && transform?.handler) {
-    const result = await transform.handler(source, id);
+    const result = await transform.handler(source, id, options);
 
     if (!result || typeof result === "string") {
       throw new Error("svelte transform should return code output");
@@ -251,6 +252,39 @@ Deno.test("vite plugin lowers svelte yield through its transform hook", async ()
 
   if (result.code.includes(`onclick={yield*`)) {
     throw new Error("markup yield should be lowered");
+  }
+});
+
+Deno.test("vite plugin emits client values and server promises", async () => {
+  const plugins = effect();
+  const plugin = plugins.find((candidate) =>
+    candidate.name === "svelte-effect-runtime:svelte-transform"
+  );
+
+  if (!plugin) {
+    throw new Error("svelte transform plugin should exist");
+  }
+
+  const source = `<p>{yield* loadValue()}</p>`;
+
+  const client = await run_svelte_transform(
+    plugin,
+    source,
+    "C:/src/routes/Test.svelte",
+    { ssr: false },
+  );
+  const server = await run_svelte_transform(
+    plugin,
+    source,
+    "C:/src/routes/Test.svelte",
+    { ssr: true },
+  );
+
+  assertStringIncludes(client.code, `__SER___markup_value`);
+  assertStringIncludes(server.code, `await __SER___markup_promise`);
+
+  if (client.code.includes(`await __SER___markup_promise`)) {
+    throw new Error("client transform should not emit awaited promises");
   }
 });
 

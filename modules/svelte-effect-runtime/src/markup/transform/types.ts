@@ -14,6 +14,33 @@ export interface MarkupTransformResult {
   relocations?: MarkupRelocation[];
 }
 
+/**
+ * Runtime environment that controls how markup effect reads are lowered.
+ *
+ * @example
+ * ```ts
+ * const target: MarkupTransformTarget = "client";
+ * ```
+ *
+ * @since 2.5.0
+ */
+export type MarkupTransformTarget = "client" | "server" | "editor";
+
+/**
+ * Options accepted by the markup transform.
+ *
+ * @example
+ * ```ts
+ * const options: MarkupTransformOptions = { target: "server" };
+ * ```
+ *
+ * @since 2.5.0
+ */
+export interface MarkupTransformOptions {
+  /** Emission target used to choose value reads or awaited promises. */
+  target?: MarkupTransformTarget;
+}
+
 /** Offset mapping between original markup and generated helper code. */
 export interface MarkupRelocation {
   /** Start offset in the original source. */

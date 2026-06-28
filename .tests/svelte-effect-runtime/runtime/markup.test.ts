@@ -234,6 +234,163 @@ Deno.test("preserves declaration rune placement while lowering yield*", () => {
   });
 });
 
+Deno.test("client declaration tags lower to synchronous value reads", () => {
+  const source = [
+    `<script>`,
+    `  function getPublicationRemote() {}`,
+    `  const params = { publication_id: "p1" };`,
+    `</script>`,
+    `{let publication = $derived(yield* getPublicationRemote({ publicationId: params.publication_id }))}`,
+    `<p>{publication}</p>`,
+  ].join("\n");
+
+  const result = transform_markup_effect(source, "Publication.svelte", {
+    target: "client",
+  });
+
+  assertStringIncludes(result.code, `$derived(__SER___markup_value`);
+
+  if (result.code.includes(`$derived(await`)) {
+    throw new Error("client declaration tags must not emit async derived code");
+  }
+
+  compile(result.code, {
+    filename: "Publication.svelte",
+    generate: "client",
+  });
+});
+
+Deno.test("editor declaration tags lower to synchronous value reads", () => {
+  const source = [
+    `<script>`,
+    `  function getPublicationRemote() {}`,
+    `  const params = { publication_id: "p1" };`,
+    `</script>`,
+    `{let publication = $derived(yield* getPublicationRemote({ publicationId: params.publication_id }))}`,
+    `<p>{publication}</p>`,
+  ].join("\n");
+
+  const result = transform_markup_effect(source, "Publication.svelte", {
+    target: "editor",
+  });
+
+  assertStringIncludes(result.code, `$derived(__SER___markup_value`);
+
+  if (result.code.includes(`$derived(await`)) {
+    throw new Error("editor declaration tags must not emit async derived code");
+  }
+
+  compile(result.code, {
+    filename: "Publication.svelte",
+    generate: "client",
+  });
+});
+
+Deno.test("server declaration tags lower to awaited promise reads", () => {
+  const source = [
+    `<script>`,
+    `  function getPublicationRemote() {}`,
+    `  const params = { publication_id: "p1" };`,
+    `</script>`,
+    `{let publication = $derived(yield* getPublicationRemote({ publicationId: params.publication_id }))}`,
+    `<p>{publication}</p>`,
+  ].join("\n");
+
+  const result = transform_markup_effect(source, "Publication.svelte", {
+    target: "server",
+  });
+
+  assertStringIncludes(result.code, `$derived(await __SER___markup_promise`);
+
+  compile(result.code, {
+    filename: "Publication.svelte",
+    generate: "server",
+    experimental: { async: true },
+  });
+});
+
+Deno.test("client render tags use optional value calls", () => {
+  const source = `{@render yield* getSnippet()}`;
+  const result = transform_markup_effect(source, "RenderClient.svelte", {
+    target: "client",
+  });
+
+  assertStringIncludes(result.code, `__SER___markup_value`);
+  assertStringIncludes(result.code, `?.()`);
+
+  if (result.code.includes(`await __SER___markup_promise`)) {
+    throw new Error("client render tags must not emit awaited promises");
+  }
+
+  compile(result.code, {
+    filename: "RenderClient.svelte",
+    generate: "client",
+  });
+});
+
+Deno.test("client common markup contexts compile without async option", () => {
+  const source = [
+    `<script>`,
+    `  function hasAccess() {}`,
+    `  function getItems() {}`,
+    `  function getLabel(item) {}`,
+    `  function loadValue() {}`,
+    `</script>`,
+    `{#if yield* hasAccess()}<p>{yield* loadValue()}</p>{/if}`,
+    `{#each yield* getItems() as item}`,
+    `  <p>{yield* getLabel(item)}</p>`,
+    `{/each}`,
+    `{#key yield* loadValue()}<span>keyed</span>{/key}`,
+    `{#snippet child(value)}<p>{value}</p>{/snippet}`,
+    `{@render child(yield* loadValue())}`,
+    `{const value = yield* loadValue()}<p>{value}</p>`,
+  ].join("\n");
+
+  const result = transform_markup_effect(source, "ClientContexts.svelte", {
+    target: "client",
+  });
+
+  if (result.code.includes(`await __SER___markup_promise`)) {
+    throw new Error("client markup contexts must not emit awaited promises");
+  }
+
+  compile(result.code, {
+    filename: "ClientContexts.svelte",
+    generate: "client",
+  });
+});
+
+Deno.test("server common markup contexts compile with async option", () => {
+  const source = [
+    `<script>`,
+    `  function hasAccess() {}`,
+    `  function getItems() {}`,
+    `  function getLabel(item) {}`,
+    `  function loadValue() {}`,
+    `</script>`,
+    `{#if yield* hasAccess()}<p>{yield* loadValue()}</p>{/if}`,
+    `{#each yield* getItems() as item}`,
+    `  <p>{yield* getLabel(item)}</p>`,
+    `{/each}`,
+    `{#key yield* loadValue()}<span>keyed</span>{/key}`,
+    `{#snippet child(value)}<p>{value}</p>{/snippet}`,
+    `{@render child(yield* loadValue())}`,
+    `{const value = yield* loadValue()}<p>{value}</p>`,
+  ].join("\n");
+
+  const result = transform_markup_effect(source, "ServerContexts.svelte", {
+    target: "server",
+  });
+
+  assertStringIncludes(result.code, `await __SER___markup_promise`);
+
+  compile(result.code, {
+    filename: "ServerContexts.svelte",
+    generate: "server",
+    experimental: { async: true },
+  });
+});
+
 Deno.test("lowers multiple yield* expressions inside declaration runes", () => {
   const source = [
     `<script>`,

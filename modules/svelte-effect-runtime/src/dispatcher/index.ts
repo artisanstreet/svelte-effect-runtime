@@ -1,4 +1,5 @@
 import { Cause, Effect, Exit, Fiber, Layer, ManagedRuntime } from "effect";
+import { SvelteMap } from "svelte/reactivity";
 import type { Fiber as FiberType } from "effect/Fiber";
 import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime";
 
@@ -8,6 +9,20 @@ import { hash_deps } from "./deps.ts";
 import type { Dispose, PromiseOptions, ValueOptions } from "./types.ts";
 
 export type { Dispose, PromiseOptions, ValueOptions } from "./types.ts";
+
+type ValueCell<A> =
+  | {
+    readonly status: "pending";
+    readonly fiber: FiberType<unknown, unknown>;
+  }
+  | {
+    readonly status: "success";
+    readonly value: A;
+  }
+  | {
+    readonly status: "failure";
+    readonly error: unknown;
+  };
 
 /**
  * Unified effect block dispatcher. Manages the fiber lifecycle of every
@@ -28,8 +43,10 @@ export class Dispatcher {
   #runtime: ManagedRuntimeType<unknown, unknown>;
   /** Active fibers keyed by cache id or generated fork id. */
   #fibers = new Map<string, FiberType<unknown, unknown>>();
-  /** Resolved values and pending promises keyed by cache id. */
-  #values = new Map<string, unknown>();
+  /** Reactive value cells keyed by value cache id. */
+  #value_cells = new SvelteMap<string, ValueCell<unknown>>();
+  /** Pending promises keyed by promise cache id. */
+  #promise_values = new Map<string, Promise<unknown>>();
   /** Current cache key per value block id. */
   #value_ids = new Map<string, string>();
   /** Current cache key per promise block id. */
@@ -142,21 +159,32 @@ export class Dispatcher {
    * @returns The cached value if resolved, otherwise the fallback.
    */
   value<A>(options: ValueOptions<A>): A {
+    if (this.#disposed) {
+      return options.fallback;
+    }
+
     const cache_key = this.#make_value_cache_key(options.id, options.deps);
     const old_key = this.#value_ids.get(options.id);
+    const cell = this.#value_cells.get(cache_key);
 
     if (old_key !== undefined && old_key !== cache_key) {
-      this.#interrupt_cached_fiber(old_key);
+      const old_fiber = this.#interrupt_cached_fiber(old_key);
+
+      this.#clear_pending_value_cell(old_key, old_fiber);
     }
 
     this.#value_ids.set(options.id, cache_key);
 
-    if (this.#should_start_value_fiber(cache_key)) {
+    if (this.#should_start_value_fiber(cache_key, cell)) {
       this.#start_value_fiber(cache_key, options);
     }
 
-    if (this.#values.has(cache_key)) {
-      return this.#values.get(cache_key) as A;
+    if (cell?.status === "success") {
+      return cell.value as A;
+    }
+
+    if (cell?.status === "failure") {
+      throw cell.error;
     }
 
     return options.fallback;
@@ -184,20 +212,20 @@ export class Dispatcher {
 
     if (old_key !== undefined && old_key !== cache_key) {
       this.#interrupt_cached_fiber(old_key);
-      this.#values.delete(old_key);
+      this.#promise_values.delete(old_key);
     }
 
     this.#promise_ids.set(options.id, cache_key);
 
-    const existing = this.#values.get(cache_key);
+    const existing = this.#promise_values.get(cache_key);
 
-    if (existing instanceof Promise) {
+    if (existing) {
       return existing as Promise<A>;
     }
 
     const promise = this.#start_promise_fiber(cache_key, options);
 
-    this.#values.set(cache_key, promise);
+    this.#promise_values.set(cache_key, promise);
 
     return promise;
   }
@@ -267,7 +295,8 @@ export class Dispatcher {
     }
 
     this.#fibers.clear();
-    this.#values.clear();
+    this.#value_cells.clear();
+    this.#promise_values.clear();
     this.#value_ids.clear();
     this.#promise_ids.clear();
 
@@ -286,22 +315,29 @@ export class Dispatcher {
     return `promise:${id}::${hash_deps(deps)}`;
   }
 
-  #interrupt_cached_fiber(cache_key: string): void {
+  #interrupt_cached_fiber(
+    cache_key: string,
+  ): FiberType<unknown, unknown> | undefined {
     const old_fiber = this.#fibers.get(cache_key);
 
     if (!old_fiber) {
-      return;
+      return undefined;
     }
 
     interrupt_fiber(this.#runtime, old_fiber);
     this.#fibers.delete(cache_key);
+
+    return old_fiber;
   }
 
-  #should_start_value_fiber(cache_key: string): boolean {
+  #should_start_value_fiber(
+    cache_key: string,
+    cell: ValueCell<unknown> | undefined,
+  ): boolean {
     return (
       !this.#disposed &&
       !this.#fibers.has(cache_key) &&
-      !this.#values.has(cache_key)
+      cell === undefined
     );
   }
 
@@ -316,11 +352,39 @@ export class Dispatcher {
     );
 
     this.#fibers.set(cache_key, fiber);
+
+    queueMicrotask(() => {
+      if (!this.#is_current_fiber(cache_key, fiber)) {
+        return;
+      }
+
+      if (this.#value_cells.has(cache_key)) {
+        return;
+      }
+
+      this.#value_cells.set(cache_key, {
+        status: "pending",
+        fiber,
+      });
+    });
+
     watch_fiber_exit({
       runtime: this.#runtime,
       fiber,
-      on_complete: () => this.#fibers.delete(cache_key),
-      on_success: (value) => this.#values.set(cache_key, value),
+      surface_failure: false,
+      on_complete: () => this.#complete_fiber(cache_key, fiber),
+      on_success: (value) =>
+        this.#publish_value_success(
+          cache_key,
+          fiber,
+          value,
+        ),
+      on_failure: (error) =>
+        this.#publish_value_failure(
+          cache_key,
+          fiber,
+          error,
+        ),
     });
   }
 
@@ -342,11 +406,15 @@ export class Dispatcher {
     return this.#runtime.runPromise(
       Effect.flatMap(Fiber.await(fiber), (exit) =>
         Effect.sync(() => {
-          this.#fibers.delete(cache_key);
-          this.#values.delete(cache_key);
+          const is_current = this.#is_current_fiber(cache_key, fiber);
 
-          if (this.#promise_ids.get(options.id) === cache_key) {
-            this.#promise_ids.delete(options.id);
+          if (is_current) {
+            this.#fibers.delete(cache_key);
+            this.#promise_values.delete(cache_key);
+
+            if (this.#promise_ids.get(options.id) === cache_key) {
+              this.#promise_ids.delete(options.id);
+            }
           }
 
           if (Exit.isSuccess(exit)) {
@@ -356,6 +424,71 @@ export class Dispatcher {
           throw Cause.squash(exit.cause);
         })),
     );
+  }
+
+  #clear_pending_value_cell(
+    cache_key: string,
+    fiber: FiberType<unknown, unknown> | undefined,
+  ): void {
+    const cell = this.#value_cells.get(cache_key);
+
+    if (cell?.status !== "pending") {
+      return;
+    }
+
+    if (fiber !== undefined && cell.fiber !== fiber) {
+      return;
+    }
+
+    this.#value_cells.delete(cache_key);
+  }
+
+  #complete_fiber(
+    cache_key: string,
+    fiber: FiberType<unknown, unknown>,
+  ): void {
+    if (!this.#is_current_fiber(cache_key, fiber)) {
+      return;
+    }
+
+    this.#fibers.delete(cache_key);
+  }
+
+  #publish_value_success<A>(
+    cache_key: string,
+    fiber: FiberType<unknown, unknown>,
+    value: A,
+  ): void {
+    if (!this.#is_current_fiber(cache_key, fiber)) {
+      return;
+    }
+
+    this.#value_cells.set(cache_key, {
+      status: "success",
+      value,
+    });
+  }
+
+  #publish_value_failure(
+    cache_key: string,
+    fiber: FiberType<unknown, unknown>,
+    error: unknown,
+  ): void {
+    if (!this.#is_current_fiber(cache_key, fiber)) {
+      return;
+    }
+
+    this.#value_cells.set(cache_key, {
+      status: "failure",
+      error,
+    });
+  }
+
+  #is_current_fiber(
+    cache_key: string,
+    fiber: FiberType<unknown, unknown>,
+  ): boolean {
+    return !this.#disposed && this.#fibers.get(cache_key) === fiber;
   }
 }
 

@@ -1,4 +1,4 @@
-import { assertEquals, assertRejects } from "@std/assert";
+import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import {
   Dispatcher,
@@ -432,6 +432,85 @@ Deno.test("value does not fork when disposed", () => {
 });
 
 // ─── promise ─────────────────────────────────────────────────
+
+Deno.test("value stores failures and throws them during reads", async () => {
+  const d = make_dispatcher();
+  const original_queue = queueMicrotask;
+  const queued: Array<() => void> = [];
+
+  (globalThis as Record<string, unknown>).queueMicrotask = (fn: () => void) =>
+    queued.push(fn);
+
+  const options: ValueOptions<string> = {
+    id: "value-failure",
+    deps: [],
+    fallback: "loading",
+    factory: function* () {
+      return yield* Effect.fail(new Error("value failed"));
+    },
+  };
+
+  try {
+    assertEquals(d.value(options), "loading");
+
+    for (const callback of queued.splice(0)) {
+      callback();
+    }
+
+    await wait_for(() => {
+      try {
+        d.value(options);
+
+        return false;
+      } catch (error) {
+        return error instanceof Error && error.message === "value failed";
+      }
+    });
+
+    assertThrows(() => d.value(options), Error, "value failed");
+    assertEquals(queued.length, 0);
+  } finally {
+    (globalThis as Record<string, unknown>).queueMicrotask = original_queue;
+    d.dispose();
+  }
+});
+
+Deno.test("promise caching remains independent from value caching", async () => {
+  const d = make_dispatcher();
+  let value_calls = 0;
+  let promise_calls = 0;
+
+  const value_options: ValueOptions<string> = {
+    id: "shared-public-id",
+    deps: [],
+    fallback: "loading",
+    factory: function* () {
+      value_calls += 1;
+
+      return yield* Effect.succeed("value");
+    },
+  };
+
+  const promise_options = {
+    id: "shared-public-id",
+    deps: [],
+    factory: function* () {
+      promise_calls += 1;
+
+      return yield* Effect.succeed("promise");
+    },
+  };
+
+  d.value(value_options);
+
+  assertEquals(d.value(value_options), "value");
+  assertEquals(await d.promise(promise_options), "promise");
+  assertEquals(d.value(value_options), "value");
+  assertEquals(value_calls, 1);
+  assertEquals(promise_calls, 1);
+
+  d.dispose();
+});
 
 Deno.test("promise returns a Promise that resolves with the effect's value", async () => {
   const d = make_dispatcher();

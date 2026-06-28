@@ -15,6 +15,7 @@ import type { TransformSet } from "./types.ts";
 type TransformSvelteEffect = (
   code: string,
   filename?: string,
+  options?: { target?: "editor" },
 ) => { code: string };
 
 export function patch_svelte_compiler_path(
@@ -30,10 +31,14 @@ export function patch_svelte_compiler_path(
         config?.preprocess,
         effect_preprocessor,
       );
-      return originalCreate.call(this, document, {
-        ...config,
-        preprocess,
-      });
+      return originalCreate.call(
+        this,
+        document,
+        with_async_compiler_options({
+          ...config,
+          preprocess,
+        }),
+      );
     };
   });
 
@@ -178,6 +183,7 @@ function create_effect_transform_preprocessor(
       const result = transform_svelte_effect(
         content,
         filename ?? "unknown.svelte",
+        { target: "editor" },
       );
 
       return { code: result.code };
@@ -218,6 +224,22 @@ function create_typescript_fallback_preprocessor() {
           ),
         },
       };
+    },
+  };
+}
+
+function with_async_compiler_options(config: any) {
+  const compiler_options = config?.compilerOptions ?? {};
+  const experimental = compiler_options.experimental ?? {};
+
+  return {
+    ...config,
+    compilerOptions: {
+      ...compiler_options,
+      experimental: {
+        ...experimental,
+        async: true,
+      },
     },
   };
 }

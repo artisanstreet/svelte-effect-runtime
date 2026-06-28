@@ -14,9 +14,14 @@ import { collect_effect_callback_bindings } from "./effect-bindings.ts";
 import { emit_replacements } from "./emit.ts";
 import { sanitize_markup } from "./scan.ts";
 import { UnsupportedMarkupEffectPositionError } from "$/errors.ts";
-import type { MarkupTransformResult } from "./types.ts";
+import type { MarkupTransformOptions, MarkupTransformResult } from "./types.ts";
 
-export type { MarkupRelocation, MarkupTransformResult } from "./types.ts";
+export type {
+  MarkupRelocation,
+  MarkupTransformOptions,
+  MarkupTransformResult,
+  MarkupTransformTarget,
+} from "./types.ts";
 
 /**
  * Transforms Svelte markup containing `{yield* expr}` brace expressions
@@ -31,16 +36,20 @@ export type { MarkupRelocation, MarkupTransformResult } from "./types.ts";
  * @since 2.0.0
  * @param content - The raw `.svelte` file content.
  * @param filename - The source filename, used in error messages.
+ * @param options - Optional transform target configuration.
  * @returns The transformed markup and a flag indicating whether yield* was
  *   found.
  */
 export function transform_markup_effect(
   content: string,
   filename: string,
+  options: MarkupTransformOptions = {},
 ): MarkupTransformResult {
   if (!/\byield\s*\*/.test(content)) {
     return { code: content, has_yield: false };
   }
+
+  const target = options.target ?? "server";
 
   /** Find all brace expressions containing yield* and replace with placeholders. */
   const work = sanitize_markup(content, filename);
@@ -80,6 +89,7 @@ export function transform_markup_effect(
     effect_context,
     helper_context.bindings,
     helper_context.name_allocator,
+    target,
   );
   const helpers = replacements.flatMap((replacement) =>
     replacement.helpers ?? []

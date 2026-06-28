@@ -1,4 +1,7 @@
-import { transform_markup_effect } from "$/markup/transform.ts";
+import {
+  type MarkupTransformTarget,
+  transform_markup_effect,
+} from "$/markup/transform.ts";
 import { transform_script_effect } from "$/script-transform/index.ts";
 
 /**
@@ -18,6 +21,21 @@ export interface SvelteTransformResult {
 }
 
 /**
+ * Options accepted by the direct whole-file Svelte transform.
+ *
+ * @example
+ * ```ts
+ * const options: SvelteTransformOptions = { target: "client" };
+ * ```
+ *
+ * @since 2.5.0
+ */
+export interface SvelteTransformOptions {
+  /** Markup emission target passed through to the markup transform. */
+  target?: MarkupTransformTarget;
+}
+
+/**
  * Lowers SER syntax in a complete Svelte component without using Svelte's
  * adapter API.
  *
@@ -34,11 +52,13 @@ export interface SvelteTransformResult {
  *   it.
  * @param filename - Component filename used in generated cache identifiers and
  *   diagnostics.
+ * @param options - Optional target configuration for markup lowering.
  * @returns The transformed component source.
  */
 export function transform_svelte_effect(
   content: string,
   filename = "unknown.svelte",
+  options: SvelteTransformOptions = {},
 ): SvelteTransformResult {
   const script = find_script(content);
 
@@ -55,7 +75,9 @@ export function transform_svelte_effect(
       content.slice(script.close_start);
   }
 
-  const result = transform_markup_effect(combined, filename);
+  const result = transform_markup_effect(combined, filename, {
+    target: options.target,
+  });
 
   return { code: result.code };
 }
@@ -110,7 +132,9 @@ function has_typescript_lang(attrs: string): boolean {
 }
 
 export {
+  type MarkupTransformOptions,
   type MarkupTransformResult,
+  type MarkupTransformTarget,
   transform_markup_effect,
 } from "$/markup/transform.ts";
 

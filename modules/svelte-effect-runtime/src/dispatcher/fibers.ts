@@ -18,6 +18,8 @@ import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime
 export interface FiberWatchCallbacks<A> {
   on_complete?: () => void;
   on_success?: (value: A) => void;
+  on_failure?: (error: unknown) => void;
+  surface_failure?: boolean;
 }
 
 /**
@@ -63,24 +65,38 @@ export function watch_fiber_exit<A>(
     fiber: FiberType<unknown, unknown>;
   } & FiberWatchCallbacks<A>,
 ): void {
-  const { runtime, fiber, on_complete, on_success } = options;
+  const {
+    runtime,
+    fiber,
+    on_complete,
+    on_success,
+    on_failure,
+    surface_failure = true,
+  } = options;
 
   runtime.runFork(
     Effect.flatMap(Fiber.await(fiber), (exit) =>
       Effect.sync(() => {
-        on_complete?.();
-
         if (Exit.isSuccess(exit)) {
           on_success?.(exit.value as A);
+          on_complete?.();
 
           return;
         }
 
         if (!Cause.hasInterruptsOnly(exit.cause)) {
-          queueMicrotask(() => {
-            throw Cause.squash(exit.cause);
-          });
+          const error = Cause.squash(exit.cause);
+
+          on_failure?.(error);
+
+          if (surface_failure) {
+            queueMicrotask(() => {
+              throw error;
+            });
+          }
         }
+
+        on_complete?.();
       })),
   );
 }
