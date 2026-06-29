@@ -34,13 +34,26 @@ export function prepare_virtual_document(
       scripts.script.content,
       { filename },
     );
+    const effectAttributeRange = find_effect_attribute_range(
+      currentCode,
+      scripts.script,
+    );
+    const changedScriptContent =
+      transformedScript.code !== scripts.script.content;
 
-    if (transformedScript.code !== scripts.script.content) {
+    if (effectAttributeRange) {
+      magicString.remove(effectAttributeRange.start, effectAttributeRange.end);
+    }
+
+    if (changedScriptContent) {
       magicString.overwrite(
         scripts.script.start,
         scripts.script.end,
         transformedScript.code,
       );
+    }
+
+    if (effectAttributeRange || changedScriptContent) {
       currentCode = magicString.toString();
       const fullDocumentMapper = create_source_map_mapper(
         magicString.generateMap({
@@ -53,7 +66,7 @@ export function prepare_virtual_document(
       const transformedScripts = extractScriptTags(currentCode);
       const transformedScriptTag = transformedScripts?.script;
 
-      if (transformedScriptTag) {
+      if (changedScriptContent && transformedScriptTag) {
         scriptMapper = create_script_content_mapper(
           preScriptTransformCode,
           currentCode,
@@ -104,4 +117,33 @@ export function prepare_virtual_document(
 
 function has_own(object: object, key: PropertyKey) {
   return Object.prototype.hasOwnProperty.call(object, key);
+}
+
+function find_effect_attribute_range(
+  code: string,
+  script: { container?: { start?: unknown }; start?: unknown },
+): { start: number; end: number } | null {
+  const container_start = script.container?.start;
+  const content_start = script.start;
+
+  if (
+    typeof container_start !== "number" ||
+    typeof content_start !== "number"
+  ) {
+    return null;
+  }
+
+  const opening_tag = code.slice(container_start, content_start);
+  const match = /\s+effect(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?/.exec(
+    opening_tag,
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    start: container_start + match.index,
+    end: container_start + match.index + match[0].length,
+  };
 }

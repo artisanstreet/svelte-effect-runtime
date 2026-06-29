@@ -23,6 +23,30 @@ export interface ScriptTransformResult {
   blocks: BlockRef[];
   /** Source map from transformed code back to the original script block. */
   map?: Record<string, unknown>;
+  /** Offset ranges that preserve hoverable moved source spans. */
+  relocations?: Relocation[];
+}
+
+/**
+ * Offset mapping between original script code and generated helper code.
+ *
+ * @example
+ * ```ts
+ * const relocation: Relocation = {
+ *   originalStart: 10,
+ *   originalEnd: 28,
+ *   generatedStart: 64,
+ *   generatedEnd: 82,
+ * };
+ * ```
+ *
+ * @since 3.2.3
+ */
+export interface Relocation {
+  originalStart: number;
+  originalEnd: number;
+  generatedStart: number;
+  generatedEnd: number;
 }
 
 /**

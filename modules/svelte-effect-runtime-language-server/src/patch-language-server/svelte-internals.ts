@@ -52,6 +52,7 @@ export const { CodeActionsProviderImpl } = require(path.join(
   "CodeActionsProvider.js",
 )) as { CodeActionsProviderImpl: any };
 export const {
+  SvelteDocument,
   TranspiledSvelteDocument,
   FallbackTranspiledSvelteDocument,
 } = require(path.join(
@@ -60,6 +61,7 @@ export const {
   "svelte",
   "SvelteDocument.js",
 )) as {
+  SvelteDocument: any;
   TranspiledSvelteDocument: any;
   FallbackTranspiledSvelteDocument: any;
 };

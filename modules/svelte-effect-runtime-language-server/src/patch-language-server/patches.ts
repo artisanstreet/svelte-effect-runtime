@@ -4,6 +4,7 @@ import {
   DocumentSnapshot,
   FallbackTranspiledSvelteDocument,
   patch_marker,
+  SvelteDocument,
   TranspiledSvelteDocument,
   ts,
 } from "./svelte-internals.ts";
@@ -58,6 +59,8 @@ export function patch_svelte_compiler_path(
       };
     },
   );
+
+  patch_svelte_document_compile_options();
 }
 
 export function patch_typescript_snapshot_path(transforms: TransformSet) {
@@ -109,6 +112,25 @@ function patch_static_factory(
   const original_create = target_class.create;
   target_class.create = makeReplacement(original_create);
   target_class.create[patch_marker] = true;
+}
+
+function patch_svelte_document_compile_options() {
+  if (SvelteDocument.prototype.getCompiledWith?.[patch_marker]) {
+    return;
+  }
+
+  const original_get_compiled_with = SvelteDocument.prototype.getCompiledWith;
+
+  SvelteDocument.prototype.getCompiledWith = function getCompiledWith(
+    this: unknown,
+    options: any = {},
+  ) {
+    return original_get_compiled_with.call(
+      this,
+      with_async_compile_options(options),
+    );
+  };
+  SvelteDocument.prototype.getCompiledWith[patch_marker] = true;
 }
 
 export function patch_typescript_code_actions() {
@@ -240,6 +262,18 @@ function with_async_compiler_options(config: any) {
         ...experimental,
         async: true,
       },
+    },
+  };
+}
+
+function with_async_compile_options(options: any) {
+  const experimental = options?.experimental ?? {};
+
+  return {
+    ...options,
+    experimental: {
+      ...experimental,
+      async: true,
     },
   };
 }

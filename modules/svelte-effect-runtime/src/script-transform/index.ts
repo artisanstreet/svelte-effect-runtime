@@ -7,12 +7,13 @@ import {
 import { create_source_map, slice } from "./source.ts";
 import { AwaitInEffectWorkError, PreprocessError } from "$/errors.ts";
 import { make_runtime_block_with_bindings } from "./runtime-block.ts";
-import { contains_top_level_await } from "./ast.ts";
+import { collect_yield_star_nodes, contains_top_level_await } from "./ast.ts";
 import { lower_statement } from "./lower.ts";
 import { validate_rune_yield_usage } from "./runes.ts";
 import type {
   BlockRef,
   EffectBlock,
+  Relocation,
   RuntimeImportBindings,
   ScriptLoweringContext,
   ScriptTransformResult,
@@ -221,11 +222,150 @@ export function transform_script_effect(
 
   block_refs.push({ id: filename, kind: "script" });
 
+  const code = magic.toString();
+
   return {
-    code: magic.toString(),
+    code,
     blocks: block_refs,
     map: create_source_map(magic, filename),
+    relocations: create_script_relocations(content, code, source_file),
   };
+}
+
+function create_script_relocations(
+  content: string,
+  code: string,
+  source_file: ts.SourceFile,
+): Relocation[] {
+  const candidates = source_file.statements.flatMap((stmt) => {
+    const relocations: RelocationCandidate[] = [];
+
+    if (contains_top_level_yield_star(stmt) && ts.isVariableStatement(stmt)) {
+      for (const decl of stmt.declarationList.declarations) {
+        collect_binding_relocation_candidates(decl.name, relocations);
+      }
+    }
+
+    collect_yield_star_nodes(stmt, (node) => {
+      const text = content.slice(node.getStart(), node.end).trim();
+
+      relocations.push({
+        originalStart: node.getStart(),
+        originalEnd: node.end,
+        text,
+        match: "exact",
+      });
+    });
+
+    return relocations;
+  });
+
+  const used_ranges: Array<{ start: number; end: number }> = [];
+
+  return candidates.flatMap((candidate) => {
+    const generated_start = find_available_generated_text(
+      code,
+      candidate,
+      used_ranges,
+    );
+
+    if (generated_start < 0) {
+      return [];
+    }
+
+    const generated_end = generated_start + candidate.text.length;
+    used_ranges.push({ start: generated_start, end: generated_end });
+
+    return [{
+      originalStart: candidate.originalStart,
+      originalEnd: candidate.originalEnd,
+      generatedStart: generated_start,
+      generatedEnd: generated_end,
+    }];
+  });
+}
+
+type RelocationCandidate = {
+  originalStart: number;
+  originalEnd: number;
+  text: string;
+  match: "exact" | "identifier";
+};
+
+function collect_binding_relocation_candidates(
+  name: ts.BindingName,
+  candidates: RelocationCandidate[],
+): void {
+  if (ts.isIdentifier(name)) {
+    candidates.push({
+      originalStart: name.getStart(),
+      originalEnd: name.end,
+      text: name.text,
+      match: "identifier",
+    });
+
+    return;
+  }
+
+  for (const element of name.elements) {
+    if (ts.isOmittedExpression(element)) {
+      continue;
+    }
+
+    collect_binding_relocation_candidates(element.name, candidates);
+  }
+}
+
+function find_available_generated_text(
+  code: string,
+  candidate: RelocationCandidate,
+  used_ranges: Array<{ start: number; end: number }>,
+): number {
+  let search_start = 0;
+
+  while (search_start < code.length) {
+    const index = code.indexOf(candidate.text, search_start);
+
+    if (index < 0) {
+      return -1;
+    }
+
+    const end = index + candidate.text.length;
+    const overlaps_used_range = used_ranges.some((range) =>
+      index < range.end && end > range.start
+    );
+    const is_text_match = candidate.match === "exact" ||
+      is_identifier_text_match(code, index, end);
+
+    if (!overlaps_used_range && is_text_match) {
+      return index;
+    }
+
+    search_start = candidate.match === "identifier" ? index + 1 : end;
+  }
+
+  return -1;
+}
+
+function is_identifier_text_match(
+  code: string,
+  start: number,
+  end: number,
+): boolean {
+  const before = start === 0 ? 0 : code.charCodeAt(start - 1);
+  const after = end >= code.length ? 0 : code.charCodeAt(end);
+
+  return !is_identifier_part(before) && !is_identifier_part(after);
+}
+
+function is_identifier_part(char_code: number): boolean {
+  return (
+    (char_code >= 65 && char_code <= 90) ||
+    (char_code >= 97 && char_code <= 122) ||
+    (char_code >= 48 && char_code <= 57) ||
+    char_code === 36 ||
+    char_code === 95
+  );
 }
 
 function validate_script_yield_boundaries(
