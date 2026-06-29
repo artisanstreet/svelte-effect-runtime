@@ -50,15 +50,7 @@ export function inject_helpers(
   }> = [
     make_import_helper(
       content,
-      `import { value as ${bindings.value} } from "svelte-effect-runtime/internal/generators";`,
-    ),
-    make_import_helper(
-      content,
-      `import { promise as ${bindings.promise} } from "svelte-effect-runtime/internal/generators";`,
-    ),
-    make_import_helper(
-      content,
-      `import { run as ${bindings.run} } from "svelte-effect-runtime/internal/generators";`,
+      make_dispatcher_import(bindings),
     ),
     ...import_helpers,
     ...local_helpers,
@@ -115,9 +107,8 @@ export function make_markup_helper_bindings(
 
   return {
     bindings: {
-      value: name_allocator.reserve(HELPERS.value),
-      promise: name_allocator.reserve(HELPERS.promise),
-      run: name_allocator.reserve(HELPERS.run),
+      codes: name_allocator.reserve(HELPERS.codes),
+      dispatcher: name_allocator.reserve(HELPERS.dispatcher),
     },
     name_allocator,
   };
@@ -193,6 +184,27 @@ function make_import_helper(
   }
 
   return import_text;
+}
+
+function make_dispatcher_import(bindings: MarkupHelperBindings): string {
+  const dispatcher = make_import_specifier(
+    HELPERS.dispatcher,
+    bindings.dispatcher,
+  );
+  const codes = make_import_specifier(HELPERS.codes, bindings.codes);
+
+  return `import { ${dispatcher}, ${codes} } from "svelte-effect-runtime/internal/generators";`;
+}
+
+function make_import_specifier(
+  imported_name: string,
+  local_name: string,
+): string {
+  if (imported_name === local_name) {
+    return imported_name;
+  }
+
+  return `${imported_name} as ${local_name}`;
 }
 
 function make_insertion_relocations(

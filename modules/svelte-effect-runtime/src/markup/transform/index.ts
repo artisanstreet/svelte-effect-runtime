@@ -25,7 +25,7 @@ export type {
 
 /**
  * Transforms Svelte markup containing `{yield* expr}` brace expressions
- * into calls to the markup runtime helpers (`value`, `promise`, `run`).
+ * into generated dispatcher events.
  *
  * Strategy: first find all brace expressions containing `yield*` via
  * character scanning, replace them with placeholder identifiers, then

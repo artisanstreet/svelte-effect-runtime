@@ -5,9 +5,19 @@ import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime
 
 import { DispatcherDisposedError } from "$/errors.ts";
 import { interrupt_fiber, watch_fiber_exit } from "./fibers.ts";
+import { DispatcherCodes } from "./types.ts";
 import { hash_deps } from "./deps.ts";
-import type { Dispose, PromiseOptions, ValueOptions } from "./types.ts";
+import type {
+  DispatcherEvent,
+  Dispose,
+  MarkupPromiseEvent,
+  MarkupRunEvent,
+  MarkupValueEvent,
+  PromiseOptions,
+  ValueOptions,
+} from "./types.ts";
 
+export { DispatcherCodes } from "./types.ts";
 export type { Dispose, PromiseOptions, ValueOptions } from "./types.ts";
 
 type ValueCell<A> =
@@ -102,6 +112,43 @@ export class Dispatcher {
         unknown,
         unknown
       >;
+  }
+
+  /**
+   * Handles a transform-generated dispatcher event.
+   *
+   * @example
+   * ```ts
+   * const value = dispatcher.emit({
+   *   type: DispatcherCodes.MarkupValue,
+   *   id: "Component.svelte:1:2",
+   *   deps: [],
+   *   fallback: undefined,
+   *   fn: function* () {
+   *     return yield* Effect.succeed(1);
+   *   },
+   * });
+   * ```
+   *
+   * @since 3.3.0
+   * @param event - Generated event describing the dispatcher operation to run.
+   * @returns The operation result for the emitted dispatcher event.
+   */
+  emit<A, F>(event: MarkupValueEvent<A, F>): A | F;
+  emit<A>(event: MarkupPromiseEvent<A>): Promise<A>;
+  emit<A>(event: MarkupRunEvent<A>): Promise<A>;
+  emit<A, F>(event: DispatcherEvent<A, F>): A | F | Promise<A>;
+  emit<A, F>(event: DispatcherEvent<A, F>): A | F | Promise<A> {
+    switch (event.type) {
+      case DispatcherCodes.MarkupValue:
+        return this.#emit_markup_value(event);
+
+      case DispatcherCodes.MarkupPromise:
+        return this.#emit_markup_promise(event);
+
+      case DispatcherCodes.MarkupRun:
+        return this.#emit_markup_run(event);
+    }
   }
 
   /**
@@ -276,6 +323,43 @@ export class Dispatcher {
       });
   }
 
+  #emit_markup_value<A, F>(event: MarkupValueEvent<A, F>): A | F {
+    if (this.#is_server_render()) {
+      return event.fallback;
+    }
+
+    return this.value<A | F>({
+      id: event.id,
+      deps: event.deps,
+      fallback: event.fallback,
+      factory: event.fn,
+    });
+  }
+
+  #emit_markup_promise<A>(event: MarkupPromiseEvent<A>): Promise<A> {
+    if (this.#is_server_render()) {
+      if (event.options?.ssr === "pending") {
+        return new Promise<A>(() => {});
+      }
+
+      if ("ssr_fallback" in event) {
+        return Promise.resolve(event.ssr_fallback as A);
+      }
+    }
+
+    return this.promise({
+      id: event.id,
+      deps: event.deps,
+      factory: event.fn,
+    });
+  }
+
+  #emit_markup_run<A>(event: MarkupRunEvent<A>): Promise<A> {
+    const effect = Effect.gen(event.fn);
+
+    return this.run(effect);
+  }
+
   /**
    * Cancels all running fibers and releases cached values.
    *
@@ -313,6 +397,10 @@ export class Dispatcher {
 
   #make_promise_cache_key(id: string, deps: readonly unknown[]): string {
     return `promise:${id}::${hash_deps(deps)}`;
+  }
+
+  #is_server_render(): boolean {
+    return typeof document === "undefined";
   }
 
   #interrupt_cached_fiber(

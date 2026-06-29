@@ -2,6 +2,7 @@ import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import {
   Dispatcher,
+  DispatcherCodes,
   get_dispatcher,
   reset_dispatcher,
 } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
@@ -686,6 +687,59 @@ Deno.test("run suppresses interrupt-only exits", async () => {
   } finally {
     (globalThis as Record<string, unknown>).queueMicrotask = original_queue;
   }
+});
+
+Deno.test("emit runs markup event-handler effects", async () => {
+  const d = make_dispatcher();
+
+  const result = await d.emit({
+    type: DispatcherCodes.MarkupRun,
+    fn: function* () {
+      return yield* Effect.succeed(42);
+    },
+  });
+
+  assertEquals(result, 42);
+});
+
+Deno.test("emit returns markup value fallback during SSR", () => {
+  const d = make_dispatcher();
+  let ran = false;
+
+  const result = d.emit({
+    type: DispatcherCodes.MarkupValue,
+    id: "emit-value",
+    deps: [],
+    fallback: "fallback",
+    fn: function* () {
+      ran = true;
+
+      return yield* Effect.succeed("resolved");
+    },
+  });
+
+  assertEquals(result, "fallback");
+  assertEquals(ran, false);
+});
+
+Deno.test("emit returns markup promise fallback during SSR", async () => {
+  const d = make_dispatcher();
+  let ran = false;
+
+  const result = await d.emit({
+    type: DispatcherCodes.MarkupPromise,
+    id: "emit-promise",
+    deps: [],
+    ssr_fallback: "fallback",
+    fn: function* () {
+      ran = true;
+
+      return yield* Effect.succeed("resolved");
+    },
+  });
+
+  assertEquals(result, "fallback");
+  assertEquals(ran, false);
 });
 
 Deno.test("run rejects without executing after dispose", async () => {

@@ -163,7 +163,7 @@ function make_event_handler(
   return {
     expr_text,
     text:
-      `(event) => { ${helper_bindings.run}(function* () { ${expr_text}; }); }`,
+      `(event) => { ${helper_bindings.dispatcher}.emit({ type: ${helper_bindings.codes}.MarkupRun, fn: function* () { ${expr_text}; } }); }`,
   };
 }
 
@@ -174,15 +174,16 @@ function emit_promise_expression(
   ssr_fallback?: string,
   options?: string,
 ): string {
-  const args = [
-    id_text,
-    effect.deps_text,
-    `() => ${effect.call}`,
-    ssr_fallback,
-    options,
-  ].filter((arg): arg is string => arg !== undefined);
+  const properties = [
+    `type: ${helper_bindings.codes}.MarkupPromise`,
+    `id: ${id_text}`,
+    `deps: ${effect.deps_text}`,
+    `fn: () => ${effect.call}`,
+    ssr_fallback !== undefined && `ssr_fallback: ${ssr_fallback}`,
+    options !== undefined && `options: ${options}`,
+  ].filter((property): property is string => property !== false);
 
-  return `${helper_bindings.promise}(${args.join(", ")})`;
+  return `${helper_bindings.dispatcher}.emit({ ${properties.join(", ")} })`;
 }
 
 function emit_value_expression(
@@ -191,14 +192,15 @@ function emit_value_expression(
   helper_bindings: MarkupHelperBindings,
   fallback = "undefined",
 ): string {
-  const args = [
-    id_text,
-    effect.deps_text,
-    fallback,
-    `() => ${effect.call}`,
+  const properties = [
+    `type: ${helper_bindings.codes}.MarkupValue`,
+    `id: ${id_text}`,
+    `deps: ${effect.deps_text}`,
+    `fallback: ${fallback}`,
+    `fn: () => ${effect.call}`,
   ];
 
-  return `${helper_bindings.value}(${args.join(", ")})`;
+  return `${helper_bindings.dispatcher}.emit({ ${properties.join(", ")} })`;
 }
 
 function emit_render_expression(

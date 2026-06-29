@@ -104,9 +104,8 @@ export interface Insertion {
 }
 
 export interface MarkupHelperBindings {
-  value: string;
-  promise: string;
-  run: string;
+  codes: string;
+  dispatcher: string;
 }
 
 export interface MarkupNameAllocator {

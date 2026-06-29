@@ -71,7 +71,10 @@ Deno.test("rewrites {yield* expr} as async promise expression", () => {
   const source = `<span>{yield* renderDate()}</span>`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `await __SER___markup_promise`);
+  assertStringIncludes(
+    result.code,
+    `await Dispatcher.emit({ type: DispatcherCodes.MarkupPromise`,
+  );
   assertStringIncludes(result.code, `renderDate()`);
   assertStringIncludes(result.code, `function* __SER___markup_effect`);
   if (!result.has_yield) throw new Error("has_yield should be true");
@@ -81,7 +84,10 @@ Deno.test("rewrites {yield* expr} with free identifier deps", () => {
   const source = `<span>{yield* format(user)}</span>`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `await __SER___markup_promise`);
+  assertStringIncludes(
+    result.code,
+    `await Dispatcher.emit({ type: DispatcherCodes.MarkupPromise`,
+  );
   assertStringIncludes(result.code, `format`);
   assertStringIncludes(result.code, `user`);
   assertStringIncludes(result.code, `[format, user]`);
@@ -93,7 +99,10 @@ Deno.test("rewrites {#if yield* expr} in condition", () => {
   const source = `{#if yield* hasAccess()}<p>yes</p>{/if}`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `await __SER___markup_promise`);
+  assertStringIncludes(
+    result.code,
+    `await Dispatcher.emit({ type: DispatcherCodes.MarkupPromise`,
+  );
   assertStringIncludes(result.code, `hasAccess`);
   assertStringIncludes(result.code, `{#if`);
   if (!result.has_yield) throw new Error("has_yield should be true");
@@ -103,7 +112,10 @@ Deno.test("rewrites {:else if yield* expr} in alternate condition", () => {
   const source = `{#if a}{:else if yield* checkFlag()}<p>flag</p>{/if}`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `await __SER___markup_promise`);
+  assertStringIncludes(
+    result.code,
+    `await Dispatcher.emit({ type: DispatcherCodes.MarkupPromise`,
+  );
   assertStringIncludes(result.code, `checkFlag`);
   assertStringIncludes(result.code, `:else if`);
   if (!result.has_yield) throw new Error("has_yield should be true");
@@ -113,7 +125,10 @@ Deno.test("rewrites {#each yield* expr as item} in list", () => {
   const source = `{#each yield* getItems() as item}<li>{item}</li>{/each}`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `await __SER___markup_promise`);
+  assertStringIncludes(
+    result.code,
+    `await Dispatcher.emit({ type: DispatcherCodes.MarkupPromise`,
+  );
   assertStringIncludes(result.code, `getItems`);
   assertStringIncludes(result.code, `{#each`);
   if (!result.has_yield) throw new Error("has_yield should be true");
@@ -124,7 +139,7 @@ Deno.test("rewrites {#await yield* expr} as promise() call", () => {
     `{#await yield* loadData()}<p>loading</p>{:then val}<p>{val}</p>{/await}`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `__SER___markup_promise`);
+  assertStringIncludes(result.code, `DispatcherCodes.MarkupPromise`);
   assertStringIncludes(result.code, `loadData`);
   if (!result.has_yield) throw new Error("has_yield should be true");
 });
@@ -134,7 +149,7 @@ Deno.test("rewrites {#await yield* expr} with :catch clause", () => {
     `{#await yield* fetchUser()}<p>loading</p>{:then u}<p>{u.name}</p>{:catch err}<p>Error: {err.message}</p>{/await}`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `__SER___markup_promise`);
+  assertStringIncludes(result.code, `DispatcherCodes.MarkupPromise`);
   assertStringIncludes(result.code, `fetchUser`);
   if (!result.has_yield) throw new Error("has_yield should be true");
 });
@@ -143,7 +158,10 @@ Deno.test("rewrites {@render yield* fn()} as cached optional snippet call", () =
   const source = `{@render yield* getSnippet()}`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `await __SER___markup_promise`);
+  assertStringIncludes(
+    result.code,
+    `await Dispatcher.emit({ type: DispatcherCodes.MarkupPromise`,
+  );
   assertStringIncludes(result.code, `(`);
   assertStringIncludes(result.code, `)()`);
   if (!result.has_yield) throw new Error("has_yield should be true");
@@ -168,7 +186,7 @@ Deno.test("rewrites yield inside render tag arguments without double-calling sni
 
   assertStringIncludes(
     result.code,
-    `{@render child(await __SER___markup_promise`,
+    `{@render child(await Dispatcher.emit({ type: DispatcherCodes.MarkupPromise`,
   );
   assertStringIncludes(result.code, `return (yield* load());`);
   if (result.code.includes(`)()}`)) {
@@ -186,7 +204,10 @@ Deno.test("rewrites {@const x = yield* expr} in const initializer", () => {
   const source = `{@const x = yield* compute()}{x}`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `await __SER___markup_promise`);
+  assertStringIncludes(
+    result.code,
+    `await Dispatcher.emit({ type: DispatcherCodes.MarkupPromise`,
+  );
   assertStringIncludes(result.code, `compute`);
   if (!result.has_yield) throw new Error("has_yield should be true");
 });
@@ -195,7 +216,10 @@ Deno.test("rewrites {const x = yield* expr} in declaration initializer", () => {
   const source = `{const x = yield* compute()}{x}`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `{const x = await __SER___markup_promise`);
+  assertStringIncludes(
+    result.code,
+    `{const x = await Dispatcher.emit({ type: DispatcherCodes.MarkupPromise`,
+  );
   assertStringIncludes(result.code, `compute`);
   if (!result.has_yield) throw new Error("has_yield should be true");
 });
@@ -204,7 +228,10 @@ Deno.test("rewrites {let x = yield* expr} in declaration initializer", () => {
   const source = `{let x = yield* compute()}{x}`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `{let x = await __SER___markup_promise`);
+  assertStringIncludes(
+    result.code,
+    `{let x = await Dispatcher.emit({ type: DispatcherCodes.MarkupPromise`,
+  );
   assertStringIncludes(result.code, `compute`);
   if (!result.has_yield) throw new Error("has_yield should be true");
 });
@@ -221,7 +248,10 @@ Deno.test("preserves declaration rune placement while lowering yield*", () => {
 
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `$derived(await __SER___markup_promise`);
+  assertStringIncludes(
+    result.code,
+    `$derived(await Dispatcher.emit({ type: DispatcherCodes.MarkupPromise`,
+  );
 
   if (result.code.includes("[$derived")) {
     throw new Error("runes must not be captured as runtime dependencies");
@@ -248,7 +278,10 @@ Deno.test("client declaration tags lower to synchronous value reads", () => {
     target: "client",
   });
 
-  assertStringIncludes(result.code, `$derived(__SER___markup_value`);
+  assertStringIncludes(
+    result.code,
+    `$derived(Dispatcher.emit({ type: DispatcherCodes.MarkupValue`,
+  );
 
   if (result.code.includes(`$derived(await`)) {
     throw new Error("client declaration tags must not emit async derived code");
@@ -274,7 +307,10 @@ Deno.test("editor declaration tags lower to synchronous value reads", () => {
     target: "editor",
   });
 
-  assertStringIncludes(result.code, `$derived(__SER___markup_value`);
+  assertStringIncludes(
+    result.code,
+    `$derived(Dispatcher.emit({ type: DispatcherCodes.MarkupValue`,
+  );
 
   if (result.code.includes(`$derived(await`)) {
     throw new Error("editor declaration tags must not emit async derived code");
@@ -300,7 +336,10 @@ Deno.test("server declaration tags lower to awaited promise reads", () => {
     target: "server",
   });
 
-  assertStringIncludes(result.code, `$derived(await __SER___markup_promise`);
+  assertStringIncludes(
+    result.code,
+    `$derived(await Dispatcher.emit({ type: DispatcherCodes.MarkupPromise`,
+  );
 
   compile(result.code, {
     filename: "Publication.svelte",
@@ -315,10 +354,14 @@ Deno.test("client render tags use optional value calls", () => {
     target: "client",
   });
 
-  assertStringIncludes(result.code, `__SER___markup_value`);
+  assertStringIncludes(result.code, `DispatcherCodes.MarkupValue`);
   assertStringIncludes(result.code, `?.()`);
 
-  if (result.code.includes(`await __SER___markup_promise`)) {
+  if (
+    result.code.includes(
+      `await Dispatcher.emit({ type: DispatcherCodes.MarkupPromise`,
+    )
+  ) {
     throw new Error("client render tags must not emit awaited promises");
   }
 
@@ -350,7 +393,11 @@ Deno.test("client common markup contexts compile without async option", () => {
     target: "client",
   });
 
-  if (result.code.includes(`await __SER___markup_promise`)) {
+  if (
+    result.code.includes(
+      `await Dispatcher.emit({ type: DispatcherCodes.MarkupPromise`,
+    )
+  ) {
     throw new Error("client markup contexts must not emit awaited promises");
   }
 
@@ -382,7 +429,10 @@ Deno.test("server common markup contexts compile with async option", () => {
     target: "server",
   });
 
-  assertStringIncludes(result.code, `await __SER___markup_promise`);
+  assertStringIncludes(
+    result.code,
+    `await Dispatcher.emit({ type: DispatcherCodes.MarkupPromise`,
+  );
 
   compile(result.code, {
     filename: "ServerContexts.svelte",
@@ -403,11 +453,17 @@ Deno.test("lowers multiple yield* expressions inside declaration runes", () => {
 
   const result = transform_markup_effect(source, "Test.svelte");
   const promise_calls =
-    [...result.code.matchAll(/\b__SER___markup_promise\(/g)].length;
+    [...result.code.matchAll(/DispatcherCodes\.MarkupPromise/g)].length;
 
   assertEquals(promise_calls, 2);
-  assertStringIncludes(result.code, `$derived((await __SER___markup_promise`);
-  assertStringIncludes(result.code, `+ (await __SER___markup_promise`);
+  assertStringIncludes(
+    result.code,
+    `$derived((await Dispatcher.emit({ type: DispatcherCodes.MarkupPromise`,
+  );
+  assertStringIncludes(
+    result.code,
+    `+ (await Dispatcher.emit({ type: DispatcherCodes.MarkupPromise`,
+  );
 
   compile(result.code, {
     filename: "Test.svelte",
@@ -422,7 +478,7 @@ Deno.test("rewrites destructured declaration tag initializers", () => {
 
   assertStringIncludes(
     result.code,
-    `{const { value } = await __SER___markup_promise`,
+    `{const { value } = await Dispatcher.emit({ type: DispatcherCodes.MarkupPromise`,
   );
   assertStringIncludes(result.code, `load`);
   if (!result.has_yield) throw new Error("has_yield should be true");
@@ -433,7 +489,7 @@ Deno.test("rewrites multiple declaration tag initializers", () => {
   const result = transform_markup_effect(source, "Test.svelte");
 
   const promise_calls =
-    [...result.code.matchAll(/\b__SER___markup_promise\(/g)].length;
+    [...result.code.matchAll(/DispatcherCodes\.MarkupPromise/g)].length;
 
   assertEquals(promise_calls, 2);
   assertStringIncludes(result.code, `getA`);
@@ -444,7 +500,10 @@ Deno.test("rewrites {#key yield* expr} in key expression", () => {
   const source = `{#key yield* getKey()}<p>content</p>{/key}`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `await __SER___markup_promise`);
+  assertStringIncludes(
+    result.code,
+    `await Dispatcher.emit({ type: DispatcherCodes.MarkupPromise`,
+  );
   assertStringIncludes(result.code, `getKey`);
   if (!result.has_yield) throw new Error("has_yield should be true");
 });
@@ -456,12 +515,12 @@ Deno.test("rewrites onclick event effect expressions as run wrappers", () => {
   const result = transform_markup_effect(source, "Test.svelte");
 
   assertStringIncludes(result.code, `onclick={(event) =>`);
-  assertStringIncludes(result.code, `__SER___markup_run`);
+  assertStringIncludes(result.code, `DispatcherCodes.MarkupRun`);
   assertStringIncludes(
     result.code,
-    `__SER___markup_run(function* () { yield* trackEvent(); });`,
+    `Dispatcher.emit({ type: DispatcherCodes.MarkupRun, fn: function* () { yield* trackEvent(); } });`,
   );
-  if (result.code.includes("void __SER___markup_run")) {
+  if (result.code.includes("void DispatcherCodes.MarkupRun")) {
     throw new Error("event handler wrappers should not emit void");
   }
   assertStringIncludes(result.code, `trackEvent`);
@@ -477,7 +536,7 @@ Deno.test("rewrites event effect expressions with generated event parameter", ()
   assertStringIncludes(result.code, `event.currentTarget.value`);
   assertStringIncludes(
     result.code,
-    `__SER___markup_run(function* () { yield* validate(event.currentTarget.value); });`,
+    `Dispatcher.emit({ type: DispatcherCodes.MarkupRun, fn: function* () { yield* validate(event.currentTarget.value); } });`,
   );
 
   compile(result.code, {
@@ -492,7 +551,7 @@ Deno.test("rewrites onsubmit event effect expressions", () => {
   const result = transform_markup_effect(source, "Test.svelte");
 
   assertStringIncludes(result.code, `onsubmit={(event) =>`);
-  assertStringIncludes(result.code, `__SER___markup_run`);
+  assertStringIncludes(result.code, `DispatcherCodes.MarkupRun`);
   assertStringIncludes(result.code, `yield* submit()`);
 });
 
@@ -501,7 +560,7 @@ Deno.test("rewrites on:click event effect expressions", () => {
   const result = transform_markup_effect(source, "Test.svelte");
 
   assertStringIncludes(result.code, `on:click={(event) =>`);
-  assertStringIncludes(result.code, `__SER___markup_run`);
+  assertStringIncludes(result.code, `DispatcherCodes.MarkupRun`);
   assertStringIncludes(result.code, `yield* save(event)`);
 });
 
@@ -521,7 +580,7 @@ Deno.test("rewrites native-style form validation handlers only when marked with 
   assertStringIncludes(result.code, `oninput={(event) =>`);
   assertStringIncludes(
     result.code,
-    `__SER___markup_run(function* () { yield* createPost.validate(); });`,
+    `Dispatcher.emit({ type: DispatcherCodes.MarkupRun, fn: function* () { yield* createPost.validate(); } });`,
   );
   assertStringIncludes(
     result.code,
@@ -530,7 +589,7 @@ Deno.test("rewrites native-style form validation handlers only when marked with 
   if (!result.has_yield) throw new Error("has_yield should be true");
 });
 
-Deno.test("injects missing event run helper when another markup helper already exists", () => {
+Deno.test("injects dispatcher import when another generated helper import already exists", () => {
   const source = [
     `<script>`,
     `  import { value as __ser_markup_value } from "svelte-effect-runtime/internal/generators";`,
@@ -550,11 +609,11 @@ Deno.test("injects missing event run helper when another markup helper already e
   assertEquals(value_imports, 1);
   assertStringIncludes(
     result.code,
-    `import { run as __SER___markup_run } from "svelte-effect-runtime/internal/generators";`,
+    `import { Dispatcher, DispatcherCodes } from "svelte-effect-runtime/internal/generators";`,
   );
   assertStringIncludes(
     result.code,
-    `__SER___markup_run(function* () { yield* Effect.gen(function* () {`,
+    `Dispatcher.emit({ type: DispatcherCodes.MarkupRun, fn: function* () { yield* Effect.gen(function* () {`,
   );
 
   compile(result.code, {
@@ -1004,7 +1063,7 @@ Deno.test("handles multiple yield* expressions in markup", () => {
 
   /** Count actual helper call sites (not import aliases). */
   const promise_calls =
-    [...result.code.matchAll(/\b__SER___markup_promise\(/g)].length;
+    [...result.code.matchAll(/DispatcherCodes\.MarkupPromise/g)].length;
   if (promise_calls !== 2) {
     throw new Error(`expected 2 promise calls, got ${promise_calls}`);
   }
@@ -1083,7 +1142,7 @@ Deno.test("generates distinct markup cache ids for different files", () => {
     "Post.svelte",
   );
 
-  const pattern = /__SER___markup_promise\((".*?"),/;
+  const pattern = /id: ("[^"]+"),/;
   const first_id = first.code.match(pattern)?.[1];
   const second_id = second.code.match(pattern)?.[1];
 
@@ -1183,7 +1242,7 @@ Deno.test("does not choke on empty yield* brace contents", () => {
   // Regex match on yield* passes, but TS parser fails — should not crash
   if (result.has_yield) {
     // If it detected yield*, the output should still be valid
-    assertStringIncludes(result.code, `__SER___markup_promise`);
+    assertStringIncludes(result.code, `DispatcherCodes.MarkupPromise`);
   }
 });
 
@@ -1191,14 +1250,14 @@ Deno.test("does not choke on template literal expressions", () => {
   const source = `<span>{yield* \`prefix-\${id}\`}</span>`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `__SER___markup_promise`);
+  assertStringIncludes(result.code, `DispatcherCodes.MarkupPromise`);
 });
 
 Deno.test("rewrites {@html yield* expr} in raw HTML insertion", () => {
   const source = `{@html yield* renderMarkup()}`;
   const result = transform_markup_effect(source, "Test.svelte");
 
-  assertStringIncludes(result.code, `__SER___markup_promise`);
+  assertStringIncludes(result.code, `DispatcherCodes.MarkupPromise`);
   assertStringIncludes(result.code, `renderMarkup`);
 });
 

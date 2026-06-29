@@ -8,6 +8,16 @@ Deno.test("generators exports get_dispatcher", async () => {
   assertEquals(typeof mod.get_dispatcher, "function");
 });
 
+Deno.test("generators exports dispatcher event facade", async () => {
+  const mod = await import(
+    "../../../modules/svelte-effect-runtime/src/generators.ts"
+  );
+
+  assertExists(mod.Dispatcher);
+  assertEquals(typeof mod.Dispatcher.emit, "function");
+  assertEquals(mod.DispatcherCodes.MarkupPromise, "MarkupPromise");
+});
+
 Deno.test("generators does NOT export Effect", async () => {
   const mod = await import(
     "../../../modules/svelte-effect-runtime/src/generators.ts"
