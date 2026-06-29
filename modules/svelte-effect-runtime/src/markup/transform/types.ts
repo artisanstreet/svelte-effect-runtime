@@ -37,7 +37,7 @@ export type MarkupTransformTarget = "client" | "server" | "editor";
  * @since 2.5.0
  */
 export interface MarkupTransformOptions {
-  /** Emission target used to choose value reads or awaited promises. */
+  /** Legacy emission target retained for compatibility with older callers. */
   target?: MarkupTransformTarget;
 }
 

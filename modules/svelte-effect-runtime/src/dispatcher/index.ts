@@ -1,7 +1,7 @@
-import { Cause, Effect, Exit, Fiber, Layer, ManagedRuntime } from "effect";
-import { SvelteMap } from "svelte/reactivity";
-import type { Fiber as FiberType } from "effect/Fiber";
 import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime";
+import { Cause, Effect, Exit, Fiber, Layer, ManagedRuntime } from "effect";
+import { createSubscriber } from "svelte/reactivity";
+import type { Fiber as FiberType } from "effect/Fiber";
 
 import { DispatcherDisposedError } from "$/errors.ts";
 import { interrupt_fiber, watch_fiber_exit } from "./fibers.ts";
@@ -54,7 +54,21 @@ export class Dispatcher {
   /** Active fibers keyed by cache id or generated fork id. */
   #fibers = new Map<string, FiberType<unknown, unknown>>();
   /** Reactive value cells keyed by value cache id. */
-  #value_cells = new SvelteMap<string, ValueCell<unknown>>();
+  #value_cells = new Map<string, ValueCell<unknown>>();
+  /** Notifies subscribed Svelte template effects when value cells change. */
+  #notify_value_cells = (): void => {};
+  /** Subscribes the current Svelte tracking scope to value cell changes. */
+  #subscribe_value_cells = createSubscriber((update) => {
+    this.#notify_value_cells = update;
+
+    return () => {
+      if (this.#notify_value_cells !== update) {
+        return;
+      }
+
+      this.#notify_value_cells = (): void => {};
+    };
+  });
   /** Pending promises keyed by promise cache id. */
   #promise_values = new Map<string, Promise<unknown>>();
   /** Current cache key per value block id. */
@@ -212,6 +226,9 @@ export class Dispatcher {
 
     const cache_key = this.#make_value_cache_key(options.id, options.deps);
     const old_key = this.#value_ids.get(options.id);
+
+    this.#subscribe_value_cells();
+
     const cell = this.#value_cells.get(cache_key);
 
     if (old_key !== undefined && old_key !== cache_key) {
@@ -379,7 +396,7 @@ export class Dispatcher {
     }
 
     this.#fibers.clear();
-    this.#value_cells.clear();
+    this.#clear_value_cells();
     this.#promise_values.clear();
     this.#value_ids.clear();
     this.#promise_ids.clear();
@@ -450,7 +467,7 @@ export class Dispatcher {
         return;
       }
 
-      this.#value_cells.set(cache_key, {
+      this.#set_value_cell(cache_key, {
         status: "pending",
         fiber,
       });
@@ -528,7 +545,7 @@ export class Dispatcher {
       return;
     }
 
-    this.#value_cells.delete(cache_key);
+    this.#delete_value_cell(cache_key);
   }
 
   #complete_fiber(
@@ -551,7 +568,7 @@ export class Dispatcher {
       return;
     }
 
-    this.#value_cells.set(cache_key, {
+    this.#set_value_cell(cache_key, {
       status: "success",
       value,
     });
@@ -566,10 +583,37 @@ export class Dispatcher {
       return;
     }
 
-    this.#value_cells.set(cache_key, {
+    this.#set_value_cell(cache_key, {
       status: "failure",
       error,
     });
+  }
+
+  #set_value_cell(
+    cache_key: string,
+    cell: ValueCell<unknown>,
+  ): void {
+    this.#value_cells.set(cache_key, cell);
+    this.#notify_value_cells();
+  }
+
+  #delete_value_cell(cache_key: string): void {
+    const deleted = this.#value_cells.delete(cache_key);
+
+    if (!deleted) {
+      return;
+    }
+
+    this.#notify_value_cells();
+  }
+
+  #clear_value_cells(): void {
+    if (this.#value_cells.size === 0) {
+      return;
+    }
+
+    this.#value_cells.clear();
+    this.#notify_value_cells();
   }
 
   #is_current_fiber(

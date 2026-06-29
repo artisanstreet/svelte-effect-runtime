@@ -14,7 +14,6 @@ import type {
   MarkupCandidate,
   MarkupHelperBindings,
   MarkupNameAllocator,
-  MarkupTransformTarget,
   PendingRelocation,
   Replacement,
   TagKind,
@@ -34,7 +33,6 @@ export function emit_replacements(
   effect_context: EffectCallbackRewriteContext,
   helper_bindings: MarkupHelperBindings,
   name_allocator: MarkupNameAllocator,
-  target: MarkupTransformTarget,
 ): Replacement[] {
   return classified.map(({ candidate, kind }) =>
     emit_replacement(
@@ -43,7 +41,6 @@ export function emit_replacements(
       effect_context,
       helper_bindings,
       name_allocator,
-      target,
     )
   );
 }
@@ -54,7 +51,6 @@ function emit_replacement(
   effect_context: EffectCallbackRewriteContext,
   helper_bindings: MarkupHelperBindings,
   name_allocator: MarkupNameAllocator,
-  target: MarkupTransformTarget,
 ): Replacement {
   const normalized = normalize_effect_callback_yields(
     candidate.expr_text,
@@ -67,7 +63,6 @@ function emit_replacement(
   const id = make_cache_id(candidate);
   const id_text = JSON.stringify(id);
   const helper_name = make_helper_name(candidate, name_allocator);
-  const use_value_read = target !== "server";
 
   let replacement_text: string;
   let helpers: HelperDeclaration[];
@@ -87,28 +82,22 @@ function emit_replacement(
   } else if (kind === "render") {
     const effect = make_effect_helper(normalized_candidate, helper_name);
 
-    replacement_text = use_value_read
-      ? emit_render_value_expression(id_text, effect, helper_bindings)
-      : emit_render_expression(
-        id_text,
-        effect,
-        candidate,
-        helper_bindings,
-      );
+    replacement_text = emit_render_expression(
+      id_text,
+      effect,
+      candidate,
+      helper_bindings,
+    );
     helpers = [...normalized.helpers, effect.helper];
   } else if (kind === "render_argument") {
     const effect = make_effect_helper(normalized_candidate, helper_name);
 
-    replacement_text = use_value_read
-      ? emit_value_expression(id_text, effect, helper_bindings)
-      : emit_await_expression(id_text, effect, helper_bindings);
+    replacement_text = emit_await_expression(id_text, effect, helper_bindings);
     helpers = [...normalized.helpers, effect.helper];
   } else if (kind === "each") {
     const effect = make_effect_helper(normalized_candidate, helper_name);
 
-    replacement_text = use_value_read
-      ? emit_value_expression(id_text, effect, helper_bindings, "[]")
-      : emit_await_expression(id_text, effect, helper_bindings);
+    replacement_text = emit_await_expression(id_text, effect, helper_bindings);
     helpers = [...normalized.helpers, effect.helper];
   } else if (kind === "event") {
     const event = make_event_handler(normalized_candidate, helper_bindings);
@@ -123,9 +112,7 @@ function emit_replacement(
   } else {
     const effect = make_effect_helper(normalized_candidate, helper_name);
 
-    replacement_text = use_value_read
-      ? emit_value_expression(id_text, effect, helper_bindings)
-      : emit_await_expression(id_text, effect, helper_bindings);
+    replacement_text = emit_await_expression(id_text, effect, helper_bindings);
     helpers = [...normalized.helpers, effect.helper];
   }
 
@@ -186,23 +173,6 @@ function emit_promise_expression(
   return `${helper_bindings.dispatcher}.emit({ ${properties.join(", ")} })`;
 }
 
-function emit_value_expression(
-  id_text: string,
-  effect: EffectHelper,
-  helper_bindings: MarkupHelperBindings,
-  fallback = "undefined",
-): string {
-  const properties = [
-    `type: ${helper_bindings.codes}.Markup.Value`,
-    `id: ${id_text}`,
-    `deps: ${effect.deps_text}`,
-    `fallback: ${fallback}`,
-    `fn: () => ${effect.call}`,
-  ];
-
-  return `${helper_bindings.dispatcher}.emit({ ${properties.join(", ")} })`;
-}
-
 function emit_render_expression(
   id_text: string,
   effect: EffectHelper,
@@ -216,14 +186,6 @@ function emit_render_expression(
   }
 
   return `await ${expression}`;
-}
-
-function emit_render_value_expression(
-  id_text: string,
-  effect: EffectHelper,
-  helper_bindings: MarkupHelperBindings,
-): string {
-  return `${emit_value_expression(id_text, effect, helper_bindings)}?.()`;
 }
 
 function emit_await_expression(

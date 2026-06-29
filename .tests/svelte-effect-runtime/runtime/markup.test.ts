@@ -264,7 +264,7 @@ Deno.test("preserves declaration rune placement while lowering yield*", () => {
   });
 });
 
-Deno.test("client declaration tags lower to synchronous value reads", () => {
+Deno.test("client declaration tags lower to awaited promise reads", () => {
   const source = [
     `<script>`,
     `  function getPublicationRemote() {}`,
@@ -280,20 +280,21 @@ Deno.test("client declaration tags lower to synchronous value reads", () => {
 
   assertStringIncludes(
     result.code,
-    `$derived(Dispatcher.emit({ type: Code.Markup.Value`,
+    `$derived(await Dispatcher.emit({ type: Code.Markup.Promise`,
   );
 
-  if (result.code.includes(`$derived(await`)) {
-    throw new Error("client declaration tags must not emit async derived code");
+  if (result.code.includes(`Code.Markup.Value`)) {
+    throw new Error("client declaration tags must not emit value reads");
   }
 
   compile(result.code, {
     filename: "Publication.svelte",
     generate: "client",
+    experimental: { async: true },
   });
 });
 
-Deno.test("editor declaration tags lower to synchronous value reads", () => {
+Deno.test("editor declaration tags lower to awaited promise reads", () => {
   const source = [
     `<script>`,
     `  function getPublicationRemote() {}`,
@@ -309,16 +310,17 @@ Deno.test("editor declaration tags lower to synchronous value reads", () => {
 
   assertStringIncludes(
     result.code,
-    `$derived(Dispatcher.emit({ type: Code.Markup.Value`,
+    `$derived(await Dispatcher.emit({ type: Code.Markup.Promise`,
   );
 
-  if (result.code.includes(`$derived(await`)) {
-    throw new Error("editor declaration tags must not emit async derived code");
+  if (result.code.includes(`Code.Markup.Value`)) {
+    throw new Error("editor declaration tags must not emit value reads");
   }
 
   compile(result.code, {
     filename: "Publication.svelte",
     generate: "client",
+    experimental: { async: true },
   });
 });
 
@@ -348,30 +350,24 @@ Deno.test("server declaration tags lower to awaited promise reads", () => {
   });
 });
 
-Deno.test("client render tags use optional value calls", () => {
+Deno.test("client render tags use awaited promise calls", () => {
   const source = `{@render yield* getSnippet()}`;
   const result = transform_markup_effect(source, "RenderClient.svelte", {
     target: "client",
   });
 
-  assertStringIncludes(result.code, `Code.Markup.Value`);
-  assertStringIncludes(result.code, `?.()`);
-
-  if (
-    result.code.includes(
-      `await Dispatcher.emit({ type: Code.Markup.Promise`,
-    )
-  ) {
-    throw new Error("client render tags must not emit awaited promises");
-  }
+  assertStringIncludes(result.code, `await Dispatcher.emit`);
+  assertStringIncludes(result.code, `Code.Markup.Promise`);
+  assertStringIncludes(result.code, `)()`);
 
   compile(result.code, {
     filename: "RenderClient.svelte",
     generate: "client",
+    experimental: { async: true },
   });
 });
 
-Deno.test("client common markup contexts compile without async option", () => {
+Deno.test("client common markup contexts compile with async option", () => {
   const source = [
     `<script>`,
     `  function hasAccess() {}`,
@@ -393,17 +389,15 @@ Deno.test("client common markup contexts compile without async option", () => {
     target: "client",
   });
 
-  if (
-    result.code.includes(
-      `await Dispatcher.emit({ type: Code.Markup.Promise`,
-    )
-  ) {
-    throw new Error("client markup contexts must not emit awaited promises");
-  }
+  assertStringIncludes(
+    result.code,
+    `await Dispatcher.emit({ type: Code.Markup.Promise`,
+  );
 
   compile(result.code, {
     filename: "ClientContexts.svelte",
     generate: "client",
+    experimental: { async: true },
   });
 });
 

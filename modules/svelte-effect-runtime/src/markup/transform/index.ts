@@ -49,8 +49,6 @@ export function transform_markup_effect(
     return { code: content, has_yield: false };
   }
 
-  const target = options.target ?? "server";
-
   /** Find all brace expressions containing yield* and replace with placeholders. */
   const work = sanitize_markup(content, filename);
   const effect_context = collect_effect_callback_bindings(content);
@@ -89,7 +87,6 @@ export function transform_markup_effect(
     effect_context,
     helper_context.bindings,
     helper_context.name_allocator,
-    target,
   );
   const helpers = replacements.flatMap((replacement) =>
     replacement.helpers ?? []

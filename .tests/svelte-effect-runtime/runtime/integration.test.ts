@@ -255,7 +255,7 @@ Deno.test("vite plugin lowers svelte yield through its transform hook", async ()
   }
 });
 
-Deno.test("vite plugin emits client values and server promises", async () => {
+Deno.test("vite plugin emits client and server promises", async () => {
   const plugins = effect();
   const plugin = plugins.find((candidate) =>
     candidate.name === "svelte-effect-runtime:svelte-transform"
@@ -280,18 +280,17 @@ Deno.test("vite plugin emits client values and server promises", async () => {
     { ssr: true },
   );
 
-  assertStringIncludes(client.code, `Code.Markup.Value`);
+  assertStringIncludes(
+    client.code,
+    `await Dispatcher.emit({ type: Code.Markup.Promise`,
+  );
   assertStringIncludes(
     server.code,
     `await Dispatcher.emit({ type: Code.Markup.Promise`,
   );
 
-  if (
-    client.code.includes(
-      `await Dispatcher.emit({ type: Code.Markup.Promise`,
-    )
-  ) {
-    throw new Error("client transform should not emit awaited promises");
+  if (client.code.includes(`Code.Markup.Value`)) {
+    throw new Error("client transform should not emit value reads");
   }
 });
 
