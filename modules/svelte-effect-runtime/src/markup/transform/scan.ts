@@ -450,7 +450,7 @@ function analyze_event_yield(
   const event = strip_arrow_function(inner);
   const analysis = analyze_event_body_yield_star(event.body);
   const generated_run = new RegExp(
-    `${HELPERS.dispatcher}(?:_\\d+)?\\.emit\\(\\{\\s*type:\\s*${HELPERS.codes}(?:_\\d+)?\\.MarkupRun`,
+    `${HELPERS.dispatcher}(?:_\\d+)?\\.emit\\(\\{\\s*type:\\s*${HELPERS.codes}(?:_\\d+)?\\.Markup\\.Run`,
   );
 
   if (generated_run.test(event.body)) {

@@ -446,7 +446,7 @@ import type {
 } from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
 import { promise } from "__RUNTIME__/modules/svelte-effect-runtime/src/markup/promise.ts";
 import { run } from "__RUNTIME__/modules/svelte-effect-runtime/src/markup/run.ts";
-import { Dispatcher, DispatcherCodes } from "__RUNTIME__/modules/svelte-effect-runtime/src/generators.ts";
+import { Dispatcher, Code } from "__RUNTIME__/modules/svelte-effect-runtime/src/generators.ts";
 
 type Equal<Left, Right> =
   (<Type>() => Type extends Left ? 1 : 2) extends
@@ -621,7 +621,7 @@ async function check_generated_markup_helpers() {
   const id: string = first.id;
   const likes: number = first.likes;
   const emitted = await Dispatcher.emit({
-    type: DispatcherCodes.MarkupPromise,
+    type: Code.Markup.Promise,
     id: "posts",
     deps: [],
     fn: function* () {
@@ -630,7 +630,7 @@ async function check_generated_markup_helpers() {
   });
   const emitted_id: string = emitted[0].id;
   const emitted_value = Dispatcher.emit({
-    type: DispatcherCodes.MarkupValue,
+    type: Code.Markup.Value,
     id: "posts-value",
     deps: [],
     fallback: posts,
@@ -648,7 +648,7 @@ async function check_generated_markup_helpers() {
   });
 
   const emitted_count: number = await Dispatcher.emit({
-    type: DispatcherCodes.MarkupRun,
+    type: Code.Markup.Run,
     fn: function* () {
       return yield* UpvotePost(id);
     },

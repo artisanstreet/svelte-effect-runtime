@@ -1,4 +1,4 @@
 export const HELPERS = {
-  codes: "DispatcherCodes",
+  codes: "Code",
   dispatcher: "Dispatcher",
 } as const;

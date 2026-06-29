@@ -163,7 +163,7 @@ function make_event_handler(
   return {
     expr_text,
     text:
-      `(event) => { ${helper_bindings.dispatcher}.emit({ type: ${helper_bindings.codes}.MarkupRun, fn: function* () { ${expr_text}; } }); }`,
+      `(event) => { ${helper_bindings.dispatcher}.emit({ type: ${helper_bindings.codes}.Markup.Run, fn: function* () { ${expr_text}; } }); }`,
   };
 }
 
@@ -175,7 +175,7 @@ function emit_promise_expression(
   options?: string,
 ): string {
   const properties = [
-    `type: ${helper_bindings.codes}.MarkupPromise`,
+    `type: ${helper_bindings.codes}.Markup.Promise`,
     `id: ${id_text}`,
     `deps: ${effect.deps_text}`,
     `fn: () => ${effect.call}`,
@@ -193,7 +193,7 @@ function emit_value_expression(
   fallback = "undefined",
 ): string {
   const properties = [
-    `type: ${helper_bindings.codes}.MarkupValue`,
+    `type: ${helper_bindings.codes}.Markup.Value`,
     `id: ${id_text}`,
     `deps: ${effect.deps_text}`,
     `fallback: ${fallback}`,

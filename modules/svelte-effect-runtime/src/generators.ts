@@ -10,11 +10,7 @@
  * @since 2.0.0
  * @internal
  */
-export {
-  Dispatcher,
-  DispatcherCodes,
-  get_dispatcher,
-} from "$/generated/dispatcher.ts";
+export { Code, Dispatcher, get_dispatcher } from "$/generated/dispatcher.ts";
 export type {
   DispatcherEvent,
   MarkupPromiseEvent,

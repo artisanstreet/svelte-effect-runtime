@@ -75,8 +75,8 @@ Deno.test("full pipeline: script lowered output feeds into markup pass", () => {
 
   const result = transform_markup_effect(full_source, "Test.svelte");
 
-  assertStringIncludes(result.code, `DispatcherCodes.MarkupPromise`);
-  assertStringIncludes(result.code, `DispatcherCodes.MarkupRun`);
+  assertStringIncludes(result.code, `Code.Markup.Promise`);
+  assertStringIncludes(result.code, `Code.Markup.Run`);
   assertStringIncludes(result.code, `renderDate`);
   assertStringIncludes(result.code, `hasAccess`);
   assertStringIncludes(result.code, `handleClick`);
@@ -149,7 +149,7 @@ Deno.test("direct svelte transform accepts optional filename", () => {
 
   const result = transform_svelte_effect(source);
 
-  assertStringIncludes(result.code, `DispatcherCodes.MarkupPromise`);
+  assertStringIncludes(result.code, `Code.Markup.Promise`);
 });
 
 Deno.test("vite plugin keeps runtime package transformable in SSR builds", () => {
@@ -242,7 +242,7 @@ Deno.test("vite plugin lowers svelte yield through its transform hook", async ()
 
   assertStringIncludes(result.code, `<script lang="ts">`);
   assertStringIncludes(result.code, `__SER___program`);
-  assertStringIncludes(result.code, `DispatcherCodes.MarkupRun`);
+  assertStringIncludes(result.code, `Code.Markup.Run`);
 
   parse(result.code, { filename: "Test.svelte" });
 
@@ -280,15 +280,15 @@ Deno.test("vite plugin emits client values and server promises", async () => {
     { ssr: true },
   );
 
-  assertStringIncludes(client.code, `DispatcherCodes.MarkupValue`);
+  assertStringIncludes(client.code, `Code.Markup.Value`);
   assertStringIncludes(
     server.code,
-    `await Dispatcher.emit({ type: DispatcherCodes.MarkupPromise`,
+    `await Dispatcher.emit({ type: Code.Markup.Promise`,
   );
 
   if (
     client.code.includes(
-      `await Dispatcher.emit({ type: DispatcherCodes.MarkupPromise`,
+      `await Dispatcher.emit({ type: Code.Markup.Promise`,
     )
   ) {
     throw new Error("client transform should not emit awaited promises");

@@ -5,8 +5,8 @@ import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime
 
 import { DispatcherDisposedError } from "$/errors.ts";
 import { interrupt_fiber, watch_fiber_exit } from "./fibers.ts";
-import { DispatcherCodes } from "./types.ts";
 import { hash_deps } from "./deps.ts";
+import { Code } from "./types.ts";
 import type {
   DispatcherEvent,
   Dispose,
@@ -17,7 +17,7 @@ import type {
   ValueOptions,
 } from "./types.ts";
 
-export { DispatcherCodes } from "./types.ts";
+export { Code } from "./types.ts";
 export type { Dispose, PromiseOptions, ValueOptions } from "./types.ts";
 
 type ValueCell<A> =
@@ -120,7 +120,7 @@ export class Dispatcher {
    * @example
    * ```ts
    * const value = dispatcher.emit({
-   *   type: DispatcherCodes.MarkupValue,
+   *   type: Code.Markup.Value,
    *   id: "Component.svelte:1:2",
    *   deps: [],
    *   fallback: undefined,
@@ -140,13 +140,13 @@ export class Dispatcher {
   emit<A, F>(event: DispatcherEvent<A, F>): A | F | Promise<A>;
   emit<A, F>(event: DispatcherEvent<A, F>): A | F | Promise<A> {
     switch (event.type) {
-      case DispatcherCodes.MarkupValue:
+      case Code.Markup.Value:
         return this.#emit_markup_value(event);
 
-      case DispatcherCodes.MarkupPromise:
+      case Code.Markup.Promise:
         return this.#emit_markup_promise(event);
 
-      case DispatcherCodes.MarkupRun:
+      case Code.Markup.Run:
         return this.#emit_markup_run(event);
     }
   }

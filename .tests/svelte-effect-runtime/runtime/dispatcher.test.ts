@@ -1,8 +1,8 @@
 import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import {
+  Code,
   Dispatcher,
-  DispatcherCodes,
   get_dispatcher,
   reset_dispatcher,
 } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
@@ -693,7 +693,7 @@ Deno.test("emit runs markup event-handler effects", async () => {
   const d = make_dispatcher();
 
   const result = await d.emit({
-    type: DispatcherCodes.MarkupRun,
+    type: Code.Markup.Run,
     fn: function* () {
       return yield* Effect.succeed(42);
     },
@@ -707,7 +707,7 @@ Deno.test("emit returns markup value fallback during SSR", () => {
   let ran = false;
 
   const result = d.emit({
-    type: DispatcherCodes.MarkupValue,
+    type: Code.Markup.Value,
     id: "emit-value",
     deps: [],
     fallback: "fallback",
@@ -727,7 +727,7 @@ Deno.test("emit returns markup promise fallback during SSR", async () => {
   let ran = false;
 
   const result = await d.emit({
-    type: DispatcherCodes.MarkupPromise,
+    type: Code.Markup.Promise,
     id: "emit-promise",
     deps: [],
     ssr_fallback: "fallback",

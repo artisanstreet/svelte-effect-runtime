@@ -15,7 +15,7 @@ Deno.test("generators exports dispatcher event facade", async () => {
 
   assertExists(mod.Dispatcher);
   assertEquals(typeof mod.Dispatcher.emit, "function");
-  assertEquals(mod.DispatcherCodes.MarkupPromise, "MarkupPromise");
+  assertEquals(mod.Code.Markup.Promise, "MarkupPromise");
 });
 
 Deno.test("generators does NOT export Effect", async () => {

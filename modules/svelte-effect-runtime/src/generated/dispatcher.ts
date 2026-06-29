@@ -8,7 +8,7 @@ import type {
   MarkupValueEvent,
 } from "$/dispatcher.ts";
 
-export { DispatcherCodes } from "$/dispatcher.ts";
+export { Code } from "$/dispatcher.ts";
 export type {
   DispatcherEvent,
   MarkupPromiseEvent,
@@ -24,7 +24,7 @@ export type {
  * @example
  * ```ts
  * const value = Dispatcher.emit({
- *   type: DispatcherCodes.MarkupValue,
+ *   type: Code.Markup.Value,
  *   id: "Component.svelte:1:2",
  *   deps: [],
  *   fallback: undefined,
@@ -44,7 +44,7 @@ export class Dispatcher {
    * @example
    * ```ts
    * const promise = Dispatcher.emit({
-   *   type: DispatcherCodes.MarkupPromise,
+   *   type: Code.Markup.Promise,
    *   id: "Component.svelte:1:2",
    *   deps: [],
    *   fn: function* () {

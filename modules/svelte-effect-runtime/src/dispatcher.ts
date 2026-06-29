@@ -1,6 +1,6 @@
 export {
+  Code,
   Dispatcher,
-  DispatcherCodes,
   get_dispatcher,
   reset_dispatcher,
 } from "./dispatcher/index.ts";

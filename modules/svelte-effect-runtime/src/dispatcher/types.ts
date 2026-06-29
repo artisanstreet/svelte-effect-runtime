@@ -5,16 +5,18 @@ import type { Effect } from "effect";
  *
  * @example
  * ```ts
- * const type = DispatcherCodes.MarkupPromise;
+ * const type = Code.Markup.Promise;
  * ```
  *
  * @since 3.3.0
  * @internal
  */
-export const DispatcherCodes = {
-  MarkupPromise: "MarkupPromise",
-  MarkupRun: "MarkupRun",
-  MarkupValue: "MarkupValue",
+export const Code = {
+  Markup: {
+    Promise: "MarkupPromise",
+    Run: "MarkupRun",
+    Value: "MarkupValue",
+  },
 } as const;
 
 /**
@@ -105,7 +107,7 @@ export interface PromiseOptions<A> {
  * @example
  * ```ts
  * const event: MarkupValueEvent<number, undefined> = {
- *   type: DispatcherCodes.MarkupValue,
+ *   type: Code.Markup.Value,
  *   id: "Component.svelte:1:2",
  *   deps: [],
  *   fallback: undefined,
@@ -120,7 +122,7 @@ export interface PromiseOptions<A> {
  */
 export interface MarkupValueEvent<A, F> {
   /** Dispatcher code identifying a markup value read. */
-  type: typeof DispatcherCodes.MarkupValue;
+  type: typeof Code.Markup.Value;
   /** Stable identifier generated from the expression's source position. */
   id: string;
   /** Reactive dependency array captured from free identifiers. */
@@ -138,7 +140,7 @@ export interface MarkupValueEvent<A, F> {
  * @example
  * ```ts
  * const event: MarkupPromiseEvent<number> = {
- *   type: DispatcherCodes.MarkupPromise,
+ *   type: Code.Markup.Promise,
  *   id: "Component.svelte:1:2",
  *   deps: [],
  *   fn: function* () {
@@ -152,7 +154,7 @@ export interface MarkupValueEvent<A, F> {
  */
 export interface MarkupPromiseEvent<A> {
   /** Dispatcher code identifying a markup promise read. */
-  type: typeof DispatcherCodes.MarkupPromise;
+  type: typeof Code.Markup.Promise;
   /** Stable identifier generated from the expression's source position. */
   id: string;
   /** Reactive dependency array captured from free identifiers. */
@@ -171,7 +173,7 @@ export interface MarkupPromiseEvent<A> {
  * @example
  * ```ts
  * const event: MarkupRunEvent<void> = {
- *   type: DispatcherCodes.MarkupRun,
+ *   type: Code.Markup.Run,
  *   fn: function* () {
  *     yield* Effect.void;
  *   },
@@ -183,7 +185,7 @@ export interface MarkupPromiseEvent<A> {
  */
 export interface MarkupRunEvent<A> {
   /** Dispatcher code identifying a markup event-handler run. */
-  type: typeof DispatcherCodes.MarkupRun;
+  type: typeof Code.Markup.Run;
   /** Generator function that yields the effect to run. */
   fn: () => Effect.gen.Return<A, unknown, unknown>;
 }
@@ -194,7 +196,7 @@ export interface MarkupRunEvent<A> {
  * @example
  * ```ts
  * const event: DispatcherEvent<number, undefined> = {
- *   type: DispatcherCodes.MarkupValue,
+ *   type: Code.Markup.Value,
  *   id: "Component.svelte:1:2",
  *   deps: [],
  *   fallback: undefined,
