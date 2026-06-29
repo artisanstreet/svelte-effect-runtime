@@ -1,14 +1,7 @@
-import {
-  create_remote_http_error,
-  create_remote_validation_error,
-} from "$/remote/shared.ts";
+import { create_remote_http_error } from "$/remote/shared.ts";
 import type { RemoteFailure } from "$/remote/shared.ts";
 
-import {
-  decode_remote_error,
-  is_decoded_remote_failure,
-  is_validation_body,
-} from "./failures.ts";
+import { decode_remote_error, is_decoded_remote_failure } from "./failures.ts";
 
 /**
  * Decodes a failed fetch response into the runtime failure model.
@@ -30,10 +23,6 @@ export async function decode_response_failure<ErrorType = never>(
 
   if (is_decoded_remote_failure(decoded)) {
     return decoded;
-  }
-
-  if (response.status === 400 && is_validation_body(body)) {
-    return create_remote_validation_error(body.issues, body, response.status);
   }
 
   return create_remote_http_error(response.status, body);

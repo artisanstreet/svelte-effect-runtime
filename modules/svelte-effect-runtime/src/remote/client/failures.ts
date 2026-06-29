@@ -1,10 +1,9 @@
 import {
   create_remote_http_error,
   create_remote_transport_error,
-  create_remote_validation_error,
   is_serialized_remote_failure_envelope,
 } from "$/remote/shared.ts";
-import type { FormIssue, RemoteFailure } from "$/remote/shared.ts";
+import type { RemoteFailure } from "$/remote/shared.ts";
 import { RemoteErrorDecodeError } from "$/errors.ts";
 import { parse } from "devalue";
 
@@ -99,28 +98,6 @@ export function is_decoded_remote_failure(
 }
 
 /**
- * Checks whether a response body represents SvelteKit validation issues.
- *
- * @example
- * ```ts
- * if (is_validation_body(body)) return body.issues;
- * ```
- *
- * @since 2.0.0
- * @param value - Value to inspect.
- * @returns Whether the value contains a form issue list.
- */
-export function is_validation_body(
-  value: unknown,
-): value is { issues: readonly FormIssue[] } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    Array.isArray((value as { issues?: unknown }).issues)
-  );
-}
-
-/**
  * Normalizes native thrown values into the runtime's remote failure model.
  *
  * @example
@@ -141,10 +118,6 @@ export function normalize_native_error<ErrorType = never>(
 
   if (is_decoded_remote_failure(decoded)) {
     return decoded;
-  }
-
-  if (status === 400 && is_validation_body(body)) {
-    return create_remote_validation_error(body.issues, body, status);
   }
 
   if (status !== undefined) {

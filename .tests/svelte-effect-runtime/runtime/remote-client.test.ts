@@ -59,6 +59,21 @@ Deno.test("remote failure decoder keeps envelopes with plain messages", () => {
   assertEquals(error, domain_error);
 });
 
+Deno.test("native SvelteKit validation errors stay HTTP errors", () => {
+  const body = {
+    message: "Bad Request",
+    issues: [{ message: "missing", path: ["title"] }],
+  };
+  const error = normalize_native_error({
+    body,
+    status: 400,
+  });
+
+  assertEquals((error as { _tag?: string })._tag, "RemoteHttpError");
+  assertEquals((error as { status?: number }).status, 400);
+  assertEquals((error as { body?: unknown }).body, body);
+});
+
 Deno.test("remote query adapter wraps network failures as transport errors", async () => {
   const native = {
     load: () => Promise.reject(new Error("network")),
@@ -133,14 +148,16 @@ Deno.test("remote query adapter awaits modern thenable resources before legacy r
   assertEquals(run_called, false);
 });
 
-Deno.test("remote query adapter maps validation responses to validation errors", async () => {
+Deno.test("remote query adapter maps SvelteKit app errors to HTTP errors", async () => {
+  const body = {
+    message: "Bad Request",
+    issues: [{ message: "missing", path: ["title"] }],
+  };
   const native = {
     load: () =>
       Promise.resolve(
         new Response(
-          JSON.stringify({
-            issues: [{ message: "missing", path: ["title"] }],
-          }),
+          JSON.stringify(body),
           { status: 400 },
         ),
       ),
@@ -150,8 +167,9 @@ Deno.test("remote query adapter maps validation responses to validation errors",
 
   const error = await assertRejects(() => Effect.runPromise(query(undefined)));
 
-  assertEquals((error as { _tag?: string })._tag, "RemoteValidationError");
+  assertEquals((error as { _tag?: string })._tag, "RemoteHttpError");
   assertEquals((error as { status?: number }).status, 400);
+  assertEquals((error as { body?: unknown }).body, body);
 });
 
 Deno.test("remote query adapter maps plain http failures to http errors", async () => {

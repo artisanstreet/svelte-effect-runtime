@@ -16,8 +16,8 @@ SvelteKit's transport-level failures:
 ```ts
 type RemoteFailure<Error = unknown> =
   | Error                      // your tagged domain error, surfaced as-is
-  | RemoteValidationError      // schema or form validation rejected the payload
-  | RemoteHttpError            // HTTP response was not a remote envelope
+  | RemoteValidationError      // SER form validation rejected the payload
+  | RemoteHttpError            // SvelteKit HTTP/App.Error response
   | RemoteTransportError;      // network or decode failure (no HTTP status)
 ```
 
@@ -73,6 +73,11 @@ interface FormError<SchemaType = unknown> {
 Yield `invalid.<field>(message)` or `invalid.form(message)` inside a
 `Form` handler to produce one. The runtime serialises the issues onto
 the form's reactive `fields.X.issues()` accessor on the client.
+
+Remote function schema validation follows SvelteKit's native behavior:
+the server calls `handleValidationError`, defaults to `{ message: "Bad Request" }`,
+and the client sees a `RemoteHttpError` whose `body` is that `App.Error`
+object.
 
 ## Deprecated: `RemoteDomainError`
 
