@@ -2,11 +2,11 @@
 
 Language server for Svelte Effect Runtime syntax in Svelte files.
 
-This package ships the compiled Node language server used by the VS Code and Zed
-extensions. It includes the bundled server entrypoint, SER runtime assets, and
-the Node dependencies the editor integrations need at runtime.
+This package ships the compiled Node language server used by editor
+integrations. It includes the bundled server entrypoint, SER runtime assets, and
+the Node dependencies those integrations need at runtime.
 
-Zed installs this package from npm and starts the compiled server directly:
+Editor integrations can start the compiled server directly:
 
 ```sh
 node ./node_modules/svelte-effect-runtime-language-server/.dist/server.cjs --stdio

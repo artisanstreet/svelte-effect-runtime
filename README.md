@@ -47,6 +47,5 @@ Write effectful code without any hassle. Seriously!
 | [`svelte-effect-runtime`](./modules/svelte-effect-runtime)                                 | Core module that houses the Vite plugin to enable effectful execution.    |
 | [`svelte-effect-runtime-language-server`](./modules/svelte-effect-runtime-language-server) | Standalone npm package for the SER language server used by editor tools.  |
 | [`svelte-effect-runtime-vsix`](./modules/svelte-effect-runtime-vsix)                       | VS Code extension that launches the SER language server for Svelte files. |
-| [`svelte-effect-runtime-zed`](./modules/svelte-effect-runtime-zed)                         | Zed extension that installs and runs the SER language server from npm.    |
 
 Visit the **[docs](https://ser.barekey.dev)** for guides and API reference.

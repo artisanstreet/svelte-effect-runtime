@@ -22,7 +22,7 @@ const is_main_module = invoked_module_path === current_module_path;
 if (is_main_module) {
   void bootstrap_language_server()
     .then(() => {
-      startServer({ connection: create_zed_compatible_connection() });
+      startServer({ connection: create_language_server_connection() });
     })
     .catch((error) => {
       console.error(error);
@@ -30,7 +30,7 @@ if (is_main_module) {
     });
 }
 
-function create_zed_compatible_connection(): Connection {
+function create_language_server_connection(): Connection {
   if (process.argv.includes("--stdio")) {
     console.log = (...args) => {
       console.warn(...args);
