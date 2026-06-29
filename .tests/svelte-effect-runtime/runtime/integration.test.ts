@@ -44,6 +44,35 @@ async function run_svelte_transform(
   throw new Error("svelte transform plugin should expose a transform hook");
 }
 
+async function collect_transform_warnings(
+  plugin: ReturnType<typeof effect>[number],
+  source: string,
+  id: string,
+): Promise<string[]> {
+  const warnings: string[] = [];
+  const transform = plugin.transform;
+
+  if (typeof transform !== "function") {
+    throw new Error("guard plugin should expose a transform hook");
+  }
+
+  await transform.call(
+    {
+      warn(warning: string | { message?: string }) {
+        warnings.push(
+          typeof warning === "string"
+            ? warning
+            : warning.message ?? String(warning),
+        );
+      },
+    } as never,
+    source,
+    id,
+  );
+
+  return warnings;
+}
+
 /** Full pipeline. */
 
 Deno.test("full pipeline: script lowered output feeds into markup pass", () => {
@@ -214,6 +243,73 @@ Deno.test("vite plugin keeps runtime package transformable in SSR builds", () =>
     "svelte",
     "svelte-effect-runtime",
   ]);
+});
+
+Deno.test("vite plugin warns when SER files use reserved generated helper names", async () => {
+  const plugins = effect();
+  const guard_index = plugins.findIndex((candidate) =>
+    candidate.name === "svelte-effect-runtime:reserved-helper-guard"
+  );
+  const transform_index = plugins.findIndex((candidate) =>
+    candidate.name === "svelte-effect-runtime:svelte-transform"
+  );
+  const plugin = plugins[guard_index];
+
+  if (!plugin) {
+    throw new Error("reserved helper guard plugin should exist");
+  }
+
+  if (guard_index >= transform_index) {
+    throw new Error("reserved helper guard should run before the transform");
+  }
+
+  const source = [
+    `<script>`,
+    `  const Dispatcher = "local dispatcher";`,
+    `  function loadValue() {}`,
+    `</script>`,
+    `{#each [1] as Code}`,
+    `  <p>{Code}: {yield* loadValue()}</p>`,
+    `{/each}`,
+  ].join("\n");
+
+  const warnings = await collect_transform_warnings(
+    plugin,
+    source,
+    "C:/src/routes/Test.svelte",
+  );
+
+  assertEquals(warnings.length, 1);
+  assertStringIncludes(
+    warnings[0],
+    "`Dispatcher` and `Code` are reserved for generated markup helpers",
+  );
+});
+
+Deno.test("vite plugin reserved helper guard ignores ordinary Svelte files", async () => {
+  const plugin = effect().find((candidate) =>
+    candidate.name === "svelte-effect-runtime:reserved-helper-guard"
+  );
+
+  if (!plugin) {
+    throw new Error("reserved helper guard plugin should exist");
+  }
+
+  const source = [
+    `<script>`,
+    `  const Dispatcher = "plain";`,
+    `  const Code = "plain";`,
+    `</script>`,
+    `<p>{Code}</p>`,
+  ].join("\n");
+
+  const warnings = await collect_transform_warnings(
+    plugin,
+    source,
+    "C:/src/routes/Test.svelte",
+  );
+
+  assertEquals(warnings, []);
 });
 
 Deno.test("vite plugin lowers svelte yield through its transform hook", async () => {

@@ -29,10 +29,34 @@ export interface EffectOptions {
  */
 export function effect(options?: EffectOptions): Plugin[] {
   return [
+    make_reserved_helper_guard_plugin(),
     make_svelte_transform_plugin(),
     make_server_rewrite_plugin(),
     make_remote_client_wrapper_plugin(options),
   ];
+}
+
+function make_reserved_helper_guard_plugin(): Plugin {
+  return {
+    name: "svelte-effect-runtime:reserved-helper-guard",
+    enforce: "pre",
+
+    transform(code: string, id: string) {
+      if (!is_svelte_component_module(id) || !has_ser_syntax(code)) {
+        return undefined;
+      }
+
+      const reserved_names = find_reserved_helper_names(code);
+
+      if (reserved_names.length === 0) {
+        return undefined;
+      }
+
+      this.warn(make_reserved_helper_warning(reserved_names));
+
+      return undefined;
+    },
+  };
 }
 
 function make_svelte_transform_plugin(): Plugin {
@@ -172,6 +196,41 @@ function is_svelte_component_module(id: string): boolean {
   const allowed_params = ["t", "v"];
 
   return [...params.keys()].every((key) => allowed_params.includes(key));
+}
+
+function has_ser_syntax(code: string): boolean {
+  return /\byield\s*\*/.test(code) ||
+    /<script\b[^>]*\beffect(?:[\s=>]|$)/.test(code);
+}
+
+function find_reserved_helper_names(code: string): string[] {
+  const script_segments = [...code.matchAll(
+    /<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi,
+  )].map((match) => match[1] ?? "");
+  const markup_segments = [
+    ...code.matchAll(/\{[^{}]*(?:Dispatcher|Code)[^{}]*\}/g),
+  ]
+    .map((match) => match[0]);
+  const search_segments = [...script_segments, ...markup_segments];
+
+  return ["Dispatcher", "Code"].filter((name) =>
+    search_segments.some((segment) => new RegExp(`\\b${name}\\b`).test(segment))
+  );
+}
+
+function make_reserved_helper_warning(names: string[]): string {
+  const quoted_names = names.map((name) => `\`${name}\``);
+  const subject = quoted_names.length === 1
+    ? quoted_names[0]
+    : `${quoted_names.slice(0, -1).join(", ")} and ${
+      quoted_names[quoted_names.length - 1]
+    }`;
+  const verb = names.length === 1 ? "is" : "are";
+
+  return [
+    `[svelte-effect-runtime] ${subject} ${verb} reserved for generated markup helpers.`,
+    `Rename or alias local bindings that use ${subject} before using SER syntax in this component.`,
+  ].join(" ");
 }
 
 /**
