@@ -45,6 +45,8 @@ export function transform_markup_effect(
   filename: string,
   options: MarkupTransformOptions = {},
 ): MarkupTransformResult {
+  void options;
+
   if (!/\byield\s*\*/.test(content)) {
     return { code: content, has_yield: false };
   }

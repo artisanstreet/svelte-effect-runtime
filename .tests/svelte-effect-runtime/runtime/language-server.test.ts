@@ -31,6 +31,21 @@ const component_source = `<script lang="ts" effect>
 <h1>{post.title}</h1>
 `;
 
+type DocumentLike = {
+  positionAt(offset: number): SourcePosition;
+};
+
+type SnapshotLike = {
+  getFullText(): string;
+  offsetAt(position: SourcePosition): number;
+  getGeneratedPosition(position: SourcePosition): SourcePosition;
+};
+
+type SourcePosition = {
+  line: number;
+  character: number;
+};
+
 Deno.test("patched Svelte diagnostics compile script effect top-level await", async () => {
   patch_svelte_compiler_path(transform_svelte_effect);
 
@@ -140,8 +155,8 @@ function make_snapshot_options() {
 }
 
 function assert_maps_to_generated_text(
-  snapshot: any,
-  document: any,
+  snapshot: SnapshotLike,
+  document: DocumentLike,
   original_offset: number,
   expected_text: string,
 ): void {
