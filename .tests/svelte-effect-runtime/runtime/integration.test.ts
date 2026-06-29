@@ -1,4 +1,9 @@
-import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
+import {
+  assertEquals,
+  assertNotMatch,
+  assertStringIncludes,
+  assertThrows,
+} from "@std/assert";
 import {
   transform_markup_effect,
   transform_script_effect,
@@ -11,7 +16,7 @@ import {
 import { ServerRuntime } from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
 import { promise } from "../../../modules/svelte-effect-runtime/src/markup/promise.ts";
 import { Context, Layer } from "effect";
-import { parse } from "svelte/compiler";
+import { compile, parse } from "svelte/compiler";
 
 async function run_svelte_transform(
   plugin: ReturnType<typeof effect>[number],
@@ -167,9 +172,51 @@ Deno.test("direct svelte transform lowers script effect and removes effect attri
   const result = transform_svelte_effect(source, "Test.svelte");
 
   assertStringIncludes(result.code, `<script lang="ts">`);
-  assertStringIncludes(result.code, `__SER___program`);
+  assertStringIncludes(result.code, `await get_dispatcher().promise({`);
+  assertStringIncludes(result.code, `$state(await`);
+  assertNotMatch(result.code, /\$effect\(\(\) =>/);
   if (result.code.includes(` effect>`)) {
     throw new Error("effect attribute should be removed before Svelte parses");
+  }
+});
+
+Deno.test("direct svelte transform emits async rune output Svelte can compile", () => {
+  const sources = [
+    [
+      `<script lang="ts" effect>`,
+      `  const slug = "intro";`,
+      `  const post = $derived(yield* GetPost(slug));`,
+      `</script>`,
+      `<h1>{post.title}</h1>`,
+    ].join("\n"),
+    [
+      `<script lang="ts" effect>`,
+      `  let post = $state(yield* GetPost("intro"));`,
+      `</script>`,
+      `<h1>{post.title}</h1>`,
+    ].join("\n"),
+    [
+      `<script lang="ts" effect>`,
+      `  let { value = yield* load() } = $props();`,
+      `</script>`,
+      `<p>{value}</p>`,
+    ].join("\n"),
+  ];
+
+  for (const source of sources) {
+    const transformed = transform_svelte_effect(source, "AsyncRunes.svelte");
+
+    compile(transformed.code, {
+      filename: "AsyncRunes.svelte",
+      generate: "server",
+      experimental: { async: true },
+    });
+
+    compile(transformed.code, {
+      filename: "AsyncRunes.svelte",
+      generate: "client",
+      experimental: { async: true },
+    });
   }
 });
 
@@ -337,8 +384,10 @@ Deno.test("vite plugin lowers svelte yield through its transform hook", async ()
   );
 
   assertStringIncludes(result.code, `<script lang="ts">`);
-  assertStringIncludes(result.code, `__SER___program`);
+  assertStringIncludes(result.code, `await get_dispatcher().promise({`);
+  assertStringIncludes(result.code, `$state(await`);
   assertStringIncludes(result.code, `Code.Markup.Run`);
+  assertNotMatch(result.code, /\$effect\(\(\) =>/);
 
   parse(result.code, { filename: "Test.svelte" });
 

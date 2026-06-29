@@ -6,9 +6,10 @@ import ts from "typescript";
 
 const ASYNC_EXPRESSION_RUNES = new Set([
   "$derived",
-  "$inspect",
   "$state",
   "$state.raw",
+  "$state.snapshot",
+  "$bindable",
 ]);
 
 const CALLBACK_RUNES = new Set([
@@ -34,40 +35,6 @@ export function validate_rune_yield_usage(
   filename: string,
 ): void {
   visit_rune_yield_usage(node, content, filename);
-}
-
-/**
- * Identifies `$state(...)` and `$state.raw(...)` initializer calls.
- *
- * @since 2.0.0
- * @param expr - Expression to classify.
- * @param content - Original script source used to preserve argument text.
- * @returns State rune details when the expression is a state initializer.
- */
-export function get_state_rune_initializer(
-  expr: ts.Expression,
-  content: string,
-): { rune_name: "$state" | "$state.raw"; value_text: string } | undefined {
-  if (!ts.isCallExpression(expr)) {
-    return undefined;
-  }
-
-  const rune_name = get_rune_name(expr.expression);
-
-  if (rune_name !== "$state" && rune_name !== "$state.raw") {
-    return undefined;
-  }
-
-  const first_arg = expr.arguments[0];
-
-  if (!first_arg) {
-    return undefined;
-  }
-
-  return {
-    rune_name,
-    value_text: slice(content, first_arg).trim(),
-  };
 }
 
 function visit_rune_yield_usage(
