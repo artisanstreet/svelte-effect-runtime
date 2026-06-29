@@ -30,7 +30,7 @@ Write effectful code without any hassle. Seriously!
 
   {#each yield* GetAllStocks() as stock}
     {const liveQuery = yield* GetLivePrice(stock.ticker)}
-    {const price = liveQuery.current ?? stock.initialPrice}
+    {const price = $derived(liveQuery.current ?? stock.initialPrice)}
 
     <StockCard.Root>
       <StockCard.Header>{stock.name}</StockCard.Header>
