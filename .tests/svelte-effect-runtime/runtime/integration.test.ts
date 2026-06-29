@@ -292,6 +292,13 @@ Deno.test("vite plugin keeps runtime package transformable in SSR builds", () =>
   ]);
 });
 
+Deno.test("vite plugins do not force pre transform ordering", () => {
+  const plugins = effect();
+  const pre_plugins = plugins.filter((plugin) => plugin.enforce === "pre");
+
+  assertEquals(pre_plugins, []);
+});
+
 Deno.test("vite plugin warns when SER files use reserved generated helper names", async () => {
   const plugins = effect();
   const guard_index = plugins.findIndex((candidate) =>
