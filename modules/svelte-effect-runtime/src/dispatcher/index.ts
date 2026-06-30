@@ -3,7 +3,10 @@ import { Cause, Effect, Exit, Fiber, Layer, ManagedRuntime } from "effect";
 import { createSubscriber } from "svelte/reactivity";
 import type { Fiber as FiberType } from "effect/Fiber";
 
-import { DispatcherDisposedError } from "$/errors.ts";
+import {
+  RuntimeAlreadyInitializedError,
+  DispatcherDisposedError,
+} from "$/errors.ts";
 import { interrupt_fiber, watch_fiber_exit } from "./fibers.ts";
 import { hash_deps } from "./deps.ts";
 import { Code } from "./types.ts";
@@ -96,6 +99,10 @@ export class Dispatcher {
   static make<R = never>(
     layer?: Layer.Layer<R>,
   ): Dispatcher {
+    if (current_dispatcher) {
+      throw new RuntimeAlreadyInitializedError("ClientRuntime");
+    }
+
     const runtime = ManagedRuntime.make(
       layer ?? (Layer.empty as unknown as Layer.Layer<R>),
     );

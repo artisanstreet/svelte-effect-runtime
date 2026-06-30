@@ -5,6 +5,7 @@ export {
   RequestEvent,
   ServerRuntime,
 } from "./runtime.ts";
+export { RuntimeAlreadyInitializedError } from "$/errors.ts";
 
 export type {
   ErrorEffectFactory,

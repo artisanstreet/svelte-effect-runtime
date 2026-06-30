@@ -50,7 +50,7 @@ export function get_server_runtime_or_throw(): ManagedRuntime.ManagedRuntime<
   been registered.
 - If no runtime has been registered yet, `get_server_runtime_or_throw()` lazily
   creates a default runtime with an empty layer.
-- Calling it again replaces the active server runtime.
+- Calling it again throws `RuntimeAlreadyInitializedError`.
 - `RequestEvent` is provided automatically during remote execution.
 - Inside a remote Effect, use `yield* RequestEvent`.
 

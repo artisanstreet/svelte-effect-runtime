@@ -3,7 +3,10 @@ import { Context, Layer, ManagedRuntime } from "effect";
 import { Dispatcher as InternalDispatcher } from "$/dispatcher.ts";
 import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime";
 
-import { RequestEventUnavailableError } from "$/errors.ts";
+import {
+  RuntimeAlreadyInitializedError,
+  RequestEventUnavailableError,
+} from "$/errors.ts";
 
 /**
  * Subset of SvelteKit's `RequestEvent` that remote handlers typically access.
@@ -61,6 +64,10 @@ export class ServerRuntime {
   static make<R = never>(
     layer?: Layer.Layer<R>,
   ): ManagedRuntime.ManagedRuntime<R, never> {
+    if (current_server_runtime) {
+      throw new RuntimeAlreadyInitializedError("ServerRuntime");
+    }
+
     const runtime = ManagedRuntime.make(
       layer ?? (Layer.empty as unknown as Layer.Layer<R>),
     );
@@ -69,7 +76,6 @@ export class ServerRuntime {
       unknown,
       never
     >;
-    current_server_dispatcher?.dispose();
     current_server_dispatcher = new InternalDispatcher(
       runtime as unknown as ManagedRuntimeType<unknown, unknown>,
     );
@@ -128,4 +134,36 @@ export function get_server_dispatcher(): InternalDispatcher {
   );
 
   return current_server_dispatcher;
+}
+
+/**
+ * Resets the internal server runtime singleton used by source-level tests.
+ *
+ * @example
+ * ```ts
+ * reset_server_runtime();
+ * ```
+ *
+ * @since 3.4.0
+ * @returns Nothing.
+ * @internal
+ */
+export function reset_server_runtime(): void {
+  const dispatcher = current_server_dispatcher;
+  const runtime = current_server_runtime;
+
+  current_server_dispatcher = undefined;
+  current_server_runtime = undefined;
+
+  if (dispatcher) {
+    dispatcher.dispose();
+
+    return;
+  }
+
+  void runtime?.dispose().catch((error: unknown) => {
+    queueMicrotask(() => {
+      throw error;
+    });
+  });
 }

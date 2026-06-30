@@ -13,7 +13,12 @@ import {
   effect,
   rewrite_remote_client_exports,
 } from "../../../modules/svelte-effect-runtime/src/vite.ts";
-import { ServerRuntime } from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
+import {
+  get_server_runtime_or_throw,
+  reset_server_runtime,
+  ServerRuntime,
+} from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
+import { RuntimeAlreadyInitializedError } from "../../../modules/svelte-effect-runtime/src/errors.ts";
 import { promise } from "../../../modules/svelte-effect-runtime/src/markup/promise.ts";
 import { Context, Layer } from "effect";
 import { compile, parse } from "svelte/compiler";
@@ -447,21 +452,61 @@ Deno.test("vite plugin emits client and server promises", async () => {
 });
 
 Deno.test("generated promise helpers use ServerRuntime services during SSR", async () => {
+  reset_server_runtime();
+
   const ReproService = Context.Service<{ readonly value: string }>(
     "ReproService",
   );
 
-  ServerRuntime.make(
-    Layer.succeed(ReproService, { value: "server-service" }),
-  );
+  try {
+    ServerRuntime.make(
+      Layer.succeed(ReproService, { value: "server-service" }),
+    );
 
-  const result = await promise("server-service", [], function* () {
-    return yield* ReproService;
-  });
+    const result = await promise("server-service", [], function* () {
+      return yield* ReproService;
+    });
 
-  assertEquals(result.value, "server-service");
+    assertEquals(result.value, "server-service");
+  } finally {
+    reset_server_runtime();
+  }
+});
 
-  ServerRuntime.make();
+Deno.test("ServerRuntime.make throws when the server runtime already exists", () => {
+  reset_server_runtime();
+
+  try {
+    ServerRuntime.make();
+
+    const error = assertThrows(
+      () => ServerRuntime.make(),
+      RuntimeAlreadyInitializedError,
+      "ServerRuntime.make(...) cannot be called",
+    );
+
+    assertEquals(error.name, "RuntimeAlreadyInitializedError");
+  } finally {
+    reset_server_runtime();
+  }
+});
+
+Deno.test("ServerRuntime.make throws after lazy server runtime creation", () => {
+  reset_server_runtime();
+
+  try {
+    get_server_runtime_or_throw();
+
+    const error = assertThrows(
+      () => ServerRuntime.make(),
+      RuntimeAlreadyInitializedError,
+      "runtime has already been initialized",
+    );
+
+    assertEquals(error.name, "RuntimeAlreadyInitializedError");
+  } finally {
+    reset_server_runtime();
+  }
 });
 
 Deno.test("root entry exposes server helpers for rewritten server imports", async () => {
