@@ -43,6 +43,7 @@
     "build": "deno task build",
     "check": "deno task check",
     "clean": "deno task clean",
+    "publish:npm": "deno task publish:npm",
     "test": "deno task test"
   },
   "devDependencies": {

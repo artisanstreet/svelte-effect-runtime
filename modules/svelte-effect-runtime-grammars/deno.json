@@ -21,6 +21,7 @@
     "clean": "rm -rf ../../.dist/svelte-effect-runtime-grammars",
     "fmt": "deno fmt",
     "lint": "deno lint",
+    "publish:npm": "deno run -A ../../build/publish-grammars-npm.ts",
     "test": "deno test --no-check -A"
   },
   "imports": {

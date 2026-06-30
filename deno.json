@@ -39,6 +39,7 @@
     "docs:dev": "cd modules/docs && deno task dev",
     "lint": "deno lint",
     "package:extension": "cd modules/svelte-effect-runtime-vsix && deno task package",
+    "publish:grammars:npm": "deno run -A build/publish-grammars-npm.ts",
     "smoke:docs": "deno run -A build/smoke-docs.ts",
     "smoke:runtime": "deno run -A build/smoke-current-runtime.ts",
     "test": "deno task test:runtime",
