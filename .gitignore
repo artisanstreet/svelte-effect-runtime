@@ -15,5 +15,4 @@ modules/svelte-effect-runtime-language-server/runtime
 modules/svelte-effect-runtime-vsix/.dist
 modules/svelte-effect-runtime-vsix/runtime
 modules/svelte-effect-runtime-vsix/*.vsix
-modules/svelte-effect-runtime-zed/target
 *.tsbuildinfo
