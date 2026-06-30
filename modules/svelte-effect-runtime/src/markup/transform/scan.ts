@@ -1,14 +1,16 @@
+import { validate_rune_yield_usage } from "$/script-transform/runes.ts";
 import { collect_yield_star_nodes } from "$/script-transform/ast.ts";
 import { contains_top_level_yield_star } from "$/detect.ts";
-import MagicString from "magic-string";
-import ts from "typescript";
-
 import {
   analyze_event_body_yield_star,
   strip_arrow_function,
 } from "./expressions.ts";
 import { HELPERS } from "./constants.ts";
 import type { MarkupCandidate, TagKind } from "./types.ts";
+
+import MagicString from "magic-string";
+
+import ts from "typescript";
 
 interface SanitizeResult {
   code: string;
@@ -62,6 +64,7 @@ export function sanitize_markup(
       open,
       leading_ws,
       trimmed,
+      filename,
     );
 
     if (declaration_yields.length > 0) {
@@ -150,11 +153,14 @@ export function sanitize_markup(
       continue;
     }
 
+    validate_expression_yield_usage(expr_text, filename);
+
     if (key === "render" && !/^\s*yield\s*\*/.test(expr_text)) {
       const render_arg_yields = collect_expression_yield_expressions(
         content,
         expr_start,
         expr_text,
+        filename,
       );
 
       if (render_arg_yields.length > 0) {
@@ -212,6 +218,7 @@ function collect_expression_yield_expressions(
   content: string,
   expr_start: number,
   expr_text: string,
+  filename: string,
 ): DeclarationYieldExpression[] {
   const source_file = ts.createSourceFile(
     "markup-expression.ts",
@@ -225,6 +232,8 @@ function collect_expression_yield_expressions(
   if (!stmt || !ts.isVariableStatement(stmt)) {
     return [];
   }
+
+  validate_rune_yield_usage(stmt, source_file.text, filename);
 
   const initializer = stmt.declarationList.declarations[0]?.initializer;
 
@@ -385,14 +394,16 @@ function collect_declaration_yield_expressions(
   open: number,
   leading_ws: number,
   trimmed: string,
+  filename: string,
 ): DeclarationYieldExpression[] {
   if (!is_declaration_tag_text(trimmed)) {
     return [];
   }
 
+  const source_text = `${trimmed};`;
   const source_file = ts.createSourceFile(
     "declaration-tag.ts",
-    `${trimmed};`,
+    source_text,
     ts.ScriptTarget.Latest,
     true,
     ts.ScriptKind.TS,
@@ -404,18 +415,14 @@ function collect_declaration_yield_expressions(
     return [];
   }
 
+  validate_rune_yield_usage(stmt, source_text, filename);
+
   const tag_start = open + 1 + leading_ws;
 
   return stmt.declarationList.declarations.flatMap((decl) => {
-    const initializer = decl.initializer;
-
-    if (!initializer || !contains_top_level_yield_star(initializer)) {
-      return [];
-    }
-
     const expressions: DeclarationYieldExpression[] = [];
 
-    collect_yield_star_nodes(initializer, (yield_node) => {
+    collect_yield_star_nodes(decl, (yield_node) => {
       const start = tag_start + yield_node.getStart(source_file);
       const end = tag_start + yield_node.end;
       const expr_text = content.slice(start, end).trim();
@@ -433,6 +440,27 @@ function collect_declaration_yield_expressions(
 
 function is_declaration_tag_text(trimmed: string): boolean {
   return /^(?:const|let)\s/.test(trimmed);
+}
+
+function validate_expression_yield_usage(
+  expr_text: string,
+  filename: string,
+): void {
+  const source_text = `const __SER___expr = ${expr_text};`;
+  const source_file = ts.createSourceFile(
+    "markup-expression.ts",
+    source_text,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const stmt = source_file.statements[0];
+
+  if (!stmt) {
+    return;
+  }
+
+  validate_rune_yield_usage(stmt, source_text, filename);
 }
 
 function is_event_callback_expression(inner: string): boolean {

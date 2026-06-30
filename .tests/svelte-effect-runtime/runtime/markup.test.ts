@@ -39,6 +39,18 @@ async function with_browser_document<A>(
 
 // ─── Identity / pass-through ─────────────────────────────────
 
+function assert_rejects_markup_rune_yield(
+  source: string,
+  rune_name: string,
+): void {
+  const error = assertThrows(
+    () => transform_markup_effect(source, "Test.svelte"),
+  );
+
+  assertStringIncludes(error.message, "[ASYNC_EFFECT_IN_SYNC_RUNE]:");
+  assertStringIncludes(error.message, rune_name);
+}
+
 Deno.test("passes through markup with no yield* unchanged", () => {
   const source = `<h1>Hello</h1><p>World</p>`;
   const result = transform_markup_effect(source, "Test.svelte");
@@ -367,6 +379,23 @@ Deno.test("client render tags use awaited promise calls", () => {
   });
 });
 
+Deno.test("server render tags use noop snippet fallback during SSR", () => {
+  const source = `{@render yield* getSnippet()}`;
+  const result = transform_markup_effect(source, "RenderServer.svelte", {
+    target: "server",
+  });
+
+  assertStringIncludes(result.code, `await Dispatcher.emit`);
+  assertStringIncludes(result.code, `ssr_fallback: () => undefined`);
+  assertStringIncludes(result.code, `)()`);
+
+  compile(result.code, {
+    filename: "RenderServer.svelte",
+    generate: "server",
+    experimental: { async: true },
+  });
+});
+
 Deno.test("client common markup contexts compile with async option", () => {
   const source = [
     `<script>`,
@@ -427,6 +456,8 @@ Deno.test("server common markup contexts compile with async option", () => {
     result.code,
     `await Dispatcher.emit({ type: Code.Markup.Promise`,
   );
+  assertStringIncludes(result.code, `ssr_fallback: undefined`);
+  assertStringIncludes(result.code, `ssr_fallback: []`);
 
   compile(result.code, {
     filename: "ServerContexts.svelte",
@@ -478,6 +509,30 @@ Deno.test("rewrites destructured declaration tag initializers", () => {
   if (!result.has_yield) throw new Error("has_yield should be true");
 });
 
+Deno.test("rewrites destructured declaration tag defaults", () => {
+  const source = [
+    `<script>`,
+    `  const data = {};`,
+    `  function fallbackValue() {}`,
+    `</script>`,
+    `{let { value = yield* fallbackValue() } = data}`,
+    `<p>{value}</p>`,
+  ].join("\n");
+  const result = transform_markup_effect(source, "Test.svelte");
+
+  assertStringIncludes(
+    result.code,
+    `{let { value = await Dispatcher.emit({ type: Code.Markup.Promise`,
+  );
+  assertStringIncludes(result.code, `fallbackValue`);
+
+  compile(result.code, {
+    filename: "Test.svelte",
+    generate: "server",
+    experimental: { async: true },
+  });
+});
+
 Deno.test("rewrites multiple declaration tag initializers", () => {
   const source = `{const a = yield* getA(), b = yield* getB()}{a}{b}`;
   const result = transform_markup_effect(source, "Test.svelte");
@@ -488,6 +543,37 @@ Deno.test("rewrites multiple declaration tag initializers", () => {
   assertEquals(promise_calls, 2);
   assertStringIncludes(result.code, `getA`);
   assertStringIncludes(result.code, `getB`);
+});
+
+Deno.test("rejects yield* in synchronous-only markup declaration runes", () => {
+  const cases: Array<[string, string]> = [
+    [`{const value = $state.eager(yield* loadEager())}`, "$state.eager"],
+    [`{const props = $props(yield* loadProps())}`, "$props"],
+    [`{const id = $props.id(yield* loadId())}`, "$props.id"],
+    [
+      `{const pending = $effect.pending(yield* loadPending())}`,
+      "$effect.pending",
+    ],
+    [
+      `{const tracking = $effect.tracking(yield* loadTracking())}`,
+      "$effect.tracking",
+    ],
+    [`{const host = $host(yield* loadHost())}`, "$host"],
+    [`{const value = $inspect(yield* loadDebug())}`, "$inspect"],
+    [`{const value = $derived.by(() => yield* compute())}`, "$derived.by"],
+    [`{const value = $effect(() => yield* runEffect())}`, "$effect"],
+  ];
+
+  for (const [source, rune_name] of cases) {
+    assert_rejects_markup_rune_yield(source, rune_name);
+  }
+});
+
+Deno.test("rejects yield* in synchronous-only markup const tag runes", () => {
+  const source =
+    `{#if ready}{@const value = $inspect(yield* loadDebug())}{/if}`;
+
+  assert_rejects_markup_rune_yield(source, "$inspect");
 });
 
 Deno.test("rewrites {#key yield* expr} in key expression", () => {

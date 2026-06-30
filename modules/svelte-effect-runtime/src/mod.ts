@@ -257,6 +257,7 @@ export {
   RemoteHelperContextError,
   RemoteHelperError,
   RequestEventUnavailableError,
+  RuntimeAlreadyInitializedError,
   RuntimeError,
   ServerOnlyImportError,
   SvelteKitServerExportUnavailableError,

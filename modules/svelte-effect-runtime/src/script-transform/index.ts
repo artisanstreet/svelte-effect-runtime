@@ -29,9 +29,9 @@ interface ScriptTransformOptions {
 }
 
 /**
- * Transforms a `<script effect>` body by extracting top-level `yield*`
- * expressions into `$state` temp bindings and wrapping the lowered
- * assignments in a dependency-tracked `$effect` block.
+ * Transforms a `<script effect>` body by lowering top-level `yield*`
+ * expressions into Svelte-compatible async rendering declarations or into
+ * dependency-tracked `$effect` blocks for effectful statements.
  *
  * @example
  * ```ts
@@ -143,13 +143,13 @@ export function transform_script_effect(
       continue;
     }
 
-    if (contains_top_level_await(stmt)) {
+    has_effect = true;
+    const lowered = lower_statement(stmt, content, context);
+
+    if (lowered.effect_blocks.length > 0 && contains_top_level_await(stmt)) {
       const text = slice(content, stmt);
       throw new AwaitInEffectWorkError(filename, text);
     }
-
-    has_effect = true;
-    const lowered = lower_statement(stmt, content, context);
 
     magic.overwrite(
       lowered.range.start,

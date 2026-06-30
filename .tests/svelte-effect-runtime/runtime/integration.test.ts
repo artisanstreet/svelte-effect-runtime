@@ -1,4 +1,9 @@
-import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
+import {
+  assertEquals,
+  assertNotMatch,
+  assertStringIncludes,
+  assertThrows,
+} from "@std/assert";
 import {
   transform_markup_effect,
   transform_script_effect,
@@ -8,10 +13,15 @@ import {
   effect,
   rewrite_remote_client_exports,
 } from "../../../modules/svelte-effect-runtime/src/vite.ts";
-import { ServerRuntime } from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
+import {
+  get_server_runtime_or_throw,
+  reset_server_runtime,
+  ServerRuntime,
+} from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
+import { RuntimeAlreadyInitializedError } from "../../../modules/svelte-effect-runtime/src/errors.ts";
 import { promise } from "../../../modules/svelte-effect-runtime/src/markup/promise.ts";
 import { Context, Layer } from "effect";
-import { parse } from "svelte/compiler";
+import { compile, parse } from "svelte/compiler";
 
 async function run_svelte_transform(
   plugin: ReturnType<typeof effect>[number],
@@ -167,9 +177,51 @@ Deno.test("direct svelte transform lowers script effect and removes effect attri
   const result = transform_svelte_effect(source, "Test.svelte");
 
   assertStringIncludes(result.code, `<script lang="ts">`);
-  assertStringIncludes(result.code, `__SER___program`);
+  assertStringIncludes(result.code, `await get_dispatcher().promise({`);
+  assertStringIncludes(result.code, `$state(await`);
+  assertNotMatch(result.code, /\$effect\(\(\) =>/);
   if (result.code.includes(` effect>`)) {
     throw new Error("effect attribute should be removed before Svelte parses");
+  }
+});
+
+Deno.test("direct svelte transform emits async rune output Svelte can compile", () => {
+  const sources = [
+    [
+      `<script lang="ts" effect>`,
+      `  const slug = "intro";`,
+      `  const post = $derived(yield* GetPost(slug));`,
+      `</script>`,
+      `<h1>{post.title}</h1>`,
+    ].join("\n"),
+    [
+      `<script lang="ts" effect>`,
+      `  let post = $state(yield* GetPost("intro"));`,
+      `</script>`,
+      `<h1>{post.title}</h1>`,
+    ].join("\n"),
+    [
+      `<script lang="ts" effect>`,
+      `  let { value = yield* load() } = $props();`,
+      `</script>`,
+      `<p>{value}</p>`,
+    ].join("\n"),
+  ];
+
+  for (const source of sources) {
+    const transformed = transform_svelte_effect(source, "AsyncRunes.svelte");
+
+    compile(transformed.code, {
+      filename: "AsyncRunes.svelte",
+      generate: "server",
+      experimental: { async: true },
+    });
+
+    compile(transformed.code, {
+      filename: "AsyncRunes.svelte",
+      generate: "client",
+      experimental: { async: true },
+    });
   }
 });
 
@@ -243,6 +295,13 @@ Deno.test("vite plugin keeps runtime package transformable in SSR builds", () =>
     "svelte",
     "svelte-effect-runtime",
   ]);
+});
+
+Deno.test("vite plugins do not force pre transform ordering", () => {
+  const plugins = effect();
+  const pre_plugins = plugins.filter((plugin) => plugin.enforce === "pre");
+
+  assertEquals(pre_plugins, []);
 });
 
 Deno.test("vite plugin warns when SER files use reserved generated helper names", async () => {
@@ -337,8 +396,10 @@ Deno.test("vite plugin lowers svelte yield through its transform hook", async ()
   );
 
   assertStringIncludes(result.code, `<script lang="ts">`);
-  assertStringIncludes(result.code, `__SER___program`);
+  assertStringIncludes(result.code, `await get_dispatcher().promise({`);
+  assertStringIncludes(result.code, `$state(await`);
   assertStringIncludes(result.code, `Code.Markup.Run`);
+  assertNotMatch(result.code, /\$effect\(\(\) =>/);
 
   parse(result.code, { filename: "Test.svelte" });
 
@@ -384,28 +445,73 @@ Deno.test("vite plugin emits client and server promises", async () => {
     server.code,
     `await Dispatcher.emit({ type: Code.Markup.Promise`,
   );
+  assertStringIncludes(server.code, `ssr_fallback: undefined`);
 
   if (client.code.includes(`Code.Markup.Value`)) {
     throw new Error("client transform should not emit value reads");
   }
+
+  if (client.code.includes(`ssr_fallback`)) {
+    throw new Error("client transform should not emit SSR fallbacks");
+  }
 });
 
 Deno.test("generated promise helpers use ServerRuntime services during SSR", async () => {
+  reset_server_runtime();
+
   const ReproService = Context.Service<{ readonly value: string }>(
     "ReproService",
   );
 
-  ServerRuntime.make(
-    Layer.succeed(ReproService, { value: "server-service" }),
-  );
+  try {
+    ServerRuntime.make(
+      Layer.succeed(ReproService, { value: "server-service" }),
+    );
 
-  const result = await promise("server-service", [], function* () {
-    return yield* ReproService;
-  });
+    const result = await promise("server-service", [], function* () {
+      return yield* ReproService;
+    });
 
-  assertEquals(result.value, "server-service");
+    assertEquals(result.value, "server-service");
+  } finally {
+    reset_server_runtime();
+  }
+});
 
-  ServerRuntime.make();
+Deno.test("ServerRuntime.make throws when the server runtime already exists", () => {
+  reset_server_runtime();
+
+  try {
+    ServerRuntime.make();
+
+    const error = assertThrows(
+      () => ServerRuntime.make(),
+      RuntimeAlreadyInitializedError,
+      "ServerRuntime.make(...) cannot be called",
+    );
+
+    assertEquals(error.name, "RuntimeAlreadyInitializedError");
+  } finally {
+    reset_server_runtime();
+  }
+});
+
+Deno.test("ServerRuntime.make throws after lazy server runtime creation", () => {
+  reset_server_runtime();
+
+  try {
+    get_server_runtime_or_throw();
+
+    const error = assertThrows(
+      () => ServerRuntime.make(),
+      RuntimeAlreadyInitializedError,
+      "runtime has already been initialized",
+    );
+
+    assertEquals(error.name, "RuntimeAlreadyInitializedError");
+  } finally {
+    reset_server_runtime();
+  }
 });
 
 Deno.test("root entry exposes server helpers for rewritten server imports", async () => {

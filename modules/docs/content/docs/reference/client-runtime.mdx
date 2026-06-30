@@ -80,7 +80,8 @@ export const init = () => {
 
 Each argument is a runtime operator — typically `Layer.provide(...)`
 applied to the layer you want to add. Calling `ClientRuntime.make(...)`
-again disposes the previous runtime and installs the new one.
+again throws `RuntimeAlreadyInitializedError`; configure it once during
+startup, before Effect-backed components or browser remote adapters run.
 
 ## Internal helpers
 

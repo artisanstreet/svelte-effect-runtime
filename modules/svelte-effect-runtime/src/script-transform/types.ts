@@ -72,7 +72,7 @@ export interface LoweredStatement {
   type_helpers?: string[];
   /** Whether the rewritten statement directly awaits a dispatcher promise. */
   uses_dispatcher_promise?: boolean;
-  /** The rewritten statement text with yield* replaced by temp refs. */
+  /** The rewritten statement text with yield* lowered into runtime helpers. */
   rewritten_text: string;
   /** Effect bodies to emit in dependency-tracked runtime blocks. */
   effect_blocks: EffectBlock[];

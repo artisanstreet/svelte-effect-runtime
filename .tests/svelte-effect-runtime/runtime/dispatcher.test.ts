@@ -1,6 +1,10 @@
 import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import {
+  RuntimeAlreadyInitializedError,
+  ClientRuntime,
+} from "../../../modules/svelte-effect-runtime/src/mod.ts";
+import {
   Code,
   Dispatcher,
   get_dispatcher,
@@ -878,6 +882,42 @@ Deno.test("reset_dispatcher creates a fresh dispatcher", () => {
   reset_dispatcher();
   const d2 = get_dispatcher();
   if (d1 === d2) throw new Error("expected fresh dispatcher after reset");
+});
+
+Deno.test("ClientRuntime.make throws when the client runtime already exists", () => {
+  reset_dispatcher();
+
+  try {
+    ClientRuntime.make();
+
+    const error = assertThrows(
+      () => ClientRuntime.make(),
+      RuntimeAlreadyInitializedError,
+      "ClientRuntime.make(...) cannot be called",
+    );
+
+    assertEquals(error.name, "RuntimeAlreadyInitializedError");
+  } finally {
+    reset_dispatcher();
+  }
+});
+
+Deno.test("ClientRuntime.make throws after lazy client runtime creation", () => {
+  reset_dispatcher();
+
+  try {
+    get_dispatcher();
+
+    const error = assertThrows(
+      () => ClientRuntime.make(),
+      RuntimeAlreadyInitializedError,
+      "runtime has already been initialized",
+    );
+
+    assertEquals(error.name, "RuntimeAlreadyInitializedError");
+  } finally {
+    reset_dispatcher();
+  }
 });
 
 // ─── Helpers ─────────────────────────────────────────────────

@@ -11,9 +11,9 @@ export interface EffectOptions {
 }
 
 /**
- * Vite plugin for SvelteKit. The pre plugin rewrites server-side imports
- * to the server entrypoint; the post plugin wraps SvelteKit's generated
- * client remote exports in Effect-returning adapters.
+ * Vite plugin for SvelteKit. The server import plugin rewrites server-side
+ * imports to the server entrypoint; the remote client plugin wraps SvelteKit's
+ * generated client remote exports in Effect-returning adapters.
  *
  * @example
  * ```ts
@@ -39,7 +39,6 @@ export function effect(options?: EffectOptions): Plugin[] {
 function make_reserved_helper_guard_plugin(): Plugin {
   return {
     name: "svelte-effect-runtime:reserved-helper-guard",
-    enforce: "pre",
 
     transform(code: string, id: string) {
       if (!is_svelte_component_module(id) || !has_ser_syntax(code)) {
@@ -87,7 +86,6 @@ function make_svelte_transform_plugin(): Plugin {
 function make_server_rewrite_plugin(): Plugin {
   return {
     name: "svelte-effect-runtime:server-imports",
-    enforce: "pre",
 
     config() {
       return { optimizeDeps: { exclude: ["svelte-effect-runtime"] } };

@@ -487,6 +487,31 @@ export class DispatcherDisposedError extends RuntimeError {
 }
 
 /**
+ * Thrown when an application attempts to configure a runtime after one has
+ * already been initialized.
+ *
+ * @example
+ * ```ts
+ * throw new RuntimeAlreadyInitializedError("ClientRuntime");
+ * ```
+ *
+ * @since 3.4.0
+ * @param runtime_name - Public runtime API that was initialized more than once.
+ * @returns An Error describing the invalid runtime lifecycle transition.
+ */
+export class RuntimeAlreadyInitializedError extends RuntimeError {
+  constructor(runtime_name: string) {
+    super(
+      make_error_message(
+        "RUNTIME_ALREADY_INITIALIZED",
+        `${runtime_name}.make(...) cannot be called because the runtime has already been initialized. Configure it once during application startup, before any Effect-backed component, remote handler, or generated runtime code runs.`,
+      ),
+    );
+    this.name = "RuntimeAlreadyInitializedError";
+  }
+}
+
+/**
  * Thrown when a generated or native remote query export is not callable.
  *
  * @example

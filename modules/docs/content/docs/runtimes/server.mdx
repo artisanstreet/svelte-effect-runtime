@@ -99,8 +99,9 @@ export const init = () => {
 };
 ```
 
-If `ServerRuntime.make(...)` is called again later, the new runtime replaces the
-previous one.
+If `ServerRuntime.make(...)` is called again later, it throws
+`RuntimeAlreadyInitializedError`. Configure the server runtime once during
+startup, before remote handlers or generated runtime code run.
 
 ## `RequestEvent` is provided automatically
 

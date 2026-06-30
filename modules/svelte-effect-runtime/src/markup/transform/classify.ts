@@ -173,11 +173,13 @@ function classify_declaration_tag(
   classified: Array<{ candidate: MarkupCandidate; kind: TagKind }>,
 ): void {
   for (const decl of node.declaration.declarations) {
-    if (!decl.init) {
-      continue;
-    }
-
-    classify_expression(decl.init, "plain", candidates, matched, classified);
+    classify_expression(
+      decl as ExpressionLike,
+      "plain",
+      candidates,
+      matched,
+      classified,
+    );
   }
 }
 
