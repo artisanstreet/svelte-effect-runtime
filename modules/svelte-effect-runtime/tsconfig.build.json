@@ -17,15 +17,11 @@
     "baseUrl": ".",
     "paths": {
       "$": ["./src/mod.ts"],
-      "$/*": ["./src/*"],
-      "svelte-effect-runtime-grammars": [
-        "../../.dist/svelte-effect-runtime-grammars/mod.d.ts"
-      ]
+      "$/*": ["./src/*"]
     }
   },
   "include": [
     "./src/mod.ts",
-    "./src/grammars.ts",
     "./src/runtime/transform.ts",
     "./src/internal/generators.ts",
     "./src/internal/remote-client.ts",

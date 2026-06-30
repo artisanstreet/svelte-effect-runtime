@@ -227,20 +227,6 @@ export type {
 } from "$/remote/shared.ts";
 
 export {
-  TextMate,
-  textmate,
-  textmate_language,
-  type TextMateCaptureMap,
-  type TextMateGrammarBundle,
-  type TextMateLanguageRegistration,
-  type TextMateRawRule,
-  type TextMateRepository,
-  tree_sitter,
-  TreesitterQuery,
-  type TreeSitterQueryBundle,
-} from "./grammars.ts";
-
-export {
   AsyncEffectInEventCallbackError,
   AsyncEffectInSyncRuneError,
   AwaitInEffectWorkError,

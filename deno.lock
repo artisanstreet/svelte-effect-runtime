@@ -3696,7 +3696,6 @@
       },
       "modules/svelte-effect-runtime": {
         "dependencies": [
-          "jsr:@barekey/svelte-effect-runtime-grammars@^3.4.0",
           "jsr:@std/assert@^1.0.15",
           "jsr:@std/path@^1.1.2",
           "npm:@babel/parser@^7.29.2",
@@ -3715,7 +3714,6 @@
             "npm:devalue@^5.5.0",
             "npm:magic-string@~0.30.21",
             "npm:rolldown@^1.0.0-rc.13",
-            "npm:svelte-effect-runtime-grammars@3.4.0",
             "npm:typescript@6"
           ]
         }

@@ -5,11 +5,6 @@ const code_root = resolve(repo_root, "..");
 const smokes_root = join(code_root, "smokes");
 const smoke_dir = join(smokes_root, "ser-current");
 const package_dir = join(repo_root, "modules", "svelte-effect-runtime");
-const grammar_package_dir = join(
-  repo_root,
-  "modules",
-  "svelte-effect-runtime-grammars",
-);
 const deno = Deno.execPath();
 const npm = Deno.build.os === "windows" ? "npm.cmd" : "npm";
 const npx = Deno.build.os === "windows" ? "npx.cmd" : "npx";
@@ -281,21 +276,12 @@ async function main(): Promise<void> {
 
   await run_command(npm, ["install", "--legacy-peer-deps"], smoke_dir);
   await run_command(deno, ["task", "build"], package_dir);
-  const grammar_pack = await run_command(
-    npm,
-    ["pack", grammar_package_dir, "--json"],
-    smoke_dir,
-  );
   const runtime_pack = await run_command(
     npm,
     ["pack", package_dir, "--json"],
     smoke_dir,
   );
 
-  const grammar_tarball = resolve_packed_tarball(
-    grammar_pack.stdout,
-    "svelte-effect-runtime-grammars",
-  );
   const runtime_tarball = resolve_packed_tarball(
     runtime_pack.stdout,
     "svelte-effect-runtime",
@@ -306,7 +292,6 @@ async function main(): Promise<void> {
     [
       "install",
       "--legacy-peer-deps",
-      join(smoke_dir, grammar_tarball),
       join(smoke_dir, runtime_tarball),
     ],
     smoke_dir,

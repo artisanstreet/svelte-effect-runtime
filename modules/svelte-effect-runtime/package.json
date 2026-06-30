@@ -23,11 +23,6 @@
       "types": "./.dist/mod.d.ts",
       "default": "./.dist/mod.js"
     },
-    "./grammars": {
-      "types": "./.dist/grammars.d.ts",
-      "import": "./.dist/grammars.js",
-      "default": "./.dist/grammars.js"
-    },
     "./server": {
       "types": "./.dist/server.d.ts",
       "default": "./.dist/server.js"
@@ -69,7 +64,6 @@
   "dependencies": {
     "devalue": "^5.5.0",
     "magic-string": "^0.30.21",
-    "svelte-effect-runtime-grammars": "3.4.0",
     "typescript": "^6.0.0"
   },
   "devDependencies": {

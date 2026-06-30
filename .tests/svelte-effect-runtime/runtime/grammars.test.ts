@@ -4,11 +4,6 @@ import {
   textmate_language,
   tree_sitter,
   TreesitterQuery,
-} from "../../../modules/svelte-effect-runtime/src/grammars.ts";
-import {
-  textmate as grammar_package_textmate,
-  textmate_language as grammar_package_textmate_language,
-  tree_sitter as grammar_package_tree_sitter,
 } from "svelte-effect-runtime-grammars";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { createHighlighter } from "shiki";
@@ -16,10 +11,7 @@ import { createHighlighter } from "shiki";
 Deno.test("exports a Shiki-ready TextMate injection grammar for Svelte", () => {
   assertEquals(TextMate, textmate);
   assertEquals(TreesitterQuery, tree_sitter);
-  assertEquals(textmate, grammar_package_textmate);
   assertEquals(textmate.language, textmate_language);
-  assertEquals(textmate_language, grammar_package_textmate_language);
-  assertEquals(tree_sitter, grammar_package_tree_sitter);
   assertEquals(textmate.scope_name, "source.svelte.ser.injection");
   assertEquals(textmate.target_scope_name, "source.svelte");
   assertEquals(textmate_language.injectTo, ["source.svelte"]);
