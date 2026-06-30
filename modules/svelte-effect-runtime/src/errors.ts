@@ -68,6 +68,45 @@ export class PreprocessError extends RuntimeError {
 }
 
 /**
+ * Thrown when another Vite plugin claims pre-transform priority before SER can
+ * lower component syntax.
+ *
+ * @example
+ * ```ts
+ * throw new VitePreTransformPluginConflictError(["wuchale"]);
+ * ```
+ *
+ * @since 2.4.0
+ * @param plugin_names - Names of Vite plugins that declare pre-transform
+ *   priority and may parse raw `.svelte` files before SER lowers them.
+ * @returns A runtime-authored Error describing the plugin ordering conflict.
+ */
+export class VitePreTransformPluginConflictError extends RuntimeError {
+  /**
+   * Names of conflicting Vite plugins.
+   *
+   * @since 2.4.0
+   */
+  readonly plugin_names: readonly string[];
+
+  constructor(plugin_names: readonly string[]) {
+    const names = plugin_names.join(", ");
+
+    super(
+      [
+        `SER detected Vite plugin(s) using pre-transform priority before component syntax lowering: ${names}.`,
+        `Plugins with enforce: "pre" or transform.order: "pre" may parse .svelte files before SER lowers <script effect> and yield* syntax.`,
+        `This commonly surfaces as Svelte parser errors such as "The keyword 'yield' is reserved".`,
+        "",
+        `Remove the pre-transform priority from the conflicting plugin or run a version that uses normal Vite transform ordering.`,
+      ].join("\n"),
+    );
+    this.name = "VitePreTransformPluginConflictError";
+    this.plugin_names = plugin_names;
+  }
+}
+
+/**
  * Thrown when a statement mixes JavaScript `await` with Effect `yield*` work
  * that must be lowered into an `Effect.gen` program.
  *

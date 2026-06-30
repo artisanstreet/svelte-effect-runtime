@@ -4,8 +4,8 @@ import { Dispatcher as InternalDispatcher } from "$/dispatcher.ts";
 import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime";
 
 import {
-  RuntimeAlreadyInitializedError,
   RequestEventUnavailableError,
+  RuntimeAlreadyInitializedError,
 } from "$/errors.ts";
 
 /**

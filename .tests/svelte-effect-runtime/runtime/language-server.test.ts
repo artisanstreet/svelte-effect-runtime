@@ -74,6 +74,30 @@ Deno.test("virtual TS document removes the SER effect script attribute", () => {
   assertStringIncludes(code, "const post = await");
 });
 
+Deno.test("virtual TS document recovers from script transform errors", () => {
+  const source = [
+    `<script lang="ts" effect>`,
+    `  const query = "abc";`,
+    `  const result = $derived.by(() => {`,
+    `    if (!query) return [];`,
+    `    yield* searchRemote({ query, limit: 10 });`,
+    `  });`,
+    `</script>`,
+  ].join("\n");
+  const document = make_document(source);
+  const prepared = prepare_virtual_document(document, make_transforms());
+
+  assert(prepared);
+  assertStringIncludes(
+    prepared.document.getText(),
+    "__SER_language_server_transform_error",
+  );
+  assertStringIncludes(
+    prepared.document.getText(),
+    "yield* cannot be used inside $derived.by()",
+  );
+});
+
 Deno.test("virtual TS snapshot maps SER hover positions to generated symbols", () => {
   const document = make_document(component_source);
   const prepared = prepare_virtual_document(document, make_transforms());

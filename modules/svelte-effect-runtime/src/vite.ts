@@ -1,3 +1,5 @@
+import { VitePreTransformPluginConflictError } from "./errors.ts";
+import { find_svelte_effect_diagnostics } from "./diagnostics.ts";
 import type { Plugin } from "vite";
 
 /**
@@ -29,11 +31,58 @@ export interface EffectOptions {
  */
 export function effect(options?: EffectOptions): Plugin[] {
   return [
+    make_diagnostics_plugin(),
     make_reserved_helper_guard_plugin(),
     make_svelte_transform_plugin(),
     make_server_rewrite_plugin(),
     make_remote_client_wrapper_plugin(options),
   ];
+}
+
+function make_diagnostics_plugin(): Plugin {
+  const warned_diagnostics = new Set<string>();
+
+  return {
+    name: "svelte-effect-runtime:diagnostics",
+
+    transform(code: string, id: string) {
+      if (!is_svelte_component_module(id)) {
+        return undefined;
+      }
+
+      const clean_id = id.split("?")[0] ?? id;
+      const diagnostics = find_svelte_effect_diagnostics(
+        code,
+        clean_id,
+      );
+
+      for (const diagnostic of diagnostics) {
+        const diagnostic_key = [
+          clean_id,
+          diagnostic.line,
+          diagnostic.column,
+          diagnostic.message,
+        ].join(":");
+
+        if (warned_diagnostics.has(diagnostic_key)) {
+          continue;
+        }
+
+        warned_diagnostics.add(diagnostic_key);
+
+        this.warn({
+          id: clean_id,
+          message: diagnostic.message,
+          loc: {
+            line: diagnostic.line,
+            column: diagnostic.column,
+          },
+        });
+      }
+
+      return undefined;
+    },
+  };
 }
 
 function make_reserved_helper_guard_plugin(): Plugin {
@@ -62,6 +111,20 @@ function make_svelte_transform_plugin(): Plugin {
   return {
     name: "svelte-effect-runtime:svelte-transform",
 
+    configResolved(config) {
+      const conflicting_plugin_names = find_pre_transform_plugin_names(
+        config.plugins,
+      );
+
+      if (conflicting_plugin_names.length === 0) {
+        return;
+      }
+
+      throw new VitePreTransformPluginConflictError(
+        conflicting_plugin_names,
+      );
+    },
+
     async transform(code: string, id: string, options?: { ssr?: boolean }) {
       if (!is_svelte_component_module(id)) {
         return undefined;
@@ -81,6 +144,37 @@ function make_svelte_transform_plugin(): Plugin {
       return { code: result.code, map: null };
     },
   };
+}
+
+function find_pre_transform_plugin_names(plugins: readonly Plugin[]): string[] {
+  return plugins
+    .filter((plugin) =>
+      !plugin.name.startsWith("svelte-effect-runtime:") &&
+      !is_known_framework_pre_transform_plugin(plugin.name) &&
+      has_pre_transform_priority(plugin)
+    )
+    .map((plugin) => plugin.name);
+}
+
+function is_known_framework_pre_transform_plugin(name: string): boolean {
+  return name.startsWith("vite:") || name === "vite-plugin-svelte:preprocess";
+}
+
+function has_pre_transform_priority(plugin: Plugin): boolean {
+  if (plugin.enforce === "pre" && plugin.transform) {
+    return true;
+  }
+
+  if (
+    typeof plugin.transform === "object" &&
+    plugin.transform !== null &&
+    "order" in plugin.transform &&
+    plugin.transform.order === "pre"
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 function make_server_rewrite_plugin(): Plugin {

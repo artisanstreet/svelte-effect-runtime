@@ -1,14 +1,18 @@
 // deno-lint-ignore-file no-explicit-any
-import MagicString from "magic-string";
-
-import { Document, extractScriptTags } from "./svelte-internals.ts";
 import {
   create_relocated_source_mapper,
   create_script_content_mapper,
   create_source_map_mapper,
   SequentialDocumentMapper,
 } from "./document-mappers.ts";
+import {
+  safe_script_transform_result,
+  safe_transform_result,
+} from "./transform-results.ts";
+import { Document, extractScriptTags } from "./svelte-internals.ts";
 import type { Mapper, TransformSet } from "./types.ts";
+
+import MagicString from "magic-string";
 
 export function prepare_virtual_document(
   originalDocument: any,
@@ -26,9 +30,14 @@ export function prepare_virtual_document(
     : null;
   const baseCode = normalizedDeclarations?.code ?? originalText;
 
-  const markupResult = transforms.transformEffectMarkup(baseCode, {
+  const markupResult = safe_transform_result(
+    () =>
+      transforms.transformEffectMarkup(baseCode, {
+        filename,
+      }),
+    baseCode,
     filename,
-  });
+  );
 
   let currentCode = markupResult.code;
   const markupCode = currentCode;
@@ -38,9 +47,14 @@ export function prepare_virtual_document(
   if (scripts?.script && has_own(scripts.script.attributes, "effect")) {
     const preScriptTransformCode = currentCode;
     const magicString = new MagicString(currentCode);
-    const transformedScript = transforms.transformEffectScript(
+    const transformedScript = safe_script_transform_result(
+      () =>
+        transforms.transformEffectScript(
+          scripts.script.content,
+          { filename },
+        ),
       scripts.script.content,
-      { filename },
+      filename,
     );
     const effectAttributeRange = find_effect_attribute_range(
       currentCode,
