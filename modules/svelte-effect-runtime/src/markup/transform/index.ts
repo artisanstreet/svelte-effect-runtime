@@ -45,8 +45,6 @@ export function transform_markup_effect(
   filename: string,
   options: MarkupTransformOptions = {},
 ): MarkupTransformResult {
-  void options;
-
   if (!/\byield\s*\*/.test(content)) {
     return { code: content, has_yield: false };
   }
@@ -89,6 +87,7 @@ export function transform_markup_effect(
     effect_context,
     helper_context.bindings,
     helper_context.name_allocator,
+    options.target ?? "client",
   );
   const helpers = replacements.flatMap((replacement) =>
     replacement.helpers ?? []

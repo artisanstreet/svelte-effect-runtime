@@ -14,6 +14,7 @@ import type {
   MarkupCandidate,
   MarkupHelperBindings,
   MarkupNameAllocator,
+  MarkupTransformTarget,
   PendingRelocation,
   Replacement,
   TagKind,
@@ -33,6 +34,7 @@ export function emit_replacements(
   effect_context: EffectCallbackRewriteContext,
   helper_bindings: MarkupHelperBindings,
   name_allocator: MarkupNameAllocator,
+  target: MarkupTransformTarget,
 ): Replacement[] {
   return classified.map(({ candidate, kind }) =>
     emit_replacement(
@@ -41,6 +43,7 @@ export function emit_replacements(
       effect_context,
       helper_bindings,
       name_allocator,
+      target,
     )
   );
 }
@@ -51,6 +54,7 @@ function emit_replacement(
   effect_context: EffectCallbackRewriteContext,
   helper_bindings: MarkupHelperBindings,
   name_allocator: MarkupNameAllocator,
+  target: MarkupTransformTarget,
 ): Replacement {
   const normalized = normalize_effect_callback_yields(
     candidate.expr_text,
@@ -63,6 +67,7 @@ function emit_replacement(
   const id = make_cache_id(candidate);
   const id_text = JSON.stringify(id);
   const helper_name = make_helper_name(candidate, name_allocator);
+  const is_server_target = target === "server";
 
   let replacement_text: string;
   let helpers: HelperDeclaration[];
@@ -87,17 +92,28 @@ function emit_replacement(
       effect,
       candidate,
       helper_bindings,
+      is_server_target,
     );
     helpers = [...normalized.helpers, effect.helper];
   } else if (kind === "render_argument") {
     const effect = make_effect_helper(normalized_candidate, helper_name);
 
-    replacement_text = emit_await_expression(id_text, effect, helper_bindings);
+    replacement_text = emit_await_expression(
+      id_text,
+      effect,
+      helper_bindings,
+      server_fallback(is_server_target, "undefined"),
+    );
     helpers = [...normalized.helpers, effect.helper];
   } else if (kind === "each") {
     const effect = make_effect_helper(normalized_candidate, helper_name);
 
-    replacement_text = emit_await_expression(id_text, effect, helper_bindings);
+    replacement_text = emit_await_expression(
+      id_text,
+      effect,
+      helper_bindings,
+      server_fallback(is_server_target, "[]"),
+    );
     helpers = [...normalized.helpers, effect.helper];
   } else if (kind === "event") {
     const event = make_event_handler(normalized_candidate, helper_bindings);
@@ -112,7 +128,12 @@ function emit_replacement(
   } else {
     const effect = make_effect_helper(normalized_candidate, helper_name);
 
-    replacement_text = emit_await_expression(id_text, effect, helper_bindings);
+    replacement_text = emit_await_expression(
+      id_text,
+      effect,
+      helper_bindings,
+      server_fallback(is_server_target, "undefined"),
+    );
     helpers = [...normalized.helpers, effect.helper];
   }
 
@@ -178,8 +199,14 @@ function emit_render_expression(
   effect: EffectHelper,
   candidate: MarkupCandidate,
   helper_bindings: MarkupHelperBindings,
+  is_server_target: boolean,
 ): string {
-  const expression = emit_promise_expression(id_text, effect, helper_bindings);
+  const expression = emit_promise_expression(
+    id_text,
+    effect,
+    helper_bindings,
+    server_fallback(is_server_target, `() => undefined`),
+  );
 
   if (/^\s*yield\s*\*/.test(candidate.expr_text)) {
     return `(await ${expression})()`;
@@ -202,6 +229,13 @@ function emit_await_expression(
       ssr_fallback,
     )
   }`;
+}
+
+function server_fallback(
+  is_server_target: boolean,
+  fallback: string,
+): string | undefined {
+  return is_server_target ? fallback : undefined;
 }
 
 interface EffectHelper {

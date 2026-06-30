@@ -379,6 +379,23 @@ Deno.test("client render tags use awaited promise calls", () => {
   });
 });
 
+Deno.test("server render tags use noop snippet fallback during SSR", () => {
+  const source = `{@render yield* getSnippet()}`;
+  const result = transform_markup_effect(source, "RenderServer.svelte", {
+    target: "server",
+  });
+
+  assertStringIncludes(result.code, `await Dispatcher.emit`);
+  assertStringIncludes(result.code, `ssr_fallback: () => undefined`);
+  assertStringIncludes(result.code, `)()`);
+
+  compile(result.code, {
+    filename: "RenderServer.svelte",
+    generate: "server",
+    experimental: { async: true },
+  });
+});
+
 Deno.test("client common markup contexts compile with async option", () => {
   const source = [
     `<script>`,
@@ -439,6 +456,8 @@ Deno.test("server common markup contexts compile with async option", () => {
     result.code,
     `await Dispatcher.emit({ type: Code.Markup.Promise`,
   );
+  assertStringIncludes(result.code, `ssr_fallback: undefined`);
+  assertStringIncludes(result.code, `ssr_fallback: []`);
 
   compile(result.code, {
     filename: "ServerContexts.svelte",

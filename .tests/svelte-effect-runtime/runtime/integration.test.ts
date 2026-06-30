@@ -445,9 +445,14 @@ Deno.test("vite plugin emits client and server promises", async () => {
     server.code,
     `await Dispatcher.emit({ type: Code.Markup.Promise`,
   );
+  assertStringIncludes(server.code, `ssr_fallback: undefined`);
 
   if (client.code.includes(`Code.Markup.Value`)) {
     throw new Error("client transform should not emit value reads");
+  }
+
+  if (client.code.includes(`ssr_fallback`)) {
+    throw new Error("client transform should not emit SSR fallbacks");
   }
 });
 
