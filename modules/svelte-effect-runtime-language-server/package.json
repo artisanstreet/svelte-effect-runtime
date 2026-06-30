@@ -31,6 +31,7 @@
   "dependencies": {
     "@jridgewell/trace-mapping": "^0.3.31",
     "magic-string": "^0.30.21",
+    "svelte-effect-runtime-grammars": "3.4.0",
     "svelte": "^5.56.0",
     "svelte-language-server": "^0.17.30",
     "typescript": "^6.0.0",

@@ -5,13 +5,21 @@ import {
   tree_sitter,
   TreesitterQuery,
 } from "../../../modules/svelte-effect-runtime/src/grammars.ts";
+import {
+  textmate as grammar_package_textmate,
+  textmate_language as grammar_package_textmate_language,
+  tree_sitter as grammar_package_tree_sitter,
+} from "svelte-effect-runtime-grammars";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { createHighlighter } from "shiki";
 
 Deno.test("exports a Shiki-ready TextMate injection grammar for Svelte", () => {
   assertEquals(TextMate, textmate);
   assertEquals(TreesitterQuery, tree_sitter);
+  assertEquals(textmate, grammar_package_textmate);
   assertEquals(textmate.language, textmate_language);
+  assertEquals(textmate_language, grammar_package_textmate_language);
+  assertEquals(tree_sitter, grammar_package_tree_sitter);
   assertEquals(textmate.scope_name, "source.svelte.ser.injection");
   assertEquals(textmate.target_scope_name, "source.svelte");
   assertEquals(textmate_language.injectTo, ["source.svelte"]);
@@ -20,6 +28,18 @@ Deno.test("exports a Shiki-ready TextMate injection grammar for Svelte", () => {
     textmate_language.injectionSelector,
     "L:source.svelte -comment -string",
   );
+});
+
+Deno.test("grammar package loads tree-sitter queries from source assets", async () => {
+  const highlights_query = await Deno.readTextFile(
+    "../../modules/svelte-effect-runtime-grammars/src/tree-sitter/highlights.tsq",
+  );
+  const injections_query = await Deno.readTextFile(
+    "../../modules/svelte-effect-runtime-grammars/src/tree-sitter/injections.tsq",
+  );
+
+  assertEquals(tree_sitter.highlights_query, highlights_query);
+  assertEquals(tree_sitter.injections_query, injections_query);
 });
 
 Deno.test("TextMate grammar covers SER syntax examples", () => {

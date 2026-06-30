@@ -5,6 +5,7 @@ on:
     branches:
       - master
     paths:
+      - modules/svelte-effect-runtime-grammars/package.json
       - modules/svelte-effect-runtime/package.json
   workflow_dispatch:
 
@@ -38,7 +39,11 @@ jobs:
             exit 0
           fi
 
-          if git diff --unified=0 "${{ github.event.before }}" "${{ github.sha }}" -- modules/svelte-effect-runtime/package.json | grep -Eq '^[+-][[:space:]]*"version":[[:space:]]*"'; then
+          if git diff --unified=0 "${{ github.event.before }}" "${{ github.sha }}" -- \
+            modules/svelte-effect-runtime-grammars/package.json \
+            modules/svelte-effect-runtime/package.json \
+            | grep -Eq '^[+-][[:space:]]*"version":[[:space:]]*"'
+          then
             echo "has_version_bump=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_version_bump=false" >> "$GITHUB_OUTPUT"
@@ -105,6 +110,30 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: build_grammars
+        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-grammars
+        run: deno task build
+
+      - name: publish_grammars
+        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-grammars
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          GRAMMARS_VERSION="$(node -p "require('./package.json').version")"
+
+          if npx -y npm@11.5.1 view "svelte-effect-runtime-grammars@${GRAMMARS_VERSION}" version >/dev/null 2>&1; then
+            echo "svelte-effect-runtime-grammars@${GRAMMARS_VERSION} is already published. Skipping npm publish."
+            exit 0
+          fi
+
+          if [ -n "${NPM_TOKEN}" ]; then
+            printf '//registry.npmjs.org/:_authToken=%s\n' "${NPM_TOKEN}" > "${HOME}/.npmrc"
+          fi
+
+          npx -y npm@11.5.1 --version
+          npx -y npm@11.5.1 publish --access public --provenance
 
       - name: build_runtime
         working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime

@@ -3661,6 +3661,7 @@
     "members": {
       ".tests/svelte-effect-runtime": {
         "dependencies": [
+          "jsr:@barekey/svelte-effect-runtime-grammars@^3.4.0",
           "jsr:@std/assert@^1.0.15",
           "jsr:@std/path@^1.1.2",
           "npm:@sveltejs/kit@3.0.0-next.1",
@@ -3695,6 +3696,7 @@
       },
       "modules/svelte-effect-runtime": {
         "dependencies": [
+          "jsr:@barekey/svelte-effect-runtime-grammars@^3.4.0",
           "jsr:@std/assert@^1.0.15",
           "jsr:@std/path@^1.1.2",
           "npm:@babel/parser@^7.29.2",
@@ -3713,6 +3715,22 @@
             "npm:devalue@^5.5.0",
             "npm:magic-string@~0.30.21",
             "npm:rolldown@^1.0.0-rc.13",
+            "npm:svelte-effect-runtime-grammars@3.4.0",
+            "npm:typescript@6"
+          ]
+        }
+      },
+      "modules/svelte-effect-runtime-grammars": {
+        "dependencies": [
+          "jsr:@std/fs@^1.0.19",
+          "jsr:@std/path@^1.1.2",
+          "npm:rolldown@^1.0.0-rc.13",
+          "npm:typescript@6"
+        ],
+        "packageJson": {
+          "dependencies": [
+            "npm:@types/node@^24.6.1",
+            "npm:rolldown@^1.0.0-rc.13",
             "npm:typescript@6"
           ]
         }
@@ -3723,6 +3741,7 @@
             "npm:@jridgewell/trace-mapping@~0.3.31",
             "npm:magic-string@~0.30.21",
             "npm:rolldown@^1.0.0-rc.13",
+            "npm:svelte-effect-runtime-grammars@3.4.0",
             "npm:svelte-language-server@~0.17.30",
             "npm:svelte@^5.56.0",
             "npm:typescript@6",

@@ -1,0 +1,53 @@
+{
+  "name": "svelte-effect-runtime-grammars",
+  "version": "3.4.0",
+  "description": "TextMate and tree-sitter grammar data for Svelte Effect Runtime tooling.",
+  "license": "BSD-3-Clause",
+  "type": "module",
+  "engines": {
+    "node": "^22.12.0 || >=24.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/usebarekey/svelte-effect-runtime.git",
+    "directory": "modules/svelte-effect-runtime-grammars"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    ".dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./.dist/mod.d.ts",
+      "import": "./.dist/mod.js",
+      "default": "./.dist/mod.js"
+    },
+    "./textmate": {
+      "types": "./.dist/textmate.d.ts",
+      "import": "./.dist/textmate.js",
+      "default": "./.dist/textmate.js"
+    },
+    "./tree-sitter": {
+      "types": "./.dist/tree-sitter.d.ts",
+      "import": "./.dist/tree-sitter.js",
+      "default": "./.dist/tree-sitter.js"
+    },
+    "./textmate/svelte-effect-runtime.tmLanguage.json": "./.dist/textmate/svelte-effect-runtime.tmLanguage.json",
+    "./tree-sitter/highlights.tsq": "./.dist/tree-sitter/highlights.tsq",
+    "./tree-sitter/injections.tsq": "./.dist/tree-sitter/injections.tsq"
+  },
+  "scripts": {
+    "build": "deno task build",
+    "check": "deno task check",
+    "clean": "deno task clean",
+    "test": "deno task test"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.1",
+    "rolldown": "^1.0.0-rc.13",
+    "typescript": "^6.0.0"
+  }
+}

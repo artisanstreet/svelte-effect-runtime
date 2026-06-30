@@ -69,6 +69,7 @@
   "dependencies": {
     "devalue": "^5.5.0",
     "magic-string": "^0.30.21",
+    "svelte-effect-runtime-grammars": "3.4.0",
     "typescript": "^6.0.0"
   },
   "devDependencies": {

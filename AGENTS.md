@@ -240,12 +240,14 @@ When a commit is pushed to `master`:
 
 ## Releasing
 
-All packages must share the same semantic version. The four files that carry a version:
+All packages must share the same semantic version. The six files that carry a version:
 
 | File | Field |
 |------|-------|
 | `modules/svelte-effect-runtime/package.json` | `"version"` |
 | `modules/svelte-effect-runtime/deno.json` | `"version"` |
+| `modules/svelte-effect-runtime-grammars/package.json` | `"version"` |
+| `modules/svelte-effect-runtime-grammars/deno.json` | `"version"` |
 | `modules/svelte-effect-runtime-language-server/package.json` | `"version"` |
 | `modules/svelte-effect-runtime-vsix/package.json` | `"version"` |
 
@@ -255,7 +257,7 @@ When releasing:
    - **Major** (`2.0.0`): breaking API changes.
    - **Minor** (`1.7.0`): new features, backward-compatible.
    - **Patch** (`1.6.3`): bug fixes, no API or feature changes.
-2. Bump all four files to the same version.
+2. Bump all six files to the same version.
 3. After explicit human approval, commit and push to `master`.
 
 The CI will detect the version bump, run the full test suite, build all packages, and publish. If the versions are out of sync at any point, the release job will fail.

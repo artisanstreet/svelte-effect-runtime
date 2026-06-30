@@ -38,6 +38,8 @@ const runtime_package_json = {
   type: "module",
   dependencies: {
     svelte: runtime_manifest.peerDependencies?.svelte,
+    "svelte-effect-runtime-grammars": runtime_manifest.dependencies
+      ?.["svelte-effect-runtime-grammars"],
     typescript: runtime_manifest.dependencies?.typescript,
   },
 };

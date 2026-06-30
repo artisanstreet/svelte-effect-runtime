@@ -45,6 +45,7 @@ Write effectful code without any hassle. Seriously!
 | Package                                                                                    | Description                                                               |
 | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
 | [`svelte-effect-runtime`](./modules/svelte-effect-runtime)                                 | Core module that houses the Vite plugin to enable effectful execution.    |
+| [`svelte-effect-runtime-grammars`](./modules/svelte-effect-runtime-grammars)               | TextMate and tree-sitter grammar data used by SER-aware tooling.          |
 | [`svelte-effect-runtime-language-server`](./modules/svelte-effect-runtime-language-server) | Standalone npm package for the SER language server used by editor tools.  |
 | [`svelte-effect-runtime-vsix`](./modules/svelte-effect-runtime-vsix)                       | VS Code extension that launches the SER language server for Svelte files. |
 

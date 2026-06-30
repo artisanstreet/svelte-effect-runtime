@@ -5,6 +5,7 @@ on:
     branches:
       - master
     paths:
+      - modules/svelte-effect-runtime-grammars/package.json
       - modules/svelte-effect-runtime/package.json
       - modules/svelte-effect-runtime-language-server/package.json
       - modules/svelte-effect-runtime-vsix/package.json
@@ -40,12 +41,14 @@ jobs:
         shell: bash
         run: |
           RUNTIME_VERSION="$(node -p "require('./modules/svelte-effect-runtime/package.json').version")"
+          GRAMMARS_VERSION="$(node -p "require('./modules/svelte-effect-runtime-grammars/package.json').version")"
           LSP_VERSION="$(node -p "require('./modules/svelte-effect-runtime-language-server/package.json').version")"
           VSIX_VERSION="$(node -p "require('./modules/svelte-effect-runtime-vsix/package.json').version")"
 
-          if [ "$RUNTIME_VERSION" != "$LSP_VERSION" ] || [ "$RUNTIME_VERSION" != "$VSIX_VERSION" ]; then
+          if [ "$RUNTIME_VERSION" != "$GRAMMARS_VERSION" ] || [ "$RUNTIME_VERSION" != "$LSP_VERSION" ] || [ "$RUNTIME_VERSION" != "$VSIX_VERSION" ]; then
             echo "Release versions are out of sync." >&2
             echo "runtime: $RUNTIME_VERSION" >&2
+            echo "grammars: $GRAMMARS_VERSION" >&2
             echo "lsp: $LSP_VERSION" >&2
             echo "vsix: $VSIX_VERSION" >&2
             exit 1
@@ -77,6 +80,7 @@ jobs:
           fi
 
           if git diff --unified=0 "${{ github.event.before }}" "${{ github.sha }}" -- \
+            modules/svelte-effect-runtime-grammars/package.json \
             modules/svelte-effect-runtime/package.json \
             modules/svelte-effect-runtime-language-server/package.json \
             modules/svelte-effect-runtime-vsix/package.json \
@@ -135,22 +139,32 @@ jobs:
         shell: bash
         run: |
           RUNTIME_VERSION="$(node -p "require('./modules/svelte-effect-runtime/package.json').version")"
+          GRAMMARS_VERSION="$(node -p "require('./modules/svelte-effect-runtime-grammars/package.json').version")"
           LSP_VERSION="$(node -p "require('./modules/svelte-effect-runtime-language-server/package.json').version")"
           VSIX_VERSION="$(node -p "require('./modules/svelte-effect-runtime-vsix/package.json').version")"
           JSR_VERSION="$(node -e "const fs=require('fs'); const config=JSON.parse(fs.readFileSync('./modules/svelte-effect-runtime/deno.json', 'utf8')); process.stdout.write(config.version ?? '')")"
           JSR_NAME="$(node -e "const fs=require('fs'); const config=JSON.parse(fs.readFileSync('./modules/svelte-effect-runtime/deno.json', 'utf8')); process.stdout.write(config.name ?? '')")"
+          GRAMMARS_JSR_VERSION="$(node -e "const fs=require('fs'); const config=JSON.parse(fs.readFileSync('./modules/svelte-effect-runtime-grammars/deno.json', 'utf8')); process.stdout.write(config.version ?? '')")"
+          GRAMMARS_JSR_NAME="$(node -e "const fs=require('fs'); const config=JSON.parse(fs.readFileSync('./modules/svelte-effect-runtime-grammars/deno.json', 'utf8')); process.stdout.write(config.name ?? '')")"
 
-          if [ "$RUNTIME_VERSION" != "$RELEASE_VERSION" ] || [ "$LSP_VERSION" != "$RELEASE_VERSION" ] || [ "$VSIX_VERSION" != "$RELEASE_VERSION" ] || [ "$JSR_VERSION" != "$RELEASE_VERSION" ]; then
+          if [ "$RUNTIME_VERSION" != "$RELEASE_VERSION" ] || [ "$GRAMMARS_VERSION" != "$RELEASE_VERSION" ] || [ "$LSP_VERSION" != "$RELEASE_VERSION" ] || [ "$VSIX_VERSION" != "$RELEASE_VERSION" ] || [ "$JSR_VERSION" != "$RELEASE_VERSION" ] || [ "$GRAMMARS_JSR_VERSION" != "$RELEASE_VERSION" ]; then
             echo "Package versions do not match release version ($RELEASE_VERSION)." >&2
             echo "runtime: $RUNTIME_VERSION" >&2
+            echo "grammars: $GRAMMARS_VERSION" >&2
             echo "lsp: $LSP_VERSION" >&2
             echo "vsix: $VSIX_VERSION" >&2
             echo "jsr: $JSR_VERSION" >&2
+            echo "grammars_jsr: $GRAMMARS_JSR_VERSION" >&2
             exit 1
           fi
 
           if [ "$JSR_NAME" != "@barekey/svelte-effect-runtime" ]; then
             echo "Unexpected JSR package name: $JSR_NAME" >&2
+            exit 1
+          fi
+
+          if [ "$GRAMMARS_JSR_NAME" != "@barekey/svelte-effect-runtime-grammars" ]; then
+            echo "Unexpected grammars JSR package name: $GRAMMARS_JSR_NAME" >&2
             exit 1
           fi
 
@@ -175,6 +189,33 @@ jobs:
 
       - name: test
         run: deno task test
+
+      - name: build_grammars
+        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-grammars
+        run: deno task build
+
+      - name: publish_grammars_to_jsr
+        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-grammars
+        timeout-minutes: 10
+        run: npx --yes jsr publish
+
+      - name: publish_grammars_to_npm
+        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-grammars
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          if npx -y npm@11.5.1 view "svelte-effect-runtime-grammars@${RELEASE_VERSION}" version >/dev/null 2>&1; then
+            echo "svelte-effect-runtime-grammars@${RELEASE_VERSION} is already published. Skipping npm publish."
+            exit 0
+          fi
+
+          if [ -n "${NPM_TOKEN}" ]; then
+            printf '//registry.npmjs.org/:_authToken=%s\n' "${NPM_TOKEN}" > "${HOME}/.npmrc"
+          fi
+
+          npx -y npm@11.5.1 --version
+          npx -y npm@11.5.1 publish --access public --provenance
 
       - name: build_runtime
         working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime
@@ -217,6 +258,13 @@ jobs:
         run: |
           mkdir -p "${{ github.workspace }}/.dist/svelte-effect-runtime"
           npm pack --pack-destination "${{ github.workspace }}/.dist/svelte-effect-runtime"
+
+      - name: pack_grammars
+        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-grammars
+        shell: bash
+        run: |
+          mkdir -p "${{ github.workspace }}/.dist/svelte-effect-runtime-grammars"
+          npm pack --pack-destination "${{ github.workspace }}/.dist/svelte-effect-runtime-grammars"
 
       - name: pack_lsp
         working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-language-server
@@ -348,12 +396,14 @@ jobs:
         shell: bash
         run: |
           RUNTIME_TGZ="$(find .dist/svelte-effect-runtime -maxdepth 1 -name '*.tgz' -print -quit)"
+          GRAMMARS_TGZ="$(find .dist/svelte-effect-runtime-grammars -maxdepth 1 -name '*.tgz' -print -quit)"
           LSP_TGZ="$(find .dist/svelte-effect-runtime-language-server -maxdepth 1 -name '*.tgz' -print -quit)"
           VSIX_PATH="$(find .dist/svelte-effect-runtime-vsix -maxdepth 1 -name '*.vsix' -print -quit)"
 
-          if [ -z "$RUNTIME_TGZ" ] || [ -z "$LSP_TGZ" ] || [ -z "$VSIX_PATH" ]; then
+          if [ -z "$RUNTIME_TGZ" ] || [ -z "$GRAMMARS_TGZ" ] || [ -z "$LSP_TGZ" ] || [ -z "$VSIX_PATH" ]; then
             echo "Missing one or more release artifacts." >&2
             echo "runtime: $RUNTIME_TGZ"
+            echo "grammars: $GRAMMARS_TGZ"
             echo "lsp: $LSP_TGZ"
             echo "vsix: $VSIX_PATH"
             exit 1
@@ -361,6 +411,7 @@ jobs:
 
           gh release upload "$TAG_NAME" \
             "$RUNTIME_TGZ" \
+            "$GRAMMARS_TGZ" \
             "$LSP_TGZ" \
             "$VSIX_PATH" \
             --clobber

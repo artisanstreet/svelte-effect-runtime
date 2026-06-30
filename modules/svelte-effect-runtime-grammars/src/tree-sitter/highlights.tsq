@@ -1,0 +1,14 @@
+; Highlight the SER-only effect marker on <script effect>.
+((script_element
+  (start_tag
+    (attribute
+      (attribute_name) @storage.modifier.effect.ser)))
+  (#eq? @storage.modifier.effect.ser "effect"))
+
+; Highlight yielded Effect expressions after TypeScript has been injected.
+(yield_expression
+  "*" @keyword.operator.yield.star.ser) @keyword.control.yield.ser
+
+; Highlight bare SER declaration tags such as {const value = yield* load()}.
+((expression) @meta.embedded.declaration.ser
+  (#match? @meta.embedded.declaration.ser "^\\s*(const|let)\\s"))

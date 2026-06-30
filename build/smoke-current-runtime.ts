@@ -5,6 +5,11 @@ const code_root = resolve(repo_root, "..");
 const smokes_root = join(code_root, "smokes");
 const smoke_dir = join(smokes_root, "ser-current");
 const package_dir = join(repo_root, "modules", "svelte-effect-runtime");
+const grammar_package_dir = join(
+  repo_root,
+  "modules",
+  "svelte-effect-runtime-grammars",
+);
 const deno = Deno.execPath();
 const npm = Deno.build.os === "windows" ? "npm.cmd" : "npm";
 const npx = Deno.build.os === "windows" ? "npx.cmd" : "npx";
@@ -46,6 +51,20 @@ async function run_command(
   }
 
   return { stdout, stderr };
+}
+
+function resolve_packed_tarball(
+  stdout: string,
+  package_name: string,
+): string {
+  const [result] = JSON.parse(stdout) as Array<{ filename?: string }>;
+  const filename = result?.filename;
+
+  if (!filename) {
+    throw new Error(`npm pack did not create a ${package_name} tarball.`);
+  }
+
+  return filename;
 }
 
 const app_html = `<!doctype html>
@@ -262,27 +281,34 @@ async function main(): Promise<void> {
 
   await run_command(npm, ["install", "--legacy-peer-deps"], smoke_dir);
   await run_command(deno, ["task", "build"], package_dir);
-  await run_command(npm, ["pack", package_dir, "--json"], smoke_dir);
-
-  const tarballs = [];
-
-  for await (const entry of Deno.readDir(smoke_dir)) {
-    if (entry.isFile && entry.name.endsWith(".tgz")) {
-      tarballs.push(entry.name);
-    }
-  }
-
-  const tarball = tarballs.find((name) =>
-    name.startsWith("svelte-effect-runtime-")
+  const grammar_pack = await run_command(
+    npm,
+    ["pack", grammar_package_dir, "--json"],
+    smoke_dir,
+  );
+  const runtime_pack = await run_command(
+    npm,
+    ["pack", package_dir, "--json"],
+    smoke_dir,
   );
 
-  if (!tarball) {
-    throw new Error("npm pack did not create a svelte-effect-runtime tarball.");
-  }
+  const grammar_tarball = resolve_packed_tarball(
+    grammar_pack.stdout,
+    "svelte-effect-runtime-grammars",
+  );
+  const runtime_tarball = resolve_packed_tarball(
+    runtime_pack.stdout,
+    "svelte-effect-runtime",
+  );
 
   await run_command(
     npm,
-    ["install", "--legacy-peer-deps", join(smoke_dir, tarball)],
+    [
+      "install",
+      "--legacy-peer-deps",
+      join(smoke_dir, grammar_tarball),
+      join(smoke_dir, runtime_tarball),
+    ],
     smoke_dir,
   );
   await run_command(npm, ["run", "build"], smoke_dir);

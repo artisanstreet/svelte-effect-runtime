@@ -896,6 +896,10 @@ Deno.test("package manifests expose vite and transform entrypoints", async () =>
     import: "./.dist/grammars.js",
     default: "./.dist/grammars.js",
   });
+  assertEquals(
+    package_manifest.dependencies["svelte-effect-runtime-grammars"],
+    package_manifest.version,
+  );
   assertEquals(package_manifest.exports["./runtime/preprocess"], undefined);
 
   assertEquals(deno_manifest.exports["./vite"], "./src/vite.ts");
@@ -904,6 +908,10 @@ Deno.test("package manifests expose vite and transform entrypoints", async () =>
     "./src/runtime/transform.ts",
   );
   assertEquals(deno_manifest.exports["./grammars"], "./src/grammars.ts");
+  assertEquals(
+    deno_manifest.imports["svelte-effect-runtime-grammars"],
+    `jsr:@barekey/svelte-effect-runtime-grammars@^${deno_manifest.version}`,
+  );
   assertEquals(deno_manifest.exports["./runtime/preprocess"], undefined);
 });
 

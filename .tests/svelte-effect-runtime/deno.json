@@ -5,6 +5,7 @@
     "@std/assert": "jsr:@std/assert@^1.0.15",
     "@std/path": "jsr:@std/path@^1.1.2",
     "svelte-effect-runtime": "../../modules/svelte-effect-runtime/src/mod.ts",
+    "svelte-effect-runtime-grammars": "jsr:@barekey/svelte-effect-runtime-grammars@^3.4.0",
     "effect": "npm:effect@beta",
     "effect/": "npm:/effect@beta/",
     "magic-string": "npm:magic-string@^0.30.21",

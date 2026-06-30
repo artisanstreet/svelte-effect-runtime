@@ -19,6 +19,7 @@ const external = [
   /^vite$/,
   /^@sveltejs\/vite-plugin-svelte$/,
   /^@sveltejs\/kit(?:\/.*)?$/,
+  /^svelte-effect-runtime-grammars(?:\/.*)?$/,
   /^\$app\//,
   /^typescript$/,
   /^magic-string$/,

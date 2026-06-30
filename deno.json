@@ -1,6 +1,7 @@
 {
   "workspace": [
     "./modules/svelte-effect-runtime",
+    "./modules/svelte-effect-runtime-grammars",
     "./modules/svelte-effect-runtime-language-server",
     "./modules/svelte-effect-runtime-vsix",
     "./modules/docs",
@@ -26,12 +27,14 @@
   },
   "nodeModulesDir": "auto",
   "tasks": {
-    "build": "deno task build:runtime && deno task build:lsp && deno task build:extension",
+    "build": "deno task build:grammars && deno task build:runtime && deno task build:lsp && deno task build:extension",
     "build:docs": "cd modules/docs && deno task build",
+    "build:grammars": "cd modules/svelte-effect-runtime-grammars && deno task build",
     "build:runtime": "cd modules/svelte-effect-runtime && deno task build",
     "build:lsp": "cd modules/svelte-effect-runtime-language-server && deno task build",
     "build:extension": "cd modules/svelte-effect-runtime-vsix && deno task build",
-    "check": "deno task check:runtime",
+    "check": "deno task check:grammars && deno task check:runtime",
+    "check:grammars": "cd modules/svelte-effect-runtime-grammars && deno task check",
     "check:runtime": "cd modules/svelte-effect-runtime && deno task check",
     "docs:dev": "cd modules/docs && deno task dev",
     "lint": "deno lint",
