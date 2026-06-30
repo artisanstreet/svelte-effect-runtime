@@ -15,9 +15,9 @@
     "lib": ["deno.ns", "dom", "dom.iterable", "es2022"]
   },
   "tasks": {
-    "build": "deno task clean && deno run -A ../../build/runtime.ts && deno run -A npm:typescript@^6.0.0/tsc -p tsconfig.build.json --emitDeclarationOnly && deno run -A ../../build/rewrite-runtime-dts.ts",
+    "build": "deno task clean && deno run -A --config ../../deno.json ../../build/runtime.ts && deno run -A npm:typescript@^6.0.0/tsc -p tsconfig.build.json --emitDeclarationOnly && deno run -A --config ../../deno.json ../../build/dts.ts svelte-effect-runtime",
     "check": "deno check --node-modules-dir=auto src/mod.ts src/runtime/transform.ts src/internal/generators.ts src/internal/remote-client.ts src/internal/remote-server.ts src/detect.ts src/dispatcher.ts src/generators.ts src/vite.ts src/remote/shared.ts src/remote/server.ts src/remote/client.ts src/markup/transform.ts src/markup/value.ts src/markup/promise.ts src/markup/run.ts",
-    "clean": "deno run -A ../../build/clean.ts svelte-effect-runtime",
+    "clean": "deno run -A --config ../../deno.json ../../build/clean.ts svelte-effect-runtime",
     "test": "deno task --cwd ../../.tests/svelte-effect-runtime test",
     "fmt": "deno fmt",
     "lint": "deno lint"

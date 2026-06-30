@@ -1,4 +1,7 @@
 import { dirname, fromFileUrl, join, resolve } from "@std/path";
+import { Effect, pipe } from "effect";
+
+import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 
 const repo_root = resolve(dirname(fromFileUrl(import.meta.url)), "..");
 const code_root = resolve(repo_root, "..");
@@ -9,43 +12,47 @@ const deno = Deno.execPath();
 const npm = Deno.build.os === "windows" ? "npm.cmd" : "npm";
 const npx = Deno.build.os === "windows" ? "npx.cmd" : "npx";
 
-async function write_json(
+function write_json(
   path: string,
   value: unknown,
-): Promise<void> {
-  await write_text(path, `${JSON.stringify(value, null, 2)}\n`);
+) {
+  return write_text(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-async function write_text(path: string, value: string): Promise<void> {
-  await Deno.writeTextFile(join(smoke_dir, path), value);
+function write_text(path: string, value: string) {
+  return Effect.tryPromise(() =>
+    Deno.writeTextFile(join(smoke_dir, path), value)
+  );
 }
 
-async function run_command(
+function run_command(
   command: string,
   args: Array<string>,
   cwd: string,
-): Promise<{ stdout: string; stderr: string }> {
-  const output = await new Deno.Command(command, {
-    args,
-    cwd,
-    stdout: "piped",
-    stderr: "piped",
-  }).output();
+) {
+  return Effect.tryPromise(async () => {
+    const output = await new Deno.Command(command, {
+      args,
+      cwd,
+      stdout: "piped",
+      stderr: "piped",
+    }).output();
 
-  const stdout = new TextDecoder().decode(output.stdout);
-  const stderr = new TextDecoder().decode(output.stderr);
+    const stdout = new TextDecoder().decode(output.stdout);
+    const stderr = new TextDecoder().decode(output.stderr);
 
-  if (!output.success) {
-    throw new Error(
-      [
-        `${command} ${args.join(" ")} failed`,
-        stdout.trim(),
-        stderr.trim(),
-      ].filter(Boolean).join("\n\n"),
-    );
-  }
+    if (!output.success) {
+      throw new Error(
+        [
+          `${command} ${args.join(" ")} failed`,
+          stdout.trim(),
+          stderr.trim(),
+        ].filter(Boolean).join("\n\n"),
+      );
+    }
 
-  return { stdout, stderr };
+    return { stdout, stderr };
+  });
 }
 
 function resolve_packed_tarball(
@@ -232,19 +239,21 @@ test("current package drives script and markup effects", async ({ page }) => {
 });
 `;
 
-await main();
-
-async function main(): Promise<void> {
+const validate_smoke_dir = Effect.sync(() => {
   if (!smoke_dir.startsWith(smokes_root)) {
     throw new Error(`Refusing to write outside smoke root: ${smoke_dir}`);
   }
+});
 
+const reset_smoke_dir = Effect.tryPromise(async () => {
   await Deno.remove(smoke_dir, { recursive: true }).catch(() => undefined);
   await Deno.mkdir(join(smoke_dir, "src", "lib"), { recursive: true });
   await Deno.mkdir(join(smoke_dir, "src", "routes"), { recursive: true });
   await Deno.mkdir(join(smoke_dir, "tests"), { recursive: true });
+});
 
-  await write_json("package.json", {
+const write_smoke_project = Effect.all([
+  write_json("package.json", {
     name: "ser-current",
     private: true,
     type: "module",
@@ -264,30 +273,35 @@ async function main(): Promise<void> {
       vite: "^8.0.0",
     },
     devDependencies: {},
-  });
+  }),
+  write_text("src/app.html", app_html),
+  write_text("src/lib/demo.remote.ts", demo_remote_ts),
+  write_text("src/routes/+layout.svelte", layout_svelte),
+  write_text("src/routes/+page.svelte", page_svelte),
+  write_text("vite.config.ts", vite_config),
+  write_text("playwright.config.ts", playwright_config),
+  write_text("tests/runtime.spec.ts", runtime_spec),
+], { discard: true });
 
-  await write_text("src/app.html", app_html);
-  await write_text("src/lib/demo.remote.ts", demo_remote_ts);
-  await write_text("src/routes/+layout.svelte", layout_svelte);
-  await write_text("src/routes/+page.svelte", page_svelte);
-  await write_text("vite.config.ts", vite_config);
-  await write_text("playwright.config.ts", playwright_config);
-  await write_text("tests/runtime.spec.ts", runtime_spec);
+const install_smoke_dependencies = run_command(
+  npm,
+  ["install", "--legacy-peer-deps"],
+  smoke_dir,
+);
+const build_runtime_package = run_command(deno, ["task", "build"], package_dir);
+const pack_runtime = run_command(
+  npm,
+  ["pack", package_dir, "--json"],
+  smoke_dir,
+);
 
-  await run_command(npm, ["install", "--legacy-peer-deps"], smoke_dir);
-  await run_command(deno, ["task", "build"], package_dir);
-  const runtime_pack = await run_command(
-    npm,
-    ["pack", package_dir, "--json"],
-    smoke_dir,
-  );
-
+function install_runtime_pack(runtime_pack: { stdout: string }) {
   const runtime_tarball = resolve_packed_tarball(
     runtime_pack.stdout,
     "svelte-effect-runtime",
   );
 
-  await run_command(
+  return run_command(
     npm,
     [
       "install",
@@ -296,11 +310,37 @@ async function main(): Promise<void> {
     ],
     smoke_dir,
   );
-  await run_command(npm, ["run", "build"], smoke_dir);
-  await run_command(npx, ["playwright", "install", "chromium"], smoke_dir);
-  await run_command(npm, ["run", "smoke"], smoke_dir);
+}
 
+const build_smoke_app = run_command(npm, ["run", "build"], smoke_dir);
+const install_playwright = run_command(
+  npx,
+  ["playwright", "install", "chromium"],
+  smoke_dir,
+);
+const run_smoke = run_command(npm, ["run", "smoke"], smoke_dir);
+const report_success = Effect.sync(() => {
   console.log("[svelte-effect-runtime]", "current package smoke passed", {
     smoke_dir,
   });
-}
+});
+
+const program = pipe(
+  Effect.gen(function* () {
+    yield* validate_smoke_dir;
+    yield* reset_smoke_dir;
+    yield* write_smoke_project;
+    yield* install_smoke_dependencies;
+    yield* build_runtime_package;
+
+    const runtime_pack = yield* pack_runtime;
+
+    yield* install_runtime_pack(runtime_pack);
+    yield* build_smoke_app;
+    yield* install_playwright;
+    yield* run_smoke;
+    yield* report_success;
+  }),
+);
+
+NodeRuntime.runMain(program);

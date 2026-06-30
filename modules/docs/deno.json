@@ -2,7 +2,7 @@
   "tasks": {
     "dev": "npm run dev",
     "build": "npm run build",
-    "clean": "deno run -A ../../build/clean.ts docs",
+    "clean": "deno run -A --config ../../deno.json ../../build/clean.ts docs",
     "preview": "npm run preview"
   }
 }

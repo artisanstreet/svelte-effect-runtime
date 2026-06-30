@@ -1,7 +1,7 @@
 {
   "tasks": {
-    "build": "deno task clean && deno run -A ../../build/ext.ts",
-    "clean": "deno run -A ../../build/clean.ts svelte-effect-runtime-vsix",
-    "package": "deno task build && deno run -A ../../build/vsix.ts"
+    "build": "deno task clean && deno run -A --config ../../deno.json ../../build/ext.ts",
+    "clean": "deno run -A --config ../../deno.json ../../build/clean.ts svelte-effect-runtime-vsix",
+    "package": "deno task build && deno run -A --config ../../deno.json ../../build/vsix.ts"
   }
 }

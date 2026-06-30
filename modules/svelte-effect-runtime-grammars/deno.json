@@ -16,9 +16,9 @@
     ]
   },
   "tasks": {
-    "build": "deno task clean && deno run -A ../../build/grammars.ts && deno run -A npm:typescript@^6.0.0/tsc -p tsconfig.build.json --emitDeclarationOnly && deno run -A ../../build/rewrite-grammars-dts.ts",
+    "build": "deno task clean && deno run -A --config ../../deno.json ../../build/grammars.ts && deno run -A npm:typescript@^6.0.0/tsc -p tsconfig.build.json --emitDeclarationOnly && deno run -A --config ../../deno.json ../../build/dts.ts svelte-effect-runtime-grammars",
     "check": "deno check --node-modules-dir=auto src/mod.ts src/textmate.ts src/tree-sitter.ts",
-    "clean": "deno run -A ../../build/clean.ts svelte-effect-runtime-grammars",
+    "clean": "deno run -A --config ../../deno.json ../../build/clean.ts svelte-effect-runtime-grammars",
     "fmt": "deno fmt",
     "lint": "deno lint",
     "test": "deno test --no-check -A"
