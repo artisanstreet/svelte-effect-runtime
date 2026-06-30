@@ -1,9 +1,7 @@
-import highlights_query from "./tree-sitter/highlights.tsq" with {
-  type: "text",
-};
-import injections_query from "./tree-sitter/injections.tsq" with {
-  type: "text",
-};
+import {
+  highlights_query,
+  injections_query,
+} from "./tree-sitter/queries.generated.ts";
 
 /**
  * Tree-sitter query strings for SER-aware Svelte tooling.

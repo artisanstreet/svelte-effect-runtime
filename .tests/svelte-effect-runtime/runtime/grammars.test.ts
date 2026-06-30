@@ -30,8 +30,14 @@ Deno.test("grammar package loads tree-sitter queries from source assets", async 
     "../../modules/svelte-effect-runtime-grammars/src/tree-sitter/injections.tsq",
   );
 
-  assertEquals(tree_sitter.highlights_query, highlights_query);
-  assertEquals(tree_sitter.injections_query, injections_query);
+  assertEquals(
+    tree_sitter.highlights_query,
+    normalize_line_endings(highlights_query),
+  );
+  assertEquals(
+    tree_sitter.injections_query,
+    normalize_line_endings(injections_query),
+  );
 });
 
 Deno.test("TextMate grammar covers SER syntax examples", () => {
@@ -110,3 +116,7 @@ Deno.test("TextMate grammar is applied by Shiki to SER syntax", async () => {
 
   highlighter.dispose();
 });
+
+function normalize_line_endings(value: string) {
+  return value.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
+}
