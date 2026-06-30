@@ -2,6 +2,7 @@ import {
   Document,
   DocumentSnapshot,
   SvelteDocument,
+  ts,
 } from "../../../modules/svelte-effect-runtime-language-server/src/patch-language-server/svelte-internals.ts";
 import { normalize_transform_result } from "../../../modules/svelte-effect-runtime-language-server/src/patch-language-server/transform-results.ts";
 import { patch_svelte_compiler_path } from "../../../modules/svelte-effect-runtime-language-server/src/patch-language-server/patches.ts";
@@ -12,7 +13,12 @@ import {
   transform_script_effect,
   transform_svelte_effect,
 } from "../../../modules/svelte-effect-runtime/src/runtime/transform.ts";
-import { assert, assertFalse, assertStringIncludes } from "@std/assert";
+import {
+  assert,
+  assertEquals,
+  assertFalse,
+  assertStringIncludes,
+} from "@std/assert";
 
 import * as compiler from "svelte/compiler";
 
@@ -104,6 +110,47 @@ Deno.test("virtual TS snapshot maps SER hover positions to generated symbols", (
   );
 });
 
+Deno.test("virtual TS snapshot scopes bare const declaration tags", () => {
+  const source = [
+    `<script lang="ts">`,
+    `  const entry = { foo: 1 };`,
+    `  const params = { slug: "foo" };`,
+    `</script>`,
+    ``,
+    `{#each Object.entries(entry) as [slug] ("/" + slug)}`,
+    `  {const title = slug.replaceAll("-", " ")}`,
+    `  {const href = "/docs/" + slug}`,
+    `  {const is_active = slug === params.slug}`,
+    ``,
+    `  <a`,
+    `    {href}`,
+    `    aria-current={is_active ? "page" : undefined}`,
+    `  >`,
+    `    {title}`,
+    `  </a>`,
+    `{/each}`,
+  ].join("\n");
+  const document = make_document(source);
+  const prepared = prepare_virtual_document(document, make_transforms());
+  const snapshot = DocumentSnapshot.fromDocument(
+    prepared?.document ?? document,
+    make_snapshot_options(),
+  );
+  const rebound_snapshot = prepared
+    ? rebind_snapshot_to_original_document(
+      snapshot,
+      document,
+      prepared,
+    )
+    : snapshot;
+  const scoped_diagnostics = collect_scoped_name_diagnostics(
+    rebound_snapshot.getFullText(),
+    ["href", "is_active", "title"],
+  );
+
+  assertEquals(scoped_diagnostics, []);
+});
+
 function make_document(content: string) {
   const filename = `${Deno.cwd()}/language-server-fixture.svelte`;
   const uri = make_file_uri(filename);
@@ -112,6 +159,44 @@ function make_document(content: string) {
   document._compiler = compiler;
 
   return document;
+}
+
+function collect_scoped_name_diagnostics(
+  text: string,
+  names: string[],
+): string[] {
+  const file_name = "Component.svelte.ts";
+  const options: ts.CompilerOptions = {
+    module: ts.ModuleKind.ESNext,
+    noLib: true,
+    strict: true,
+    target: ts.ScriptTarget.ESNext,
+  };
+  const host = ts.createCompilerHost(options);
+
+  host.getSourceFile = (name, language_version) =>
+    name === file_name
+      ? ts.createSourceFile(
+        name,
+        text,
+        language_version,
+        true,
+        ts.ScriptKind.TS,
+      )
+      : undefined;
+  host.readFile = (name) => name === file_name ? text : undefined;
+  host.fileExists = (name) => name === file_name;
+  host.writeFile = () => {};
+
+  const program = ts.createProgram([file_name], options, host);
+  const diagnostics = ts.getPreEmitDiagnostics(program);
+  const pattern = new RegExp(`(?:${names.join("|")})`);
+
+  return diagnostics
+    .map((diagnostic) =>
+      ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")
+    )
+    .filter((message) => pattern.test(message));
 }
 
 function make_file_uri(filename: string): string {

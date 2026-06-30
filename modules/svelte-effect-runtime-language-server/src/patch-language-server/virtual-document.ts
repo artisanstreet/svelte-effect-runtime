@@ -17,8 +17,16 @@ export function prepare_virtual_document(
   const originalText = originalDocument.getText();
   const filename = originalDocument.getFilePath() ?? "Component.svelte";
   const sourceUri = originalDocument.uri;
+  const normalizedDeclarations = normalize_bare_const_declaration_tags(
+    originalText,
+    sourceUri,
+  );
+  const normalizationMapper = normalizedDeclarations
+    ? create_source_map_mapper(normalizedDeclarations.map, sourceUri)
+    : null;
+  const baseCode = normalizedDeclarations?.code ?? originalText;
 
-  const markupResult = transforms.transformEffectMarkup(originalText, {
+  const markupResult = transforms.transformEffectMarkup(baseCode, {
     filename,
   });
 
@@ -83,17 +91,17 @@ export function prepare_virtual_document(
     }
   }
 
-  const markupMapper = markupResult.code === originalText
+  const markupMapper = markupResult.code === baseCode
     ? null
     : create_relocated_source_mapper(
-      originalText,
+      baseCode,
       markupCode,
       markupResult.map,
       markupResult.relocations ?? [],
       sourceUri,
     );
 
-  if (!scriptMapper && !markupMapper) {
+  if (!scriptMapper && !markupMapper && !normalizationMapper) {
     return null;
   }
 
@@ -109,7 +117,9 @@ export function prepare_virtual_document(
   return {
     document: virtualDocument,
     preprocessMapper: new SequentialDocumentMapper(
-      [scriptMapper, markupMapper].filter(Boolean) as Mapper[],
+      [scriptMapper, markupMapper, normalizationMapper].filter(
+        Boolean,
+      ) as Mapper[],
       sourceUri,
     ),
   };
@@ -117,6 +127,90 @@ export function prepare_virtual_document(
 
 function has_own(object: object, key: PropertyKey) {
   return Object.prototype.hasOwnProperty.call(object, key);
+}
+
+function normalize_bare_const_declaration_tags(
+  code: string,
+  source_uri: string,
+): { code: string; map: Record<string, unknown> } | null {
+  const magic = new MagicString(code);
+  let changed = false;
+  let cursor = 0;
+
+  while (cursor < code.length) {
+    const open = code.indexOf("{", cursor);
+
+    if (open === -1) {
+      break;
+    }
+
+    if (
+      is_inside_excluded_block(code, open) || is_inside_html_comment(code, open)
+    ) {
+      cursor = open + 1;
+      continue;
+    }
+
+    const match = /^(\s*)const\s/.exec(code.slice(open + 1));
+
+    if (!match) {
+      cursor = open + 1;
+      continue;
+    }
+
+    magic.appendRight(open + 1, "@");
+    changed = true;
+    cursor = open + 1 + match[0].length;
+  }
+
+  if (!changed) {
+    return null;
+  }
+
+  return {
+    code: magic.toString(),
+    map: magic.generateMap({
+      hires: true,
+      includeContent: true,
+      source: source_uri,
+    }) as unknown as Record<string, unknown>,
+  };
+}
+
+function is_inside_excluded_block(content: string, pos: number): boolean {
+  const script = find_tag_end(content, "script", pos);
+  const style = find_tag_end(content, "style", pos);
+
+  return script > pos || style > pos;
+}
+
+function is_inside_html_comment(content: string, pos: number): boolean {
+  const open = content.lastIndexOf("<!--", pos);
+  const close = content.lastIndexOf("-->", pos);
+
+  return open > close;
+}
+
+function find_tag_end(
+  content: string,
+  tag: "script" | "style",
+  pos: number,
+): number {
+  const pattern = new RegExp(
+    `<${tag}\\b[^>]*>[\\s\\S]*?<\\/${tag}\\s*>`,
+    "gi",
+  );
+
+  for (const match of content.matchAll(pattern)) {
+    const start = match.index ?? -1;
+    const end = start + match[0].length;
+
+    if (start <= pos && pos < end) {
+      return end;
+    }
+  }
+
+  return -1;
 }
 
 function find_effect_attribute_range(
