@@ -3809,7 +3809,7 @@
             "npm:@jridgewell/trace-mapping@~0.3.31",
             "npm:magic-string@~0.30.21",
             "npm:rolldown@^1.0.0-rc.13",
-            "npm:svelte-effect-runtime-grammars@3.4.1",
+            "npm:svelte-effect-runtime-grammars@3.4.2",
             "npm:svelte-language-server@~0.17.30",
             "npm:svelte@^5.56.0",
             "npm:typescript@6",
