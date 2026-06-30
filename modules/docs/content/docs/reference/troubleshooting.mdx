@@ -25,20 +25,28 @@ If another Vite plugin parses Svelte files, make sure `effect()` runs first:
 plugins: [effect(), otherParserPlugin(), sveltekit()]
 ```
 
-## VitePreTransformPluginConflictError
+## Possible Vite Plugin Ordering Conflicts
 
-SER lowers `<script effect>` and `yield*` before normal Svelte parsing. A Vite
-plugin with `enforce: "pre"` or `transform.order: "pre"` can parse `.svelte`
-files first and crash on raw SER syntax.
+SER lowers `<script effect>` and `yield*` before normal Svelte parsing. Some
+Vite plugins run early and may inspect `.svelte` files before SER has lowered
+its syntax.
 
-The error names the conflicting plugin:
+When SER notices that setup, it prints a non-fatal info message:
 
 ```txt
-VitePreTransformPluginConflictError: SER detected Vite plugin(s) using pre-transform priority before component syntax lowering: wuchale.
+Svelte Effect Runtime noticed possible Vite plugin ordering conflicts.
+
+These plugins run before normal Svelte component transforms:
+  - example-plugin
+
+This is usually fine, but if you see Svelte parser errors around <script effect>
+or yield* in components, one of those plugins may be reading .svelte files before
+SER has lowered its syntax.
 ```
 
-Remove the plugin's pre-transform priority or upgrade to a version that uses
-normal Vite transform ordering.
+If the app works, you can ignore the note. If Svelte reports parser errors
+around SER syntax, check whether one of the listed plugins is parsing component
+source before SER runs.
 
 ## Remote functions do not resolve
 
