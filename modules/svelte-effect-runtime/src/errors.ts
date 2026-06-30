@@ -68,8 +68,8 @@ export class PreprocessError extends RuntimeError {
 }
 
 /**
- * Thrown when another Vite plugin claims pre-transform priority before SER can
- * lower component syntax.
+ * Retained for compatibility when callers need a structured representation of
+ * possible Vite plugin ordering conflicts.
  *
  * @example
  * ```ts
@@ -79,7 +79,8 @@ export class PreprocessError extends RuntimeError {
  * @since 2.4.0
  * @param plugin_names - Names of Vite plugins that declare pre-transform
  *   priority and may parse raw `.svelte` files before SER lowers them.
- * @returns A runtime-authored Error describing the plugin ordering conflict.
+ * @returns A runtime-authored Error describing the possible plugin ordering
+ *   conflict.
  */
 export class VitePreTransformPluginConflictError extends RuntimeError {
   /**
@@ -90,15 +91,16 @@ export class VitePreTransformPluginConflictError extends RuntimeError {
   readonly plugin_names: readonly string[];
 
   constructor(plugin_names: readonly string[]) {
-    const names = plugin_names.join(", ");
-
     super(
       [
-        `SER detected Vite plugin(s) using pre-transform priority before component syntax lowering: ${names}.`,
-        `Plugins with enforce: "pre" or transform.order: "pre" may parse .svelte files before SER lowers <script effect> and yield* syntax.`,
-        `This commonly surfaces as Svelte parser errors such as "The keyword 'yield' is reserved".`,
+        `Svelte Effect Runtime noticed possible Vite plugin ordering conflicts.`,
         "",
-        `Remove the pre-transform priority from the conflicting plugin or run a version that uses normal Vite transform ordering.`,
+        `These plugins run before normal Svelte component transforms:`,
+        ...plugin_names.map((plugin_name) => `  - ${plugin_name}`),
+        "",
+        `This is usually fine, but if you see Svelte parser errors around <script effect>`,
+        `or yield* in components, one of those plugins may be reading .svelte files before`,
+        `SER has lowered its syntax.`,
       ].join("\n"),
     );
     this.name = "VitePreTransformPluginConflictError";

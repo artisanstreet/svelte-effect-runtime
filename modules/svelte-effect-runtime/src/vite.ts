@@ -1,4 +1,3 @@
-import { VitePreTransformPluginConflictError } from "./errors.ts";
 import { find_svelte_effect_diagnostics } from "./diagnostics.ts";
 import type { Plugin } from "vite";
 
@@ -120,8 +119,8 @@ function make_svelte_transform_plugin(): Plugin {
         return;
       }
 
-      throw new VitePreTransformPluginConflictError(
-        conflicting_plugin_names,
+      config.logger.info(
+        make_pre_transform_plugin_notice(conflicting_plugin_names),
       );
     },
 
@@ -154,6 +153,28 @@ function find_pre_transform_plugin_names(plugins: readonly Plugin[]): string[] {
       has_pre_transform_priority(plugin)
     )
     .map((plugin) => plugin.name);
+}
+
+const ansi_reset = "\x1b[0m";
+const ansi_light_green = "\x1b[92m";
+
+function make_pre_transform_plugin_notice(
+  plugin_names: readonly string[],
+): string {
+  const formatted_plugins = plugin_names
+    .map((plugin_name) => `  - ${plugin_name}`)
+    .join("\n");
+
+  return [
+    `${ansi_light_green}[svelte-effect-runtime]${ansi_reset} Svelte Effect Runtime noticed possible Vite plugin ordering conflicts.`,
+    "",
+    "These plugins run before normal Svelte component transforms:",
+    formatted_plugins,
+    "",
+    "This is usually fine, but if you see Svelte parser errors around <script effect>",
+    "or yield* in components, one of those plugins may be reading .svelte files before",
+    "SER has lowered its syntax.",
+  ].join("\n");
 }
 
 function is_known_framework_pre_transform_plugin(name: string): boolean {

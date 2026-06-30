@@ -18,10 +18,7 @@ import {
   reset_server_runtime,
   ServerRuntime,
 } from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
-import {
-  RuntimeAlreadyInitializedError,
-  VitePreTransformPluginConflictError,
-} from "../../../modules/svelte-effect-runtime/src/errors.ts";
+import { RuntimeAlreadyInitializedError } from "../../../modules/svelte-effect-runtime/src/errors.ts";
 import { promise } from "../../../modules/svelte-effect-runtime/src/markup/promise.ts";
 import { Context, Layer } from "effect";
 import { compile, parse } from "svelte/compiler";
@@ -521,8 +518,9 @@ Deno.test("vite diagnostics plugin deduplicates repeated warnings", async () => 
   assertEquals(warnings.length, 1);
 });
 
-Deno.test("vite transform plugin errors for conflicting pre transform plugins", () => {
+Deno.test("vite transform plugin logs possible pre transform plugin conflicts", () => {
   const plugins = effect();
+  const infos: string[] = [];
   const transform_plugin = plugins.find((plugin) =>
     plugin.name === "svelte-effect-runtime:svelte-transform"
   );
@@ -533,44 +531,51 @@ Deno.test("vite transform plugin errors for conflicting pre transform plugins", 
     throw new Error("svelte transform plugin should expose a config hook");
   }
 
-  const error = assertThrows(
-    () =>
-      transform_plugin.configResolved?.({
-        plugins: [
-          ...plugins,
-          {
-            name: "vite-plugin-svelte:preprocess",
-            enforce: "pre",
-            transform() {
-              return undefined;
-            },
+  transform_plugin.configResolved?.({
+    plugins: [
+      ...plugins,
+      {
+        name: "vite-plugin-svelte:preprocess",
+        enforce: "pre",
+        transform() {
+          return undefined;
+        },
+      },
+      {
+        name: "pre-parser",
+        enforce: "pre",
+        transform() {
+          return undefined;
+        },
+      },
+      {
+        name: "wuchale",
+        transform: {
+          order: "pre",
+          handler() {
+            return undefined;
           },
-          {
-            name: "pre-parser",
-            enforce: "pre",
-            transform() {
-              return undefined;
-            },
-          },
-          {
-            name: "wuchale",
-            transform: {
-              order: "pre",
-              handler() {
-                return undefined;
-              },
-            },
-          },
-        ],
-      } as never),
-    VitePreTransformPluginConflictError,
-  );
+        },
+      },
+    ],
+    logger: {
+      info(message: string) {
+        infos.push(message);
+      },
+    },
+  } as never);
 
-  assertEquals(error.plugin_names, ["pre-parser", "wuchale"]);
-  assertStringIncludes(error.message, "pre-parser");
-  assertStringIncludes(error.message, "wuchale");
-  assertStringIncludes(error.message, "transform.order");
-  assertStringIncludes(error.message, "yield");
+  assertEquals(infos.length, 1);
+  assertStringIncludes(infos[0], "[svelte-effect-runtime]");
+  assertStringIncludes(
+    infos[0],
+    "Svelte Effect Runtime noticed possible Vite plugin ordering conflicts.",
+  );
+  assertStringIncludes(infos[0], "  - pre-parser");
+  assertStringIncludes(infos[0], "  - wuchale");
+  assertStringIncludes(infos[0], "<script effect>");
+  assertStringIncludes(infos[0], "yield* in components");
+  assertNotMatch(infos[0], /remove/i);
 });
 
 Deno.test("vite plugins do not force pre transform ordering", () => {
