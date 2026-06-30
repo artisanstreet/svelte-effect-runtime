@@ -101,7 +101,10 @@ export const init = () => {
 
 If `ServerRuntime.make(...)` is called again later, it throws
 `RuntimeAlreadyInitializedError`. Configure the server runtime once during
-startup, before remote handlers or generated runtime code run.
+startup, before remote handlers or generated runtime code run. During Vite dev
+SSR HMR reloads, SER disposes the old runtime and rebuilds it from the reloaded
+`hooks.server.ts` module so edited server layers take effect without restarting
+the dev server.
 
 ## `RequestEvent` is provided automatically
 

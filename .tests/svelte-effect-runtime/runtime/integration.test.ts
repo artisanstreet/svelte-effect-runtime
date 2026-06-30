@@ -4,6 +4,7 @@ import {
   assertStringIncludes,
   assertThrows,
 } from "@std/assert";
+import { createServer, normalizePath } from "vite";
 import {
   transform_markup_effect,
   transform_script_effect,
@@ -756,6 +757,53 @@ Deno.test("generated promise helpers use ServerRuntime services during SSR", asy
     assertEquals(result.value, "server-service");
   } finally {
     reset_server_runtime();
+  }
+});
+
+Deno.test("ServerRuntime.make survives Vite dev SSR hook reloads", async () => {
+  const temp_dir = await Deno.makeTempDir({ prefix: "ser-hmr-repro-" });
+  const source_root = normalizePath(
+    `${Deno.cwd()}/../../modules/svelte-effect-runtime/src`,
+  );
+  const hook_path = `${temp_dir}/src/hooks.server.ts`;
+
+  await Deno.mkdir(`${temp_dir}/src`, { recursive: true });
+  await Deno.writeTextFile(
+    hook_path,
+    [
+      `import { ServerRuntime } from "${source_root}/server/runtime.ts";`,
+      ``,
+      `export const init = () => {`,
+      `  return ServerRuntime.make();`,
+      `};`,
+    ].join("\n"),
+  );
+
+  const server = await createServer({
+    root: temp_dir,
+    logLevel: "silent",
+    configFile: false,
+    server: { middlewareMode: true },
+    appType: "custom",
+    resolve: {
+      alias: [
+        { find: /^\$\/(.*)$/, replacement: `${source_root}/$1` },
+      ],
+    },
+  });
+
+  try {
+    const first = await server.ssrLoadModule("/src/hooks.server.ts");
+    const first_runtime = first.init();
+    const second = await server.ssrLoadModule("/src/hooks.server.ts?hmr=1");
+    const second_runtime = second.init();
+
+    if (first_runtime === second_runtime) {
+      throw new Error("HMR reload should rebuild the server runtime");
+    }
+  } finally {
+    await server.close();
+    await Deno.remove(temp_dir, { recursive: true });
   }
 });
 

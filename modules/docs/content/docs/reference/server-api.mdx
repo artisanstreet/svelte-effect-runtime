@@ -13,7 +13,12 @@ import { ServerRuntime } from "svelte-effect-runtime/server";
 ServerRuntime.make(layer);
 ```
 
-Registers the layer used by remote function handlers. Call it once from `src/hooks.server.ts`. The Vite plugin also rewrites server-side package-root imports to `_server`, but explicit `_server` imports make server-only examples clear.
+Registers the layer used by remote function handlers. Call it once from
+`src/hooks.server.ts`. Duplicate calls still throw outside Vite dev SSR; during
+dev HMR, SER rebuilds the runtime when SvelteKit reloads `hooks.server.ts`.
+
+The Vite plugin also rewrites server-side package-root imports to `_server`, but
+explicit `_server` imports make server-only examples clear.
 
 ## RequestEvent
 

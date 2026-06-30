@@ -8,6 +8,13 @@ import {
   RuntimeAlreadyInitializedError,
 } from "$/errors.ts";
 
+type ViteImportMeta = ImportMeta & {
+  readonly env?: {
+    readonly DEV?: boolean;
+    readonly SSR?: boolean;
+  };
+};
+
 /**
  * Subset of SvelteKit's `RequestEvent` that remote handlers typically access.
  *
@@ -64,8 +71,19 @@ export class ServerRuntime {
   static make<R = never>(
     layer?: Layer.Layer<R>,
   ): ManagedRuntime.ManagedRuntime<R, never> {
-    if (current_server_runtime) {
+    const should_replace_dev_runtime = current_server_runtime !== undefined &&
+      is_vite_dev_ssr();
+
+    /**
+     * Keep duplicate production initialization loud while allowing SvelteKit's
+     * dev server to re-run hooks.server.ts after an HMR invalidation.
+     */
+    if (current_server_runtime && !should_replace_dev_runtime) {
       throw new RuntimeAlreadyInitializedError("ServerRuntime");
+    }
+
+    if (should_replace_dev_runtime) {
+      reset_server_runtime();
     }
 
     const runtime = ManagedRuntime.make(
@@ -134,6 +152,12 @@ export function get_server_dispatcher(): InternalDispatcher {
   );
 
   return current_server_dispatcher;
+}
+
+function is_vite_dev_ssr(): boolean {
+  const env = (import.meta as ViteImportMeta).env;
+
+  return env?.DEV === true && env?.SSR === true;
 }
 
 /**

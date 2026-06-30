@@ -50,7 +50,10 @@ export function get_server_runtime_or_throw(): ManagedRuntime.ManagedRuntime<
   been registered.
 - If no runtime has been registered yet, `get_server_runtime_or_throw()` lazily
   creates a default runtime with an empty layer.
-- Calling it again throws `RuntimeAlreadyInitializedError`.
+- Calling `ServerRuntime.make(...)` again throws
+  `RuntimeAlreadyInitializedError`, except during Vite dev SSR HMR reloads
+  where the old runtime is disposed and rebuilt from the reloaded
+  `hooks.server.ts` module.
 - `RequestEvent` is provided automatically during remote execution.
 - Inside a remote Effect, use `yield* RequestEvent`.
 
