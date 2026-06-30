@@ -240,24 +240,6 @@ jobs:
 
           npx --yes jsr publish
 
-      - name: publish_runtime_to_npm
-        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        shell: bash
-        run: |
-          if npx -y npm@11.5.1 view "svelte-effect-runtime@${RELEASE_VERSION}" version >/dev/null 2>&1; then
-            echo "svelte-effect-runtime@${RELEASE_VERSION} is already published. Skipping npm publish."
-            exit 0
-          fi
-
-          if [ -n "${NPM_TOKEN}" ]; then
-            printf '//registry.npmjs.org/:_authToken=%s\n' "${NPM_TOKEN}" > "${HOME}/.npmrc"
-          fi
-
-          npx -y npm@11.5.1 --version
-          npx -y npm@11.5.1 publish --access public --provenance
-
       - name: build_lsp
         working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-language-server
         run: deno task build
