@@ -11,7 +11,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
   group: runtime-${{ github.ref }}
@@ -88,66 +87,3 @@ jobs:
       - name: build_runtime
         working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime
         run: deno task build
-
-  publish_runtime:
-    needs:
-      - detect_version_bump
-      - lint_and_test
-      - build_runtime
-    if: needs.detect_version_bump.outputs.has_version_bump == 'true'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: checkout
-        uses: actions/checkout@v4
-
-      - name: setup_deno
-        uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
-
-      - name: setup_node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: build_grammars
-        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-grammars
-        run: deno task build
-
-      - name: publish_grammars
-        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-grammars
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        shell: bash
-        run: |
-          GRAMMARS_VERSION="$(node -p "require('./package.json').version")"
-
-          if npx -y npm@11.5.1 view "svelte-effect-runtime-grammars@${GRAMMARS_VERSION}" version >/dev/null 2>&1; then
-            echo "svelte-effect-runtime-grammars@${GRAMMARS_VERSION} is already published. Skipping npm publish."
-            exit 0
-          fi
-
-          if [ -n "${NPM_TOKEN}" ]; then
-            printf '//registry.npmjs.org/:_authToken=%s\n' "${NPM_TOKEN}" > "${HOME}/.npmrc"
-          fi
-
-          npx -y npm@11.5.1 --version
-          npx -y npm@11.5.1 publish --access public --provenance
-
-      - name: build_runtime
-        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime
-        run: deno task build
-
-      - name: publish_runtime
-        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        shell: bash
-        run: |
-          if [ -n "${NPM_TOKEN}" ]; then
-            printf '//registry.npmjs.org/:_authToken=%s\n' "${NPM_TOKEN}" > "${HOME}/.npmrc"
-          fi
-
-          npx -y npm@11.5.1 --version
-          npx -y npm@11.5.1 publish --access public --provenance

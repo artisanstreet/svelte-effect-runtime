@@ -25,8 +25,7 @@
     "build": "deno task build",
     "clean": "deno task clean",
     "prepare:runtime": "deno task prepare:runtime",
-    "start": "node ./.dist/server.cjs --stdio",
-    "test": "deno task test"
+    "start": "node ./.dist/server.cjs --stdio"
   },
   "dependencies": {
     "@jridgewell/trace-mapping": "^0.3.31",

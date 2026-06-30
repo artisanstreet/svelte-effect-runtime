@@ -15,15 +15,18 @@ The npm package also publishes raw grammar assets as package subpaths:
 From the repository root:
 
 ```sh
-deno task publish:grammars:npm
+cd modules/svelte-effect-runtime-grammars
+deno task build
+npm publish --access public
 ```
 
 For a publish rehearsal:
 
 ```sh
-deno task publish:grammars:npm --dry-run
+cd modules/svelte-effect-runtime-grammars
+deno task build
+npm publish --access public --dry-run
 ```
 
-The command checks, builds, verifies the npm tarball contents, confirms the
-version is not already published, and then runs `npm publish --access public`.
-Run `npm login` first, or set `NPM_TOKEN` for the command.
+Run `npm login` first. If npm asks for an OTP, pass it with
+`npm publish --access public --otp 123456`.

@@ -1,4 +1,7 @@
 {
+  "tasks": {
+    "test": "deno test --no-check -A runtime"
+  },
   "imports": {
     "$": "../../modules/svelte-effect-runtime/src/mod.ts",
     "$/": "../../modules/svelte-effect-runtime/src/",

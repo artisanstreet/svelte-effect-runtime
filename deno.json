@@ -28,22 +28,22 @@
   "nodeModulesDir": "auto",
   "tasks": {
     "build": "deno task build:grammars && deno task build:runtime && deno task build:lsp && deno task build:extension",
-    "build:docs": "cd modules/docs && deno task build",
-    "build:grammars": "cd modules/svelte-effect-runtime-grammars && deno task build",
-    "build:runtime": "cd modules/svelte-effect-runtime && deno task build",
-    "build:lsp": "cd modules/svelte-effect-runtime-language-server && deno task build",
-    "build:extension": "cd modules/svelte-effect-runtime-vsix && deno task build",
+    "build:docs": "deno task --cwd modules/docs build",
+    "build:grammars": "deno task --cwd modules/svelte-effect-runtime-grammars build",
+    "build:runtime": "deno task --cwd modules/svelte-effect-runtime build",
+    "build:lsp": "deno task --cwd modules/svelte-effect-runtime-language-server build",
+    "build:extension": "deno task --cwd modules/svelte-effect-runtime-vsix build",
     "check": "deno task check:grammars && deno task check:runtime",
-    "check:grammars": "cd modules/svelte-effect-runtime-grammars && deno task check",
-    "check:runtime": "cd modules/svelte-effect-runtime && deno task check",
-    "docs:dev": "cd modules/docs && deno task dev",
+    "check:grammars": "deno task --cwd modules/svelte-effect-runtime-grammars check",
+    "check:runtime": "deno task --cwd modules/svelte-effect-runtime check",
+    "clean": "deno run -A build/clean.ts",
+    "docs:dev": "deno task --cwd modules/docs dev",
     "lint": "deno lint",
-    "package:extension": "cd modules/svelte-effect-runtime-vsix && deno task package",
-    "publish:grammars:npm": "deno run -A build/publish-grammars-npm.ts",
+    "package:extension": "deno task --cwd modules/svelte-effect-runtime-vsix package",
     "smoke:docs": "deno run -A build/smoke-docs.ts",
     "smoke:runtime": "deno run -A build/smoke-current-runtime.ts",
     "test": "deno task test:runtime",
     "test:lsp": "deno task build:lsp",
-    "test:runtime": "cd modules/svelte-effect-runtime && deno task test"
+    "test:runtime": "deno task --cwd .tests/svelte-effect-runtime test"
   }
 }
