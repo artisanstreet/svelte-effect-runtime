@@ -3,9 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/svelte-effect-runtime">Runtime npm</a>
-  •
-  <a href="https://www.npmjs.com/package/svelte-effect-runtime-language-server">Language Server npm</a>
+  <a href="https://www.npmjs.com/package/svelte-effect-runtime">npm</a>
   •
   <a href="https://jsr.io/@barekey/svelte-effect-runtime">JSR</a>
   •
