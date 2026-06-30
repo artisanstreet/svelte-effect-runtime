@@ -197,7 +197,14 @@ jobs:
       - name: publish_grammars_to_jsr
         working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-grammars
         timeout-minutes: 10
-        run: npx --yes jsr publish
+        shell: bash
+        run: |
+          if npx --yes jsr info "@barekey/svelte-effect-runtime-grammars@${RELEASE_VERSION}" >/dev/null 2>&1; then
+            echo "@barekey/svelte-effect-runtime-grammars@${RELEASE_VERSION} is already published. Skipping JSR publish."
+            exit 0
+          fi
+
+          npx --yes jsr publish
 
       - name: publish_grammars_to_npm
         working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-grammars
@@ -224,7 +231,32 @@ jobs:
       - name: publish_runtime_to_jsr
         working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime
         timeout-minutes: 10
-        run: npx --yes jsr publish
+        shell: bash
+        run: |
+          if npx --yes jsr info "@barekey/svelte-effect-runtime@${RELEASE_VERSION}" >/dev/null 2>&1; then
+            echo "@barekey/svelte-effect-runtime@${RELEASE_VERSION} is already published. Skipping JSR publish."
+            exit 0
+          fi
+
+          npx --yes jsr publish
+
+      - name: publish_runtime_to_npm
+        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          if npx -y npm@11.5.1 view "svelte-effect-runtime@${RELEASE_VERSION}" version >/dev/null 2>&1; then
+            echo "svelte-effect-runtime@${RELEASE_VERSION} is already published. Skipping npm publish."
+            exit 0
+          fi
+
+          if [ -n "${NPM_TOKEN}" ]; then
+            printf '//registry.npmjs.org/:_authToken=%s\n' "${NPM_TOKEN}" > "${HOME}/.npmrc"
+          fi
+
+          npx -y npm@11.5.1 --version
+          npx -y npm@11.5.1 publish --access public --provenance
 
       - name: build_lsp
         working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-language-server
@@ -274,6 +306,7 @@ jobs:
           npm pack --pack-destination "${{ github.workspace }}/.dist/svelte-effect-runtime-language-server"
 
       - name: azure_login_for_marketplace
+        if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')
         uses: azure/login@v2
         env:
           AZURE_CORE_OUTPUT: none
@@ -283,9 +316,11 @@ jobs:
           allow-no-subscriptions: true
 
       - name: install_tfx_cli
+        if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')
         run: npm install -g tfx-cli
 
       - name: publish_extension_to_openvsx
+        if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')
         shell: bash
         run: |
           if [ -z "${{ secrets.OPEN_VSX_TOKEN }}" ]; then
@@ -302,6 +337,7 @@ jobs:
           npx --yes ovsx publish "$VSIX_PATH" -p "${{ secrets.OPEN_VSX_TOKEN }}"
 
       - name: publish_extension_to_marketplace
+        if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')
         shell: bash
         run: |
           if [ -z "${{ secrets.AZURE_CLIENT_ID }}" ] || [ -z "${{ secrets.AZURE_TENANT_ID }}" ]; then
@@ -347,6 +383,7 @@ jobs:
           exit "$TFX_EXIT_CODE"
 
       - name: create_or_update_release
+        if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -391,6 +428,7 @@ jobs:
           fi
 
       - name: upload_release_assets
+        if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
