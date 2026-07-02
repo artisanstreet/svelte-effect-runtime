@@ -1,4 +1,5 @@
 import { transform_markup_effect } from "../../../modules/svelte-effect-runtime/src/markup/transform.ts";
+import { sanitize_markup } from "../../../modules/svelte-effect-runtime/src/markup/transform/scan.ts";
 import { reset_dispatcher } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
 import { promise } from "../../../modules/svelte-effect-runtime/src/markup/promise.ts";
 import { value } from "../../../modules/svelte-effect-runtime/src/markup/value.ts";
@@ -58,6 +59,58 @@ Deno.test("passes through markup with no yield* unchanged", () => {
   assertStringIncludes(result.code, `<h1>Hello</h1>`);
   assertStringIncludes(result.code, `<p>World</p>`);
   if (result.has_yield) throw new Error("has_yield should be false");
+});
+
+Deno.test("skips excluded block braces without per-brace tag scans", () => {
+  const original_match_all = String.prototype.matchAll;
+  let match_all_calls = 0;
+
+  Object.defineProperty(String.prototype, "matchAll", {
+    configurable: true,
+    value(pattern: string | RegExp) {
+      match_all_calls += 1;
+
+      return original_match_all.call(this, pattern);
+    },
+  });
+
+  try {
+    const script_body = Array.from(
+      { length: 200 },
+      (_, index) => `if (flag${index}) { value += ${index}; }`,
+    ).join("\n");
+    const style_body = Array.from(
+      { length: 200 },
+      (_, index) => `.item-${index} { color: red; }`,
+    ).join("\n");
+    const source = [
+      `<script>`,
+      `  const ignored = yield* loadIgnored();`,
+      script_body,
+      `</script>`,
+      `<style>`,
+      style_body,
+      `</style>`,
+      `<!-- {yield* ignoredComment()} -->`,
+      `<p>{yield* shown()}</p>`,
+    ].join("\n");
+
+    const result = sanitize_markup(source, "Excluded.svelte");
+
+    assertEquals(result.candidates.length, 1);
+    assertStringIncludes(result.code, `__SER___markup_placeholder_0`);
+  } finally {
+    Object.defineProperty(String.prototype, "matchAll", {
+      configurable: true,
+      value: original_match_all,
+    });
+  }
+
+  if (match_all_calls > 8) {
+    throw new Error(
+      `expected precomputed excluded ranges, got ${match_all_calls} scans`,
+    );
+  }
 });
 
 Deno.test("passes through markup with yield* inside a generator (function boundary)", () => {

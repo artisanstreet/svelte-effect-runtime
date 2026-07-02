@@ -23,11 +23,37 @@ interface DeclarationYieldExpression {
   expr_text: string;
 }
 
+interface SourceRange {
+  start: number;
+  end: number;
+}
+
+/**
+ * Replaces markup `yield*` expressions with placeholders before Svelte parses
+ * the component.
+ *
+ * @example
+ * ```ts
+ * const sanitized = sanitize_markup(
+ *   `<p>{yield* loadLabel()}</p>`,
+ *   "Label.svelte",
+ * );
+ * ```
+ *
+ * @since 2.0.0
+ * @param content - Raw Svelte component source to scan for effectful markup
+ *   expressions.
+ * @param filename - Source filename used when validation errors need to point
+ *   back to the component being transformed.
+ * @returns Sanitized source plus placeholder candidates that should be lowered
+ *   after Svelte classifies their markup positions.
+ */
 export function sanitize_markup(
   content: string,
   filename: string,
 ): SanitizeResult {
   const candidates: MarkupCandidate[] = [];
+  const excluded_ranges = collect_excluded_ranges(content);
   const magic = new MagicString(content);
   let helper_index = 0;
   let cursor = 0;
@@ -37,11 +63,10 @@ export function sanitize_markup(
     if (open === -1) break;
 
     /** Skip braces inside <script> and <style> blocks. */
-    if (
-      is_inside_excluded_block(content, open) ||
-      is_inside_html_comment(content, open)
-    ) {
-      cursor = open + 1;
+    const excluded_range = find_excluded_range(excluded_ranges, open);
+
+    if (excluded_range) {
+      cursor = excluded_range.end;
       continue;
     }
 
@@ -260,39 +285,100 @@ function collect_expression_yield_expressions(
   return expressions;
 }
 
-function is_inside_excluded_block(content: string, pos: number): boolean {
-  const script = find_tag_end(content, "script", pos);
-  const style = find_tag_end(content, "style", pos);
+function collect_excluded_ranges(content: string): SourceRange[] {
+  const ranges = [
+    ...collect_tag_ranges(content, "script"),
+    ...collect_tag_ranges(content, "style"),
+    ...collect_html_comment_ranges(content),
+  ];
 
-  return (
-    (script !== undefined && pos < script.end && pos > script.start) ||
-    (style !== undefined && pos < style.end && pos > style.start)
-  );
+  ranges.sort((a, b) => a.start - b.start);
+
+  return merge_ranges(ranges);
 }
 
-function is_inside_html_comment(content: string, pos: number): boolean {
-  const open = content.lastIndexOf("<!--", pos);
-  const close = content.lastIndexOf("-->", pos);
-
-  return open !== -1 && open > close;
-}
-
-function find_tag_end(
+function collect_tag_ranges(
   content: string,
   tag: string,
-  after_pos: number,
-): { start: number; end: number } | undefined {
+): SourceRange[] {
   const pattern = new RegExp(
     `<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}\\s*>`,
     "gi",
   );
 
-  for (const match of content.matchAll(pattern)) {
-    if (match.index === undefined) continue;
-    const end_pos = match.index + match[0].length;
-    if (match.index <= after_pos && after_pos < end_pos) {
-      return { start: match.index, end: end_pos };
+  return [...content.matchAll(pattern)].flatMap((match) => {
+    if (match.index === undefined) {
+      return [];
     }
+
+    return [{
+      start: match.index,
+      end: match.index + match[0].length,
+    }];
+  });
+}
+
+function collect_html_comment_ranges(content: string): SourceRange[] {
+  const ranges: SourceRange[] = [];
+  let cursor = 0;
+
+  while (cursor < content.length) {
+    const start = content.indexOf("<!--", cursor);
+
+    if (start === -1) {
+      break;
+    }
+
+    const close = content.indexOf("-->", start + "<!--".length);
+    const end = close === -1 ? content.length : close + "-->".length;
+
+    ranges.push({ start, end });
+
+    cursor = end;
+  }
+
+  return ranges;
+}
+
+function merge_ranges(ranges: SourceRange[]): SourceRange[] {
+  const merged: SourceRange[] = [];
+
+  for (const range of ranges) {
+    const previous = merged.at(-1);
+
+    if (!previous || range.start > previous.end) {
+      merged.push({ ...range });
+      continue;
+    }
+
+    previous.end = Math.max(previous.end, range.end);
+  }
+
+  return merged;
+}
+
+function find_excluded_range(
+  ranges: SourceRange[],
+  pos: number,
+): SourceRange | undefined {
+  let low = 0;
+  let high = ranges.length - 1;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const range = ranges[mid];
+
+    if (pos <= range.start) {
+      high = mid - 1;
+      continue;
+    }
+
+    if (pos >= range.end) {
+      low = mid + 1;
+      continue;
+    }
+
+    return range;
   }
 
   return undefined;
