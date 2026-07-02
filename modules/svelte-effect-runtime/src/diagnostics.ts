@@ -14,6 +14,16 @@ interface MarkupExpression {
   attribute_name?: string;
 }
 
+interface SourceRange {
+  start: number;
+  end: number;
+}
+
+interface SourceLocation {
+  line: number;
+  column: number;
+}
+
 /**
  * Finds best-effort SER usage diagnostics in Svelte component markup.
  *
@@ -35,10 +45,16 @@ export function find_svelte_effect_diagnostics(
   filename: string,
 ): Array<{ message: string; line: number; column: number }> {
   const effect_names = find_effect_local_names(code);
+  const line_starts = make_line_starts(code);
   const expressions = find_markup_expressions(code);
 
   return expressions.flatMap((expression) =>
-    make_expression_diagnostics(code, filename, effect_names, expression)
+    make_expression_diagnostics(
+      filename,
+      effect_names,
+      expression,
+      line_starts,
+    )
   );
 }
 
@@ -85,7 +101,9 @@ function parse_effect_import_local_name(specifier: string): string | undefined {
 
 function find_markup_expressions(code: string): MarkupExpression[] {
   const expressions: MarkupExpression[] = [];
+  const excluded_ranges = find_svelte_excluded_ranges(code);
   let cursor = 0;
+  let excluded_range_index = 0;
 
   while (cursor < code.length) {
     const open = code.indexOf("{", cursor);
@@ -94,8 +112,21 @@ function find_markup_expressions(code: string): MarkupExpression[] {
       break;
     }
 
-    if (is_inside_svelte_excluded_block(code, open)) {
-      cursor = open + 1;
+    while (
+      excluded_range_index < excluded_ranges.length &&
+      open >= excluded_ranges[excluded_range_index].end
+    ) {
+      excluded_range_index += 1;
+    }
+
+    const excluded_range = excluded_ranges[excluded_range_index];
+
+    if (
+      excluded_range !== undefined &&
+      open >= excluded_range.start &&
+      open < excluded_range.end
+    ) {
+      cursor = excluded_range.end;
       continue;
     }
 
@@ -120,17 +151,16 @@ function find_markup_expressions(code: string): MarkupExpression[] {
 }
 
 function make_expression_diagnostics(
-  code: string,
   filename: string,
   effect_names: Set<string>,
   expression: MarkupExpression,
+  line_starts: number[],
 ): Diagnostic[] {
   const attribute_name = expression.attribute_name;
   const expression_text = expression.expression_text;
   const is_event_attribute = attribute_name !== undefined &&
     is_event_attribute_name(attribute_name);
   const is_attribute = attribute_name !== undefined;
-  const loc = get_line_column(code, expression.start);
 
   if (!contains_effect_reference(expression_text, effect_names)) {
     return [];
@@ -139,6 +169,8 @@ function make_expression_diagnostics(
   if (starts_with_yield_star(expression_text)) {
     return [];
   }
+
+  const loc = get_line_column(line_starts, expression.start);
 
   if (
     is_event_attribute &&
@@ -427,39 +459,30 @@ function find_attribute_name_before_expression(
   return match?.[1];
 }
 
-function is_inside_svelte_excluded_block(code: string, pos: number): boolean {
-  const script = find_svelte_tag_range(code, "script", pos);
-  const style = find_svelte_tag_range(code, "style", pos);
+function find_svelte_excluded_ranges(code: string): SourceRange[] {
+  const ranges = [
+    ...find_svelte_tag_ranges(code, "script"),
+    ...find_svelte_tag_ranges(code, "style"),
+  ];
 
-  return (
-    (script !== undefined && pos < script.end && pos > script.start) ||
-    (style !== undefined && pos < style.end && pos > style.start)
-  );
+  return ranges.sort((a, b) => a.start - b.start);
 }
 
-function find_svelte_tag_range(
+function find_svelte_tag_ranges(
   code: string,
   tag: string,
-  after_pos: number,
-): { start: number; end: number } | undefined {
+): SourceRange[] {
   const pattern = new RegExp(
-    `<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}\\s*>`,
+    `<${tag}\\b[^>]*>[\\s\\S]*?<\\/${tag}\\s*>`,
     "gi",
   );
+  const matches = [...code.matchAll(pattern)];
 
-  for (const match of code.matchAll(pattern)) {
-    if (match.index === undefined) {
-      continue;
-    }
-
-    const end = match.index + match[0].length;
-
-    if (match.index <= after_pos && after_pos < end) {
-      return { start: match.index, end };
-    }
-  }
-
-  return undefined;
+  return matches.flatMap((match) =>
+    match.index === undefined
+      ? []
+      : [{ start: match.index, end: match.index + match[0].length }]
+  );
 }
 
 function find_closing_brace(code: string, start: number): number {
@@ -532,15 +555,41 @@ function skip_block_comment(code: string, start: number): number {
 }
 
 function get_line_column(
-  code: string,
+  line_starts: number[],
   position: number,
-): { line: number; column: number } {
-  const before = code.slice(0, position);
-  const lines = before.split("\n");
-  const line = lines.length;
-  const column = lines.at(-1)?.length ?? 0;
+): SourceLocation {
+  let low = 0;
+  let high = line_starts.length - 1;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+
+    if (line_starts[mid] <= position) {
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  const line_index = Math.max(0, high);
+  const line = line_index + 1;
+  const column = position - line_starts[line_index];
 
   return { line, column };
+}
+
+function make_line_starts(code: string): number[] {
+  const line_starts = [0];
+
+  for (let i = 0; i < code.length; i += 1) {
+    if (code[i] !== "\n") {
+      continue;
+    }
+
+    line_starts.push(i + 1);
+  }
+
+  return line_starts;
 }
 
 function escape_regexp(value: string): string {
