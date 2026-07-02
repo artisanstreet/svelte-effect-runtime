@@ -261,20 +261,26 @@ function create_script_relocations(
   });
 
   const used_ranges: Array<{ start: number; end: number }> = [];
+  const search_cursors = new Map<string, number>();
 
   return candidates.flatMap((candidate) => {
+    const search_key = make_relocation_search_key(candidate);
     const generated_start = find_available_generated_text(
       code,
       candidate,
       used_ranges,
+      search_cursors.get(search_key) ?? 0,
     );
 
     if (generated_start < 0) {
+      search_cursors.set(search_key, code.length);
+
       return [];
     }
 
     const generated_end = generated_start + candidate.text.length;
     used_ranges.push({ start: generated_start, end: generated_end });
+    search_cursors.set(search_key, generated_end);
 
     return [{
       originalStart: candidate.originalStart,
@@ -291,6 +297,10 @@ type RelocationCandidate = {
   text: string;
   match: "exact" | "identifier";
 };
+
+function make_relocation_search_key(candidate: RelocationCandidate): string {
+  return `${candidate.match}:${candidate.text}`;
+}
 
 function collect_binding_relocation_candidates(
   name: ts.BindingName,
@@ -320,9 +330,8 @@ function find_available_generated_text(
   code: string,
   candidate: RelocationCandidate,
   used_ranges: Array<{ start: number; end: number }>,
+  search_start: number,
 ): number {
-  let search_start = 0;
-
   while (search_start < code.length) {
     const index = code.indexOf(candidate.text, search_start);
 
