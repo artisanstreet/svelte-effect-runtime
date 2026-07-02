@@ -3,6 +3,10 @@ import {
   CONFIG_SERVER_PATH,
   LANGUAGE_SERVER_PACKAGE_NAME,
 } from "./constants.ts";
+import {
+  LANGUAGE_SERVER_PACKAGE_VERSION,
+  make_language_server_install_manifest,
+} from "./language-server-package.ts";
 
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
@@ -92,62 +96,24 @@ async function install_language_server(
     LANGUAGE_SERVER_CACHE_DIR,
   );
   const installed_version = await read_installed_package_version(install_root);
-  const latest_version = await read_latest_package_version(
-    output_channel,
-    installed_version,
-  );
+  const target_version = LANGUAGE_SERVER_PACKAGE_VERSION;
+  const install_manifest = make_language_server_install_manifest();
 
   await mkdir(install_root, { recursive: true });
 
-  if (installed_version !== latest_version) {
+  if (installed_version !== target_version) {
     output_channel.appendLine(
-      `Installing ${LANGUAGE_SERVER_PACKAGE_NAME}@${latest_version}.`,
+      `Installing ${LANGUAGE_SERVER_PACKAGE_NAME}@${target_version}.`,
     );
 
     await writeFile(
       join(install_root, "package.json"),
-      `${JSON.stringify(make_install_manifest(latest_version), null, 2)}\n`,
+      `${JSON.stringify(install_manifest, null, 2)}\n`,
     );
-    await run_npm_install(
-      install_root,
-      output_channel,
-      installed_version,
-    );
+    await run_npm_install(install_root);
   }
 
-  return await verify_language_server_install(install_root);
-}
-
-async function read_latest_package_version(
-  output_channel: vscode.OutputChannel,
-  installed_version: string | undefined,
-): Promise<string> {
-  try {
-    const { stdout } = await run_npm([
-      "view",
-      LANGUAGE_SERVER_PACKAGE_NAME,
-      "version",
-      "--json",
-    ]);
-
-    return parse_npm_version(stdout);
-  } catch (error) {
-    const message = format_error(error);
-
-    output_channel.appendLine(
-      `Failed to read latest ${LANGUAGE_SERVER_PACKAGE_NAME} version: ${message}`,
-    );
-
-    if (installed_version) {
-      output_channel.appendLine(
-        `Using installed ${LANGUAGE_SERVER_PACKAGE_NAME}@${installed_version}.`,
-      );
-
-      return installed_version;
-    }
-
-    throw error;
-  }
+  return await verify_language_server_install(install_root, target_version);
 }
 
 async function read_installed_package_version(
@@ -173,41 +139,39 @@ async function read_installed_package_version(
 
 async function verify_language_server_install(
   install_root: string,
+  target_version: string,
 ): Promise<string> {
   const script_path = join(install_root, ...LANGUAGE_SERVER_SCRIPT_PATH);
   const runtime_path = join(install_root, ...LANGUAGE_SERVER_RUNTIME_PATH);
+  const installed_version = await read_installed_package_version(install_root);
 
   await access(script_path);
   await access(runtime_path);
+
+  if (installed_version !== target_version) {
+    throw new Error(
+      `Installed ${LANGUAGE_SERVER_PACKAGE_NAME}@${
+        installed_version ?? "unknown"
+      } does not match required ${target_version}.`,
+    );
+  }
 
   return script_path;
 }
 
 async function run_npm_install(
   install_root: string,
-  output_channel: vscode.OutputChannel,
-  installed_version: string | undefined,
 ): Promise<void> {
-  try {
-    await run_npm(
-      [
-        "install",
-        "--omit=dev",
-        "--ignore-scripts",
-        "--no-audit",
-        "--no-fund",
-      ],
-      install_root,
-    );
-  } catch (error) {
-    if (!installed_version) {
-      throw error;
-    }
-
-    output_channel.appendLine(
-      `Failed to update ${LANGUAGE_SERVER_PACKAGE_NAME}; using installed ${installed_version}.`,
-    );
-  }
+  await run_npm(
+    [
+      "install",
+      "--omit=dev",
+      "--ignore-scripts",
+      "--no-audit",
+      "--no-fund",
+    ],
+    install_root,
+  );
 }
 
 async function run_npm(args: string[], cwd?: string) {
@@ -218,28 +182,6 @@ async function run_npm(args: string[], cwd?: string) {
     windowsHide: true,
     maxBuffer: 10 * 1024 * 1024,
   });
-}
-
-function make_install_manifest(version: string) {
-  return {
-    private: true,
-    dependencies: {
-      [LANGUAGE_SERVER_PACKAGE_NAME]: version,
-    },
-  };
-}
-
-function parse_npm_version(stdout: string): string {
-  const text = stdout.trim();
-  const parsed = JSON.parse(text);
-
-  if (typeof parsed !== "string" || parsed.length === 0) {
-    throw new Error(
-      `Unexpected npm version response for ${LANGUAGE_SERVER_PACKAGE_NAME}: ${text}`,
-    );
-  }
-
-  return parsed;
 }
 
 function npm_invocation(args: string[]) {
@@ -254,8 +196,4 @@ function npm_invocation(args: string[]) {
     command: "npm",
     args,
   };
-}
-
-function format_error(error: unknown): string {
-  return error instanceof Error ? error.stack ?? error.message : String(error);
 }
