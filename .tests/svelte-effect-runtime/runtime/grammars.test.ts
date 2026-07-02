@@ -5,6 +5,7 @@ import {
   tree_sitter,
   TreesitterQuery,
 } from "svelte-effect-runtime-grammars";
+import { generate_tree_sitter_query_module } from "../../../build/grammar-query-codegen.ts";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { createHighlighter } from "shiki";
 
@@ -58,6 +59,34 @@ Deno.test("Tree-sitter queries describe SER highlighting and injection points", 
   assertStringIncludes(tree_sitter.injections_query, "script_element");
   assertStringIncludes(tree_sitter.injections_query, "yield\\\\s*\\\\*");
   assertStringIncludes(tree_sitter.injections_query, "typescript");
+});
+
+Deno.test("tree-sitter query codegen keeps template breakout fixtures inert", async () => {
+  const breakout_key = "__ser_tree_sitter_query_codegen_breakout";
+  const highlights_query = [
+    "; fixture with backslash-backtick: \\`",
+    '; fixture with interpolation: ${globalThis.__ser_tree_sitter_query_codegen_breakout = "executed"}',
+  ].join("\n");
+  const injections_query = [
+    "; second fixture with backslash-backtick: \\`",
+    '; second fixture with interpolation: ${globalThis.__ser_tree_sitter_query_codegen_breakout = "executed-again"}',
+  ].join("\n");
+  const code = generate_tree_sitter_query_module(
+    highlights_query,
+    injections_query,
+  );
+  const module_url = `data:text/javascript;charset=utf-8,${
+    encodeURIComponent(code)
+  }`;
+
+  Reflect.deleteProperty(globalThis, breakout_key);
+
+  const generated_module = await import(module_url);
+
+  assertEquals(generated_module.highlights_query, highlights_query);
+  assertEquals(generated_module.injections_query, injections_query);
+  assertEquals(Reflect.get(globalThis, breakout_key), undefined);
+  assert(!code.includes("String.raw"));
 });
 
 Deno.test("TextMate grammar is applied by Shiki to SER syntax", async () => {

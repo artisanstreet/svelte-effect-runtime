@@ -1,7 +1,8 @@
+import { generate_tree_sitter_query_module } from "./grammar-query-codegen.ts";
 import { dirname, fromFileUrl, join, resolve } from "@std/path";
+import { copy } from "@std/fs/copy";
 import { Effect, pipe } from "effect";
 import { build } from "rolldown";
-import { copy } from "@std/fs/copy";
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 
@@ -25,7 +26,7 @@ const prepare_output = Effect.tryPromise(async () => {
   await Deno.mkdir(output_dir, { recursive: true });
 });
 
-const generate_tree_sitter_query_module = Effect.tryPromise(async () => {
+const write_tree_sitter_query_module = Effect.tryPromise(async () => {
   const highlights_query = normalize_line_endings(
     await Deno.readTextFile(highlights_query_path),
   );
@@ -35,16 +36,7 @@ const generate_tree_sitter_query_module = Effect.tryPromise(async () => {
 
   await Deno.writeTextFile(
     generated_query_module_path,
-    [
-      `export const highlights_query = ${
-        make_raw_template_literal(highlights_query)
-      };`,
-      ``,
-      `export const injections_query = ${
-        make_raw_template_literal(injections_query)
-      };`,
-      ``,
-    ].join("\n"),
+    generate_tree_sitter_query_module(highlights_query, injections_query),
   );
 });
 
@@ -94,21 +86,13 @@ const copy_assets = Effect.tryPromise(async () => {
 const program = pipe(
   Effect.gen(function* () {
     yield* prepare_output;
-    yield* generate_tree_sitter_query_module;
+    yield* write_tree_sitter_query_module;
     yield* bundle_grammars;
     yield* copy_assets;
   }),
 );
 
 NodeRuntime.runMain(program);
-
-function make_raw_template_literal(value: string) {
-  return `String\n  .raw\`${
-    value
-      .replaceAll("`", "\\`")
-      .replaceAll("${", "\\${")
-  }\``;
-}
 
 function normalize_line_endings(value: string) {
   return value.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
