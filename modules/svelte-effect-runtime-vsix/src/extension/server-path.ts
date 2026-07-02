@@ -3,6 +3,10 @@ import {
   CONFIG_SERVER_PATH,
   LANGUAGE_SERVER_PACKAGE_NAME,
 } from "./constants.ts";
+import {
+  resolve_configured_server_path,
+  type ScopedServerPathConfiguration,
+} from "./server-path-policy.ts";
 
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
@@ -46,7 +50,7 @@ export async function get_server_path(
   context: vscode.ExtensionContext,
   output_channel: vscode.OutputChannel,
 ): Promise<string> {
-  const configured_path = get_configured_server_path();
+  const configured_path = get_configured_server_path(output_channel);
 
   if (configured_path) {
     return configured_path;
@@ -72,15 +76,44 @@ export async function get_server_path(
  * ```
  *
  * @since 2.0.0
+ * @param output_channel - Optional output channel used to report ignored
+ *   unsafe configuration.
  * @returns The configured path, or undefined when the setting is empty.
  */
-export function get_configured_server_path(): string | undefined {
-  const configured_path = vscode.workspace
-    .getConfiguration(CONFIG_ROOT)
-    .get(CONFIG_SERVER_PATH, "")
-    .trim();
+export function get_configured_server_path(
+  output_channel?: vscode.OutputChannel,
+): string | undefined {
+  const result = resolve_configured_server_path(
+    read_scoped_server_path_configuration(),
+  );
 
-  return configured_path.length === 0 ? undefined : configured_path;
+  if (result.ignored_workspace_path) {
+    output_channel?.appendLine(
+      "Ignoring workspace svelte-effect-runtime.languageServer.path because executable paths must be configured in user or machine settings.",
+    );
+  }
+
+  if (result.invalid_global_path) {
+    output_channel?.appendLine(
+      "Ignoring svelte-effect-runtime.languageServer.path because it is not an absolute local filesystem path.",
+    );
+  }
+
+  return result.path;
+}
+
+function read_scoped_server_path_configuration(): ScopedServerPathConfiguration {
+  const inspection = vscode.workspace
+    .getConfiguration(CONFIG_ROOT)
+    .inspect(CONFIG_SERVER_PATH);
+
+  return {
+    global_path: inspection?.globalValue,
+    workspace_path: inspection?.workspaceValue,
+    workspace_folder_path: inspection?.workspaceFolderValue,
+    workspace_language_path: inspection?.workspaceLanguageValue,
+    workspace_folder_language_path: inspection?.workspaceFolderLanguageValue,
+  };
 }
 
 async function install_language_server(

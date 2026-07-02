@@ -5,6 +5,7 @@ import {
   type ServerOptions,
   TransportKind,
 } from "vscode-languageclient/node.js";
+import { assert_safe_language_server_path } from "./server-path-policy.ts";
 import { create_initialization_options } from "./initialization-options.ts";
 import { CLIENT_ID, CLIENT_NAME } from "./constants.ts";
 
@@ -90,6 +91,8 @@ function create_server_options(server_path: string): ServerOptions {
 
 function create_server_executable(server_path: string): Executable {
   const workspace_folder = vscode.workspace.workspaceFolders?.[0];
+
+  assert_safe_language_server_path(server_path);
 
   return {
     command: process.execPath,
