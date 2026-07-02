@@ -177,7 +177,7 @@ Deno.test("encode_remote_failure serialises cyclic failure records safely", () =
   assertEquals(parsed.token, undefined);
 });
 
-Deno.test("encode_remote_failure preserves Error messages and fields", () => {
+Deno.test("encode_remote_failure redacts ordinary Error messages and fields", () => {
   const failure = new Error("boom") as Error & { code?: string };
 
   failure.code = "E_BOOM";
@@ -187,8 +187,28 @@ Deno.test("encode_remote_failure preserves Error messages and fields", () => {
   } as never);
   const parsed = parse(encoded);
 
-  assertEquals(parsed.message, "boom");
-  assertEquals(parsed.code, "E_BOOM");
+  assertEquals(parsed.message, "[UNKNOWN_REMOTE_FAILURE]: Unknown error");
+  assertEquals(parsed.code, undefined);
+  assertFalse(encoded.includes("boom"));
+  assertFalse(encoded.includes("E_BOOM"));
+});
+
+Deno.test("encode_remote_failure redacts untagged failure records", () => {
+  const encoded = encode_remote_failure({
+    reasons: [{
+      _tag: "Fail",
+      error: {
+        message: "database password rejected",
+        token: "server-secret-token",
+      },
+    }],
+  } as never);
+  const parsed = parse(encoded);
+
+  assertEquals(parsed.message, "[UNKNOWN_REMOTE_FAILURE]: Unknown error");
+  assertEquals(parsed.token, undefined);
+  assertFalse(encoded.includes("database password"));
+  assertFalse(encoded.includes("server-secret-token"));
 });
 
 Deno.test("encode_remote_failure handles cause with no failures gracefully", () => {

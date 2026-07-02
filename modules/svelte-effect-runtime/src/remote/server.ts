@@ -120,24 +120,16 @@ export function encode_remote_failure(cause: Cause.Cause<unknown>): string {
 
   for (const reason of reasons) {
     if (Cause.isFailReason(reason as never)) {
-      const failure = reason.error;
-
+      const failure = to_public_remote_failure(reason.error);
       const encoded = stringify_failure(failure);
 
       if (encoded !== undefined) {
         return encoded;
       }
-
-      const serializable_failure = to_serializable_failure(failure);
-      const serializable_encoded = stringify_failure(serializable_failure);
-
-      if (serializable_encoded !== undefined) {
-        return serializable_encoded;
-      }
     }
   }
 
-  return stringify({ message: "[UNKNOWN_REMOTE_FAILURE]: Unknown error" });
+  return stringify_unknown_remote_failure();
 }
 
 function get_cause_reasons(
@@ -161,7 +153,17 @@ function stringify_failure(value: unknown): string | undefined {
   }
 }
 
-function to_serializable_failure(
+function to_public_remote_failure(value: unknown): unknown {
+  if (!has_public_remote_failure_tag(value)) {
+    return create_unknown_remote_failure();
+  }
+
+  const serializable_failure = to_serializable_public_failure(value);
+
+  return serializable_failure ?? create_unknown_remote_failure();
+}
+
+function to_serializable_public_failure(
   value: unknown,
   seen = new WeakSet<object>(),
 ): unknown {
@@ -177,6 +179,10 @@ function to_serializable_failure(
     return value;
   }
 
+  if (is_internal_object(value)) {
+    return undefined;
+  }
+
   if (seen.has(value)) {
     return undefined;
   }
@@ -184,7 +190,7 @@ function to_serializable_failure(
   seen.add(value);
 
   const serializable = Array.isArray(value)
-    ? value.map((item) => to_serializable_failure(item, seen))
+    ? value.map((item) => to_serializable_public_failure(item, seen))
     : to_plain_record(value, seen);
 
   seen.delete(value);
@@ -204,7 +210,7 @@ function to_plain_record(
       continue;
     }
 
-    record[key] = to_serializable_failure(descriptor.value, seen);
+    record[key] = to_serializable_public_failure(descriptor.value, seen);
   }
 
   if (value instanceof Error && !("message" in record)) {
@@ -216,6 +222,35 @@ function to_plain_record(
 
 function is_object_like(value: unknown): value is object {
   return typeof value === "object" && value !== null;
+}
+
+function has_public_remote_failure_tag(value: unknown): boolean {
+  return (
+    is_object_like(value) &&
+    typeof (value as { _tag?: unknown })._tag === "string"
+  );
+}
+
+function is_internal_object(value: object): boolean {
+  return (
+    !Array.isArray(value) &&
+    !is_plain_record(value) &&
+    !has_public_remote_failure_tag(value)
+  );
+}
+
+function is_plain_record(value: object): boolean {
+  const prototype = Object.getPrototypeOf(value);
+
+  return prototype === Object.prototype || prototype === null;
+}
+
+function create_unknown_remote_failure(): { readonly message: string } {
+  return { message: "[UNKNOWN_REMOTE_FAILURE]: Unknown error" };
+}
+
+function stringify_unknown_remote_failure(): string {
+  return stringify(create_unknown_remote_failure());
 }
 
 /**
