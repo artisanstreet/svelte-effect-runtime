@@ -19,6 +19,7 @@ import {
   assertFalse,
   assertStringIncludes,
 } from "@std/assert";
+import type { CompilerOptions } from "typescript";
 
 import * as compiler from "svelte/compiler";
 
@@ -175,6 +176,59 @@ Deno.test("virtual TS snapshot scopes bare const declaration tags", () => {
   assertEquals(scoped_diagnostics, []);
 });
 
+Deno.test("virtual TS document normalizes bare const tags without brace rescans", () => {
+  const count = 6_000;
+  const max_elapsed_ms = 1_000;
+  const script_filler = Array.from(
+    { length: count },
+    (_, index) => `{ const skipped_${index} = ${index}; }`,
+  ).join("\n");
+  const style_filler = Array.from(
+    { length: count },
+    (_, index) => `.item_${index} { color: red; }`,
+  ).join("\n");
+  const comment_filler = Array.from(
+    { length: count },
+    (_, index) => `{ const commented_${index} = ${index}; }`,
+  ).join("\n");
+  const outside_filler = Array.from(
+    { length: count },
+    (_, index) => `{ value_${index} }`,
+  ).join("\n");
+  const source = [
+    `<script>`,
+    script_filler,
+    `</script>`,
+    ``,
+    `<style>`,
+    style_filler,
+    `</style>`,
+    ``,
+    `<!--`,
+    comment_filler,
+    `-->`,
+    ``,
+    `{const title = "ok"}`,
+    outside_filler,
+  ].join("\n");
+  const document = make_document(source);
+  const started_at = performance.now();
+  const prepared = prepare_virtual_document(
+    document,
+    make_identity_transforms(),
+  );
+  const elapsed_ms = performance.now() - started_at;
+
+  assert(prepared);
+  assertStringIncludes(prepared.document.getText(), `{@const title = "ok"}`);
+  assertFalse(prepared.document.getText().includes(`{@ const skipped_`));
+  assertFalse(prepared.document.getText().includes(`{@ const commented_`));
+  assert(
+    elapsed_ms < max_elapsed_ms,
+    `normalization took ${elapsed_ms.toFixed(1)}ms`,
+  );
+});
+
 function make_document(content: string) {
   const filename = `${Deno.cwd()}/language-server-fixture.svelte`;
   const uri = make_file_uri(filename);
@@ -190,7 +244,7 @@ function collect_scoped_name_diagnostics(
   names: string[],
 ): string[] {
   const file_name = "Component.svelte.ts";
-  const options: ts.CompilerOptions = {
+  const options: CompilerOptions = {
     module: ts.ModuleKind.ESNext,
     noLib: true,
     strict: true,
@@ -249,6 +303,13 @@ function make_transforms() {
         code,
         options.filename,
       ),
+  };
+}
+
+function make_identity_transforms() {
+  return {
+    transformEffectMarkup: (code: string) => ({ code, map: {} }),
+    transformEffectScript: (code: string) => ({ code, map: {} }),
   };
 }
 

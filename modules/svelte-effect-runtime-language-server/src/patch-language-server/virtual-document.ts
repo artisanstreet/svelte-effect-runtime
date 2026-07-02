@@ -14,6 +14,11 @@ import type { Mapper, TransformSet } from "./types.ts";
 
 import MagicString from "magic-string";
 
+type SourceRange = {
+  start: number;
+  end: number;
+};
+
 export function prepare_virtual_document(
   originalDocument: any,
   transforms: TransformSet,
@@ -148,8 +153,10 @@ function normalize_bare_const_declaration_tags(
   source_uri: string,
 ): { code: string; map: Record<string, unknown> } | null {
   const magic = new MagicString(code);
+  const excluded_ranges = collect_excluded_ranges(code);
   let changed = false;
   let cursor = 0;
+  let excluded_range_index = 0;
 
   while (cursor < code.length) {
     const open = code.indexOf("{", cursor);
@@ -158,23 +165,34 @@ function normalize_bare_const_declaration_tags(
       break;
     }
 
-    if (
-      is_inside_excluded_block(code, open) || is_inside_html_comment(code, open)
+    while (
+      excluded_range_index < excluded_ranges.length &&
+      excluded_ranges[excluded_range_index].end <= open
     ) {
-      cursor = open + 1;
+      excluded_range_index += 1;
+    }
+
+    const excluded_range = excluded_ranges[excluded_range_index];
+
+    if (
+      excluded_range &&
+      excluded_range.start <= open &&
+      open < excluded_range.end
+    ) {
+      cursor = excluded_range.end;
       continue;
     }
 
-    const match = /^(\s*)const\s/.exec(code.slice(open + 1));
+    const prefix_length = get_bare_const_prefix_length(code, open + 1);
 
-    if (!match) {
+    if (prefix_length === null) {
       cursor = open + 1;
       continue;
     }
 
     magic.appendRight(open + 1, "@");
     changed = true;
-    cursor = open + 1 + match[0].length;
+    cursor = open + 1 + prefix_length;
   }
 
   if (!changed) {
@@ -191,40 +209,92 @@ function normalize_bare_const_declaration_tags(
   };
 }
 
-function is_inside_excluded_block(content: string, pos: number): boolean {
-  const script = find_tag_end(content, "script", pos);
-  const style = find_tag_end(content, "style", pos);
+function get_bare_const_prefix_length(
+  content: string,
+  start: number,
+): number | null {
+  let cursor = start;
 
-  return script > pos || style > pos;
+  while (cursor < content.length && /\s/.test(content[cursor])) {
+    cursor += 1;
+  }
+
+  if (!content.startsWith("const", cursor)) {
+    return null;
+  }
+
+  if (!/\s/.test(content[cursor + "const".length] ?? "")) {
+    return null;
+  }
+
+  return cursor - start + "const".length + 1;
 }
 
-function is_inside_html_comment(content: string, pos: number): boolean {
-  const open = content.lastIndexOf("<!--", pos);
-  const close = content.lastIndexOf("-->", pos);
+function collect_excluded_ranges(content: string): SourceRange[] {
+  const ranges = [
+    ...collect_tag_ranges(content, "script"),
+    ...collect_tag_ranges(content, "style"),
+    ...collect_html_comment_ranges(content),
+  ].sort((left, right) => left.start - right.start || left.end - right.end);
+  const merged_ranges: SourceRange[] = [];
 
-  return open > close;
+  for (const range of ranges) {
+    const previous_range = merged_ranges.at(-1);
+
+    if (previous_range && range.start <= previous_range.end) {
+      previous_range.end = Math.max(previous_range.end, range.end);
+      continue;
+    }
+
+    merged_ranges.push({ ...range });
+  }
+
+  return merged_ranges;
 }
 
-function find_tag_end(
+function collect_tag_ranges(
   content: string,
   tag: "script" | "style",
-  pos: number,
-): number {
+): SourceRange[] {
   const pattern = new RegExp(
     `<${tag}\\b[^>]*>[\\s\\S]*?<\\/${tag}\\s*>`,
     "gi",
   );
+  const ranges: SourceRange[] = [];
 
   for (const match of content.matchAll(pattern)) {
     const start = match.index ?? -1;
     const end = start + match[0].length;
 
-    if (start <= pos && pos < end) {
-      return end;
+    if (start === -1) {
+      continue;
     }
+
+    ranges.push({ start, end });
   }
 
-  return -1;
+  return ranges;
+}
+
+function collect_html_comment_ranges(content: string): SourceRange[] {
+  const ranges: SourceRange[] = [];
+  let cursor = 0;
+
+  while (cursor < content.length) {
+    const start = content.indexOf("<!--", cursor);
+
+    if (start === -1) {
+      break;
+    }
+
+    const close = content.indexOf("-->", start + "<!--".length);
+    const end = close === -1 ? content.length : close + "-->".length;
+
+    ranges.push({ start, end });
+    cursor = end;
+  }
+
+  return ranges;
 }
 
 function find_effect_attribute_range(
