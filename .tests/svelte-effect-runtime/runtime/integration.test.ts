@@ -84,6 +84,31 @@ async function collect_transform_warnings(
   return warnings;
 }
 
+async function run_server_import_transform(
+  source: string,
+  id: string,
+): Promise<string> {
+  const plugin = effect().find((candidate) =>
+    candidate.name === "svelte-effect-runtime:server-imports"
+  );
+
+  if (!plugin || typeof plugin.transform !== "function") {
+    throw new Error("server rewrite plugin should expose a transform hook");
+  }
+
+  const result = await plugin.transform.call({} as never, source, id);
+
+  if (!result) {
+    return source;
+  }
+
+  if (typeof result === "string") {
+    return result;
+  }
+
+  return result.code;
+}
+
 /** Full pipeline. */
 
 Deno.test("full pipeline: script lowered output feeds into markup pass", () => {
@@ -307,6 +332,30 @@ Deno.test("vite plugin keeps runtime package transformable in SSR builds", () =>
     "svelte",
     "svelte-effect-runtime",
   ]);
+});
+
+Deno.test("vite server import rewrite handles query-suffixed server modules", async () => {
+  const source = [
+    `import { Redirect } from "svelte-effect-runtime";`,
+    `import { get_dispatcher } from "svelte-effect-runtime/internal/generators";`,
+    `export const Login = Redirect(303, "/oauth");`,
+  ].join("\n");
+  const ids = [
+    "C:/src/routes/auth.remote.ts?server",
+    "C:/src/routes/+page.server.ts?ts=123",
+    "C:/src/hooks.server.ts?hmr=1",
+  ];
+
+  for (const id of ids) {
+    const result = await run_server_import_transform(source, id);
+
+    assertStringIncludes(result, `from "svelte-effect-runtime/server"`);
+    assertNotMatch(result, /from\s+["']svelte-effect-runtime["']/);
+    assertNotMatch(
+      result,
+      /from\s+["']svelte-effect-runtime\/internal\/generators["']/,
+    );
+  }
 });
 
 Deno.test("vite diagnostics plugin warns for bare Effect.gen event handlers", async () => {

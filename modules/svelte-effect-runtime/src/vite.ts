@@ -282,10 +282,11 @@ function make_remote_client_wrapper_plugin(options?: EffectOptions): Plugin {
 }
 
 function is_server_runtime_module(id: string): boolean {
+  const [filename] = id.split("?", 2);
+
   return (
-    id.endsWith(".server.ts") ||
-    id.endsWith(".remote.ts") ||
-    id.includes("hooks.server.")
+    /\.(server|remote)(?:\.[cm])?\.[jt]s$/.test(filename) ||
+    /(?:^|[\\/])hooks\.server(?:\.[cm])?\.[jt]s$/.test(filename)
   );
 }
 
