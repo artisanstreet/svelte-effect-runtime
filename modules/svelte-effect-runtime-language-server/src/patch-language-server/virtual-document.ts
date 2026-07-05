@@ -28,7 +28,15 @@ export function prepare_virtual_document(
   const normalizationMapper = normalizedDeclarations
     ? create_source_map_mapper(normalizedDeclarations.map, sourceUri)
     : null;
-  const baseCode = normalizedDeclarations?.code ?? originalText;
+  const normalizedCode = normalizedDeclarations?.code ?? originalText;
+  const globalTypescript = add_global_typescript_scripts(
+    normalizedCode,
+    sourceUri,
+  );
+  const globalTypescriptMapper = globalTypescript
+    ? create_source_map_mapper(globalTypescript.map, sourceUri)
+    : null;
+  const baseCode = globalTypescript?.code ?? normalizedCode;
 
   const markupResult = safe_transform_result(
     () =>
@@ -115,7 +123,12 @@ export function prepare_virtual_document(
       sourceUri,
     );
 
-  if (!scriptMapper && !markupMapper && !normalizationMapper) {
+  if (
+    !scriptMapper &&
+    !markupMapper &&
+    !globalTypescriptMapper &&
+    !normalizationMapper
+  ) {
     return null;
   }
 
@@ -131,12 +144,149 @@ export function prepare_virtual_document(
   return {
     document: virtualDocument,
     preprocessMapper: new SequentialDocumentMapper(
-      [scriptMapper, markupMapper, normalizationMapper].filter(
+      [
+        scriptMapper,
+        markupMapper,
+        globalTypescriptMapper,
+        normalizationMapper,
+      ].filter(
         Boolean,
       ) as Mapper[],
       sourceUri,
     ),
   };
+}
+
+function add_global_typescript_scripts(
+  code: string,
+  source_uri: string,
+): { code: string; map: Record<string, unknown> } | null {
+  const tags = find_script_open_tags(code);
+  const magic = new MagicString(code);
+
+  let changed = false;
+
+  for (const tag of tags) {
+    if (tag.has_lang) {
+      continue;
+    }
+
+    magic.appendLeft(tag.insert_position, ' lang="ts"');
+    changed = true;
+  }
+
+  if (tags.length === 0) {
+    magic.prepend('<script lang="ts"></script>\n');
+    changed = true;
+  }
+
+  if (!changed) {
+    return null;
+  }
+
+  return {
+    code: magic.toString(),
+    map: magic.generateMap({
+      hires: true,
+      includeContent: true,
+      source: source_uri,
+    }) as unknown as Record<string, unknown>,
+  };
+}
+
+function find_script_open_tags(
+  source: string,
+): Array<{ has_lang: boolean; insert_position: number }> {
+  const lower_source = source.toLowerCase();
+  const tags: Array<{ has_lang: boolean; insert_position: number }> = [];
+
+  let index = 0;
+
+  while (index < source.length) {
+    const script_start = find_next_script_start(lower_source, index);
+
+    if (script_start === -1) {
+      break;
+    }
+
+    const tag_end = find_tag_end_from(source, script_start);
+
+    if (tag_end === -1) {
+      break;
+    }
+
+    const tag = source.slice(script_start, tag_end + 1);
+
+    tags.push({
+      has_lang: tag_has_lang_attribute(tag),
+      insert_position: script_start + "<script".length,
+    });
+
+    index = tag_end + 1;
+  }
+
+  return tags;
+}
+
+function find_next_script_start(
+  lower_source: string,
+  start: number,
+): number {
+  let index = start;
+
+  while (index < lower_source.length) {
+    const script_start = lower_source.indexOf("<script", index);
+
+    if (script_start === -1) {
+      return -1;
+    }
+
+    const boundary = lower_source[script_start + "<script".length];
+
+    if (
+      boundary === undefined ||
+      boundary === ">" ||
+      boundary === "/" ||
+      /\s/.test(boundary)
+    ) {
+      return script_start;
+    }
+
+    index = script_start + "<script".length;
+  }
+
+  return -1;
+}
+
+function find_tag_end_from(source: string, start: number): number {
+  let quote: string | undefined;
+
+  for (let index = start; index < source.length; index += 1) {
+    const char = source[index];
+
+    if (quote) {
+      if (char === quote) {
+        quote = undefined;
+      }
+
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+
+    if (char === ">") {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function tag_has_lang_attribute(tag: string): boolean {
+  return /\slang(?:\s*=|\s|>|\/)/i.test(tag);
 }
 
 function has_own(object: object, key: PropertyKey) {
