@@ -65,6 +65,12 @@ type AppErrorStatus = App.Error extends { readonly status?: infer Status }
   ? Status
   : number;
 
+/**
+ * Compatibility shim while SER supports both SvelteKit 2 and 3. The wrappers
+ * call the SvelteKit 3 control-flow shapes, while SvelteKit 2 ignores extra
+ * runtime arguments. Drop these broad call signatures when Kit 2 support is
+ * removed.
+ */
 type SvelteError = (
   status: number,
   body?: ErrorBody,
