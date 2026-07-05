@@ -8,10 +8,13 @@ export {
 export { RuntimeAlreadyInitializedError } from "$/errors.ts";
 
 export type {
+  ErrorBody,
   ErrorEffectFactory,
+  ErrorProperties,
   ErrorStatus,
   ErrorStatusName,
   RedirectEffectFactory,
+  RedirectOptions,
   RedirectStatus,
   RedirectStatusName,
 } from "./control-flow.ts";

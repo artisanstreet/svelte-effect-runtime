@@ -1,6 +1,9 @@
 import { run_remote_effect } from "$/remote/server.ts";
 import { InvalidLiveQueryReturnError } from "$/errors.ts";
-import { error as svelte_error, invalid } from "@sveltejs/kit";
+import {
+  error as svelte_error,
+  invalid as svelte_invalid,
+} from "@sveltejs/kit";
 import { Effect, Stream } from "effect";
 
 import { get_server_runtime_or_throw, RequestEvent } from "./runtime.ts";
@@ -165,15 +168,6 @@ export function run_handler_effect<A>(
     svelte_remote_error,
   );
 }
-
-const svelte_invalid = (_status: number, body: unknown): never => {
-  const issues = typeof body === "object" && body !== null &&
-      Array.isArray((body as { issues?: unknown }).issues)
-    ? (body as { issues: unknown[] }).issues
-    : [String(body)];
-
-  invalid(...(issues as never[]));
-};
 
 const svelte_remote_error = (status: number, body: unknown): never => {
   svelte_error(status as never, body as never);

@@ -271,10 +271,13 @@ export { effect, type EffectOptions } from "$/vite.ts";
 
 /** Re-export server helper types from the root entrypoint. */
 export type {
+  ErrorBody,
   ErrorEffectFactory,
+  ErrorProperties,
   ErrorStatus,
   ErrorStatusName,
   RedirectEffectFactory,
+  RedirectOptions,
   RedirectStatus,
   RedirectStatusName,
 } from "$/server/control-flow.ts";

@@ -81,13 +81,11 @@ Deno.test("SvelteKit server fallback exports throw clear boundary errors", () =>
 
 // ─── throw_form_error ──────────────────────────────────────────
 
-Deno.test("throw_form_error calls invalid with issues and 400 status", () => {
-  let captured_status = 0;
-  let captured_body: unknown = null;
+Deno.test("throw_form_error calls invalid with issues", () => {
+  const captured_issues: unknown[] = [];
 
-  const invalid = (status: number, body: unknown): never => {
-    captured_status = status;
-    captured_body = body;
+  const invalid = (...issues: unknown[]): never => {
+    captured_issues.push(...issues);
     throw new Error("invalid called");
   };
 
@@ -97,10 +95,9 @@ Deno.test("throw_form_error calls invalid with issues and 400 status", () => {
       invalid,
     );
   } catch {
-    assertEquals(captured_status, 400);
-    assertEquals(captured_body, {
-      issues: [{ message: "bad input", path: ["field"] }],
-    });
+    assertEquals(captured_issues, [
+      { message: "bad input", path: ["field"] },
+    ]);
   }
 });
 
@@ -228,7 +225,7 @@ Deno.test("Error resolves named status aliases", async () => {
   );
 
   assert(isHttpError(thrown, 404));
-  assertEquals(thrown.body, { message: "missing" });
+  assertEquals(thrown.body, { message: "missing", status: 404 });
 });
 
 Deno.test("Error passes numeric statuses through", async () => {
@@ -237,7 +234,16 @@ Deno.test("Error passes numeric statuses through", async () => {
   );
 
   assert(isHttpError(thrown, 418));
-  assertEquals(thrown.body, { message: "short and stout" });
+  assertEquals(thrown.body, { message: "short and stout", status: 418 });
+});
+
+Deno.test("Error accepts SvelteKit 3 properties overload", async () => {
+  const thrown = await assertRejects(() =>
+    Effect.runPromise(ServerError(400, "bad request", {}))
+  );
+
+  assert(isHttpError(thrown, 400));
+  assertEquals(thrown.body, { message: "bad request", status: 400 });
 });
 
 Deno.test("Redirect resolves named status aliases", async () => {
@@ -260,21 +266,37 @@ Deno.test("Redirect passes numeric statuses through", async () => {
   assertEquals(thrown.location, "/done");
 });
 
+Deno.test("Redirect passes SvelteKit 3 external options through", async () => {
+  const thrown = await assertRejects(() =>
+    Effect.runPromise(
+      ServerRedirect(303, "https://example.com/oauth", { external: true }),
+    )
+  );
+
+  assert(isRedirect(thrown));
+  assertEquals(thrown.status, 303);
+  assertEquals(thrown.location, "https://example.com/oauth");
+});
+
 Deno.test("control-flow helpers type-check in Effect generators", () => {
   const server_error_program = Effect.gen(function* () {
-    return yield* ServerError("NotFound", "missing");
+    return yield* ServerError("NotFound", "missing", {});
   });
 
   const server_redirect_program = Effect.gen(function* () {
-    return yield* ServerRedirect("SeeOther", "/done");
+    return yield* ServerRedirect("SeeOther", "https://example.com/done", {
+      external: true,
+    });
   });
 
   const root_error_program = Effect.gen(function* () {
-    return yield* RootError("NotFound", "missing");
+    return yield* RootError("NotFound", "missing", {});
   });
 
   const root_redirect_program = Effect.gen(function* () {
-    return yield* RootRedirect("SeeOther", "/done");
+    return yield* RootRedirect("SeeOther", "https://example.com/done", {
+      external: true,
+    });
   });
 
   assert(Effect.isEffect(server_error_program));
@@ -327,16 +349,14 @@ Deno.test("run_remote_effect throws invalid on FormError failure", async () => {
   const issues = [{ message: "bad", path: ["x"] }];
   const form_error = create_form_error(issues);
 
-  let captured_status = 0;
-  let captured_body: unknown = null;
+  const captured_issues: unknown[] = [];
 
   await assertRejects(async () => {
     await run_remote_effect(
       Effect.fail(form_error) as Effect.Effect<number, unknown>,
       runtime,
-      (status, body) => {
-        captured_status = status;
-        captured_body = body;
+      (...received_issues) => {
+        captured_issues.push(...received_issues);
         throw new Error("invalid");
       },
       () => {
@@ -345,8 +365,7 @@ Deno.test("run_remote_effect throws invalid on FormError failure", async () => {
     );
   });
 
-  assertEquals(captured_status, 400);
-  assertEquals(captured_body, { issues });
+  assertEquals(captured_issues, issues);
 });
 
 Deno.test("run_remote_effect throws error on non-FormError failure", async () => {
@@ -525,7 +544,7 @@ Deno.test("run_remote_effect rethrows SvelteKit HTTP error defects", async () =>
   });
 
   assert(isHttpError(thrown, 404));
-  assertEquals(thrown.body, { message: "missing" });
+  assertEquals(thrown.body, { message: "missing", status: 404 });
   assertFalse(invalid_called);
   assertFalse(error_called);
 });
