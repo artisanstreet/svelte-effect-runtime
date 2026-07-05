@@ -1,4 +1,5 @@
 import type { RemoteFailure } from "$/remote/shared.ts";
+import { isRedirect } from "@sveltejs/kit";
 import { Effect } from "effect";
 
 import {
@@ -24,6 +25,10 @@ export function make_effect_from_promise<Output, ErrorType = never>(
   return Effect.tryPromise({
     try: run,
     catch: (error: unknown) => {
+      if (isRedirect(error)) {
+        throw error;
+      }
+
       if (is_decoded_remote_failure(error)) {
         return error;
       }

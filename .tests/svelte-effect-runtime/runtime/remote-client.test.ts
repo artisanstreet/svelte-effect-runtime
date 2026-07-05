@@ -1,4 +1,5 @@
 import { assertEquals, assertRejects, assertThrows } from "@std/assert";
+import { isRedirect, redirect as svelte_redirect } from "@sveltejs/kit";
 import { Effect } from "effect";
 import { stringify } from "devalue";
 import {
@@ -10,6 +11,7 @@ import {
 import { to_form_data } from "../../../modules/svelte-effect-runtime/src/remote/client/form-data.ts";
 import { normalize_native_error } from "../../../modules/svelte-effect-runtime/src/remote/client/failures.ts";
 import { create_serialized_remote_failure_envelope } from "../../../modules/svelte-effect-runtime/src/remote/shared.ts";
+import { reset_dispatcher } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
 
 Deno.test("remote query adapter preserves decoded domain failures", async () => {
   const domain_error = { _tag: "DomainError", message: "nope" };
@@ -213,6 +215,23 @@ Deno.test("remote query adapter exposes http failures on the Effect error channe
   );
 
   assertEquals(result, 404);
+});
+
+Deno.test("remote query adapter preserves SvelteKit redirects as control flow", async () => {
+  const native = () =>
+    Promise.resolve().then(() => svelte_redirect(303, "/oauth"));
+
+  const query = create_remote_query_adapter<undefined, never>(
+    native,
+    (value) => value,
+    "",
+  );
+
+  const error = await assertRejects(() => Effect.runPromise(query(undefined)));
+
+  assertEquals(isRedirect(error), true);
+  assertEquals((error as { status?: number }).status, 303);
+  assertEquals((error as { location?: string }).location, "/oauth");
 });
 
 Deno.test("remote query adapter preserves resource state and methods", async () => {
@@ -816,6 +835,46 @@ Deno.test("remote form adapter resolves enhance submit to form result", async ()
   );
 
   assertEquals(result, { id: "created" });
+});
+
+Deno.test("remote form enhance submit suppresses SvelteKit redirects as control flow", async () => {
+  let callback_result: unknown;
+
+  const native = {
+    method: "POST",
+    action: "?/remote=abc%2Fcreate",
+    enhance(callback: (event: unknown) => unknown) {
+      callback_result = callback({
+        submit: () =>
+          Promise.resolve().then(() => svelte_redirect(303, "/oauth")),
+      });
+
+      return { method: "POST" };
+    },
+  };
+
+  const form = create_remote_form_adapter(native, (value) => value, "");
+
+  form.enhance((event: unknown) =>
+    Effect.gen(function* () {
+      yield* (event as {
+        submit: () => Effect.Effect<unknown, unknown, never>;
+      }).submit();
+    })
+  );
+
+  assertEquals(
+    typeof (callback_result as { then?: unknown } | undefined)?.then,
+    "function",
+  );
+
+  try {
+    const result = await callback_result as unknown;
+
+    assertEquals(result, undefined);
+  } finally {
+    reset_dispatcher();
+  }
 });
 
 Deno.test("remote form adapter preserves enhance submit updates as an Effect", async () => {
