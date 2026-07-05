@@ -61,7 +61,21 @@ const redirect_status_codes = {
   Found: 302,
 } as const;
 
-type SvelteErrorBody = Parameters<typeof svelte_error>[1];
+type AppErrorStatus = App.Error extends { readonly status?: infer Status }
+  ? Status
+  : number;
+
+type SvelteError = (
+  status: number,
+  body?: ErrorBody,
+  properties?: ErrorProperties,
+) => never;
+
+type SvelteRedirect = (
+  status: number,
+  location: string | URL,
+  options?: RedirectOptions,
+) => never;
 
 /**
  * Named HTTP status accepted by the {@link Error} helper.
@@ -88,6 +102,34 @@ export type ErrorStatusName = keyof typeof error_status_codes;
 export type ErrorStatus = ErrorStatusName | number;
 
 /**
+ * Error body accepted by the {@link Error} helper.
+ *
+ * @example
+ * ```ts
+ * const body: ErrorBody = { message: "Post not found" };
+ * ```
+ *
+ * @since 3.4.3
+ */
+export type ErrorBody =
+  | (Omit<App.Error, "status"> & { readonly status?: AppErrorStatus })
+  | string
+  | undefined;
+
+/**
+ * Extra SvelteKit app error properties accepted by the {@link Error} helper
+ * when using the SvelteKit 3 string-body overload.
+ *
+ * @example
+ * ```ts
+ * const properties: ErrorProperties = { code: "POST_NOT_FOUND" };
+ * ```
+ *
+ * @since 3.4.3
+ */
+export type ErrorProperties = Omit<App.Error, "status" | "message">;
+
+/**
  * Named HTTP status accepted by the {@link Redirect} helper.
  *
  * @example
@@ -110,6 +152,20 @@ export type RedirectStatusName = keyof typeof redirect_status_codes;
  * @since 2.3.0
  */
 export type RedirectStatus = RedirectStatusName | number;
+
+/**
+ * Options accepted by the {@link Redirect} helper.
+ *
+ * @example
+ * ```ts
+ * const options: RedirectOptions = { external: true };
+ * ```
+ *
+ * @since 3.4.3
+ */
+export type RedirectOptions = {
+  readonly external?: boolean | string[];
+};
 
 /**
  * Callable shape for the exported {@link Error} helper.
@@ -140,7 +196,33 @@ export interface ErrorEffectFactory {
    */
   (
     status: ErrorStatus,
-    body?: SvelteErrorBody,
+    body?: ErrorBody,
+  ): Effect.Effect<never, never, never>;
+
+  /**
+   * Creates an Effect that throws SvelteKit's HTTP error control-flow value
+   * using the SvelteKit 3 string-body overload with extra properties.
+   *
+   * @example
+   * ```ts
+   * return yield* Error("NotFound", "Post not found", {
+   *   code: "POST_NOT_FOUND",
+   * });
+   * ```
+   *
+   * @since 3.4.3
+   * @param status - Numeric HTTP status or PascalCase status name to pass to
+   *   SvelteKit's `error` helper.
+   * @param body - Error message forwarded to SvelteKit.
+   * @param properties - Additional app error properties forwarded to
+   *   SvelteKit.
+   * @returns An Effect that never succeeds because SvelteKit takes over request
+   *   control flow.
+   */
+  (
+    status: ErrorStatus,
+    body: string,
+    properties: ErrorProperties,
   ): Effect.Effect<never, never, never>;
 }
 
@@ -167,12 +249,15 @@ export interface RedirectEffectFactory {
    * @param status - Numeric redirect status or PascalCase status name to pass
    *   to SvelteKit's `redirect` helper.
    * @param location - Target URL forwarded unchanged to SvelteKit.
+   * @param options - Optional SvelteKit redirect options. In SvelteKit 3, pass
+   *   `{ external: true }` or an allowlist to redirect to external URLs.
    * @returns An Effect that never succeeds because SvelteKit takes over request
    *   control flow.
    */
   (
     status: RedirectStatus,
     location: string | URL,
+    options?: RedirectOptions,
   ): Effect.Effect<never, never, never>;
 }
 
@@ -189,16 +274,27 @@ export interface RedirectEffectFactory {
  *   SvelteKit's `error` helper.
  * @param body - Optional SvelteKit error body or message forwarded unchanged
  *   to SvelteKit.
+ * @param properties - Optional SvelteKit 3 app error properties forwarded when
+ *   using a string error message.
  * @returns An Effect that never succeeds because SvelteKit takes over request
  *   control flow.
  */
-export const Error: ErrorEffectFactory = (status, body) => {
+export const Error: ErrorEffectFactory = ((
+  status: ErrorStatus,
+  body?: ErrorBody,
+  properties?: ErrorProperties,
+) => {
   const resolved_status = resolve_error_status(status);
+  const error = svelte_error as SvelteError;
 
-  return Effect.sync(() => {
-    svelte_error(resolved_status, body);
+  return Effect.sync((): never => {
+    if (properties === undefined) {
+      return error(resolved_status, body);
+    }
+
+    return error(resolved_status, body, properties);
   });
-};
+}) as ErrorEffectFactory;
 
 /**
  * Creates an Effect that raises SvelteKit's redirect control flow.
@@ -212,16 +308,21 @@ export const Error: ErrorEffectFactory = (status, body) => {
  * @param status - Numeric redirect status or PascalCase status name to pass to
  *   SvelteKit's `redirect` helper.
  * @param location - Target URL forwarded unchanged to SvelteKit.
+ * @param options - Optional SvelteKit redirect options. In SvelteKit 3, pass
+ *   `{ external: true }` or an allowlist to redirect to external URLs.
  * @returns An Effect that never succeeds because SvelteKit takes over request
  *   control flow.
  */
-export const Redirect: RedirectEffectFactory = (status, location) => {
+export const Redirect: RedirectEffectFactory = ((
+  status: RedirectStatus,
+  location: string | URL,
+  options?: RedirectOptions,
+) => {
   const resolved_status = resolve_redirect_status(status);
+  const redirect = svelte_redirect as SvelteRedirect;
 
-  return Effect.sync(() => {
-    svelte_redirect(resolved_status, location);
-  });
-};
+  return Effect.sync((): never => redirect(resolved_status, location, options));
+}) as RedirectEffectFactory;
 
 function resolve_error_status(status: ErrorStatus): number {
   if (typeof status === "number") {

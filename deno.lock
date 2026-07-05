@@ -12,7 +12,7 @@
     "npm:@babel/parser@^7.29.2": "7.29.2",
     "npm:@effect/platform-node@beta": "4.0.0-beta.92_effect@4.0.0-beta.92_ioredis@5.11.1",
     "npm:@jridgewell/trace-mapping@~0.3.31": "0.3.31",
-    "npm:@sveltejs/kit@3.0.0-next.1": "3.0.0-next.1_@sveltejs+vite-plugin-svelte@7.1.2__svelte@5.56.0__vite@8.0.16___@types+node@24.12.2___esbuild@0.28.0__@types+node@24.12.2_svelte@5.56.0_typescript@6.0.3_vite@8.0.16__@types+node@24.12.2__esbuild@0.28.0_@types+node@24.12.2",
+    "npm:@sveltejs/kit@3.0.0-next.6": "3.0.0-next.6_@sveltejs+vite-plugin-svelte@7.1.2__svelte@5.56.0__vite@8.0.16___@types+node@24.12.2___esbuild@0.28.0__@types+node@24.12.2_svelte@5.56.0_typescript@6.0.3_vite@8.0.16__@types+node@24.12.2__esbuild@0.28.0",
     "npm:@sveltejs/vite-plugin-svelte@7": "7.1.2_svelte@5.56.0_vite@8.0.16__@types+node@24.12.2__esbuild@0.28.0_@types+node@24.12.2",
     "npm:@tailwindcss/postcss@^4.3.0": "4.3.0",
     "npm:@types/mdx@^2.0.13": "2.0.13",
@@ -33,6 +33,7 @@
     "npm:rolldown@^1.0.0-rc.13": "1.0.3",
     "npm:shiki@4.1.0": "4.1.0",
     "npm:svelte-language-server@~0.17.30": "0.17.30_prettier@3.3.3_svelte@4.2.20_typescript@5.9.3",
+    "npm:svelte@5": "5.56.0",
     "npm:svelte@^5.56.0": "5.56.0",
     "npm:tailwindcss@4": "4.3.0",
     "npm:typescript@*": "6.0.3",
@@ -1264,20 +1265,17 @@
     "@standard-schema/spec@1.1.0": {
       "integrity": "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="
     },
-    "@sveltejs/acorn-typescript@1.0.10_acorn@8.16.0": {
-      "integrity": "sha512-4WfKk68eTih+MiJD4fSbxN7E8kVBmTMPWHUPYjvl2N0rMs53YLTT8/YjKU5Dtnz5LqDjl7LEw4U7lXR2W3J5WA=="
-    },
     "@sveltejs/acorn-typescript@1.0.10_acorn@8.17.0": {
       "integrity": "sha512-4WfKk68eTih+MiJD4fSbxN7E8kVBmTMPWHUPYjvl2N0rMs53YLTT8/YjKU5Dtnz5LqDjl7LEw4U7lXR2W3J5WA==",
       "dependencies": [
         "acorn"
       ]
     },
-    "@sveltejs/kit@3.0.0-next.1_@sveltejs+vite-plugin-svelte@7.1.2__svelte@5.56.0__vite@8.0.16___@types+node@24.12.2___esbuild@0.28.0__@types+node@24.12.2_svelte@5.56.0_typescript@6.0.3_vite@8.0.16__@types+node@24.12.2__esbuild@0.28.0_@types+node@24.12.2": {
-      "integrity": "sha512-dcEulvtFYFqCRUpLLSB9AT+S0tjsLjAkr69qfxkvdK9RU+AmL1PvzP4b/jk+9xQUW7CuCSLC3XDa84lHHW8G9A==",
+    "@sveltejs/kit@3.0.0-next.6_@sveltejs+vite-plugin-svelte@7.1.2__svelte@5.56.0__vite@8.0.16___@types+node@24.12.2___esbuild@0.28.0__@types+node@24.12.2_svelte@5.56.0_typescript@6.0.3_vite@8.0.16__@types+node@24.12.2__esbuild@0.28.0": {
+      "integrity": "sha512-hGuQHT7HYu6a4ea12LkihtJpYersl5eihgiaToVGjO2KojDg/6iEkEKt33fCjEnqziZNmomzuaMjzdPBAz8n3Q==",
       "dependencies": [
         "@standard-schema/spec",
-        "@sveltejs/acorn-typescript@1.0.10_acorn@8.16.0",
+        "@sveltejs/acorn-typescript",
         "@sveltejs/vite-plugin-svelte",
         "acorn",
         "cookie",
@@ -1614,8 +1612,8 @@
     "compute-scroll-into-view@3.1.1": {
       "integrity": "sha512-VRhuHOLoKYOy4UbilLbUzbYg93XLjv2PncJC50EuTWPA3gaja1UjBsUP/D/9/juV3vQFr6XBEzn9KCAHdUvOHw=="
     },
-    "cookie@1.1.1": {
-      "integrity": "sha512-ei8Aos7ja0weRpFzJnEA9UHJ/7XQmqglbRwnf2ATjcB9Wq874VKH9kfjjirM6UhU2/E5fFYadylyhFldcqSidQ=="
+    "cookie@2.0.1": {
+      "integrity": "sha512-yuToqVvRrj6pfDXREyQAAv8SkAEk/8GS3jQRTiUMm66TVtBYmqQeoEjL2Lmq8Rpo6271vH76InTChTitEAm65w=="
     },
     "css-tree@2.3.1": {
       "integrity": "sha512-6Fv1DV/TYw//QF5IzQdqsNDjx/wc8TrMBZsqjL9eW01tWb7R7k/mq+/VXfJCl7SoD5emsJop9cOByJZfs8hYIw==",
@@ -3367,7 +3365,7 @@
       "dependencies": [
         "@jridgewell/remapping",
         "@jridgewell/sourcemap-codec",
-        "@sveltejs/acorn-typescript@1.0.10_acorn@8.17.0",
+        "@sveltejs/acorn-typescript",
         "@types/estree",
         "@types/trusted-types",
         "acorn",
@@ -3734,7 +3732,7 @@
           "jsr:@barekey/svelte-effect-runtime-grammars@^3.4.0",
           "jsr:@std/assert@^1.0.15",
           "jsr:@std/path@^1.1.2",
-          "npm:@sveltejs/kit@3.0.0-next.1",
+          "npm:@sveltejs/kit@3.0.0-next.6",
           "npm:@sveltejs/vite-plugin-svelte@7",
           "npm:devalue@^5.5.0",
           "npm:effect@beta",
@@ -3769,7 +3767,7 @@
           "jsr:@std/assert@^1.0.15",
           "jsr:@std/path@^1.1.2",
           "npm:@babel/parser@^7.29.2",
-          "npm:@sveltejs/kit@3.0.0-next.1",
+          "npm:@sveltejs/kit@3.0.0-next.6",
           "npm:@sveltejs/vite-plugin-svelte@7",
           "npm:devalue@^5.5.0",
           "npm:effect@beta",

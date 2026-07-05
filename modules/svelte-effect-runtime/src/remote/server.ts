@@ -11,6 +11,10 @@ type CauseReason = {
   readonly error?: unknown;
 };
 
+type SvelteInvalid = (...issues: readonly (FormIssue | string)[]) => never;
+
+type SvelteError = (status: number, body: unknown) => never;
+
 /**
  * Runs a user-supplied Effect program through a ManagedRuntime, maps its
  * exit into the shape expected by SvelteKit, and returns the result or
@@ -31,8 +35,8 @@ export async function run_remote_effect<A>(
       e: Effect.Effect<unknown, unknown, unknown>,
     ) => Promise<unknown>;
   },
-  invalid: (status: number, body: unknown) => never,
-  error: (status: number, body: unknown) => never,
+  invalid: SvelteInvalid,
+  error: SvelteError,
 ): Promise<A> {
   const exit: Exit.Exit<A, unknown> = await runtime.runPromise(
     Effect.exit(effect) as Effect.Effect<unknown, unknown, unknown>,
@@ -52,8 +56,8 @@ export async function run_remote_effect<A>(
  */
 function handle_failure(
   cause: Cause.Cause<unknown>,
-  invalid: (status: number, body: unknown) => never,
-  error: (status: number, body: unknown) => never,
+  invalid: SvelteInvalid,
+  error: SvelteError,
 ): never {
   const reasons = get_cause_reasons(cause);
 
@@ -92,7 +96,7 @@ function handle_failure(
       ) {
         const issues = (failure as { issues?: readonly FormIssue[] }).issues ??
           [];
-        invalid(400, { issues });
+        invalid(...issues);
       }
     }
   }
@@ -237,9 +241,9 @@ function is_object_like(value: unknown): value is object {
  */
 export function throw_form_error(
   issues: readonly FormIssue[],
-  invalid: (status: number, body: unknown) => never,
+  invalid: SvelteInvalid,
 ): never {
-  invalid(400, { issues });
+  invalid(...issues);
 }
 
 /**
