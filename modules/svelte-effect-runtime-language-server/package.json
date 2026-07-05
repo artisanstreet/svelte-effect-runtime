@@ -1,6 +1,6 @@
 {
   "name": "svelte-effect-runtime-language-server",
-  "version": "3.4.3",
+  "version": "3.4.4",
   "description": "Language server for Svelte Effect Runtime syntax in Svelte files.",
   "license": "BSD-3-Clause",
   "type": "commonjs",
@@ -30,7 +30,7 @@
   "dependencies": {
     "@jridgewell/trace-mapping": "^0.3.31",
     "magic-string": "^0.30.21",
-    "svelte-effect-runtime-grammars": "3.4.3",
+    "svelte-effect-runtime-grammars": "3.4.4",
     "svelte": "^5.56.0",
     "svelte-language-server": "^0.17.30",
     "typescript": "^6.0.0",
