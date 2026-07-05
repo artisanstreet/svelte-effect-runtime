@@ -36,8 +36,21 @@ import * as sveltekit_server from "../../../modules/svelte-effect-runtime/src/in
 
 // ─── normalize_remote_helper_error ─────────────────────────────
 
-Deno.test("normalize_remote_helper_error wraps outside-a-route message", () => {
-  const err = new Error("Cannot use query outside a route");
+Deno.test("normalize_remote_helper_error wraps request-event context errors", () => {
+  const err = new Error(
+    "Can only read the current request event inside functions invoked during `handle`, such as server `load` functions, actions, endpoints, and other server hooks.",
+  );
+  const result = normalize_remote_helper_error(err, "Query");
+
+  assertStringIncludes(result.message, "[REMOTE_HELPER_CONTEXT]:");
+  assertStringIncludes(
+    result.message,
+    "Query was called outside a .remote.ts file",
+  );
+});
+
+Deno.test("normalize_remote_helper_error wraps request-store context errors", () => {
+  const err = new Error("Could not get the request store.");
   const result = normalize_remote_helper_error(err, "Query");
 
   assertStringIncludes(result.message, "[REMOTE_HELPER_CONTEXT]:");
@@ -53,6 +66,15 @@ Deno.test("normalize_remote_helper_error preserves other error messages", () => 
 
   assertEquals(result, err);
   assertEquals(result.message, "something else");
+});
+
+Deno.test("normalize_remote_helper_error preserves unrelated cannot-use errors", () => {
+  const err = new Error(
+    "Cannot use `goto` with an external URL. Use `window.location` instead",
+  );
+  const result = normalize_remote_helper_error(err, "Query");
+
+  assertEquals(result, err);
 });
 
 Deno.test("normalize_remote_helper_error wraps non-Error values", () => {

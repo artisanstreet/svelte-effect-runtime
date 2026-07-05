@@ -15,6 +15,11 @@ type SvelteInvalid = (...issues: readonly (FormIssue | string)[]) => never;
 
 type SvelteError = (status: number, body: unknown) => never;
 
+const request_event_context_error_start =
+  "Can only read the current request event inside functions invoked during `handle`";
+
+const request_store_context_error = "Could not get the request store.";
+
 /**
  * Runs a user-supplied Effect program through a ManagedRuntime, maps its
  * exit into the shape expected by SvelteKit, and returns the result or
@@ -247,8 +252,8 @@ export function throw_form_error(
 }
 
 /**
- * Remaps low-level SvelteKit errors (e.g. "Cannot use ___ outside a route")
- * into clear, actionable messages.
+ * Remaps SvelteKit's unbranded request-context errors into clear, actionable
+ * messages.
  *
  * @example
  * ```ts
@@ -268,12 +273,19 @@ export function throw_form_error(
 export function normalize_remote_helper_error(
   err: unknown,
   helper_name: string,
-): globalThis.Error {
-  const message = err instanceof Error ? err.message : String(err);
-
-  if (message.includes("Cannot use") || message.includes("outside a route")) {
+): Error {
+  if (is_sveltekit_remote_context_error(err)) {
     return new RemoteHelperContextError(helper_name);
   }
 
   return err instanceof Error ? err : new RemoteHelperError(err);
+}
+
+function is_sveltekit_remote_context_error(err: unknown): err is Error {
+  if (!(err instanceof Error)) {
+    return false;
+  }
+
+  return err.message.startsWith(request_event_context_error_start) ||
+    err.message === request_store_context_error;
 }
