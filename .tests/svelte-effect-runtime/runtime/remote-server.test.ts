@@ -436,6 +436,46 @@ Deno.test("run_remote_effect rethrows SvelteKit redirect defects", async () => {
   assertFalse(error_called);
 });
 
+Deno.test("run_remote_effect rethrows Redirect helper from generators", async () => {
+  class TestRuntime {
+    runPromise(
+      effect: Effect.Effect<unknown, unknown, unknown>,
+    ): Promise<unknown> {
+      return Effect.runPromise(effect);
+    }
+  }
+
+  const runtime = new TestRuntime();
+  const program = Effect.gen(function* () {
+    yield* Effect.sync(() => undefined);
+    yield* ServerRedirect(303, "/oauth");
+  });
+
+  let invalid_called = false;
+  let error_called = false;
+
+  const thrown = await assertRejects(async () => {
+    await run_remote_effect(
+      program,
+      runtime,
+      () => {
+        invalid_called = true;
+        throw new globalThis.Error("invalid");
+      },
+      () => {
+        error_called = true;
+        throw new globalThis.Error("error");
+      },
+    );
+  });
+
+  assert(isRedirect(thrown));
+  assertEquals(thrown.status, 303);
+  assertEquals(thrown.location, "/oauth");
+  assertFalse(invalid_called);
+  assertFalse(error_called);
+});
+
 Deno.test("run_remote_effect rethrows SvelteKit HTTP error defects", async () => {
   class TestRuntime {
     runPromise(

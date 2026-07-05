@@ -1,4 +1,5 @@
 import { assertEquals, assertRejects, assertThrows } from "@std/assert";
+import { redirect as svelte_redirect } from "@sveltejs/kit";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import {
   RuntimeAlreadyInitializedError,
@@ -684,6 +685,26 @@ Deno.test("run suppresses interrupt-only exits", async () => {
   try {
     const result = await d.run(
       Effect.interrupt as Effect.Effect<never, never, never>,
+    );
+
+    assertEquals(result, undefined);
+    assertEquals(errors, []);
+  } finally {
+    (globalThis as Record<string, unknown>).queueMicrotask = original_queue;
+  }
+});
+
+Deno.test("run suppresses SvelteKit redirect control flow", async () => {
+  const d = make_dispatcher();
+  const errors: unknown[] = [];
+  const original_queue = queueMicrotask;
+
+  (globalThis as Record<string, unknown>).queueMicrotask = (fn: () => void) =>
+    errors.push(fn);
+
+  try {
+    const result = await d.run(
+      Effect.sync(() => svelte_redirect(303, "/oauth")),
     );
 
     assertEquals(result, undefined);

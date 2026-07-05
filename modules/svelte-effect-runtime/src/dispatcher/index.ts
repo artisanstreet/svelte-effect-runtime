@@ -2,6 +2,7 @@ import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime
 import { Cause, Effect, Exit, Fiber, Layer, ManagedRuntime } from "effect";
 import { createSubscriber } from "svelte/reactivity";
 import type { Fiber as FiberType } from "effect/Fiber";
+import { isRedirect } from "@sveltejs/kit";
 
 import {
   RuntimeAlreadyInitializedError,
@@ -338,6 +339,10 @@ export class Dispatcher {
         }
 
         const error = Cause.squash(result.cause);
+
+        if (isRedirect(error)) {
+          return undefined as A;
+        }
 
         queueMicrotask(() => {
           throw error;
