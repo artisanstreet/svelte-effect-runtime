@@ -1,6 +1,6 @@
 {
   "name": "svelte-effect-runtime-grammars",
-  "version": "3.4.2",
+  "version": "3.4.5",
   "description": "TextMate and tree-sitter grammar data for Svelte Effect Runtime tooling.",
   "license": "BSD-3-Clause",
   "type": "module",
