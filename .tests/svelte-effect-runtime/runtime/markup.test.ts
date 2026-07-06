@@ -256,6 +256,40 @@ test("rewrites yield inside render tag arguments without double-calling snippet 
 	});
 });
 
+test("rewrites yield inside snippet block bodies", () => {
+	const source = [
+		`<script>let { load } = $props();</script>`,
+		`{#snippet child()}`,
+		`<p>{yield* load()}</p>`,
+		`{/snippet}`,
+		`{@render child()}`,
+	].join("");
+	const result = transform_markup_effect(source, "SnippetBody.svelte");
+
+	assert_string_includes(result.code, `Code.Markup.Promise`);
+	assert_string_includes(result.code, `return (yield* load());`);
+
+	compile(result.code, {
+		filename: "SnippetBody.svelte",
+		generate: "server",
+		experimental: { async: true },
+	});
+});
+
+test("rewrites yield in dynamic svelte element tags", () => {
+	const source = `<svelte:element this={yield* tag()}>Dynamic</svelte:element>`;
+	const result = transform_markup_effect(source, "DynamicElement.svelte");
+
+	assert_string_includes(result.code, `this={await Dispatcher.emit`);
+	assert_string_includes(result.code, `return (yield* tag());`);
+
+	compile(result.code, {
+		filename: "DynamicElement.svelte",
+		generate: "client",
+		experimental: { async: true },
+	});
+});
+
 test("rewrites {@const x = yield* expr} in const initializer", () => {
 	const source = `{@const x = yield* compute()}{x}`;
 	const result = transform_markup_effect(source, "Test.svelte");
@@ -1391,6 +1425,22 @@ test("rejects unsupported attribute yield positions", () => {
 
 	assert_string_includes(error.message, "[UNSUPPORTED_MARKUP_EFFECT_POSITION]:");
 	assert_string_includes(error.message, `yield* load()`);
+});
+
+test("rejects unsupported attach tag yield positions", () => {
+	const source = `<div {@attach yield* makeAttachment()}></div>`;
+	const error = assert_throws(() => transform_markup_effect(source, "Attach.svelte"));
+
+	assert_string_includes(error.message, "[UNSUPPORTED_MARKUP_EFFECT_POSITION]:");
+	assert_string_includes(error.message, `yield* makeAttachment()`);
+});
+
+test("rejects unsupported spread attribute yield positions", () => {
+	const source = `<Widget {...yield* loadProps()} />`;
+	const error = assert_throws(() => transform_markup_effect(source, "Spread.svelte"));
+
+	assert_string_includes(error.message, "[UNSUPPORTED_MARKUP_EFFECT_POSITION]:");
+	assert_string_includes(error.message, `yield* loadProps()`);
 });
 
 test("ignores yield text inside HTML comments", () => {

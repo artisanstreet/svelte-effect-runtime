@@ -1,6 +1,10 @@
 import type { RemoteFormInput } from "@sveltejs/kit";
 
-import { normalize_validator } from "$/internal/schema.ts";
+import {
+	is_standard_schema,
+	normalize_validator,
+	type StandardSchema,
+} from "$/internal/schema.ts";
 import { decode_response_or_value } from "./responses.ts";
 import { MakeEffectFromPromise } from "./effect.ts";
 import { get_remote_action_id, submit_remote_form } from "./form-transport.ts";
@@ -9,6 +13,10 @@ import { wrap_enhance_callback } from "./form-enhance.ts";
 import type { EffectRemoteForm, NativeFormRecord, NativeMethod } from "./types.ts";
 
 type RemoteInput<Input> = undefined extends Input ? Input | void : Input;
+
+interface RemoteFormAdapterState {
+	shared_preflight_schema?: StandardSchema;
+}
 
 /**
  * Creates a remote form adapter. The callable preserves SvelteKit's native
@@ -25,6 +33,10 @@ type RemoteInput<Input> = undefined extends Input ? Input | void : Input;
  * @param native_factory - SvelteKit's native form object.
  * @param decode_payload - Function to decode the response payload.
  * @param remote_base - Base URL for SvelteKit's remote endpoint.
+ * @param adapter_state - Shared mutable state used to mirror root form
+ *   preflight schemas across keyed form instances.
+ * @param keyed - Whether this adapter wraps a keyed form instance returned by
+ *   SvelteKit's native `for(...)` helper.
  * @returns A callable form function whose properties mirror the native form.
  * @internal
  */
@@ -36,8 +48,11 @@ export function create_remote_form_adapter<
 	native_factory: unknown,
 	decode_payload: (value: unknown) => unknown,
 	remote_base = "",
+	adapter_state: RemoteFormAdapterState = {},
+	keyed = false,
 ): EffectRemoteForm<Input, Output, ErrorType> {
 	const form_obj = native_factory as NativeFormRecord;
+	let local_preflight_schema: StandardSchema | undefined;
 
 	const submit_effect = (input?: RemoteInput<Input>) =>
 		MakeEffectFromPromise<Output, ErrorType>(async () => {
@@ -50,7 +65,13 @@ export function create_remote_form_adapter<
 				return await decode_response_or_value<Output>(result, decode_payload);
 			}
 
-			return await submit_remote_form<Output>(form_obj, input, decode_payload, remote_base);
+			return await submit_remote_form<Output>(
+				form_obj,
+				input,
+				decode_payload,
+				remote_base,
+				local_preflight_schema ?? adapter_state.shared_preflight_schema,
+			);
 		});
 
 	const callable = ((input?: RemoteInput<Input>) => submit_effect(input)) as EffectRemoteForm<
@@ -77,7 +98,7 @@ export function create_remote_form_adapter<
 			enumerable: false,
 			value: (options?: Record<string, unknown>) =>
 				MakeEffectFromPromise<void, ErrorType>(async () => {
-					await form_obj.validate(options);
+					await form_obj.validate(normalize_validate_options(form_obj.validate, options));
 				}),
 		});
 	}
@@ -100,6 +121,8 @@ export function create_remote_form_adapter<
 					form_obj.for(key),
 					decode_payload,
 					remote_base,
+					adapter_state,
+					true,
 				),
 		});
 	}
@@ -109,7 +132,17 @@ export function create_remote_form_adapter<
 			configurable: true,
 			enumerable: false,
 			value: (schema: unknown) => {
-				form_obj.preflight(normalize_validator(schema));
+				const normalized_schema = normalize_validator(schema);
+
+				if (is_standard_schema(normalized_schema)) {
+					local_preflight_schema = normalized_schema;
+
+					if (!keyed) {
+						adapter_state.shared_preflight_schema = normalized_schema;
+					}
+				}
+
+				form_obj.preflight(normalized_schema);
 
 				return callable;
 			},
@@ -117,4 +150,26 @@ export function create_remote_form_adapter<
 	}
 
 	return callable;
+}
+
+function normalize_validate_options(
+	validate: NativeMethod,
+	options: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+	if (!options || !("all" in options) || "includeUntouched" in options) {
+		return options;
+	}
+
+	const source = Function.prototype.toString.call(validate);
+	const uses_stable_option =
+		source.includes("includeUntouched") && !/\ball\s*=/.test(source);
+
+	if (!uses_stable_option) {
+		return options;
+	}
+
+	return {
+		...options,
+		includeUntouched: options.all,
+	};
 }

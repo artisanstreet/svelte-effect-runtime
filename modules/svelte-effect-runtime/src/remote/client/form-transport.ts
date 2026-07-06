@@ -8,6 +8,7 @@ import {
 	RemoteFormEndpointMissingError,
 	UnsupportedRemoteFormResponseError,
 } from "$/errors.ts";
+import type { StandardSchema } from "$/internal/schema.ts";
 import type { FormIssue } from "$/remote/shared.ts";
 import { Option, Schema } from "effect";
 import { parse } from "devalue";
@@ -76,6 +77,8 @@ const DecodeRemoteFormPayload = Schema.decodeUnknownOption(RemoteFormDecodedPayl
  * @param input - Form input value.
  * @param decode_payload - Function to decode successful payloads.
  * @param remote_base - Base URL for the remote endpoint.
+ * @param preflight_schema - Optional schema used to mirror SvelteKit's
+ *   client-side preflight before posting direct programmatic input.
  * @returns Decoded form output.
  */
 export async function submit_remote_form<Output>(
@@ -83,6 +86,7 @@ export async function submit_remote_form<Output>(
 	input: unknown,
 	decode_payload: (value: unknown) => unknown,
 	remote_base: string,
+	preflight_schema?: StandardSchema,
 ): Promise<Output> {
 	const action_id = get_remote_action_id(form_obj);
 
@@ -90,8 +94,11 @@ export async function submit_remote_form<Output>(
 		throw create_remote_transport_error(new RemoteFormEndpointMissingError());
 	}
 
+	await validate_preflight_input(preflight_schema, input);
+
 	const response = await fetch(to_remote_form_url(remote_base, action_id), {
 		method: "POST",
+		headers: get_remote_request_headers(),
 		body: to_form_data(input),
 	});
 
@@ -136,6 +143,69 @@ function to_remote_form_url(remote_base: string, action_id: string): string {
 	}
 
 	return `${normalized_base}/${head}/${encodeURIComponent(tail)}`;
+}
+
+function get_remote_request_headers(): HeadersInit {
+	if (typeof location === "undefined") {
+		return {};
+	}
+
+	return {
+		"x-sveltekit-pathname": location.pathname,
+		"x-sveltekit-search": location.search,
+	};
+}
+
+async function validate_preflight_input(
+	schema: StandardSchema | undefined,
+	input: unknown,
+): Promise<void> {
+	if (!schema) {
+		return;
+	}
+
+	const validated = await schema["~standard"].validate(input);
+
+	if (!is_record(validated) || !Array.isArray(validated.issues)) {
+		return;
+	}
+
+	const issues = validated.issues.map(normalize_standard_issue);
+
+	throw create_remote_validation_error(issues, { issues }, 400);
+}
+
+function normalize_standard_issue(issue: unknown): FormIssue {
+	if (!is_record(issue)) {
+		return { message: String(issue), path: [] };
+	}
+
+	const message = typeof issue.message === "string" ? issue.message : "Invalid input";
+	const path = Array.isArray(issue.path) ? issue.path.flatMap(normalize_path_segment) : [];
+
+	return { message, path };
+}
+
+function normalize_path_segment(segment: unknown): Array<string | number> {
+	if (typeof segment === "string" || typeof segment === "number") {
+		return [segment];
+	}
+
+	if (!is_record(segment)) {
+		return [];
+	}
+
+	const key = segment.key;
+
+	if (typeof key === "string" || typeof key === "number") {
+		return [key];
+	}
+
+	return [];
+}
+
+function is_record(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null;
 }
 
 function decode_form_response<Output>(

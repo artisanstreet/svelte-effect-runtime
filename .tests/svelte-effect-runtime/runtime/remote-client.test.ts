@@ -493,11 +493,79 @@ test("remote form adapter preserves descriptors and wraps validate in an Effect"
 	assert_equals(validate_called, true);
 });
 
+test("remote form adapter maps all to includeUntouched for stable Kit validate", async () => {
+	let received_options: Record<string, unknown> | undefined;
+
+	const native = {
+		method: "POST",
+		action: "?/remote=abc%2Fcreate",
+	};
+
+	Object.defineProperty(native, "validate", {
+		value: async function validate({
+			includeUntouched = false,
+			preflightOnly = false,
+		}: {
+			includeUntouched?: boolean;
+			preflightOnly?: boolean;
+		} = {}) {
+			received_options = arguments[0] as Record<string, unknown>;
+
+			return { includeUntouched, preflightOnly };
+		},
+	});
+
+	const form = create_remote_form_adapter(native, (value) => value, "");
+
+	await Effect.runPromise(form.validate({ all: true, preflightOnly: true }));
+
+	assert_equals(received_options?.all, true);
+	assert_equals(received_options?.includeUntouched, true);
+	assert_equals(received_options?.preflightOnly, true);
+});
+
+test("remote form adapter keeps all for next Kit validate", async () => {
+	let received_options: Record<string, unknown> | undefined;
+
+	const native = {
+		method: "POST",
+		action: "?/remote=abc%2Fcreate",
+	};
+
+	Object.defineProperty(native, "validate", {
+		value: async function validate({
+			all = false,
+			preflightOnly = false,
+			includeUntouched,
+		}: {
+			all?: boolean;
+			preflightOnly?: boolean;
+			includeUntouched?: boolean;
+		} = {}) {
+			received_options = arguments[0] as Record<string, unknown>;
+
+			return { all, includeUntouched, preflightOnly };
+		},
+	});
+
+	const form = create_remote_form_adapter(native, (value) => value, "");
+
+	await Effect.runPromise(form.validate({ all: true, preflightOnly: true }));
+
+	assert_equals(received_options?.all, true);
+	assert_equals("includeUntouched" in (received_options ?? {}), false);
+	assert_equals(received_options?.preflightOnly, true);
+});
+
 test("remote form adapter posts explicit input when native submit is form-bound", async () => {
 	const original_fetch = globalThis.fetch;
+	const had_location = "location" in globalThis;
+	const original_location = globalThis.location;
 
 	let native_submit_called = false;
 	let requested_url = "";
+	let request_pathname: string | null = null;
+	let request_search: string | null = null;
 	let posted_title: FormDataEntryValue | null = null;
 
 	const native = {
@@ -509,10 +577,18 @@ test("remote form adapter posts explicit input when native submit is form-bound"
 		},
 	};
 
+	Object.defineProperty(globalThis, "location", {
+		configurable: true,
+		value: new URL("https://example.test/profile?tab=settings"),
+	});
+
 	globalThis.fetch = ((url: string | URL | Request, init?: RequestInit) => {
 		const body = init?.body as FormData;
+		const headers = new Headers(init?.headers);
 
 		requested_url = String(url);
+		request_pathname = headers.get("x-sveltekit-pathname");
+		request_search = headers.get("x-sveltekit-search");
 		posted_title = body.get("title");
 
 		return Promise.resolve(
@@ -537,9 +613,20 @@ test("remote form adapter posts explicit input when native submit is form-bound"
 		assert_equals(result, { ok: true });
 		assert_equals(native_submit_called, false);
 		assert_equals(requested_url, "/_app/remote/abc/create");
+		assert_equals(request_pathname, "/profile");
+		assert_equals(request_search, "?tab=settings");
 		assert_equals(posted_title, "hello");
 	} finally {
 		globalThis.fetch = original_fetch;
+
+		if (had_location) {
+			Object.defineProperty(globalThis, "location", {
+				configurable: true,
+				value: original_location,
+			});
+		} else {
+			Reflect.deleteProperty(globalThis, "location");
+		}
 	}
 });
 
@@ -740,6 +827,52 @@ test("remote form adapter normalizes Effect Schema preflight input", () => {
 		typeof (schemas[0] as { "~standard"?: { validate?: unknown } })["~standard"]?.validate,
 		"function",
 	);
+});
+
+test("remote form adapter runs preflight before direct endpoint submit", async () => {
+	const original_fetch = globalThis.fetch;
+	let fetch_called = false;
+
+	const schema = {
+		"~standard": {
+			validate() {
+				return {
+					issues: [{ message: "missing", path: ["title"] }],
+				};
+			},
+		},
+	};
+	const native = {
+		method: "POST",
+		action: "?/remote=abc%2Fcreate",
+		preflight() {
+			return native;
+		},
+	};
+
+	globalThis.fetch = (() => {
+		fetch_called = true;
+
+		return Promise.resolve(new Response());
+	}) as typeof fetch;
+
+	try {
+		const form = create_remote_form_adapter<{ title: string }, string>(
+			native,
+			(value) => value,
+			"/_app/remote",
+		);
+
+		form.preflight(schema);
+
+		const error = await assert_rejects(() => Effect.runPromise(form({ title: "" })));
+
+		assert_equals((error as { _tag?: string })._tag, "RemoteValidationError");
+		assert_equals((error as { issues?: Array<{ message: string }> }).issues?.[0]?.message, "missing");
+		assert_equals(fetch_called, false);
+	} finally {
+		globalThis.fetch = original_fetch;
+	}
 });
 
 test("remote form adapter preserves SvelteKit 2.61 enhance instance descriptors", () => {
