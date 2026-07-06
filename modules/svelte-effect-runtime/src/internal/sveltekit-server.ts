@@ -8,7 +8,7 @@ import { SvelteKitServerExportUnavailableError } from "$/errors.ts";
  * @returns Never returns because this shim is not executable.
  */
 export function query(..._args: ReadonlyArray<unknown>): never {
-  throw make_sveltekit_server_error("query");
+	throw make_sveltekit_server_error("query");
 }
 
 /**
@@ -19,7 +19,7 @@ export function query(..._args: ReadonlyArray<unknown>): never {
  * @returns Never returns because this shim is not executable.
  */
 export function command(..._args: ReadonlyArray<unknown>): never {
-  throw make_sveltekit_server_error("command");
+	throw make_sveltekit_server_error("command");
 }
 
 /**
@@ -30,7 +30,7 @@ export function command(..._args: ReadonlyArray<unknown>): never {
  * @returns Never returns because this shim is not executable.
  */
 export function form(..._args: ReadonlyArray<unknown>): never {
-  throw make_sveltekit_server_error("form");
+	throw make_sveltekit_server_error("form");
 }
 
 /**
@@ -41,7 +41,7 @@ export function form(..._args: ReadonlyArray<unknown>): never {
  * @returns Never returns because this shim is not executable.
  */
 export function prerender(..._args: ReadonlyArray<unknown>): never {
-  throw make_sveltekit_server_error("prerender");
+	throw make_sveltekit_server_error("prerender");
 }
 
 /**
@@ -51,9 +51,9 @@ export function prerender(..._args: ReadonlyArray<unknown>): never {
  * @returns Never returns because this shim is not executable.
  */
 export function getRequestEvent(): never {
-  throw make_sveltekit_server_error("getRequestEvent");
+	throw make_sveltekit_server_error("getRequestEvent");
 }
 
 function make_sveltekit_server_error(name: string): Error {
-  return new SvelteKitServerExportUnavailableError(name);
+	return new SvelteKitServerExportUnavailableError(name);
 }

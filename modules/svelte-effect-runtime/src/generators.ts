@@ -12,11 +12,11 @@
  */
 export { Code, Dispatcher, get_dispatcher } from "$/generated/dispatcher.ts";
 export type {
-  DispatcherEvent,
-  MarkupPromiseEvent,
-  MarkupPromiseOptions,
-  MarkupRunEvent,
-  MarkupValueEvent,
+	DispatcherEvent,
+	MarkupPromiseEvent,
+	MarkupPromiseOptions,
+	MarkupRunEvent,
+	MarkupValueEvent,
 } from "$/generated/dispatcher.ts";
 export { value } from "$/markup/value.ts";
 export { promise } from "$/markup/promise.ts";

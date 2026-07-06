@@ -16,16 +16,16 @@ import { decode_remote_error, is_decoded_remote_failure } from "./failures.ts";
  * @returns Remote failure represented by the response.
  */
 export async function decode_response_failure<ErrorType = never>(
-  response: Response,
+	response: Response,
 ): Promise<RemoteFailure<ErrorType>> {
-  const body = await response.json().catch(() => undefined);
-  const decoded = decode_remote_error<ErrorType>(body);
+	const body = await response.json().catch(() => undefined);
+	const decoded = decode_remote_error<ErrorType>(body);
 
-  if (is_decoded_remote_failure(decoded)) {
-    return decoded;
-  }
+	if (is_decoded_remote_failure(decoded)) {
+		return decoded;
+	}
 
-  return create_remote_http_error(response.status, body);
+	return create_remote_http_error(response.status, body);
 }
 
 /**
@@ -42,34 +42,32 @@ export async function decode_response_failure<ErrorType = never>(
  * @returns Decoded successful output.
  */
 export async function decode_response_or_value<Output, ErrorType = never>(
-  value: unknown,
-  decode_payload: (value: unknown) => unknown,
+	value: unknown,
+	decode_payload: (value: unknown) => unknown,
 ): Promise<Output> {
-  if (value instanceof Response) {
-    if (!value.ok) {
-      throw await decode_response_failure<ErrorType>(value);
-    }
+	if (value instanceof Response) {
+		if (!value.ok) {
+			throw await decode_response_failure<ErrorType>(value);
+		}
 
-    const data = await decode_success_response_body(value);
+		const data = await decode_success_response_body(value);
 
-    return decode_payload(data) as Output;
-  }
+		return decode_payload(data) as Output;
+	}
 
-  return decode_payload(value) as Output;
+	return decode_payload(value) as Output;
 }
 
-async function decode_success_response_body(
-  response: Response,
-): Promise<unknown> {
-  if (response.status === 204 || response.status === 205) {
-    return undefined;
-  }
+async function decode_success_response_body(response: Response): Promise<unknown> {
+	if (response.status === 204 || response.status === 205) {
+		return undefined;
+	}
 
-  const text = await response.text();
+	const text = await response.text();
 
-  if (text.length === 0) {
-    return undefined;
-  }
+	if (text.length === 0) {
+		return undefined;
+	}
 
-  return JSON.parse(text);
+	return JSON.parse(text);
 }

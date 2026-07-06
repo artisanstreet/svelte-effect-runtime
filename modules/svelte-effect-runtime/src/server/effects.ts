@@ -1,24 +1,17 @@
 import { run_remote_effect } from "$/remote/server.ts";
 import { InvalidLiveQueryReturnError } from "$/errors.ts";
-import {
-  error as svelte_error,
-  invalid as svelte_invalid,
-} from "@sveltejs/kit";
+import { error as svelte_error, invalid as svelte_invalid } from "@sveltejs/kit";
 import { Effect, Stream } from "effect";
 
 import { get_server_runtime_or_throw, RequestEvent } from "./runtime.ts";
 import type { RequestEvent as RequestEventShape } from "./runtime.ts";
 import type { EffectLike, EffectRemoteLiveSource } from "./types.ts";
 
-type ResolvedLiveSource<A> =
-  | AsyncIterable<A>
-  | AsyncIterator<A>
-  | Iterable<A>
-  | Iterator<A>;
+type ResolvedLiveSource<A> = AsyncIterable<A> | AsyncIterator<A> | Iterable<A> | Iterator<A>;
 
 type LiveHandlerResult<A> =
-  | EffectLike<EffectRemoteLiveSource<A>, unknown, unknown>
-  | EffectRemoteLiveSource<A>;
+	| EffectLike<EffectRemoteLiveSource<A>, unknown, unknown>
+	| EffectRemoteLiveSource<A>;
 
 /**
  * Checks whether a value is an Effect generator return object.
@@ -28,13 +21,13 @@ type LiveHandlerResult<A> =
  * @returns Whether the value should be wrapped with `Effect.gen`.
  */
 export function is_generator_result<A>(
-  value: unknown,
+	value: unknown,
 ): value is Effect.gen.Return<A, unknown, unknown> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as { next?: unknown }).next === "function"
-  );
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		typeof (value as { next?: unknown }).next === "function"
+	);
 }
 
 /**
@@ -44,15 +37,28 @@ export function is_generator_result<A>(
  * @param value - Effect or generator return value.
  * @returns Normalized Effect.
  */
-export function to_effect<A, E, R>(
-  value: EffectLike<A, E, R>,
-): Effect.Effect<A, E, R> {
-  if (is_generator_result<A>(value)) {
-    return Effect.gen(() => value) as Effect.Effect<A, E, R>;
-  }
+export function ToEffect<A, E, R>(value: EffectLike<A, E, R>): Effect.Effect<A, E, R> {
+	if (is_generator_result<A>(value)) {
+		return Effect.gen(() => value) as Effect.Effect<A, E, R>;
+	}
 
-  return value;
+	return value;
 }
+
+/**
+ * Compatibility alias for {@link ToEffect}.
+ *
+ * @example
+ * ```ts
+ * const program = to_effect(Effect.succeed(1));
+ * ```
+ *
+ * @since 2.0.0
+ * @param value - Effect or generator return value.
+ * @returns Normalized Effect.
+ * @internal
+ */
+export const to_effect = ToEffect;
 
 /**
  * Checks whether a value is a live query source SvelteKit can consume.
@@ -61,28 +67,26 @@ export function to_effect<A, E, R>(
  * @param value - Value to inspect.
  * @returns Whether the value is an Effect Stream or native iterable source.
  */
-export function is_live_source<A>(
-  value: unknown,
-): value is EffectRemoteLiveSource<A> {
-  if (Stream.isStream(value)) {
-    return true;
-  }
+export function is_live_source<A>(value: unknown): value is EffectRemoteLiveSource<A> {
+	if (Stream.isStream(value)) {
+		return true;
+	}
 
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
+	if (typeof value !== "object" || value === null) {
+		return false;
+	}
 
-  const source = value as {
-    readonly next?: unknown;
-    readonly [Symbol.asyncIterator]?: unknown;
-    readonly [Symbol.iterator]?: unknown;
-  };
+	const source = value as {
+		readonly next?: unknown;
+		readonly [Symbol.asyncIterator]?: unknown;
+		readonly [Symbol.iterator]?: unknown;
+	};
 
-  return (
-    typeof source.next === "function" ||
-    typeof source[Symbol.asyncIterator] === "function" ||
-    typeof source[Symbol.iterator] === "function"
-  );
+	return (
+		typeof source.next === "function" ||
+		typeof source[Symbol.asyncIterator] === "function" ||
+		typeof source[Symbol.iterator] === "function"
+	);
 }
 
 /**
@@ -95,51 +99,44 @@ export function is_live_source<A>(
  * @returns Promise resolving with a source SvelteKit can stream.
  */
 export function run_live_handler_source<A>(
-  value: LiveHandlerResult<A>,
-  event: RequestEventShape,
+	value: LiveHandlerResult<A>,
+	event: RequestEventShape,
 ): Promise<ResolvedLiveSource<A>> {
-  const runtime = get_server_runtime_or_throw();
-  const effect = Effect.provideService(
-    to_live_source_effect(value),
-    RequestEvent,
-    event,
-  ) as Effect.Effect<ResolvedLiveSource<A>, unknown, unknown>;
+	const runtime = get_server_runtime_or_throw();
+	const EffectWithRequestEvent = Effect.provideService(
+		ToLiveSourceEffect(value),
+		RequestEvent,
+		event,
+	) as Effect.Effect<ResolvedLiveSource<A>, unknown, unknown>;
 
-  return run_remote_effect(
-    effect,
-    runtime,
-    svelte_invalid,
-    svelte_remote_error,
-  );
+	return run_remote_effect(EffectWithRequestEvent, runtime, svelte_invalid, svelte_remote_error);
 }
 
-function to_live_source_effect<A>(
-  value: LiveHandlerResult<A>,
+function ToLiveSourceEffect<A>(
+	value: LiveHandlerResult<A>,
 ): Effect.Effect<ResolvedLiveSource<A>, unknown, unknown> {
-  if (Stream.isStream(value)) {
-    return Stream.toAsyncIterableEffect(
-      value as Stream.Stream<A, unknown, unknown>,
-    ) as Effect.Effect<ResolvedLiveSource<A>, unknown, unknown>;
-  }
+	if (Stream.isStream(value)) {
+		return Stream.toAsyncIterableEffect(
+			value as Stream.Stream<A, unknown, unknown>,
+		) as Effect.Effect<ResolvedLiveSource<A>, unknown, unknown>;
+	}
 
-  if (is_native_live_source<A>(value)) {
-    return Effect.succeed(value);
-  }
+	if (is_native_live_source<A>(value)) {
+		return Effect.succeed(value);
+	}
 
-  if (!Effect.isEffect(value)) {
-    return Effect.fail(new InvalidLiveQueryReturnError());
-  }
+	if (!Effect.isEffect(value)) {
+		return Effect.fail(new InvalidLiveQueryReturnError());
+	}
 
-  return Effect.flatMap(
-    value as Effect.Effect<EffectRemoteLiveSource<A>, unknown, unknown>,
-    to_live_source_effect,
-  );
+	return Effect.flatMap(
+		value as Effect.Effect<EffectRemoteLiveSource<A>, unknown, unknown>,
+		ToLiveSourceEffect,
+	);
 }
 
-function is_native_live_source<A>(
-  value: unknown,
-): value is ResolvedLiveSource<A> {
-  return is_live_source<A>(value) && !Stream.isStream(value);
+function is_native_live_source<A>(value: unknown): value is ResolvedLiveSource<A> {
+	return is_live_source<A>(value) && !Stream.isStream(value);
 }
 
 /**
@@ -151,24 +148,19 @@ function is_native_live_source<A>(
  * @returns Promise resolving with the handler output.
  */
 export function run_handler_effect<A>(
-  value: EffectLike<A, unknown, unknown>,
-  event: RequestEventShape,
+	value: EffectLike<A, unknown, unknown>,
+	event: RequestEventShape,
 ): Promise<A> {
-  const runtime = get_server_runtime_or_throw();
-  const effect = Effect.provideService(
-    to_effect(value),
-    RequestEvent,
-    event,
-  ) as Effect.Effect<A, unknown, unknown>;
+	const runtime = get_server_runtime_or_throw();
+	const EffectWithRequestEvent = Effect.provideService(
+		ToEffect(value),
+		RequestEvent,
+		event,
+	) as Effect.Effect<A, unknown, unknown>;
 
-  return run_remote_effect(
-    effect,
-    runtime,
-    svelte_invalid,
-    svelte_remote_error,
-  );
+	return run_remote_effect(EffectWithRequestEvent, runtime, svelte_invalid, svelte_remote_error);
 }
 
 const svelte_remote_error = (status: number, body: unknown): never => {
-  svelte_error(status as never, body as never);
+	svelte_error(status as never, body as never);
 };

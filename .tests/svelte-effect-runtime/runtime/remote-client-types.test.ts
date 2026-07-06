@@ -1,10 +1,19 @@
-import { assertEquals } from "@std/assert";
-import { join } from "@std/path";
+import { test } from "vitest";
+import { assert_equals } from "./helpers/assert.ts";
+import { spawnSync } from "node:child_process";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-Deno.test("remote form preflight keeps enhance callback Effect-aware", async () => {
-  await assert_type_checks(
-    "preflight-enhance.ts",
-    `
+/**
+ * Type-error fixtures intentionally keep TypeScript's directive comment syntax
+ * inside embedded source strings because the compiler only recognizes that
+ * exact marker.
+ */
+test("remote form preflight keeps enhance callback Effect-aware", async () => {
+	await assert_type_checks(
+		"preflight-enhance.ts",
+		`
 import { Effect } from "effect";
 import { create_remote_form_adapter } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
 import type { RemoteFormInput } from "@sveltejs/kit";
@@ -34,13 +43,13 @@ form.preflight(schema).enhance(({ submit }) =>
 returning_form.preflight(schema).enhance(({ submit }) => submit());
 returning_form.preflight(schema).enhance(({ submit }) => submit().updates());
 `,
-  );
+	);
 });
 
-Deno.test("remote form preflight keeps validate Effect-yieldable", async () => {
-  await assert_type_checks(
-    "preflight-validate.ts",
-    `
+test("remote form preflight keeps validate Effect-yieldable", async () => {
+	await assert_type_checks(
+		"preflight-validate.ts",
+		`
 import { Effect } from "effect";
 import { create_remote_form_adapter } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
 import type { RemoteFormInput } from "@sveltejs/kit";
@@ -59,13 +68,13 @@ Effect.gen(function* () {
   yield* form.preflight(schema).validate();
 });
 `,
-  );
+	);
 });
 
-Deno.test("remote form enhance submit keeps form result types", async () => {
-  await assert_type_checks(
-    "enhance-submit-types.ts",
-    `
+test("remote form enhance submit keeps form result types", async () => {
+	await assert_type_checks(
+		"enhance-submit-types.ts",
+		`
 import { Cause, Effect } from "effect";
 import { create_remote_form_adapter } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
 import type { RemoteFailure } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/shared.ts";
@@ -100,13 +109,13 @@ form.enhance(({ result, submit }) =>
   })
 );
 `,
-  );
+	);
 });
 
-Deno.test("remote client adapters keep structured remote failure types", async () => {
-  await assert_type_checks(
-    "remote-failure-types.ts",
-    `
+test("remote client adapters keep structured remote failure types", async () => {
+	await assert_type_checks(
+		"remote-failure-types.ts",
+		`
 import { Cause, Effect } from "effect";
 import {
   create_remote_form_adapter,
@@ -150,13 +159,13 @@ query().pipe(
   ),
 );
 `,
-  );
+	);
 });
 
-Deno.test("remote form updates accepts Effect query wrappers", async () => {
-  await assert_type_checks(
-    "remote-updates-query-wrapper.ts",
-    `
+test("remote form updates accepts Effect query wrappers", async () => {
+	await assert_type_checks(
+		"remote-updates-query-wrapper.ts",
+		`
 import { Effect } from "effect";
 import {
   create_remote_form_adapter,
@@ -203,13 +212,13 @@ form.enhance(({ submit }) =>
 void post_result;
 void clock_result;
 `,
-  );
+	);
 });
 
-Deno.test("remote form types reject invalid preflight and command updates", async () => {
-  await assert_type_checks(
-    "remote-form-negative-boundaries.ts",
-    `
+test("remote form types reject invalid preflight and command updates", async () => {
+	await assert_type_checks(
+		"remote-form-negative-boundaries.ts",
+		`
 import { Effect } from "effect";
 import {
   create_remote_command_adapter,
@@ -253,13 +262,13 @@ form.enhance(({ submit }) =>
   })
 );
 `,
-  );
+	);
 });
 
-Deno.test("remote query adapter infers decoder output", async () => {
-  await assert_type_checks(
-    "remote-query-adapter-inference.ts",
-    `
+test("remote query adapter infers decoder output", async () => {
+	await assert_type_checks(
+		"remote-query-adapter-inference.ts",
+		`
 import { Effect } from "effect";
 import { create_remote_query_adapter } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
 
@@ -279,13 +288,13 @@ type Post = Assert<Equal<Effect.Success<typeof post>, { id: string }>>;
 // @ts-expect-error input shape is inferred from the native query
 get_post({ slug: "one" });
 `,
-  );
+	);
 });
 
-Deno.test("markup value helper infers yielded value types", async () => {
-  await assert_type_checks(
-    "markup-value-helper-inference.ts",
-    `
+test("markup value helper infers yielded value types", async () => {
+	await assert_type_checks(
+		"markup-value-helper-inference.ts",
+		`
 import { Effect } from "effect";
 import { value } from "__RUNTIME__/modules/svelte-effect-runtime/src/markup/value.ts";
 
@@ -296,13 +305,13 @@ const count: number = loaded;
 
 void count;
 `,
-  );
+	);
 });
 
-Deno.test("server type exports include factory helper types", async () => {
-  await assert_type_checks(
-    "server-type-exports.ts",
-    `
+test("server type exports include factory helper types", async () => {
+	await assert_type_checks(
+		"server-type-exports.ts",
+		`
 import type {
   CommandFactory,
   FormFactory,
@@ -331,13 +340,13 @@ const exports_tuple: Exports | undefined = undefined;
 
 void exports_tuple;
 `,
-  );
+	);
 });
 
-Deno.test("server schema remotes preserve encoded input and domain errors", async () => {
-  await assert_type_checks(
-    "server-schema-remote-types.ts",
-    `
+test("server schema remotes preserve encoded input and domain errors", async () => {
+	await assert_type_checks(
+		"server-schema-remote-types.ts",
+		`
 import { Effect, Schema } from "effect";
 import { Command, Form, Prerender, Query } from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
 
@@ -431,13 +440,13 @@ SignIn({ email: "hi@example.com" });
 // @ts-expect-error schema call input uses the encoded type
 ReadNumber(1);
 `,
-  );
+	);
 });
 
-Deno.test("server remote helpers stay Effect-yieldable in markup helpers", async () => {
-  await assert_type_checks(
-    "server-remote-markup.ts",
-    `
+test("server remote helpers stay Effect-yieldable in markup helpers", async () => {
+	await assert_type_checks(
+		"server-remote-markup.ts",
+		`
 import { Effect, Schema, Stream } from "effect";
 import { Command, Form, Query } from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
 import type {
@@ -670,13 +679,13 @@ async function check_generated_markup_helpers() {
 
 void check_generated_markup_helpers;
 `,
-  );
+	);
 });
 
-Deno.test("server remote helpers preserve domain error and Standard Schema types", async () => {
-  await assert_type_checks(
-    "server-remote-domain-types.ts",
-    `
+test("server remote helpers preserve domain error and Standard Schema types", async () => {
+	await assert_type_checks(
+		"server-remote-domain-types.ts",
+		`
 import { Effect, Schema, Stream } from "effect";
 import { Command, Form, Prerender, Query } from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
 import type { FormInvalid } from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
@@ -820,13 +829,13 @@ void invalid_name;
 void invalid_length;
 void generated_value;
 `,
-  );
+	);
 });
 
-Deno.test("remote form enhance submit exposes form result Effects", async () => {
-  await assert_type_checks(
-    "remote-form-submit-result.ts",
-    `
+test("remote form enhance submit exposes form result Effects", async () => {
+	await assert_type_checks(
+		"remote-form-submit-result.ts",
+		`
 import { Effect } from "effect";
 import type { RemoteFormInput } from "@sveltejs/kit";
 import type { EffectRemoteFormEnhanceOptions } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
@@ -843,13 +852,13 @@ const updates_effect: Effect.Effect<SaveResult | undefined, unknown, unknown> =
 void submit_effect;
 void updates_effect;
 `,
-  );
+	);
 });
 
-Deno.test("RequestEvent locals use SvelteKit App.Locals augmentation", async () => {
-  await assert_type_checks(
-    "request-event-locals.ts",
-    `
+test("RequestEvent locals use SvelteKit App.Locals augmentation", async () => {
+	await assert_type_checks(
+		"request-event-locals.ts",
+		`
 import { Effect } from "effect";
 import { RequestEvent } from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
 
@@ -870,26 +879,23 @@ Effect.gen(function* () {
   return user_id;
 });
 `,
-  );
+	);
 });
 
-async function assert_type_checks(
-  filename: string,
-  source: string,
-): Promise<void> {
-  const repo_root = join(Deno.cwd(), "../..");
-  const tmp_root = join(repo_root, ".tmp");
+async function assert_type_checks(filename: string, source: string): Promise<void> {
+	const repo_root = fileURLToPath(new URL("../../..", import.meta.url));
+	const tmp_root = join(repo_root, ".tmp");
 
-  await Deno.mkdir(tmp_root, { recursive: true });
+	await mkdir(tmp_root, { recursive: true });
 
-  const dir = await Deno.makeTempDir({ dir: tmp_root });
-  const app_server_path = join(dir, "$app-server.ts");
-  const source_path = join(dir, filename);
-  const tsconfig_path = join(dir, "tsconfig.json");
+	const dir = await mkdtemp(join(tmp_root, "remote-client-types-"));
+	const app_server_path = join(dir, "$app-server.ts");
+	const source_path = join(dir, filename);
+	const tsconfig_path = join(dir, "tsconfig.json");
 
-  await Deno.writeTextFile(
-    app_server_path,
-    `
+	await writeFile(
+		app_server_path,
+		`
 type MaybePromise<T> = T | Promise<T>;
 
 export function query<Output>(fn: () => MaybePromise<Output>): unknown;
@@ -923,67 +929,54 @@ export function prerender(..._args: unknown[]): unknown {
   return undefined;
 }
 `,
-  );
+	);
 
-  await Deno.writeTextFile(
-    source_path,
-    source.replaceAll("__RUNTIME__", to_posix_path(repo_root)),
-  );
+	await writeFile(source_path, source.replaceAll("__RUNTIME__", to_posix_path(repo_root)));
 
-  await Deno.writeTextFile(
-    tsconfig_path,
-    JSON.stringify(
-      {
-        compilerOptions: {
-          allowImportingTsExtensions: true,
-          baseUrl: `${to_posix_path(repo_root)}/modules/svelte-effect-runtime`,
-          ignoreDeprecations: "6.0",
-          lib: ["dom", "dom.iterable", "es2022"],
-          module: "nodenext",
-          moduleResolution: "nodenext",
-          noEmit: true,
-          exactOptionalPropertyTypes: true,
-          paths: {
-            "$app/server": [to_posix_path(app_server_path)],
-            "$": ["./src/mod.ts"],
-            "$/*": ["./src/*"],
-          },
-          skipLibCheck: true,
-          strict: true,
-          target: "es2022",
-        },
-        files: [to_posix_path(source_path)],
-      },
-      null,
-      2,
-    ),
-  );
+	await writeFile(
+		tsconfig_path,
+		JSON.stringify(
+			{
+				compilerOptions: {
+					allowImportingTsExtensions: true,
+					baseUrl: `${to_posix_path(repo_root)}/modules/svelte-effect-runtime`,
+					ignoreDeprecations: "6.0",
+					lib: ["dom", "dom.iterable", "es2022"],
+					module: "nodenext",
+					moduleResolution: "nodenext",
+					noEmit: true,
+					exactOptionalPropertyTypes: true,
+					paths: {
+						"@sveltejs/kit": ["./node_modules/@sveltejs/kit"],
+						"@sveltejs/kit/*": ["./node_modules/@sveltejs/kit/*"],
+						effect: ["./node_modules/effect"],
+						"effect/*": ["./node_modules/effect/*"],
+						svelte: ["./node_modules/svelte"],
+						"svelte/*": ["./node_modules/svelte/*"],
+						"$app/server": [to_posix_path(app_server_path)],
+						$: ["./src/mod.ts"],
+						"$/*": ["./src/*"],
+					},
+					skipLibCheck: true,
+					strict: true,
+					target: "es2022",
+				},
+				files: [to_posix_path(source_path)],
+			},
+			null,
+			2,
+		),
+	);
 
-  const npm_command = Deno.build.os === "windows" ? "npm.cmd" : "npm";
-  const command = new Deno.Command(npm_command, {
-    args: [
-      "exec",
-      "tsc",
-      "--",
-      "-p",
-      tsconfig_path,
-    ],
-    cwd: repo_root,
-    stdout: "piped",
-    stderr: "piped",
-  });
+	const output = spawnSync("vp", ["exec", "tsc", "-p", tsconfig_path], {
+		cwd: repo_root,
+		encoding: "utf8",
+		stdio: ["ignore", "pipe", "pipe"],
+	});
 
-  const output = await command.output();
-
-  assertEquals(
-    output.code,
-    0,
-    `${new TextDecoder().decode(output.stdout)}${
-      new TextDecoder().decode(output.stderr)
-    }`,
-  );
+	assert_equals(output.status ?? 1, 0, `${output.stdout}${output.stderr}`);
 }
 
 function to_posix_path(path: string): string {
-  return path.replaceAll("\\", "/");
+	return path.replaceAll("\\", "/");
 }

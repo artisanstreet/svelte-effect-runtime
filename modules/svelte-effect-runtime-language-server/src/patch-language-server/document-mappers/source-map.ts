@@ -17,16 +17,13 @@ import type { Mapper } from "../types.ts";
  * @returns Mapper that translates between transformed and original positions.
  */
 export function create_source_map_mapper(
-  raw_map: Record<string, unknown>,
-  source_uri: string,
+	raw_map: Record<string, unknown>,
+	source_uri: string,
 ): Mapper {
-  const trace_map_input = {
-    ...raw_map,
-    sources: [source_uri],
-  } as ConstructorParameters<typeof TraceMap>[0];
+	const trace_map_input = {
+		...raw_map,
+		sources: [source_uri],
+	} as ConstructorParameters<typeof TraceMap>[0];
 
-  return new SourceMapDocumentMapper(
-    new TraceMap(trace_map_input),
-    source_uri,
-  ) as Mapper;
+	return new SourceMapDocumentMapper(new TraceMap(trace_map_input), source_uri) as Mapper;
 }

@@ -1,8 +1,0 @@
-{
-  "tasks": {
-    "build": "deno task clean && deno task prepare:runtime && deno run -A --config ../../deno.json ../../build/lsp.ts",
-    "clean": "deno run -A --config ../../deno.json ../../build/clean.ts svelte-effect-runtime-language-server",
-    "prepare:runtime": "deno task --cwd ../svelte-effect-runtime build && deno run -A --config ../../deno.json ../../build/assets.ts svelte-effect-runtime-language-server",
-    "start": "node ./.dist/server.cjs --stdio"
-  }
-}

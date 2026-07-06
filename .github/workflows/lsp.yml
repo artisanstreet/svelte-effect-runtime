@@ -52,16 +52,28 @@ jobs:
       - name: checkout
         uses: actions/checkout@v4
 
-      - name: setup_deno
-        uses: denoland/setup-deno@v2
+      - name: setup_node
+        uses: actions/setup-node@v4
         with:
-          deno-version: v2.x
+          node-version: 24
+
+      - name: enable_corepack
+        run: corepack enable
+
+      - name: install_vite_plus
+        shell: bash
+        run: |
+          curl -fsSL https://vite.plus | bash
+          echo "$HOME/.vite-plus/bin" >> "$GITHUB_PATH"
+
+      - name: install_dependencies
+        run: corepack pnpm install --frozen-lockfile
 
       - name: lint
-        run: deno task lint
+        run: corepack pnpm run lint
 
       - name: test_lsp
-        run: deno task test:lsp
+        run: corepack pnpm run test
 
   build_lsp:
     needs:
@@ -74,11 +86,22 @@ jobs:
       - name: checkout
         uses: actions/checkout@v4
 
-      - name: setup_deno
-        uses: denoland/setup-deno@v2
+      - name: setup_node
+        uses: actions/setup-node@v4
         with:
-          deno-version: v2.x
+          node-version: 24
+
+      - name: enable_corepack
+        run: corepack enable
+
+      - name: install_vite_plus
+        shell: bash
+        run: |
+          curl -fsSL https://vite.plus | bash
+          echo "$HOME/.vite-plus/bin" >> "$GITHUB_PATH"
+
+      - name: install_dependencies
+        run: corepack pnpm install --frozen-lockfile
 
       - name: build_lsp
-        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-language-server
-        run: deno task build
+        run: corepack pnpm --dir modules/svelte-effect-runtime-language-server run build

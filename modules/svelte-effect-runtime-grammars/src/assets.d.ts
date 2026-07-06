@@ -1,5 +1,5 @@
 declare module "*.tsq" {
-  const content: string;
+	const content: string;
 
-  export default content;
+	export default content;
 }

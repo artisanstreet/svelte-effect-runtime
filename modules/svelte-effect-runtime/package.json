@@ -1,73 +1,73 @@
 {
-  "name": "svelte-effect-runtime",
-  "version": "3.4.5",
-  "description": "Core module that houses the Vite plugin to enable effectful execution.",
-  "license": "BSD-3-Clause",
-  "type": "module",
-  "engines": {
-    "node": "^22.12.0 || >=24.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/usebarekey/svelte-effect-runtime.git"
-  },
-  "publishConfig": {
-    "access": "public"
-  },
-  "files": [
-    ".dist",
-    "README.md"
-  ],
-  "exports": {
-    ".": {
-      "types": "./.dist/mod.d.ts",
-      "default": "./.dist/mod.js"
-    },
-    "./server": {
-      "types": "./.dist/server.d.ts",
-      "default": "./.dist/server.js"
-    },
-    "./vite": {
-      "types": "./.dist/vite.d.ts",
-      "default": "./.dist/vite.js"
-    },
-    "./runtime/transform": {
-      "types": "./.dist/runtime/transform.d.ts",
-      "default": "./.dist/runtime/transform.js"
-    },
-    "./internal/generators": {
-      "types": "./.dist/internal/generators.d.ts",
-      "default": "./.dist/internal/generators.js"
-    },
-    "./internal/remote-client": {
-      "types": "./.dist/internal/remote-client.d.ts",
-      "default": "./.dist/internal/remote-client.js"
-    },
-    "./internal/remote-server": {
-      "types": "./.dist/internal/remote-server.d.ts",
-      "default": "./.dist/internal/remote-server.js"
-    }
-  },
-  "scripts": {
-    "build": "deno task build",
-    "check": "deno task check",
-    "clean": "deno task clean",
-    "test": "deno task test"
-  },
-  "peerDependencies": {
-    "@sveltejs/kit": "^2.0.0 || ^3.0.0-next.0",
-    "@sveltejs/vite-plugin-svelte": "^6.0.0 || ^7.0.0",
-    "effect": "^4.0.0-beta",
-    "svelte": "^5.0.0",
-    "vite": "^7.0.0 || ^8.0.0"
-  },
-  "dependencies": {
-    "devalue": "^5.5.0",
-    "magic-string": "^0.30.21",
-    "typescript": "^6.0.0"
-  },
-  "devDependencies": {
-    "@types/node": "^24.6.1",
-    "rolldown": "^1.0.0-rc.13"
-  }
+	"name": "svelte-effect-runtime",
+	"version": "3.4.5",
+	"description": "Core module that houses the Vite plugin to enable effectful execution.",
+	"license": "BSD-3-Clause",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/usebarekey/svelte-effect-runtime.git"
+	},
+	"files": [
+		".dist",
+		"README.md"
+	],
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./.dist/mod.d.ts",
+			"default": "./.dist/mod.js"
+		},
+		"./server": {
+			"types": "./.dist/server.d.ts",
+			"default": "./.dist/server.js"
+		},
+		"./vite": {
+			"types": "./.dist/vite.d.ts",
+			"default": "./.dist/vite.js"
+		},
+		"./runtime/transform": {
+			"types": "./.dist/runtime/transform.d.ts",
+			"default": "./.dist/runtime/transform.js"
+		},
+		"./internal/generators": {
+			"types": "./.dist/internal/generators.d.ts",
+			"default": "./.dist/internal/generators.js"
+		},
+		"./internal/remote-client": {
+			"types": "./.dist/internal/remote-client.d.ts",
+			"default": "./.dist/internal/remote-client.js"
+		},
+		"./internal/remote-server": {
+			"types": "./.dist/internal/remote-server.d.ts",
+			"default": "./.dist/internal/remote-server.js"
+		}
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"scripts": {
+		"build": "corepack pnpm run clean && vp node ../../build/runtime.ts && vp exec tsc -p tsconfig.build.json --emitDeclarationOnly && vp node ../../build/dts.ts svelte-effect-runtime",
+		"check": "vp exec tsc -p tsconfig.build.json --noEmit",
+		"clean": "vp node ../../build/clean.ts svelte-effect-runtime",
+		"test": "corepack pnpm --dir ../.. run test"
+	},
+	"dependencies": {
+		"devalue": "^5.5.0",
+		"magic-string": "^0.30.21",
+		"typescript": "^6.0.0"
+	},
+	"devDependencies": {
+		"@types/node": "^24.6.1",
+		"rolldown": "^1.0.0-rc.13"
+	},
+	"peerDependencies": {
+		"@sveltejs/kit": "^2.0.0 || ^3.0.0-next.0",
+		"@sveltejs/vite-plugin-svelte": "^6.0.0 || ^7.0.0",
+		"effect": "^4.0.0-beta",
+		"svelte": "^5.0.0",
+		"vite": "^7.0.0 || ^8.0.0"
+	},
+	"engines": {
+		"node": "^22.12.0 || >=24.0.0"
+	}
 }

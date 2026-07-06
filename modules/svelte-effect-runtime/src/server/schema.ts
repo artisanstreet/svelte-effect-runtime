@@ -10,7 +10,7 @@ import type { RemoteHandler, StandardSchema } from "./types.ts";
  * @returns Whether the value is `"unchecked"`.
  */
 export function is_unchecked(value: unknown): value is "unchecked" {
-  return value === "unchecked";
+	return value === "unchecked";
 }
 
 /**
@@ -21,9 +21,9 @@ export function is_unchecked(value: unknown): value is "unchecked" {
  * @returns Whether the value is callable as a handler.
  */
 export function is_handler(
-  value: unknown,
+	value: unknown,
 ): value is RemoteHandler<unknown, unknown, unknown, unknown> {
-  return typeof value === "function";
+	return typeof value === "function";
 }
 
 /**
@@ -34,11 +34,7 @@ export function is_handler(
  * @returns Whether the value is a Standard Schema.
  */
 export function is_standard_schema(value: unknown): value is StandardSchema {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "~standard" in value
-  );
+	return typeof value === "object" && value !== null && "~standard" in value;
 }
 
 /**
@@ -48,15 +44,8 @@ export function is_standard_schema(value: unknown): value is StandardSchema {
  * @param value - Value to inspect.
  * @returns Whether the value should be converted to Standard Schema.
  */
-export function is_effect_schema(
-  value: unknown,
-): value is Schema.Schema<unknown> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "ast" in value &&
-    "make" in value
-  );
+export function is_effect_schema(value: unknown): value is Schema.Schema<unknown> {
+	return typeof value === "object" && value !== null && "ast" in value && "make" in value;
 }
 
 /**
@@ -67,9 +56,9 @@ export function is_effect_schema(
  * @returns Original value or Standard Schema view of an Effect Schema.
  */
 export function normalize_validator(value: unknown): unknown {
-  if (is_standard_schema(value) || !is_effect_schema(value)) {
-    return value;
-  }
+	if (is_standard_schema(value) || !is_effect_schema(value)) {
+		return value;
+	}
 
-  return Schema.toStandardSchemaV1(value as never);
+	return Schema.toStandardSchemaV1(value as never);
 }

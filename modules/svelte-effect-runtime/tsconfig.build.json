@@ -1,42 +1,42 @@
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "rootDir": "./src",
-    "outDir": "../../.dist/svelte-effect-runtime",
-    "declaration": true,
-    "ignoreDeprecations": "6.0",
-    "verbatimModuleSyntax": true,
-    "strict": true,
-    "skipLibCheck": true,
-    "allowImportingTsExtensions": true,
-    "allowSyntheticDefaultImports": true,
-    "esModuleInterop": true,
-    "types": ["node"],
-    "baseUrl": ".",
-    "paths": {
-      "$": ["./src/mod.ts"],
-      "$/*": ["./src/*"]
-    }
-  },
-  "include": [
-    "./src/mod.ts",
-    "./src/runtime/transform.ts",
-    "./src/internal/generators.ts",
-    "./src/internal/remote-client.ts",
-    "./src/internal/remote-server.ts",
-    "./src/detect.ts",
-    "./src/dispatcher.ts",
-    "./src/generators.ts",
-    "./src/server.ts",
-    "./src/vite.ts",
-    "./src/remote/shared.ts",
-    "./src/remote/server.ts",
-    "./src/remote/client.ts",
-    "./src/markup/transform.ts",
-    "./src/markup/value.ts",
-    "./src/markup/promise.ts",
-    "./src/markup/run.ts"
-  ]
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"rootDir": "./src",
+		"outDir": "../../.dist/svelte-effect-runtime",
+		"declaration": true,
+		"ignoreDeprecations": "6.0",
+		"verbatimModuleSyntax": true,
+		"strict": true,
+		"skipLibCheck": true,
+		"allowImportingTsExtensions": true,
+		"allowSyntheticDefaultImports": true,
+		"esModuleInterop": true,
+		"types": ["node"],
+		"baseUrl": ".",
+		"paths": {
+			"$": ["./src/mod.ts"],
+			"$/*": ["./src/*"]
+		}
+	},
+	"include": [
+		"./src/mod.ts",
+		"./src/runtime/transform.ts",
+		"./src/internal/generators.ts",
+		"./src/internal/remote-client.ts",
+		"./src/internal/remote-server.ts",
+		"./src/detect.ts",
+		"./src/dispatcher.ts",
+		"./src/generators.ts",
+		"./src/server.ts",
+		"./src/vite.ts",
+		"./src/remote/shared.ts",
+		"./src/remote/server.ts",
+		"./src/remote/client.ts",
+		"./src/markup/transform.ts",
+		"./src/markup/value.ts",
+		"./src/markup/promise.ts",
+		"./src/markup/run.ts"
+	]
 }

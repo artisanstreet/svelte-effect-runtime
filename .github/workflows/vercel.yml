@@ -27,18 +27,22 @@ jobs:
       - name: setup_node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
 
-      - name: install_docs_dependencies
-        working-directory: ${{ github.workspace }}/modules/docs
-        run: npm install
+      - name: enable_corepack
+        run: corepack enable
+
+      - name: install_vite_plus
+        shell: bash
+        run: |
+          curl -fsSL https://vite.plus | bash
+          echo "$HOME/.vite-plus/bin" >> "$GITHUB_PATH"
+
+      - name: install_dependencies
+        run: corepack pnpm install --frozen-lockfile
 
       - name: build_docs
-        working-directory: ${{ github.workspace }}/modules/docs
-        run: npm run build
-
-      - name: install_vercel_cli
-        run: npm install --global vercel@latest
+        run: corepack pnpm --dir modules/docs run build
 
       - name: prepare_vercel_output
         env:
@@ -53,8 +57,8 @@ jobs:
             exit 1
           fi
 
-          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
-          vercel build --prod --token="$VERCEL_TOKEN"
+          vp dlx vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          vp dlx vercel build --prod --token="$VERCEL_TOKEN"
 
       - name: deploy_to_vercel
         env:
@@ -68,7 +72,7 @@ jobs:
             exit 1
           fi
 
-          vercel deploy \
+          vp dlx vercel deploy \
             --prebuilt \
             --prod \
             --yes \

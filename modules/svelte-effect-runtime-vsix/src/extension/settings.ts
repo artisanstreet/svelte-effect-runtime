@@ -1,8 +1,8 @@
 import {
-  CONFIG_CLIENT_MODE,
-  CONFIG_ENABLED,
-  CONFIG_ROOT,
-  CONFIG_SERVER_PATH,
+	CONFIG_CLIENT_MODE,
+	CONFIG_ENABLED,
+	CONFIG_ROOT,
+	CONFIG_SERVER_PATH,
 } from "./constants.ts";
 import type { ClientMode } from "./types.ts";
 
@@ -21,11 +21,13 @@ import * as vscode from "vscode";
  * @returns Whether the extension should resync language-server state.
  */
 export function affects_language_server_configuration(
-  event: vscode.ConfigurationChangeEvent,
+	event: vscode.ConfigurationChangeEvent,
 ): boolean {
-  return event.affectsConfiguration(`${CONFIG_ROOT}.${CONFIG_ENABLED}`) ||
-    event.affectsConfiguration(`${CONFIG_ROOT}.${CONFIG_CLIENT_MODE}`) ||
-    event.affectsConfiguration(`${CONFIG_ROOT}.${CONFIG_SERVER_PATH}`);
+	return (
+		event.affectsConfiguration(`${CONFIG_ROOT}.${CONFIG_ENABLED}`) ||
+		event.affectsConfiguration(`${CONFIG_ROOT}.${CONFIG_CLIENT_MODE}`) ||
+		event.affectsConfiguration(`${CONFIG_ROOT}.${CONFIG_SERVER_PATH}`)
+	);
 }
 
 /**
@@ -40,9 +42,7 @@ export function affects_language_server_configuration(
  * @returns Whether language-server support is enabled.
  */
 export function is_language_server_enabled(): boolean {
-  return vscode.workspace
-    .getConfiguration(CONFIG_ROOT)
-    .get(CONFIG_ENABLED, true);
+	return vscode.workspace.getConfiguration(CONFIG_ROOT).get(CONFIG_ENABLED, true);
 }
 
 /**
@@ -57,16 +57,10 @@ export function is_language_server_enabled(): boolean {
  * @param enabled - Desired enabled state to write globally.
  * @returns A promise that resolves once the setting has been updated.
  */
-export async function set_language_server_enabled(
-  enabled: boolean,
-): Promise<void> {
-  await vscode.workspace
-    .getConfiguration(CONFIG_ROOT)
-    .update(
-      CONFIG_ENABLED,
-      enabled,
-      vscode.ConfigurationTarget.Global,
-    );
+export async function set_language_server_enabled(enabled: boolean): Promise<void> {
+	await vscode.workspace
+		.getConfiguration(CONFIG_ROOT)
+		.update(CONFIG_ENABLED, enabled, vscode.ConfigurationTarget.Global);
 }
 
 /**
@@ -81,7 +75,7 @@ export async function set_language_server_enabled(
  * @returns The configured client mode, defaulting to `auto`.
  */
 export function get_client_mode(): ClientMode {
-  return vscode.workspace
-    .getConfiguration(CONFIG_ROOT)
-    .get<ClientMode>(CONFIG_CLIENT_MODE, "auto");
+	return vscode.workspace
+		.getConfiguration(CONFIG_ROOT)
+		.get<ClientMode>(CONFIG_CLIENT_MODE, "auto");
 }

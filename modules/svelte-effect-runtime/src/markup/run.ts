@@ -11,10 +11,8 @@ import { Effect } from "effect";
  * @param factory - Generator function that yields the effect to run.
  * @returns A Promise that resolves or rejects when the effect completes.
  */
-export function run<A, E, R>(
-  factory: () => Effect.gen.Return<A, E, R>,
-): Promise<A> {
-  const effect = Effect.gen(factory);
+export function run<A, E, R>(factory: () => Effect.gen.Return<A, E, R>): Promise<A> {
+	const Program = Effect.gen(factory);
 
-  return get_dispatcher().run(effect);
+	return get_dispatcher().run(Program);
 }

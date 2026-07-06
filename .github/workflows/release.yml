@@ -103,15 +103,22 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: setup_deno
-        uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
-
       - name: setup_node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
+
+      - name: enable_corepack
+        run: corepack enable
+
+      - name: install_vite_plus
+        shell: bash
+        run: |
+          curl -fsSL https://vite.plus | bash
+          echo "$HOME/.vite-plus/bin" >> "$GITHUB_PATH"
+
+      - name: install_dependencies
+        run: corepack pnpm install --frozen-lockfile
 
       - name: resolve_release_version
         id: release_meta
@@ -142,29 +149,13 @@ jobs:
           GRAMMARS_VERSION="$(node -p "require('./modules/svelte-effect-runtime-grammars/package.json').version")"
           LSP_VERSION="$(node -p "require('./modules/svelte-effect-runtime-language-server/package.json').version")"
           VSIX_VERSION="$(node -p "require('./modules/svelte-effect-runtime-vsix/package.json').version")"
-          JSR_VERSION="$(node -e "const fs=require('fs'); const config=JSON.parse(fs.readFileSync('./modules/svelte-effect-runtime/deno.json', 'utf8')); process.stdout.write(config.version ?? '')")"
-          JSR_NAME="$(node -e "const fs=require('fs'); const config=JSON.parse(fs.readFileSync('./modules/svelte-effect-runtime/deno.json', 'utf8')); process.stdout.write(config.name ?? '')")"
-          GRAMMARS_JSR_VERSION="$(node -e "const fs=require('fs'); const config=JSON.parse(fs.readFileSync('./modules/svelte-effect-runtime-grammars/deno.json', 'utf8')); process.stdout.write(config.version ?? '')")"
-          GRAMMARS_JSR_NAME="$(node -e "const fs=require('fs'); const config=JSON.parse(fs.readFileSync('./modules/svelte-effect-runtime-grammars/deno.json', 'utf8')); process.stdout.write(config.name ?? '')")"
 
-          if [ "$RUNTIME_VERSION" != "$RELEASE_VERSION" ] || [ "$GRAMMARS_VERSION" != "$RELEASE_VERSION" ] || [ "$LSP_VERSION" != "$RELEASE_VERSION" ] || [ "$VSIX_VERSION" != "$RELEASE_VERSION" ] || [ "$JSR_VERSION" != "$RELEASE_VERSION" ] || [ "$GRAMMARS_JSR_VERSION" != "$RELEASE_VERSION" ]; then
+          if [ "$RUNTIME_VERSION" != "$RELEASE_VERSION" ] || [ "$GRAMMARS_VERSION" != "$RELEASE_VERSION" ] || [ "$LSP_VERSION" != "$RELEASE_VERSION" ] || [ "$VSIX_VERSION" != "$RELEASE_VERSION" ]; then
             echo "Package versions do not match release version ($RELEASE_VERSION)." >&2
             echo "runtime: $RUNTIME_VERSION" >&2
             echo "grammars: $GRAMMARS_VERSION" >&2
             echo "lsp: $LSP_VERSION" >&2
             echo "vsix: $VSIX_VERSION" >&2
-            echo "jsr: $JSR_VERSION" >&2
-            echo "grammars_jsr: $GRAMMARS_JSR_VERSION" >&2
-            exit 1
-          fi
-
-          if [ "$JSR_NAME" != "@barekey/svelte-effect-runtime" ]; then
-            echo "Unexpected JSR package name: $JSR_NAME" >&2
-            exit 1
-          fi
-
-          if [ "$GRAMMARS_JSR_NAME" != "@barekey/svelte-effect-runtime-grammars" ]; then
-            echo "Unexpected grammars JSR package name: $GRAMMARS_JSR_NAME" >&2
             exit 1
           fi
 
@@ -185,34 +176,23 @@ jobs:
           git push origin "$TAG_NAME"
 
       - name: lint
-        run: deno task lint
+        run: corepack pnpm run lint
 
       - name: test
-        run: deno task test
+        run: corepack pnpm run test
 
       - name: build_grammars
-        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-grammars
-        run: deno task build
+        run: corepack pnpm --dir modules/svelte-effect-runtime-grammars run build
 
-      - name: publish_grammars_to_jsr
-        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-grammars
-        timeout-minutes: 10
-        shell: bash
-        run: |
-          if npx --yes jsr info "@barekey/svelte-effect-runtime-grammars@${RELEASE_VERSION}" >/dev/null 2>&1; then
-            echo "@barekey/svelte-effect-runtime-grammars@${RELEASE_VERSION} is already published. Skipping JSR publish."
-            exit 0
-          fi
-
-          npx --yes jsr publish
+      - name: pack_grammars
+        run: vp node build/pack.ts svelte-effect-runtime-grammars
 
       - name: publish_grammars_to_npm
-        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-grammars
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         shell: bash
         run: |
-          if npx -y npm@11.5.1 view "svelte-effect-runtime-grammars@${RELEASE_VERSION}" version >/dev/null 2>&1; then
+          if corepack pnpm view "svelte-effect-runtime-grammars@${RELEASE_VERSION}" version >/dev/null 2>&1; then
             echo "svelte-effect-runtime-grammars@${RELEASE_VERSION} is already published. Skipping npm publish."
             exit 0
           fi
@@ -221,36 +201,44 @@ jobs:
             printf '//registry.npmjs.org/:_authToken=%s\n' "${NPM_TOKEN}" > "${HOME}/.npmrc"
           fi
 
-          npx -y npm@11.5.1 --version
-          npx -y npm@11.5.1 publish --access public --provenance
+          GRAMMARS_TGZ="$(find .dist/svelte-effect-runtime-grammars -maxdepth 1 -name '*.tgz' -print -quit)"
+          corepack pnpm publish "$GRAMMARS_TGZ" --access public --provenance --no-git-checks
 
       - name: build_runtime
-        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime
-        run: deno task build
+        run: corepack pnpm --dir modules/svelte-effect-runtime run build
 
-      - name: publish_runtime_to_jsr
-        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime
-        timeout-minutes: 10
-        shell: bash
-        run: |
-          if npx --yes jsr info "@barekey/svelte-effect-runtime@${RELEASE_VERSION}" >/dev/null 2>&1; then
-            echo "@barekey/svelte-effect-runtime@${RELEASE_VERSION} is already published. Skipping JSR publish."
-            exit 0
-          fi
+      - name: pack_runtime
+        run: vp node build/pack.ts svelte-effect-runtime
 
-          npx --yes jsr publish
-
-      - name: build_lsp
-        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-language-server
-        run: deno task build
-
-      - name: publish_lsp_to_npm
-        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-language-server
+      - name: publish_runtime_to_npm
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         shell: bash
         run: |
-          if npx -y npm@11.5.1 view "svelte-effect-runtime-language-server@${RELEASE_VERSION}" version >/dev/null 2>&1; then
+          if corepack pnpm view "svelte-effect-runtime@${RELEASE_VERSION}" version >/dev/null 2>&1; then
+            echo "svelte-effect-runtime@${RELEASE_VERSION} is already published. Skipping npm publish."
+            exit 0
+          fi
+
+          if [ -n "${NPM_TOKEN}" ]; then
+            printf '//registry.npmjs.org/:_authToken=%s\n' "${NPM_TOKEN}" > "${HOME}/.npmrc"
+          fi
+
+          RUNTIME_TGZ="$(find .dist/svelte-effect-runtime -maxdepth 1 -name '*.tgz' -print -quit)"
+          corepack pnpm publish "$RUNTIME_TGZ" --access public --provenance --no-git-checks
+
+      - name: build_lsp
+        run: corepack pnpm --dir modules/svelte-effect-runtime-language-server run build
+
+      - name: pack_lsp
+        run: vp node build/pack.ts svelte-effect-runtime-language-server
+
+      - name: publish_lsp_to_npm
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          if corepack pnpm view "svelte-effect-runtime-language-server@${RELEASE_VERSION}" version >/dev/null 2>&1; then
             echo "svelte-effect-runtime-language-server@${RELEASE_VERSION} is already published. Skipping npm publish."
             exit 0
           fi
@@ -259,33 +247,11 @@ jobs:
             printf '//registry.npmjs.org/:_authToken=%s\n' "${NPM_TOKEN}" > "${HOME}/.npmrc"
           fi
 
-          npx -y npm@11.5.1 --version
-          npx -y npm@11.5.1 publish --access public --provenance
+          LSP_TGZ="$(find .dist/svelte-effect-runtime-language-server -maxdepth 1 -name '*.tgz' -print -quit)"
+          corepack pnpm publish "$LSP_TGZ" --access public --provenance --no-git-checks
 
       - name: package_vsix
-        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-vsix
-        run: deno task package
-
-      - name: pack_runtime
-        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime
-        shell: bash
-        run: |
-          mkdir -p "${{ github.workspace }}/.dist/svelte-effect-runtime"
-          npm pack --pack-destination "${{ github.workspace }}/.dist/svelte-effect-runtime"
-
-      - name: pack_grammars
-        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-grammars
-        shell: bash
-        run: |
-          mkdir -p "${{ github.workspace }}/.dist/svelte-effect-runtime-grammars"
-          npm pack --pack-destination "${{ github.workspace }}/.dist/svelte-effect-runtime-grammars"
-
-      - name: pack_lsp
-        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime-language-server
-        shell: bash
-        run: |
-          mkdir -p "${{ github.workspace }}/.dist/svelte-effect-runtime-language-server"
-          npm pack --pack-destination "${{ github.workspace }}/.dist/svelte-effect-runtime-language-server"
+        run: corepack pnpm --dir modules/svelte-effect-runtime-vsix run package
 
       - name: azure_login_for_marketplace
         if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')
@@ -296,10 +262,6 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           allow-no-subscriptions: true
-
-      - name: install_tfx_cli
-        if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')
-        run: npm install -g tfx-cli
 
       - name: publish_extension_to_openvsx
         if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')
@@ -316,7 +278,7 @@ jobs:
             exit 1
           fi
 
-          npx --yes ovsx publish "$VSIX_PATH" -p "${{ secrets.OPEN_VSX_TOKEN }}"
+          vp dlx ovsx publish "$VSIX_PATH" -p "${{ secrets.OPEN_VSX_TOKEN }}"
 
       - name: publish_extension_to_marketplace
         if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')
@@ -341,7 +303,7 @@ jobs:
 
           set +e
           TFX_OUTPUT="$(
-            tfx extension publish \
+            vp dlx --package tfx-cli tfx extension publish \
               --publisher barekey \
               --vsix "$VSIX_PATH" \
               --auth-type pat \

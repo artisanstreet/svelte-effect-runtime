@@ -1,8 +1,4 @@
-const default_excluded_descriptor_keys = new Set<PropertyKey>([
-  "length",
-  "name",
-  "prototype",
-]);
+const default_excluded_descriptor_keys = new Set<PropertyKey>(["length", "name", "prototype"]);
 
 /**
  * Copies own property descriptors from a native helper to a wrapper while
@@ -21,29 +17,29 @@ const default_excluded_descriptor_keys = new Set<PropertyKey>([
  * @returns Nothing.
  */
 export function copy_property_descriptors(
-  source: unknown,
-  target: object,
-  exclude: ReadonlySet<PropertyKey> = default_excluded_descriptor_keys,
+	source: unknown,
+	target: object,
+	exclude: ReadonlySet<PropertyKey> = default_excluded_descriptor_keys,
 ): void {
-  if (typeof source !== "object" && typeof source !== "function") {
-    return;
-  }
+	if (typeof source !== "object" && typeof source !== "function") {
+		return;
+	}
 
-  if (source === null) {
-    return;
-  }
+	if (source === null) {
+		return;
+	}
 
-  for (const key of Reflect.ownKeys(source)) {
-    if (default_excluded_descriptor_keys.has(key) || exclude.has(key)) {
-      continue;
-    }
+	for (const key of Reflect.ownKeys(source)) {
+		if (default_excluded_descriptor_keys.has(key) || exclude.has(key)) {
+			continue;
+		}
 
-    const descriptor = Object.getOwnPropertyDescriptor(source, key);
+		const descriptor = Object.getOwnPropertyDescriptor(source, key);
 
-    if (!descriptor) {
-      continue;
-    }
+		if (!descriptor) {
+			continue;
+		}
 
-    Object.defineProperty(target, key, descriptor);
-  }
+		Object.defineProperty(target, key, descriptor);
+	}
 }

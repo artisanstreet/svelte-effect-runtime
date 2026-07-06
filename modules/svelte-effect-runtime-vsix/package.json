@@ -1,90 +1,105 @@
 {
-  "name": "svelte-effect-runtime-vscode",
-  "displayName": "Svelte Effect Runtime",
-  "description": "VS Code extension that installs and launches the SER LSP from npm.",
-  "version": "3.4.5",
-  "publisher": "barekey",
-  "license": "BSD-3-Clause",
-  "type": "module",
-  "engines": {
-    "vscode": "^1.100.0"
-  },
-  "categories": [
-    "Programming Languages",
-    "Other"
-  ],
-  "activationEvents": [
-    "onLanguage:svelte",
-    "workspaceContains:**/*.svelte",
-    "onCommand:svelte-effect-runtime.startLanguageServer",
-    "onCommand:svelte-effect-runtime.stopLanguageServer",
-    "onCommand:svelte-effect-runtime.restartLanguageServer",
-    "onCommand:svelte-effect-runtime.showOutput"
-  ],
-  "files": [
-    ".dist",
-    "node_modules",
-    "README.md"
-  ],
-  "main": "./.dist/extension.js",
-  "contributes": {
-    "languages": [
-      {
-        "id": "svelte",
-        "aliases": [
-          "Svelte",
-          "svelte"
-        ],
-        "extensions": [
-          ".svelte"
-        ]
-      }
-    ],
-    "commands": [
-      {
-        "command": "svelte-effect-runtime.startLanguageServer",
-        "title": "Svelte Effect Runtime: Start Language Server"
-      },
-      {
-        "command": "svelte-effect-runtime.stopLanguageServer",
-        "title": "Svelte Effect Runtime: Stop Language Server"
-      },
-      {
-        "command": "svelte-effect-runtime.restartLanguageServer",
-        "title": "Svelte Effect Runtime: Restart Language Server"
-      },
-      {
-        "command": "svelte-effect-runtime.showOutput",
-        "title": "Svelte Effect Runtime: Show Output"
-      }
-    ],
-    "configuration": {
-      "title": "Svelte Effect Runtime",
-      "properties": {
-        "svelte-effect-runtime.languageServer.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Start the npm-installed Svelte Effect Runtime language server automatically for Svelte files."
-        },
-        "svelte-effect-runtime.languageServer.client": {
-          "type": "string",
-          "enum": [
-            "auto",
-            "direct",
-            "svelteExtension"
-          ],
-          "default": "auto",
-          "description": "Language-client strategy. Auto uses the official Svelte extension client when installed to avoid duplicate Svelte language servers, otherwise it starts the bundled VS Code client directly."
-        },
-        "svelte-effect-runtime.languageServer.path": {
-          "type": "string",
-          "default": "",
-          "description": "Absolute path to a custom svelte-effect-runtime-language-server script. Leave empty to install the server from npm."
-        }
-      }
-    }
-  },
-  "dependencies": {
-    "vscode-languageclient": "9.0.1"
-  }
+	"name": "svelte-effect-runtime-vscode",
+	"displayName": "Svelte Effect Runtime",
+	"version": "3.4.5",
+	"description": "VS Code extension that installs and launches the SER LSP from the npm registry.",
+	"categories": [
+		"Other",
+		"Programming Languages"
+	],
+	"license": "BSD-3-Clause",
+	"publisher": "barekey",
+	"files": [
+		".dist",
+		"LICENSE",
+		"README.md"
+	],
+	"type": "module",
+	"main": "./.dist/extension.js",
+	"scripts": {
+		"build": "corepack pnpm run clean && vp node ../../build/ext.ts",
+		"clean": "vp node ../../build/clean.ts svelte-effect-runtime-vsix",
+		"package": "corepack pnpm run build && vp node ../../build/vsix.ts"
+	},
+	"dependencies": {
+		"vscode-languageclient": "9.0.1"
+	},
+	"contributes": {
+		"languages": [
+			{
+				"id": "svelte",
+				"aliases": [
+					"Svelte",
+					"svelte"
+				],
+				"extensions": [
+					".svelte"
+				]
+			}
+		],
+		"commands": [
+			{
+				"command": "svelte-effect-runtime.startLanguageServer",
+				"title": "Svelte Effect Runtime: Start Language Server"
+			},
+			{
+				"command": "svelte-effect-runtime.stopLanguageServer",
+				"title": "Svelte Effect Runtime: Stop Language Server"
+			},
+			{
+				"command": "svelte-effect-runtime.restartLanguageServer",
+				"title": "Svelte Effect Runtime: Restart Language Server"
+			},
+			{
+				"command": "svelte-effect-runtime.showOutput",
+				"title": "Svelte Effect Runtime: Show Output"
+			}
+		],
+		"configuration": {
+			"title": "Svelte Effect Runtime",
+			"properties": {
+				"svelte-effect-runtime.languageServer.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Start the pnpm-installed Svelte Effect Runtime language server automatically for Svelte files."
+				},
+				"svelte-effect-runtime.languageServer.client": {
+					"type": "string",
+					"enum": [
+						"auto",
+						"direct",
+						"svelteExtension"
+					],
+					"default": "auto",
+					"description": "Language-client strategy. Auto uses the official Svelte extension client when installed to avoid duplicate Svelte language servers, otherwise it starts the bundled VS Code client directly."
+				},
+				"svelte-effect-runtime.languageServer.path": {
+					"type": "string",
+					"default": "",
+					"scope": "machine",
+					"restricted": true,
+					"description": "Absolute path to a custom svelte-effect-runtime-language-server script. Leave empty to install the server from the npm registry."
+				}
+			}
+		}
+	},
+	"activationEvents": [
+		"onCommand:svelte-effect-runtime.restartLanguageServer",
+		"onCommand:svelte-effect-runtime.showOutput",
+		"onCommand:svelte-effect-runtime.startLanguageServer",
+		"onCommand:svelte-effect-runtime.stopLanguageServer",
+		"onLanguage:svelte",
+		"workspaceContains:**/*.svelte"
+	],
+	"engines": {
+		"vscode": "^1.100.0"
+	},
+	"capabilities": {
+		"untrustedWorkspaces": {
+			"supported": true,
+			"restrictedConfigurations": [
+				"svelte-effect-runtime.languageServer.path"
+			]
+		}
+	}
 }

@@ -15,22 +15,22 @@ import { has_method } from "./utils.ts";
  * @returns Decoded query output.
  */
 export async function resolve_query_result<Output>(
-  value: unknown,
-  decode_payload: (value: unknown) => unknown,
+	value: unknown,
+	decode_payload: (value: unknown) => unknown,
 ): Promise<Output> {
-  if (has_method(value, "then")) {
-    const result = await Promise.resolve(value);
+	if (has_method(value, "then")) {
+		const result = await Promise.resolve(value);
 
-    return decode_response_or_value(result, decode_payload);
-  }
+		return decode_response_or_value(result, decode_payload);
+	}
 
-  if (has_method(value, "run")) {
-    const result = await value.run();
+	if (has_method(value, "run")) {
+		const result = await value.run();
 
-    return decode_response_or_value(result, decode_payload);
-  }
+		return decode_response_or_value(result, decode_payload);
+	}
 
-  const result = await Promise.resolve(value);
+	const result = await Promise.resolve(value);
 
-  return decode_response_or_value(result, decode_payload);
+	return decode_response_or_value(result, decode_payload);
 }

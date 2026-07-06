@@ -10,8 +10,8 @@
  * @since 2.0.0
  */
 export type DocumentPosition = {
-  line: number;
-  character: number;
+	line: number;
+	character: number;
 };
 
 /**
@@ -26,9 +26,9 @@ export type DocumentPosition = {
  * @since 2.0.0
  */
 export type Mapper = {
-  getOriginalPosition(position: DocumentPosition): DocumentPosition;
-  getGeneratedPosition(position: DocumentPosition): DocumentPosition;
-  isInGenerated(position: DocumentPosition): boolean;
+	getOriginalPosition(position: DocumentPosition): DocumentPosition;
+	getGeneratedPosition(position: DocumentPosition): DocumentPosition;
+	isInGenerated(position: DocumentPosition): boolean;
 };
 
 /**
@@ -42,8 +42,8 @@ export type Mapper = {
  * @since 2.0.0
  */
 export type FragmentTagInfo = {
-  content: string;
-  [key: string]: unknown;
+	content: string;
+	[key: string]: unknown;
 };
 
 /**
@@ -63,10 +63,10 @@ export type FragmentTagInfo = {
  * @since 2.0.0
  */
 export type Relocation = {
-  originalStart: number;
-  originalEnd: number;
-  generatedStart: number;
-  generatedEnd: number;
+	originalStart: number;
+	originalEnd: number;
+	generatedStart: number;
+	generatedEnd: number;
 };
 
 /**
@@ -80,9 +80,9 @@ export type Relocation = {
  * @since 2.0.0
  */
 export type TransformResult = {
-  code: string;
-  map?: Record<string, unknown>;
-  relocations?: Array<Relocation>;
+	code: string;
+	map?: Record<string, unknown>;
+	relocations?: Array<Relocation>;
 };
 
 /**
@@ -97,9 +97,9 @@ export type TransformResult = {
  * @since 2.0.0
  */
 export type RequiredTransformResult = {
-  code: string;
-  map: Record<string, unknown>;
-  relocations?: Array<Relocation>;
+	code: string;
+	map: Record<string, unknown>;
+	relocations?: Array<Relocation>;
 };
 
 /**
@@ -113,12 +113,6 @@ export type RequiredTransformResult = {
  * @since 2.0.0
  */
 export type TransformSet = {
-  transformEffectMarkup: (
-    code: string,
-    options: { filename: string },
-  ) => RequiredTransformResult;
-  transformEffectScript: (
-    code: string,
-    options: { filename: string },
-  ) => RequiredTransformResult;
+	transformEffectMarkup: (code: string, options: { filename: string }) => RequiredTransformResult;
+	transformEffectScript: (code: string, options: { filename: string }) => RequiredTransformResult;
 };

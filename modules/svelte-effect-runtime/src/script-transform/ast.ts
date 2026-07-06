@@ -8,12 +8,12 @@ import ts from "typescript";
  * @returns Whether the node represents `yield * operand`.
  */
 export function is_yield_star_expression(node: ts.Node): boolean {
-  return (
-    ts.isBinaryExpression(node) &&
-    node.operatorToken.kind === ts.SyntaxKind.AsteriskToken &&
-    ts.isIdentifier(node.left) &&
-    node.left.text === "yield"
-  );
+	return (
+		ts.isBinaryExpression(node) &&
+		node.operatorToken.kind === ts.SyntaxKind.AsteriskToken &&
+		ts.isIdentifier(node.left) &&
+		node.left.text === "yield"
+	);
 }
 
 /**
@@ -24,14 +24,14 @@ export function is_yield_star_expression(node: ts.Node): boolean {
  * @returns Whether traversal should stop at this function boundary.
  */
 export function is_function_boundary_node(node: ts.Node): boolean {
-  return (
-    ts.isArrowFunction(node) ||
-    ts.isFunctionDeclaration(node) ||
-    ts.isFunctionExpression(node) ||
-    ts.isMethodDeclaration(node) ||
-    ts.isGetAccessorDeclaration(node) ||
-    ts.isSetAccessorDeclaration(node)
-  );
+	return (
+		ts.isArrowFunction(node) ||
+		ts.isFunctionDeclaration(node) ||
+		ts.isFunctionExpression(node) ||
+		ts.isMethodDeclaration(node) ||
+		ts.isGetAccessorDeclaration(node) ||
+		ts.isSetAccessorDeclaration(node)
+	);
 }
 
 /**
@@ -42,14 +42,13 @@ export function is_function_boundary_node(node: ts.Node): boolean {
  * @returns Whether a top-level await expression was found.
  */
 export function contains_top_level_await(node: ts.Node): boolean {
-  if (ts.isAwaitExpression(node)) {
-    return true;
-  }
+	if (ts.isAwaitExpression(node)) {
+		return true;
+	}
 
-  return node.getChildren().some(
-    (child) =>
-      !is_function_boundary_node(child) && contains_top_level_await(child),
-  );
+	return node
+		.getChildren()
+		.some((child) => !is_function_boundary_node(child) && contains_top_level_await(child));
 }
 
 /**
@@ -60,22 +59,19 @@ export function contains_top_level_await(node: ts.Node): boolean {
  * @param on_found - Callback invoked for each matching yield node.
  * @returns Nothing.
  */
-export function collect_yield_star_nodes(
-  node: ts.Node,
-  on_found: (node: ts.Node) => void,
-): void {
-  if (is_function_boundary_node(node)) {
-    return;
-  }
+export function collect_yield_star_nodes(node: ts.Node, on_found: (node: ts.Node) => void): void {
+	if (is_function_boundary_node(node)) {
+		return;
+	}
 
-  if (is_yield_star_expression(node)) {
-    on_found(node);
-    return;
-  }
+	if (is_yield_star_expression(node)) {
+		on_found(node);
+		return;
+	}
 
-  node.forEachChild((child) => {
-    collect_yield_star_nodes(child, on_found);
-  });
+	node.forEachChild((child) => {
+		collect_yield_star_nodes(child, on_found);
+	});
 }
 
 /**
@@ -86,22 +82,19 @@ export function collect_yield_star_nodes(
  * @param on_found - Callback invoked with the first matching node.
  * @returns Nothing.
  */
-export function find_yield_star_node(
-  node: ts.Node,
-  on_found: (node: ts.Node) => void,
-): void {
-  if (is_function_boundary_node(node)) {
-    return;
-  }
+export function find_yield_star_node(node: ts.Node, on_found: (node: ts.Node) => void): void {
+	if (is_function_boundary_node(node)) {
+		return;
+	}
 
-  if (is_yield_star_expression(node)) {
-    on_found(node);
-    return;
-  }
+	if (is_yield_star_expression(node)) {
+		on_found(node);
+		return;
+	}
 
-  node.forEachChild((child) => {
-    find_yield_star_node(child, on_found);
-  });
+	node.forEachChild((child) => {
+		find_yield_star_node(child, on_found);
+	});
 }
 
 /**
@@ -112,19 +105,19 @@ export function find_yield_star_node(
  * @returns Identifier names from identifiers and destructuring patterns.
  */
 export function extract_binding_names(name: ts.BindingName): string[] {
-  if (ts.isIdentifier(name)) {
-    return [name.text];
-  }
+	if (ts.isIdentifier(name)) {
+		return [name.text];
+	}
 
-  const result: string[] = [];
+	const result: string[] = [];
 
-  for (const element of name.elements) {
-    if (ts.isOmittedExpression(element)) {
-      continue;
-    }
+	for (const element of name.elements) {
+		if (ts.isOmittedExpression(element)) {
+			continue;
+		}
 
-    result.push(...extract_binding_names(element.name));
-  }
+		result.push(...extract_binding_names(element.name));
+	}
 
-  return result;
+	return result;
 }

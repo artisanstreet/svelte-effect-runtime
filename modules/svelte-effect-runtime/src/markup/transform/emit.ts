@@ -1,23 +1,20 @@
-import {
-  AsyncEffectInEventCallbackError,
-  YieldStarInEventCallbackError,
-} from "$/errors.ts";
+import { AsyncEffectInEventCallbackError, YieldStarInEventCallbackError } from "$/errors.ts";
 import type { EffectCallbackRewriteContext } from "./effect-bindings.ts";
 import {
-  analyze_event_body_yield_star,
-  collect_free_identifiers,
-  is_callback_function_expression,
+	analyze_event_body_yield_star,
+	collect_free_identifiers,
+	is_callback_function_expression,
 } from "./expressions.ts";
 import { normalize_effect_callback_yields } from "./effect-callbacks.ts";
 import type {
-  HelperDeclaration,
-  MarkupCandidate,
-  MarkupHelperBindings,
-  MarkupNameAllocator,
-  MarkupTransformTarget,
-  PendingRelocation,
-  Replacement,
-  TagKind,
+	HelperDeclaration,
+	MarkupCandidate,
+	MarkupHelperBindings,
+	MarkupNameAllocator,
+	MarkupTransformTarget,
+	PendingRelocation,
+	Replacement,
+	TagKind,
 } from "./types.ts";
 
 /**
@@ -30,282 +27,245 @@ import type {
  * @returns Replacements ready to apply to the original component source.
  */
 export function emit_replacements(
-  classified: Array<{ candidate: MarkupCandidate; kind: TagKind }>,
-  effect_context: EffectCallbackRewriteContext,
-  helper_bindings: MarkupHelperBindings,
-  name_allocator: MarkupNameAllocator,
-  target: MarkupTransformTarget,
+	classified: Array<{ candidate: MarkupCandidate; kind: TagKind }>,
+	effect_context: EffectCallbackRewriteContext,
+	helper_bindings: MarkupHelperBindings,
+	name_allocator: MarkupNameAllocator,
+	target: MarkupTransformTarget,
 ): Replacement[] {
-  return classified.map(({ candidate, kind }) =>
-    emit_replacement(
-      candidate,
-      kind,
-      effect_context,
-      helper_bindings,
-      name_allocator,
-      target,
-    )
-  );
+	return classified.map(({ candidate, kind }) =>
+		emit_replacement(candidate, kind, effect_context, helper_bindings, name_allocator, target),
+	);
 }
 
 function emit_replacement(
-  candidate: MarkupCandidate,
-  kind: TagKind,
-  effect_context: EffectCallbackRewriteContext,
-  helper_bindings: MarkupHelperBindings,
-  name_allocator: MarkupNameAllocator,
-  target: MarkupTransformTarget,
+	candidate: MarkupCandidate,
+	kind: TagKind,
+	effect_context: EffectCallbackRewriteContext,
+	helper_bindings: MarkupHelperBindings,
+	name_allocator: MarkupNameAllocator,
+	target: MarkupTransformTarget,
 ): Replacement {
-  const normalized = normalize_effect_callback_yields(
-    candidate.expr_text,
-    effect_context,
-  );
-  const normalized_candidate = {
-    ...candidate,
-    expr_text: normalized.expr_text,
-  };
-  const id = make_cache_id(candidate);
-  const id_text = JSON.stringify(id);
-  const helper_name = make_helper_name(candidate, name_allocator);
-  const is_server_target = target === "server";
+	const normalized = normalize_effect_callback_yields(candidate.expr_text, effect_context);
+	const normalized_candidate = {
+		...candidate,
+		expr_text: normalized.expr_text,
+	};
+	const id = make_cache_id(candidate);
+	const id_text = JSON.stringify(id);
+	const helper_name = make_helper_name(candidate, name_allocator);
+	const is_server_target = target === "server";
 
-  let replacement_text: string;
-  let helpers: HelperDeclaration[];
-  let relocation: PendingRelocation | undefined;
+	let replacement_text: string;
+	let helpers: HelperDeclaration[];
+	let relocation: PendingRelocation | undefined;
 
-  if (kind === "await") {
-    const effect = make_effect_helper(normalized_candidate, helper_name);
+	if (kind === "await") {
+		const effect = make_effect_helper(normalized_candidate, helper_name);
 
-    replacement_text = emit_promise_expression(
-      id_text,
-      effect,
-      helper_bindings,
-      "undefined",
-      `{ ssr: "pending" }`,
-    );
-    helpers = [...normalized.helpers, effect.helper];
-  } else if (kind === "render") {
-    const effect = make_effect_helper(normalized_candidate, helper_name);
+		replacement_text = emit_promise_expression(
+			id_text,
+			effect,
+			helper_bindings,
+			"undefined",
+			`{ ssr: "pending" }`,
+		);
+		helpers = [...normalized.helpers, effect.helper];
+	} else if (kind === "render") {
+		const effect = make_effect_helper(normalized_candidate, helper_name);
 
-    replacement_text = emit_render_expression(
-      id_text,
-      effect,
-      candidate,
-      helper_bindings,
-      is_server_target,
-    );
-    helpers = [...normalized.helpers, effect.helper];
-  } else if (kind === "render_argument") {
-    const effect = make_effect_helper(normalized_candidate, helper_name);
+		replacement_text = emit_render_expression(
+			id_text,
+			effect,
+			candidate,
+			helper_bindings,
+			is_server_target,
+		);
+		helpers = [...normalized.helpers, effect.helper];
+	} else if (kind === "render_argument") {
+		const effect = make_effect_helper(normalized_candidate, helper_name);
 
-    replacement_text = emit_await_expression(
-      id_text,
-      effect,
-      helper_bindings,
-      server_fallback(is_server_target, "undefined"),
-    );
-    helpers = [...normalized.helpers, effect.helper];
-  } else if (kind === "each") {
-    const effect = make_effect_helper(normalized_candidate, helper_name);
+		replacement_text = emit_await_expression(
+			id_text,
+			effect,
+			helper_bindings,
+			server_fallback(is_server_target, "undefined"),
+		);
+		helpers = [...normalized.helpers, effect.helper];
+	} else if (kind === "each") {
+		const effect = make_effect_helper(normalized_candidate, helper_name);
 
-    replacement_text = emit_await_expression(
-      id_text,
-      effect,
-      helper_bindings,
-      server_fallback(is_server_target, "[]"),
-    );
-    helpers = [...normalized.helpers, effect.helper];
-  } else if (kind === "event") {
-    const event = make_event_handler(normalized_candidate, helper_bindings);
+		replacement_text = emit_await_expression(
+			id_text,
+			effect,
+			helper_bindings,
+			server_fallback(is_server_target, "[]"),
+		);
+		helpers = [...normalized.helpers, effect.helper];
+	} else if (kind === "event") {
+		const event = make_event_handler(normalized_candidate, helper_bindings);
 
-    replacement_text = event.text;
-    helpers = normalized.helpers;
-    relocation = make_relocation(candidate, replacement_text, {
-      originalStart: 0,
-      originalEnd: candidate.expr_text.length,
-      generatedText: event.expr_text,
-    });
-  } else {
-    const effect = make_effect_helper(normalized_candidate, helper_name);
+		replacement_text = event.text;
+		helpers = normalized.helpers;
+		relocation = make_relocation(candidate, replacement_text, {
+			originalStart: 0,
+			originalEnd: candidate.expr_text.length,
+			generatedText: event.expr_text,
+		});
+	} else {
+		const effect = make_effect_helper(normalized_candidate, helper_name);
 
-    replacement_text = emit_await_expression(
-      id_text,
-      effect,
-      helper_bindings,
-      server_fallback(is_server_target, "undefined"),
-    );
-    helpers = [...normalized.helpers, effect.helper];
-  }
+		replacement_text = emit_await_expression(
+			id_text,
+			effect,
+			helper_bindings,
+			server_fallback(is_server_target, "undefined"),
+		);
+		helpers = [...normalized.helpers, effect.helper];
+	}
 
-  return {
-    start: candidate.start,
-    end: candidate.end,
-    text: replacement_text,
-    helpers,
-    relocation,
-  };
+	return {
+		start: candidate.start,
+		end: candidate.end,
+		text: replacement_text,
+		helpers,
+		relocation,
+	};
 }
 
 function make_event_handler(
-  candidate: MarkupCandidate,
-  helper_bindings: MarkupHelperBindings,
+	candidate: MarkupCandidate,
+	helper_bindings: MarkupHelperBindings,
 ): { text: string; expr_text: string } {
-  const expr_text = candidate.expr_text;
+	const expr_text = candidate.expr_text;
 
-  if (is_callback_function_expression(expr_text)) {
-    throw new YieldStarInEventCallbackError(
-      candidate.filename,
-      expr_text,
-    );
-  }
+	if (is_callback_function_expression(expr_text)) {
+		throw new YieldStarInEventCallbackError(candidate.filename, expr_text);
+	}
 
-  const analysis = analyze_event_body_yield_star(expr_text);
+	const analysis = analyze_event_body_yield_star(expr_text);
 
-  if (analysis.has_nested_invalid_yield_star) {
-    throw new AsyncEffectInEventCallbackError(
-      candidate.filename,
-      expr_text,
-    );
-  }
+	if (analysis.has_nested_invalid_yield_star) {
+		throw new AsyncEffectInEventCallbackError(candidate.filename, expr_text);
+	}
 
-  return {
-    expr_text,
-    text:
-      `(event) => { ${helper_bindings.dispatcher}.emit({ type: ${helper_bindings.codes}.Markup.Run, fn: function* () { ${expr_text}; } }); }`,
-  };
+	return {
+		expr_text,
+		text: `(event) => { ${helper_bindings.dispatcher}.emit({ type: ${helper_bindings.codes}.Markup.Run, fn: function* () { ${expr_text}; } }); }`,
+	};
 }
 
 function emit_promise_expression(
-  id_text: string,
-  effect: EffectHelper,
-  helper_bindings: MarkupHelperBindings,
-  ssr_fallback?: string,
-  options?: string,
+	id_text: string,
+	effect: EffectHelper,
+	helper_bindings: MarkupHelperBindings,
+	ssr_fallback?: string,
+	options?: string,
 ): string {
-  const properties = [
-    `type: ${helper_bindings.codes}.Markup.Promise`,
-    `id: ${id_text}`,
-    `deps: ${effect.deps_text}`,
-    `fn: () => ${effect.call}`,
-    ssr_fallback !== undefined && `ssr_fallback: ${ssr_fallback}`,
-    options !== undefined && `options: ${options}`,
-  ].filter((property): property is string => property !== false);
+	const properties = [
+		`type: ${helper_bindings.codes}.Markup.Promise`,
+		`id: ${id_text}`,
+		`deps: ${effect.deps_text}`,
+		`fn: () => ${effect.call}`,
+		ssr_fallback !== undefined && `ssr_fallback: ${ssr_fallback}`,
+		options !== undefined && `options: ${options}`,
+	].filter((property): property is string => property !== false);
 
-  return `${helper_bindings.dispatcher}.emit({ ${properties.join(", ")} })`;
+	return `${helper_bindings.dispatcher}.emit({ ${properties.join(", ")} })`;
 }
 
 function emit_render_expression(
-  id_text: string,
-  effect: EffectHelper,
-  candidate: MarkupCandidate,
-  helper_bindings: MarkupHelperBindings,
-  is_server_target: boolean,
+	id_text: string,
+	effect: EffectHelper,
+	candidate: MarkupCandidate,
+	helper_bindings: MarkupHelperBindings,
+	is_server_target: boolean,
 ): string {
-  const expression = emit_promise_expression(
-    id_text,
-    effect,
-    helper_bindings,
-    server_fallback(is_server_target, `() => undefined`),
-  );
+	const expression = emit_promise_expression(
+		id_text,
+		effect,
+		helper_bindings,
+		server_fallback(is_server_target, `() => undefined`),
+	);
 
-  if (/^\s*yield\s*\*/.test(candidate.expr_text)) {
-    return `(await ${expression})()`;
-  }
+	if (/^\s*yield\s*\*/.test(candidate.expr_text)) {
+		return `(await ${expression})()`;
+	}
 
-  return `await ${expression}`;
+	return `await ${expression}`;
 }
 
 function emit_await_expression(
-  id_text: string,
-  effect: EffectHelper,
-  helper_bindings: MarkupHelperBindings,
-  ssr_fallback?: string,
+	id_text: string,
+	effect: EffectHelper,
+	helper_bindings: MarkupHelperBindings,
+	ssr_fallback?: string,
 ): string {
-  return `await ${
-    emit_promise_expression(
-      id_text,
-      effect,
-      helper_bindings,
-      ssr_fallback,
-    )
-  }`;
+	return `await ${emit_promise_expression(id_text, effect, helper_bindings, ssr_fallback)}`;
 }
 
-function server_fallback(
-  is_server_target: boolean,
-  fallback: string,
-): string | undefined {
-  return is_server_target ? fallback : undefined;
+function server_fallback(is_server_target: boolean, fallback: string): string | undefined {
+	return is_server_target ? fallback : undefined;
 }
 
 interface EffectHelper {
-  helper: HelperDeclaration;
-  call: string;
-  deps_text: string;
+	helper: HelperDeclaration;
+	call: string;
+	deps_text: string;
 }
 
-function make_effect_helper(
-  candidate: MarkupCandidate,
-  helper_name: string,
-): EffectHelper {
-  const deps = collect_free_identifiers(candidate.expr_text);
-  const args_text = deps.join(", ");
-  const deps_text = deps.length === 0 ? "[]" : `[${args_text}]`;
-  const call = `${helper_name}()`;
-  const text =
-    `function* ${helper_name}() { return (${candidate.expr_text}); }`;
-  const generated_start = text.indexOf(candidate.expr_text);
+function make_effect_helper(candidate: MarkupCandidate, helper_name: string): EffectHelper {
+	const deps = collect_free_identifiers(candidate.expr_text);
+	const args_text = deps.join(", ");
+	const deps_text = deps.length === 0 ? "[]" : `[${args_text}]`;
+	const call = `${helper_name}()`;
+	const text = `function* ${helper_name}() { return (${candidate.expr_text}); }`;
+	const generated_start = text.indexOf(candidate.expr_text);
 
-  return {
-    call,
-    deps_text,
-    helper: {
-      text,
-      relocation: {
-        originalStart: candidate.start,
-        originalEnd: candidate.end,
-        generatedStartInReplacement: generated_start,
-        generatedEndInReplacement: generated_start +
-          candidate.expr_text.length,
-      },
-    },
-  };
+	return {
+		call,
+		deps_text,
+		helper: {
+			text,
+			relocation: {
+				originalStart: candidate.start,
+				originalEnd: candidate.end,
+				generatedStartInReplacement: generated_start,
+				generatedEndInReplacement: generated_start + candidate.expr_text.length,
+			},
+		},
+	};
 }
 
 function make_cache_id(candidate: MarkupCandidate): string {
-  const normalized_filename = candidate.filename.replace(/[?#].*$/, "");
+	const normalized_filename = candidate.filename.replace(/[?#].*$/, "");
 
-  return `${normalized_filename}:${candidate.start}:${candidate.end}`;
+	return `${normalized_filename}:${candidate.start}:${candidate.end}`;
 }
 
-function make_helper_name(
-  candidate: MarkupCandidate,
-  name_allocator: MarkupNameAllocator,
-): string {
-  return name_allocator.reserve(
-    `__SER___markup_effect_${candidate.start}_${candidate.end}`,
-  );
+function make_helper_name(candidate: MarkupCandidate, name_allocator: MarkupNameAllocator): string {
+	return name_allocator.reserve(`__SER___markup_effect_${candidate.start}_${candidate.end}`);
 }
 
 function make_relocation(
-  candidate: MarkupCandidate,
-  replacement_text: string,
-  inner: {
-    originalStart: number;
-    originalEnd: number;
-    generatedText: string;
-  },
+	candidate: MarkupCandidate,
+	replacement_text: string,
+	inner: {
+		originalStart: number;
+		originalEnd: number;
+		generatedText: string;
+	},
 ): PendingRelocation | undefined {
-  const generated_start = replacement_text.indexOf(inner.generatedText);
+	const generated_start = replacement_text.indexOf(inner.generatedText);
 
-  if (generated_start === -1) {
-    return undefined;
-  }
+	if (generated_start === -1) {
+		return undefined;
+	}
 
-  return {
-    originalStart: candidate.start + inner.originalStart,
-    originalEnd: candidate.start + inner.originalEnd,
-    generatedStartInReplacement: generated_start,
-    generatedEndInReplacement: generated_start + inner.generatedText.length,
-  };
+	return {
+		originalStart: candidate.start + inner.originalStart,
+		originalEnd: candidate.start + inner.originalEnd,
+		generatedStartInReplacement: generated_start,
+		generatedEndInReplacement: generated_start + inner.generatedText.length,
+	};
 }

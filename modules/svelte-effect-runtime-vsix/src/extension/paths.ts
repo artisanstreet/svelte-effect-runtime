@@ -13,14 +13,10 @@ import path from "node:path";
  * @param right - Second path to compare.
  * @returns Whether both paths point at the same normalized location.
  */
-export function paths_equal(
-  left: string | undefined,
-  right: string | undefined,
-): boolean {
-  if (!left || !right) {
-    return false;
-  }
+export function paths_equal(left: string | undefined, right: string | undefined): boolean {
+	if (!left || !right) {
+		return false;
+	}
 
-  return path.normalize(left).toLowerCase() ===
-    path.normalize(right).toLowerCase();
+	return path.normalize(left).toLowerCase() === path.normalize(right).toLowerCase();
 }

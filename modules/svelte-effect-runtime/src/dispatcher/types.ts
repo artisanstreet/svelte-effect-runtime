@@ -12,11 +12,11 @@ import type { Effect } from "effect";
  * @internal
  */
 export const Code = {
-  Markup: {
-    Promise: "MarkupPromise",
-    Run: "MarkupRun",
-    Value: "MarkupValue",
-  },
+	Markup: {
+		Promise: "MarkupPromise",
+		Run: "MarkupRun",
+		Value: "MarkupValue",
+	},
 } as const;
 
 /**
@@ -31,8 +31,8 @@ export const Code = {
  * @internal
  */
 export interface MarkupPromiseOptions {
-  /** Keep the SSR promise pending so Svelte renders an await block fallback. */
-  ssr?: "pending";
+	/** Keep the SSR promise pending so Svelte renders an await block fallback. */
+	ssr?: "pending";
 }
 
 /**
@@ -66,14 +66,14 @@ export type Dispose = () => void;
  * @internal
  */
 export interface ValueOptions<A> {
-  /** Stable cache key for this value block. */
-  id: string;
-  /** Reactive dependency array. */
-  deps: readonly unknown[];
-  /** Value returned synchronously while the effect is running or during SSR. */
-  fallback: A;
-  /** Generator function that yields the effect to run. */
-  factory: () => Effect.gen.Return<A, unknown, unknown>;
+	/** Stable cache key for this value block. */
+	id: string;
+	/** Reactive dependency array. */
+	deps: readonly unknown[];
+	/** Value returned synchronously while the effect is running or during SSR. */
+	fallback: A;
+	/** Generator function that yields the effect to run. */
+	factory: () => Effect.gen.Return<A, unknown, unknown>;
 }
 
 /**
@@ -92,12 +92,12 @@ export interface ValueOptions<A> {
  * @internal
  */
 export interface PromiseOptions<A> {
-  /** Stable cache key for this promise block. */
-  id: string;
-  /** Reactive dependency array. */
-  deps: readonly unknown[];
-  /** Generator function that yields the effect to run. */
-  factory: () => Effect.gen.Return<A, unknown, unknown>;
+	/** Stable cache key for this promise block. */
+	id: string;
+	/** Reactive dependency array. */
+	deps: readonly unknown[];
+	/** Generator function that yields the effect to run. */
+	factory: () => Effect.gen.Return<A, unknown, unknown>;
 }
 
 /**
@@ -121,16 +121,16 @@ export interface PromiseOptions<A> {
  * @internal
  */
 export interface MarkupValueEvent<A, F> {
-  /** Dispatcher code identifying a markup value read. */
-  type: typeof Code.Markup.Value;
-  /** Stable identifier generated from the expression's source position. */
-  id: string;
-  /** Reactive dependency array captured from free identifiers. */
-  deps: readonly unknown[];
-  /** Value returned synchronously while the effect is pending. */
-  fallback: F;
-  /** Generator function that yields the effect to run. */
-  fn: () => Effect.gen.Return<A, unknown, unknown>;
+	/** Dispatcher code identifying a markup value read. */
+	type: typeof Code.Markup.Value;
+	/** Stable identifier generated from the expression's source position. */
+	id: string;
+	/** Reactive dependency array captured from free identifiers. */
+	deps: readonly unknown[];
+	/** Value returned synchronously while the effect is pending. */
+	fallback: F;
+	/** Generator function that yields the effect to run. */
+	fn: () => Effect.gen.Return<A, unknown, unknown>;
 }
 
 /**
@@ -153,18 +153,18 @@ export interface MarkupValueEvent<A, F> {
  * @internal
  */
 export interface MarkupPromiseEvent<A> {
-  /** Dispatcher code identifying a markup promise read. */
-  type: typeof Code.Markup.Promise;
-  /** Stable identifier generated from the expression's source position. */
-  id: string;
-  /** Reactive dependency array captured from free identifiers. */
-  deps: readonly unknown[];
-  /** Generator function that yields the effect to run. */
-  fn: () => Effect.gen.Return<A, unknown, unknown>;
-  /** Value resolved during SSR when a fallback is required. */
-  ssr_fallback?: A;
-  /** Optional SSR behavior for await blocks and similar contexts. */
-  options?: MarkupPromiseOptions;
+	/** Dispatcher code identifying a markup promise read. */
+	type: typeof Code.Markup.Promise;
+	/** Stable identifier generated from the expression's source position. */
+	id: string;
+	/** Reactive dependency array captured from free identifiers. */
+	deps: readonly unknown[];
+	/** Generator function that yields the effect to run. */
+	fn: () => Effect.gen.Return<A, unknown, unknown>;
+	/** Value resolved during SSR when a fallback is required. */
+	ssr_fallback?: A;
+	/** Optional SSR behavior for await blocks and similar contexts. */
+	options?: MarkupPromiseOptions;
 }
 
 /**
@@ -184,10 +184,10 @@ export interface MarkupPromiseEvent<A> {
  * @internal
  */
 export interface MarkupRunEvent<A> {
-  /** Dispatcher code identifying a markup event-handler run. */
-  type: typeof Code.Markup.Run;
-  /** Generator function that yields the effect to run. */
-  fn: () => Effect.gen.Return<A, unknown, unknown>;
+	/** Dispatcher code identifying a markup event-handler run. */
+	type: typeof Code.Markup.Run;
+	/** Generator function that yields the effect to run. */
+	fn: () => Effect.gen.Return<A, unknown, unknown>;
 }
 
 /**
@@ -210,6 +210,6 @@ export interface MarkupRunEvent<A> {
  * @internal
  */
 export type DispatcherEvent<A, F = A> =
-  | MarkupPromiseEvent<A>
-  | MarkupRunEvent<A>
-  | MarkupValueEvent<A, F>;
+	| MarkupPromiseEvent<A>
+	| MarkupRunEvent<A>
+	| MarkupValueEvent<A, F>;

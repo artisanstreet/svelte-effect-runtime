@@ -1,252 +1,248 @@
 {
-  "name": "svelte-effect-runtime",
-  "displayName": "Svelte Effect Runtime",
-  "scopeName": "source.svelte.ser.injection",
-  "injectionSelector": "L:source.svelte -comment -string",
-  "injectTo": [
-    "source.svelte"
-  ],
-  "embeddedLangs": [
-    "typescript"
-  ],
-  "patterns": [
-    {
-      "include": "#ser-script-effect-attribute"
-    },
-    {
-      "include": "#ser-declaration-tag"
-    },
-    {
-      "include": "#ser-const-directive"
-    },
-    {
-      "include": "#ser-block-directive"
-    },
-    {
-      "include": "#ser-else-if-directive"
-    },
-    {
-      "include": "#ser-expression-directive"
-    },
-    {
-      "include": "#ser-event-attribute"
-    },
-    {
-      "include": "#ser-yield-expression"
-    },
-    {
-      "include": "#ser-yield-star"
-    }
-  ],
-  "repository": {
-    "ser-script-effect-attribute": {
-      "match": "(?<=<script\\b[^>]*\\s)(effect)(?=(?:\\s*=|\\s|>|$))",
-      "captures": {
-        "1": {
-          "name": "storage.modifier.effect.ser.svelte"
-        }
-      }
-    },
-    "ser-yield-star": {
-      "match": "\\byield\\s*(\\*)",
-      "name": "keyword.control.yield.ser.svelte",
-      "captures": {
-        "1": {
-          "name": "keyword.operator.yield.star.ser.svelte"
-        }
-      }
-    },
-    "ser-yield-expression": {
-      "begin": "(\\{)(?=\\s*yield\\s*\\*)",
-      "beginCaptures": {
-        "1": {
-          "name": "punctuation.section.embedded.begin.svelte"
-        }
-      },
-      "end": "(\\})",
-      "endCaptures": {
-        "1": {
-          "name": "punctuation.section.embedded.end.svelte"
-        }
-      },
-      "name": "meta.embedded.expression.yield.ser.svelte",
-      "patterns": [
-        {
-          "include": "#ser-yield-star"
-        },
-        {
-          "include": "source.ts"
-        }
-      ]
-    },
-    "ser-declaration-tag": {
-      "begin": "(\\{)(\\s*)(?=(?:const|let)\\b)",
-      "beginCaptures": {
-        "1": {
-          "name": "punctuation.section.embedded.begin.svelte"
-        }
-      },
-      "end": "(\\})",
-      "endCaptures": {
-        "1": {
-          "name": "punctuation.section.embedded.end.svelte"
-        }
-      },
-      "name": "meta.embedded.declaration.ser.svelte",
-      "patterns": [
-        {
-          "match": "\\b(?:const|let)\\b",
-          "name": "storage.type.declaration.ser.svelte"
-        },
-        {
-          "include": "#ser-yield-star"
-        },
-        {
-          "include": "source.ts"
-        }
-      ]
-    },
-    "ser-const-directive": {
-      "begin": "(\\{)(\\s*)(@)(const)\\b",
-      "beginCaptures": {
-        "1": {
-          "name": "punctuation.section.embedded.begin.svelte"
-        },
-        "3": {
-          "name": "punctuation.definition.tag.ser.svelte"
-        },
-        "4": {
-          "name": "storage.type.declaration.ser.svelte"
-        }
-      },
-      "end": "(\\})",
-      "endCaptures": {
-        "1": {
-          "name": "punctuation.section.embedded.end.svelte"
-        }
-      },
-      "name": "meta.embedded.directive.const.ser.svelte",
-      "patterns": [
-        {
-          "include": "#ser-yield-star"
-        },
-        {
-          "include": "source.ts"
-        }
-      ]
-    },
-    "ser-block-directive": {
-      "begin": "(\\{)(\\s*)(#)(each|await|if|key)\\b",
-      "beginCaptures": {
-        "1": {
-          "name": "punctuation.section.embedded.begin.svelte"
-        },
-        "3": {
-          "name": "punctuation.definition.tag.ser.svelte"
-        },
-        "4": {
-          "name": "keyword.control.block.ser.svelte"
-        }
-      },
-      "end": "(\\})",
-      "endCaptures": {
-        "1": {
-          "name": "punctuation.section.embedded.end.svelte"
-        }
-      },
-      "name": "meta.embedded.directive.block.ser.svelte",
-      "patterns": [
-        {
-          "include": "#ser-yield-star"
-        },
-        {
-          "include": "source.ts"
-        }
-      ]
-    },
-    "ser-else-if-directive": {
-      "begin": "(\\{)(\\s*)(:)(else\\s+if)\\b",
-      "beginCaptures": {
-        "1": {
-          "name": "punctuation.section.embedded.begin.svelte"
-        },
-        "3": {
-          "name": "punctuation.definition.tag.ser.svelte"
-        },
-        "4": {
-          "name": "keyword.control.conditional.ser.svelte"
-        }
-      },
-      "end": "(\\})",
-      "endCaptures": {
-        "1": {
-          "name": "punctuation.section.embedded.end.svelte"
-        }
-      },
-      "name": "meta.embedded.directive.else-if.ser.svelte",
-      "patterns": [
-        {
-          "include": "#ser-yield-star"
-        },
-        {
-          "include": "source.ts"
-        }
-      ]
-    },
-    "ser-expression-directive": {
-      "begin": "(\\{)(\\s*)(@)(render|html|debug)\\b",
-      "beginCaptures": {
-        "1": {
-          "name": "punctuation.section.embedded.begin.svelte"
-        },
-        "3": {
-          "name": "punctuation.definition.tag.ser.svelte"
-        },
-        "4": {
-          "name": "keyword.control.directive.ser.svelte"
-        }
-      },
-      "end": "(\\})",
-      "endCaptures": {
-        "1": {
-          "name": "punctuation.section.embedded.end.svelte"
-        }
-      },
-      "name": "meta.embedded.directive.expression.ser.svelte",
-      "patterns": [
-        {
-          "include": "#ser-yield-star"
-        },
-        {
-          "include": "source.ts"
-        }
-      ]
-    },
-    "ser-event-attribute": {
-      "begin": "(\\b(?:on:[A-Za-z_$][\\w$-]*|on[A-Za-z_$][\\w$-]*)\\b)(\\s*=\\s*)(\\{)(?=\\s*yield\\s*\\*)",
-      "beginCaptures": {
-        "1": {
-          "name": "entity.other.attribute-name.event.ser.svelte"
-        },
-        "3": {
-          "name": "punctuation.section.embedded.begin.svelte"
-        }
-      },
-      "end": "(\\})",
-      "endCaptures": {
-        "1": {
-          "name": "punctuation.section.embedded.end.svelte"
-        }
-      },
-      "name": "meta.embedded.attribute.event.ser.svelte",
-      "patterns": [
-        {
-          "include": "#ser-yield-star"
-        },
-        {
-          "include": "source.ts"
-        }
-      ]
-    }
-  }
+	"name": "svelte-effect-runtime",
+	"displayName": "Svelte Effect Runtime",
+	"scopeName": "source.svelte.ser.injection",
+	"injectionSelector": "L:source.svelte -comment -string",
+	"injectTo": ["source.svelte"],
+	"embeddedLangs": ["typescript"],
+	"patterns": [
+		{
+			"include": "#ser-script-effect-attribute"
+		},
+		{
+			"include": "#ser-declaration-tag"
+		},
+		{
+			"include": "#ser-const-directive"
+		},
+		{
+			"include": "#ser-block-directive"
+		},
+		{
+			"include": "#ser-else-if-directive"
+		},
+		{
+			"include": "#ser-expression-directive"
+		},
+		{
+			"include": "#ser-event-attribute"
+		},
+		{
+			"include": "#ser-yield-expression"
+		},
+		{
+			"include": "#ser-yield-star"
+		}
+	],
+	"repository": {
+		"ser-script-effect-attribute": {
+			"match": "(?<=<script\\b[^>]*\\s)(effect)(?=(?:\\s*=|\\s|>|$))",
+			"captures": {
+				"1": {
+					"name": "storage.modifier.effect.ser.svelte"
+				}
+			}
+		},
+		"ser-yield-star": {
+			"match": "\\byield\\s*(\\*)",
+			"name": "keyword.control.yield.ser.svelte",
+			"captures": {
+				"1": {
+					"name": "keyword.operator.yield.star.ser.svelte"
+				}
+			}
+		},
+		"ser-yield-expression": {
+			"begin": "(\\{)(?=\\s*yield\\s*\\*)",
+			"beginCaptures": {
+				"1": {
+					"name": "punctuation.section.embedded.begin.svelte"
+				}
+			},
+			"end": "(\\})",
+			"endCaptures": {
+				"1": {
+					"name": "punctuation.section.embedded.end.svelte"
+				}
+			},
+			"name": "meta.embedded.expression.yield.ser.svelte",
+			"patterns": [
+				{
+					"include": "#ser-yield-star"
+				},
+				{
+					"include": "source.ts"
+				}
+			]
+		},
+		"ser-declaration-tag": {
+			"begin": "(\\{)(\\s*)(?=(?:const|let)\\b)",
+			"beginCaptures": {
+				"1": {
+					"name": "punctuation.section.embedded.begin.svelte"
+				}
+			},
+			"end": "(\\})",
+			"endCaptures": {
+				"1": {
+					"name": "punctuation.section.embedded.end.svelte"
+				}
+			},
+			"name": "meta.embedded.declaration.ser.svelte",
+			"patterns": [
+				{
+					"match": "\\b(?:const|let)\\b",
+					"name": "storage.type.declaration.ser.svelte"
+				},
+				{
+					"include": "#ser-yield-star"
+				},
+				{
+					"include": "source.ts"
+				}
+			]
+		},
+		"ser-const-directive": {
+			"begin": "(\\{)(\\s*)(@)(const)\\b",
+			"beginCaptures": {
+				"1": {
+					"name": "punctuation.section.embedded.begin.svelte"
+				},
+				"3": {
+					"name": "punctuation.definition.tag.ser.svelte"
+				},
+				"4": {
+					"name": "storage.type.declaration.ser.svelte"
+				}
+			},
+			"end": "(\\})",
+			"endCaptures": {
+				"1": {
+					"name": "punctuation.section.embedded.end.svelte"
+				}
+			},
+			"name": "meta.embedded.directive.const.ser.svelte",
+			"patterns": [
+				{
+					"include": "#ser-yield-star"
+				},
+				{
+					"include": "source.ts"
+				}
+			]
+		},
+		"ser-block-directive": {
+			"begin": "(\\{)(\\s*)(#)(each|await|if|key)\\b",
+			"beginCaptures": {
+				"1": {
+					"name": "punctuation.section.embedded.begin.svelte"
+				},
+				"3": {
+					"name": "punctuation.definition.tag.ser.svelte"
+				},
+				"4": {
+					"name": "keyword.control.block.ser.svelte"
+				}
+			},
+			"end": "(\\})",
+			"endCaptures": {
+				"1": {
+					"name": "punctuation.section.embedded.end.svelte"
+				}
+			},
+			"name": "meta.embedded.directive.block.ser.svelte",
+			"patterns": [
+				{
+					"include": "#ser-yield-star"
+				},
+				{
+					"include": "source.ts"
+				}
+			]
+		},
+		"ser-else-if-directive": {
+			"begin": "(\\{)(\\s*)(:)(else\\s+if)\\b",
+			"beginCaptures": {
+				"1": {
+					"name": "punctuation.section.embedded.begin.svelte"
+				},
+				"3": {
+					"name": "punctuation.definition.tag.ser.svelte"
+				},
+				"4": {
+					"name": "keyword.control.conditional.ser.svelte"
+				}
+			},
+			"end": "(\\})",
+			"endCaptures": {
+				"1": {
+					"name": "punctuation.section.embedded.end.svelte"
+				}
+			},
+			"name": "meta.embedded.directive.else-if.ser.svelte",
+			"patterns": [
+				{
+					"include": "#ser-yield-star"
+				},
+				{
+					"include": "source.ts"
+				}
+			]
+		},
+		"ser-expression-directive": {
+			"begin": "(\\{)(\\s*)(@)(render|html|debug)\\b",
+			"beginCaptures": {
+				"1": {
+					"name": "punctuation.section.embedded.begin.svelte"
+				},
+				"3": {
+					"name": "punctuation.definition.tag.ser.svelte"
+				},
+				"4": {
+					"name": "keyword.control.directive.ser.svelte"
+				}
+			},
+			"end": "(\\})",
+			"endCaptures": {
+				"1": {
+					"name": "punctuation.section.embedded.end.svelte"
+				}
+			},
+			"name": "meta.embedded.directive.expression.ser.svelte",
+			"patterns": [
+				{
+					"include": "#ser-yield-star"
+				},
+				{
+					"include": "source.ts"
+				}
+			]
+		},
+		"ser-event-attribute": {
+			"begin": "(\\b(?:on:[A-Za-z_$][\\w$-]*|on[A-Za-z_$][\\w$-]*)\\b)(\\s*=\\s*)(\\{)(?=\\s*yield\\s*\\*)",
+			"beginCaptures": {
+				"1": {
+					"name": "entity.other.attribute-name.event.ser.svelte"
+				},
+				"3": {
+					"name": "punctuation.section.embedded.begin.svelte"
+				}
+			},
+			"end": "(\\})",
+			"endCaptures": {
+				"1": {
+					"name": "punctuation.section.embedded.end.svelte"
+				}
+			},
+			"name": "meta.embedded.attribute.event.ser.svelte",
+			"patterns": [
+				{
+					"include": "#ser-yield-star"
+				},
+				{
+					"include": "source.ts"
+				}
+			]
+		}
+	}
 }

@@ -58,16 +58,28 @@ jobs:
       - name: checkout
         uses: actions/checkout@v4
 
-      - name: setup_deno
-        uses: denoland/setup-deno@v2
+      - name: setup_node
+        uses: actions/setup-node@v4
         with:
-          deno-version: v2.x
+          node-version: 24
+
+      - name: enable_corepack
+        run: corepack enable
+
+      - name: install_vite_plus
+        shell: bash
+        run: |
+          curl -fsSL https://vite.plus | bash
+          echo "$HOME/.vite-plus/bin" >> "$GITHUB_PATH"
+
+      - name: install_dependencies
+        run: corepack pnpm install --frozen-lockfile
 
       - name: lint
-        run: deno task lint
+        run: corepack pnpm run lint
 
       - name: test
-        run: deno task test
+        run: corepack pnpm run test
 
   build_runtime:
     needs:
@@ -80,31 +92,45 @@ jobs:
       - name: checkout
         uses: actions/checkout@v4
 
-      - name: setup_deno
-        uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
-
       - name: setup_node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
+
+      - name: enable_corepack
+        run: corepack enable
+
+      - name: install_vite_plus
+        shell: bash
+        run: |
+          curl -fsSL https://vite.plus | bash
+          echo "$HOME/.vite-plus/bin" >> "$GITHUB_PATH"
+
+      - name: install_dependencies
+        run: corepack pnpm install --frozen-lockfile
 
       - name: build_runtime
-        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime
-        run: deno task build
+        run: corepack pnpm --dir modules/svelte-effect-runtime run build
+
+      - name: pack_runtime
+        run: vp node build/pack.ts svelte-effect-runtime
 
       - name: publish_runtime_to_npm
         if: github.ref == 'refs/heads/master'
-        working-directory: ${{ github.workspace }}/modules/svelte-effect-runtime
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         shell: bash
         run: |
-          RUNTIME_VERSION="$(node -p "require('./package.json').version")"
+          RUNTIME_VERSION="$(node -p "require('./modules/svelte-effect-runtime/package.json').version")"
 
-          if npx -y npm@11.5.1 view "svelte-effect-runtime@${RUNTIME_VERSION}" version >/dev/null 2>&1; then
+          if corepack pnpm view "svelte-effect-runtime@${RUNTIME_VERSION}" version >/dev/null 2>&1; then
             echo "svelte-effect-runtime@${RUNTIME_VERSION} is already published. Skipping npm publish."
             exit 0
           fi
 
-          npx -y npm@11.5.1 --version
-          npx -y npm@11.5.1 publish --access public --provenance
+          if [ -n "${NPM_TOKEN}" ]; then
+            printf '//registry.npmjs.org/:_authToken=%s\n' "${NPM_TOKEN}" > "${HOME}/.npmrc"
+          fi
+
+          RUNTIME_TGZ="$(find .dist/svelte-effect-runtime -maxdepth 1 -name '*.tgz' -print -quit)"
+          corepack pnpm publish "$RUNTIME_TGZ" --access public --provenance --no-git-checks

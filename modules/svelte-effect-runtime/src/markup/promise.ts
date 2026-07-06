@@ -7,8 +7,8 @@ import type { Effect } from "effect";
  * @since 2.4.0
  */
 interface MarkupPromiseOptions {
-  /** Keep the SSR promise pending so Svelte renders an await block fallback. */
-  ssr?: "pending";
+	/** Keep the SSR promise pending so Svelte renders an await block fallback. */
+	ssr?: "pending";
 }
 
 /**
@@ -29,25 +29,25 @@ interface MarkupPromiseOptions {
  * @returns A Promise that resolves with the effect's result.
  */
 export function promise<A, E, R>(
-  id: string,
-  deps: readonly unknown[],
-  factory: () => Effect.gen.Return<A, E, R>,
-  ssr_fallback?: A,
-  options?: MarkupPromiseOptions,
+	id: string,
+	deps: readonly unknown[],
+	factory: () => Effect.gen.Return<A, E, R>,
+	ssr_fallback?: A,
+	options?: MarkupPromiseOptions,
 ): Promise<A> {
-  if (is_server_render()) {
-    if (options?.ssr === "pending") {
-      return new Promise<A>(() => {});
-    }
+	if (is_server_render()) {
+		if (options?.ssr === "pending") {
+			return new Promise<A>(() => {});
+		}
 
-    if (arguments.length >= 4) {
-      return Promise.resolve(ssr_fallback as A);
-    }
-  }
+		if (arguments.length >= 4) {
+			return Promise.resolve(ssr_fallback as A);
+		}
+	}
 
-  return get_dispatcher().promise({ id, deps, factory });
+	return get_dispatcher().promise({ id, deps, factory });
 }
 
 function is_server_render(): boolean {
-  return typeof document === "undefined";
+	return typeof document === "undefined";
 }

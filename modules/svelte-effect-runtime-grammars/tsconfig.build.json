@@ -1,28 +1,21 @@
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "rootDir": "./src",
-    "outDir": "../../.dist/svelte-effect-runtime-grammars",
-    "declaration": true,
-    "ignoreDeprecations": "6.0",
-    "verbatimModuleSyntax": true,
-    "strict": true,
-    "skipLibCheck": true,
-    "allowArbitraryExtensions": true,
-    "allowImportingTsExtensions": true,
-    "allowSyntheticDefaultImports": true,
-    "esModuleInterop": true,
-    "resolveJsonModule": true,
-    "types": [
-      "node"
-    ]
-  },
-  "include": [
-    "./src/assets.d.ts",
-    "./src/mod.ts",
-    "./src/textmate.ts",
-    "./src/tree-sitter.ts"
-  ]
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"rootDir": "./src",
+		"outDir": "../../.dist/svelte-effect-runtime-grammars",
+		"declaration": true,
+		"ignoreDeprecations": "6.0",
+		"verbatimModuleSyntax": true,
+		"strict": true,
+		"skipLibCheck": true,
+		"allowArbitraryExtensions": true,
+		"allowImportingTsExtensions": true,
+		"allowSyntheticDefaultImports": true,
+		"esModuleInterop": true,
+		"resolveJsonModule": true,
+		"types": ["node"]
+	},
+	"include": ["./src/assets.d.ts", "./src/mod.ts", "./src/textmate.ts", "./src/tree-sitter.ts"]
 }

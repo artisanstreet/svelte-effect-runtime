@@ -16,10 +16,10 @@ import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime
  * @internal
  */
 export interface FiberWatchCallbacks<A> {
-  on_complete?: () => void;
-  on_success?: (value: A) => void;
-  on_failure?: (error: unknown) => void;
-  surface_failure?: boolean;
+	on_complete?: () => void;
+	on_success?: (value: A) => void;
+	on_failure?: (error: unknown) => void;
+	surface_failure?: boolean;
 }
 
 /**
@@ -37,12 +37,10 @@ export interface FiberWatchCallbacks<A> {
  * @internal
  */
 export function interrupt_fiber(
-  runtime: ManagedRuntimeType<unknown, unknown>,
-  fiber: FiberType<unknown, unknown>,
+	runtime: ManagedRuntimeType<unknown, unknown>,
+	fiber: FiberType<unknown, unknown>,
 ): void {
-  runtime.runFork(
-    Fiber.interrupt(fiber) as Effect.Effect<unknown, unknown, unknown>,
-  );
+	runtime.runFork(Fiber.interrupt(fiber) as Effect.Effect<unknown, unknown, unknown>);
 }
 
 /**
@@ -60,43 +58,37 @@ export function interrupt_fiber(
  * @internal
  */
 export function watch_fiber_exit<A>(
-  options: {
-    runtime: ManagedRuntimeType<unknown, unknown>;
-    fiber: FiberType<unknown, unknown>;
-  } & FiberWatchCallbacks<A>,
+	options: {
+		runtime: ManagedRuntimeType<unknown, unknown>;
+		fiber: FiberType<unknown, unknown>;
+	} & FiberWatchCallbacks<A>,
 ): void {
-  const {
-    runtime,
-    fiber,
-    on_complete,
-    on_success,
-    on_failure,
-    surface_failure = true,
-  } = options;
+	const { runtime, fiber, on_complete, on_success, on_failure, surface_failure = true } = options;
 
-  runtime.runFork(
-    Effect.flatMap(Fiber.await(fiber), (exit) =>
-      Effect.sync(() => {
-        if (Exit.isSuccess(exit)) {
-          on_success?.(exit.value as A);
-          on_complete?.();
+	runtime.runFork(
+		Effect.flatMap(Fiber.await(fiber), (exit) =>
+			Effect.sync(() => {
+				if (Exit.isSuccess(exit)) {
+					on_success?.(exit.value as A);
+					on_complete?.();
 
-          return;
-        }
+					return;
+				}
 
-        if (!Cause.hasInterruptsOnly(exit.cause)) {
-          const error = Cause.squash(exit.cause);
+				if (!Cause.hasInterruptsOnly(exit.cause)) {
+					const error = Cause.squash(exit.cause);
 
-          on_failure?.(error);
+					on_failure?.(error);
 
-          if (surface_failure) {
-            queueMicrotask(() => {
-              throw error;
-            });
-          }
-        }
+					if (surface_failure) {
+						queueMicrotask(() => {
+							throw error;
+						});
+					}
+				}
 
-        on_complete?.();
-      })),
-  );
+				on_complete?.();
+			}),
+		),
+	);
 }

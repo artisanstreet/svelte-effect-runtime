@@ -1,18 +1,15 @@
-import type { RequestEvent as SvelteKitRequestEvent } from "@sveltejs/kit";
-import { Context, Layer, ManagedRuntime } from "effect";
-import { Dispatcher as InternalDispatcher } from "$/dispatcher.ts";
+import { RequestEventUnavailableError, RuntimeAlreadyInitializedError } from "$/errors.ts";
 import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime";
-
-import {
-  RequestEventUnavailableError,
-  RuntimeAlreadyInitializedError,
-} from "$/errors.ts";
+import type { RequestEvent as SvelteKitRequestEvent } from "@sveltejs/kit";
+import { Dispatcher as InternalDispatcher } from "$/dispatcher.ts";
+import { Context, Layer, ManagedRuntime } from "effect";
 
 type ViteImportMeta = ImportMeta & {
-  readonly env?: {
-    readonly DEV?: boolean;
-    readonly SSR?: boolean;
-  };
+	readonly env?: {
+		readonly DEV?: boolean;
+		readonly MODE?: string;
+		readonly SSR?: boolean;
+	};
 };
 
 /**
@@ -20,18 +17,10 @@ type ViteImportMeta = ImportMeta & {
  *
  * @since 2.0.0
  */
-export interface RequestEvent extends
-  Pick<
-    SvelteKitRequestEvent,
-    | "cookies"
-    | "getClientAddress"
-    | "locals"
-    | "params"
-    | "platform"
-    | "request"
-    | "route"
-    | "url"
-  > {}
+export interface RequestEvent extends Pick<
+	SvelteKitRequestEvent,
+	"cookies" | "getClientAddress" | "locals" | "params" | "platform" | "request" | "route" | "url"
+> {}
 
 /**
  * SvelteKit's `RequestEvent` exposed as an Effect {@link Context.Tag}.
@@ -43,12 +32,14 @@ export interface RequestEvent extends
  *
  * @since 2.0.0
  */
-export const RequestEvent: Context.Reference<RequestEvent> = Context
-  .Reference<RequestEvent>("@ser/RequestEvent", {
-    defaultValue: () => {
-      throw new RequestEventUnavailableError();
-    },
-  });
+export const RequestEvent: Context.Reference<RequestEvent> = Context.Reference<RequestEvent>(
+	"@ser/RequestEvent",
+	{
+		defaultValue: () => {
+			throw new RequestEventUnavailableError();
+		},
+	},
+);
 
 /**
  * Builder for the server-side Effect runtime.
@@ -61,50 +52,41 @@ export const RequestEvent: Context.Reference<RequestEvent> = Context
  * @since 2.0.0
  */
 export class ServerRuntime {
-  /**
-   * Build and cache the server-side `ManagedRuntime`.
-   *
-   * @since 2.0.0
-   * @param layer - Optional Effect layer to provide to the runtime.
-   * @returns The configured ManagedRuntime.
-   */
-  static make<R = never>(
-    layer?: Layer.Layer<R>,
-  ): ManagedRuntime.ManagedRuntime<R, never> {
-    const should_replace_dev_runtime = current_server_runtime !== undefined &&
-      is_vite_dev_ssr();
+	/**
+	 * Build and cache the server-side `ManagedRuntime`.
+	 *
+	 * @since 2.0.0
+	 * @param layer - Optional Effect layer to provide to the runtime.
+	 * @returns The configured ManagedRuntime.
+	 */
+	static make<R = never>(layer?: Layer.Layer<R>): ManagedRuntime.ManagedRuntime<R, never> {
+		const should_replace_dev_runtime =
+			current_server_runtime !== undefined && is_vite_dev_ssr();
 
-    /**
-     * Keep duplicate production initialization loud while allowing SvelteKit's
-     * dev server to re-run hooks.server.ts after an HMR invalidation.
-     */
-    if (current_server_runtime && !should_replace_dev_runtime) {
-      throw new RuntimeAlreadyInitializedError("ServerRuntime");
-    }
+		/**
+		 * Keep duplicate production initialization loud while allowing SvelteKit's
+		 * dev server to re-run hooks.server.ts after an HMR invalidation.
+		 */
+		if (current_server_runtime && !should_replace_dev_runtime) {
+			throw new RuntimeAlreadyInitializedError("ServerRuntime");
+		}
 
-    if (should_replace_dev_runtime) {
-      reset_server_runtime();
-    }
+		if (should_replace_dev_runtime) {
+			reset_server_runtime();
+		}
 
-    const runtime = ManagedRuntime.make(
-      layer ?? (Layer.empty as unknown as Layer.Layer<R>),
-    );
+		const runtime = ManagedRuntime.make(layer ?? (Layer.empty as unknown as Layer.Layer<R>));
 
-    current_server_runtime = runtime as ManagedRuntime.ManagedRuntime<
-      unknown,
-      never
-    >;
-    current_server_dispatcher = new InternalDispatcher(
-      runtime as unknown as ManagedRuntimeType<unknown, unknown>,
-    );
+		current_server_runtime = runtime as ManagedRuntime.ManagedRuntime<unknown, never>;
+		current_server_dispatcher = new InternalDispatcher(
+			runtime as unknown as ManagedRuntimeType<unknown, unknown>,
+		);
 
-    return runtime;
-  }
+		return runtime;
+	}
 }
 
-let current_server_runtime:
-  | ManagedRuntime.ManagedRuntime<unknown, never>
-  | undefined;
+let current_server_runtime: ManagedRuntime.ManagedRuntime<unknown, never> | undefined;
 let current_server_dispatcher: InternalDispatcher | undefined;
 
 /**
@@ -118,17 +100,15 @@ let current_server_dispatcher: InternalDispatcher | undefined;
  * @since 2.0.0
  * @returns The current ManagedRuntime instance.
  */
-export function get_server_runtime_or_throw(): ManagedRuntime.ManagedRuntime<
-  unknown,
-  never
-> {
-  if (!current_server_runtime) {
-    current_server_runtime = ManagedRuntime.make(
-      Layer.empty,
-    ) as ManagedRuntime.ManagedRuntime<unknown, never>;
-  }
+export function get_server_runtime_or_throw(): ManagedRuntime.ManagedRuntime<unknown, never> {
+	if (!current_server_runtime) {
+		current_server_runtime = ManagedRuntime.make(Layer.empty) as ManagedRuntime.ManagedRuntime<
+			unknown,
+			never
+		>;
+	}
 
-  return current_server_runtime;
+	return current_server_runtime;
 }
 
 /**
@@ -144,20 +124,17 @@ export function get_server_runtime_or_throw(): ManagedRuntime.ManagedRuntime<
  *   runtime when needed.
  */
 export function get_server_dispatcher(): InternalDispatcher {
-  current_server_dispatcher ??= new InternalDispatcher(
-    get_server_runtime_or_throw() as unknown as ManagedRuntimeType<
-      unknown,
-      unknown
-    >,
-  );
+	current_server_dispatcher ??= new InternalDispatcher(
+		get_server_runtime_or_throw() as unknown as ManagedRuntimeType<unknown, unknown>,
+	);
 
-  return current_server_dispatcher;
+	return current_server_dispatcher;
 }
 
 function is_vite_dev_ssr(): boolean {
-  const env = (import.meta as ViteImportMeta).env;
+	const env = (import.meta as ViteImportMeta).env;
 
-  return env?.DEV === true && env?.SSR === true;
+	return env?.DEV === true && env?.SSR === true && env.MODE !== "test";
 }
 
 /**
@@ -173,21 +150,21 @@ function is_vite_dev_ssr(): boolean {
  * @internal
  */
 export function reset_server_runtime(): void {
-  const dispatcher = current_server_dispatcher;
-  const runtime = current_server_runtime;
+	const dispatcher = current_server_dispatcher;
+	const runtime = current_server_runtime;
 
-  current_server_dispatcher = undefined;
-  current_server_runtime = undefined;
+	current_server_dispatcher = undefined;
+	current_server_runtime = undefined;
 
-  if (dispatcher) {
-    dispatcher.dispose();
+	if (dispatcher) {
+		dispatcher.dispose();
 
-    return;
-  }
+		return;
+	}
 
-  void runtime?.dispose().catch((error: unknown) => {
-    queueMicrotask(() => {
-      throw error;
-    });
-  });
+	void runtime?.dispose().catch((error: unknown) => {
+		queueMicrotask(() => {
+			throw error;
+		});
+	});
 }

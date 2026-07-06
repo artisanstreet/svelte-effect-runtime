@@ -1,8 +1,14 @@
 import {
-  LEGACY_STATE_MANAGED_PATH,
-  LEGACY_STATE_PREVIOUS_PATH,
-  LEGACY_TARGET_KEY,
+	LEGACY_STATE_MANAGED_PATH,
+	LEGACY_STATE_PREVIOUS_PATH,
+	LEGACY_TARGET_KEY,
 } from "./constants.ts";
+import {
+	assert_safe_language_server_path,
+	get_workspace_configured_server_path,
+	normalize_configured_server_path,
+	type ScopedServerPathConfiguration,
+} from "./server-path-policy.ts";
 import { paths_equal } from "./paths.ts";
 
 import path from "node:path";
@@ -22,25 +28,15 @@ import * as vscode from "vscode";
  * @returns A promise that resolves once migration state has been updated.
  */
 export async function migrate_legacy_svelte_configuration(
-  context: vscode.ExtensionContext,
+	context: vscode.ExtensionContext,
 ): Promise<void> {
-  const svelte_config = vscode.workspace.getConfiguration("svelte");
-  const current_path = svelte_config.get<string | undefined>(
-    LEGACY_TARGET_KEY,
-  );
-  const legacy_server_path = context.asAbsolutePath(
-    path.join(".dist", "server.js"),
-  );
-  const managed_path = context.globalState.get<string | undefined>(
-    LEGACY_STATE_MANAGED_PATH,
-  );
+	const current_path = get_global_svelte_language_server_path();
+	const legacy_server_path = context.asAbsolutePath(path.join(".dist", "server.js"));
+	const managed_path = context.globalState.get<string | undefined>(LEGACY_STATE_MANAGED_PATH);
 
-  if (paths_equal(current_path, legacy_server_path) && !managed_path) {
-    await context.globalState.update(
-      LEGACY_STATE_MANAGED_PATH,
-      legacy_server_path,
-    );
-  }
+	if (paths_equal(current_path, legacy_server_path) && !managed_path) {
+		await context.globalState.update(LEGACY_STATE_MANAGED_PATH, legacy_server_path);
+	}
 }
 
 /**
@@ -58,44 +54,42 @@ export async function migrate_legacy_svelte_configuration(
  * @returns Whether the Svelte extension configuration was updated.
  */
 export async function configure_svelte_extension_language_server(
-  context: vscode.ExtensionContext,
-  server_path: string,
-  options: { force: boolean },
+	context: vscode.ExtensionContext,
+	server_path: string,
+	options: { force: boolean },
 ): Promise<boolean> {
-  const svelte_config = vscode.workspace.getConfiguration("svelte");
-  const current_path = svelte_config.get<string | undefined>(
-    LEGACY_TARGET_KEY,
-  );
-  const managed_path = context.globalState.get<string | undefined>(
-    LEGACY_STATE_MANAGED_PATH,
-  );
-  const can_configure = !current_path ||
-    paths_equal(current_path, managed_path) ||
-    paths_equal(current_path, server_path);
+	const scoped_path = read_scoped_svelte_language_server_path_configuration();
+	const workspace_path = get_workspace_configured_server_path(scoped_path);
+	const svelte_config = vscode.workspace.getConfiguration("svelte");
+	const current_path = normalize_configured_server_path(scoped_path.global_path);
+	const managed_path = context.globalState.get<string | undefined>(LEGACY_STATE_MANAGED_PATH);
+	const can_configure =
+		!current_path ||
+		paths_equal(current_path, managed_path) ||
+		paths_equal(current_path, server_path);
 
-  if (!options.force && !can_configure) {
-    return false;
-  }
+	assert_safe_language_server_path(server_path);
 
-  if (
-    current_path &&
-    !paths_equal(current_path, server_path) &&
-    !paths_equal(current_path, managed_path)
-  ) {
-    await context.globalState.update(
-      LEGACY_STATE_PREVIOUS_PATH,
-      current_path,
-    );
-  }
+	if (workspace_path) {
+		return false;
+	}
 
-  await svelte_config.update(
-    LEGACY_TARGET_KEY,
-    server_path,
-    vscode.ConfigurationTarget.Global,
-  );
-  await context.globalState.update(LEGACY_STATE_MANAGED_PATH, server_path);
+	if (!options.force && !can_configure) {
+		return false;
+	}
 
-  return true;
+	if (
+		current_path &&
+		!paths_equal(current_path, server_path) &&
+		!paths_equal(current_path, managed_path)
+	) {
+		await context.globalState.update(LEGACY_STATE_PREVIOUS_PATH, current_path);
+	}
+
+	await svelte_config.update(LEGACY_TARGET_KEY, server_path, vscode.ConfigurationTarget.Global);
+	await context.globalState.update(LEGACY_STATE_MANAGED_PATH, server_path);
+
+	return true;
 }
 
 /**
@@ -111,27 +105,39 @@ export async function configure_svelte_extension_language_server(
  * @returns A promise that resolves once managed settings have been restored.
  */
 export async function restore_svelte_extension_configuration(
-  context: vscode.ExtensionContext,
+	context: vscode.ExtensionContext,
 ): Promise<void> {
-  const svelte_config = vscode.workspace.getConfiguration("svelte");
-  const current_path = svelte_config.get<string | undefined>(
-    LEGACY_TARGET_KEY,
-  );
-  const managed_path = context.globalState.get<string | undefined>(
-    LEGACY_STATE_MANAGED_PATH,
-  );
-  const previous_path = context.globalState.get<string | undefined>(
-    LEGACY_STATE_PREVIOUS_PATH,
-  );
+	const svelte_config = vscode.workspace.getConfiguration("svelte");
+	const current_path = get_global_svelte_language_server_path();
+	const managed_path = context.globalState.get<string | undefined>(LEGACY_STATE_MANAGED_PATH);
+	const previous_path = context.globalState.get<string | undefined>(LEGACY_STATE_PREVIOUS_PATH);
 
-  if (paths_equal(current_path, managed_path)) {
-    await svelte_config.update(
-      LEGACY_TARGET_KEY,
-      previous_path ?? undefined,
-      vscode.ConfigurationTarget.Global,
-    );
-  }
+	if (paths_equal(current_path, managed_path)) {
+		await svelte_config.update(
+			LEGACY_TARGET_KEY,
+			previous_path ?? undefined,
+			vscode.ConfigurationTarget.Global,
+		);
+	}
 
-  await context.globalState.update(LEGACY_STATE_MANAGED_PATH, undefined);
-  await context.globalState.update(LEGACY_STATE_PREVIOUS_PATH, undefined);
+	await context.globalState.update(LEGACY_STATE_MANAGED_PATH, undefined);
+	await context.globalState.update(LEGACY_STATE_PREVIOUS_PATH, undefined);
+}
+
+function get_global_svelte_language_server_path(): string | undefined {
+	return normalize_configured_server_path(
+		read_scoped_svelte_language_server_path_configuration().global_path,
+	);
+}
+
+function read_scoped_svelte_language_server_path_configuration(): ScopedServerPathConfiguration {
+	const inspection = vscode.workspace.getConfiguration("svelte").inspect(LEGACY_TARGET_KEY);
+
+	return {
+		global_path: inspection?.globalValue,
+		workspace_path: inspection?.workspaceValue,
+		workspace_folder_path: inspection?.workspaceFolderValue,
+		workspace_language_path: inspection?.workspaceLanguageValue,
+		workspace_folder_language_path: inspection?.workspaceFolderLanguageValue,
+	};
 }

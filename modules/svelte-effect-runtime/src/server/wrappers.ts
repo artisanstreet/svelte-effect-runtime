@@ -5,12 +5,7 @@ import { run_handler_effect, run_live_handler_source } from "./effects.ts";
 import { make_invalid_proxy } from "./invalid.ts";
 import { is_handler } from "./schema.ts";
 import type { RequestEvent } from "./runtime.ts";
-import type {
-  EffectLike,
-  RemoteFormHandler,
-  RemoteHandler,
-  RemoteLiveHandler,
-} from "./types.ts";
+import type { EffectLike, RemoteFormHandler, RemoteHandler, RemoteLiveHandler } from "./types.ts";
 
 let running_remote_effect_handlers = 0;
 
@@ -29,7 +24,7 @@ let running_remote_effect_handlers = 0;
  * @internal
  */
 export function is_running_remote_effect_handler(): boolean {
-  return running_remote_effect_handlers > 0;
+	return running_remote_effect_handlers > 0;
 }
 
 /**
@@ -41,28 +36,28 @@ export function is_running_remote_effect_handler(): boolean {
  * @returns Native SvelteKit handler wrapper.
  */
 export function make_remote_wrapper(
-  handler: RemoteHandler<unknown, unknown, unknown, unknown> | EffectLike,
-  helper_name: string,
+	handler: RemoteHandler<unknown, unknown, unknown, unknown> | EffectLike,
+	helper_name: string,
 ): (input: unknown) => Promise<unknown> {
-  return async (input: unknown) => {
-    let event: RequestEvent;
+	return async (input: unknown) => {
+		let event: RequestEvent;
 
-    try {
-      event = get_native_request_event() as unknown as RequestEvent;
-    } catch (error: unknown) {
-      throw normalize_remote_helper_error(error, helper_name);
-    }
+		try {
+			event = get_native_request_event() as unknown as RequestEvent;
+		} catch (error: unknown) {
+			throw normalize_remote_helper_error(error, helper_name);
+		}
 
-    return await run_inside_remote_effect_handler(() => {
-      try {
-        const result = is_handler(handler) ? handler(input) : handler;
+		return await run_inside_remote_effect_handler(() => {
+			try {
+				const result = is_handler(handler) ? handler(input) : handler;
 
-        return run_handler_effect(result, event);
-      } catch (error: unknown) {
-        throw normalize_remote_helper_error(error, helper_name);
-      }
-    });
-  };
+				return run_handler_effect(result, event);
+			} catch (error: unknown) {
+				throw normalize_remote_helper_error(error, helper_name);
+			}
+		});
+	};
 }
 
 /**
@@ -74,30 +69,28 @@ export function make_remote_wrapper(
  * @returns Native SvelteKit live query wrapper.
  */
 export function make_remote_live_wrapper<Input, A>(
-  handler: RemoteLiveHandler<Input, A, unknown, unknown>,
-  helper_name: string,
+	handler: RemoteLiveHandler<Input, A, unknown, unknown>,
+	helper_name: string,
 ): (input: unknown) => Promise<unknown> {
-  return async (input: unknown) => {
-    let event: RequestEvent;
+	return async (input: unknown) => {
+		let event: RequestEvent;
 
-    try {
-      event = get_native_request_event() as unknown as RequestEvent;
-    } catch (error: unknown) {
-      throw normalize_remote_helper_error(error, helper_name);
-    }
+		try {
+			event = get_native_request_event() as unknown as RequestEvent;
+		} catch (error: unknown) {
+			throw normalize_remote_helper_error(error, helper_name);
+		}
 
-    return await run_inside_remote_effect_handler(() => {
-      try {
-        const result = typeof handler === "function"
-          ? handler(input as Input)
-          : handler;
+		return await run_inside_remote_effect_handler(() => {
+			try {
+				const result = typeof handler === "function" ? handler(input as Input) : handler;
 
-        return run_live_handler_source(result, event);
-      } catch (error: unknown) {
-        throw normalize_remote_helper_error(error, helper_name);
-      }
-    });
-  };
+				return run_live_handler_source(result, event);
+			} catch (error: unknown) {
+				throw normalize_remote_helper_error(error, helper_name);
+			}
+		});
+	};
 }
 
 /**
@@ -109,44 +102,42 @@ export function make_remote_live_wrapper<Input, A>(
  * @returns Native SvelteKit form handler wrapper.
  */
 export function make_remote_form_wrapper<Input, A>(
-  handler: RemoteFormHandler<Input, A, unknown, unknown>,
-  helper_name: string,
+	handler: RemoteFormHandler<Input, A, unknown, unknown>,
+	helper_name: string,
 ): (data: unknown, issue: unknown) => Promise<unknown> {
-  return async (data: unknown, issue: unknown) => {
-    let event: RequestEvent;
+	return async (data: unknown, issue: unknown) => {
+		let event: RequestEvent;
 
-    try {
-      event = get_native_request_event() as unknown as RequestEvent;
-    } catch (error: unknown) {
-      throw normalize_remote_helper_error(error, helper_name);
-    }
+		try {
+			event = get_native_request_event() as unknown as RequestEvent;
+		} catch (error: unknown) {
+			throw normalize_remote_helper_error(error, helper_name);
+		}
 
-    return await run_inside_remote_effect_handler(() => {
-      const invalid_proxy = make_invalid_proxy<Input>();
+		return await run_inside_remote_effect_handler(() => {
+			const invalid_proxy = make_invalid_proxy<Input>();
 
-      try {
-        const result = handler({
-          data: data as Input,
-          invalid: invalid_proxy,
-          issue,
-        });
+			try {
+				const result = handler({
+					data: data as Input,
+					invalid: invalid_proxy,
+					issue,
+				});
 
-        return run_handler_effect(result, event);
-      } catch (error: unknown) {
-        throw normalize_remote_helper_error(error, helper_name);
-      }
-    });
-  };
+				return run_handler_effect(result, event);
+			} catch (error: unknown) {
+				throw normalize_remote_helper_error(error, helper_name);
+			}
+		});
+	};
 }
 
-async function run_inside_remote_effect_handler<A>(
-  run: () => Promise<A>,
-): Promise<A> {
-  running_remote_effect_handlers += 1;
+async function run_inside_remote_effect_handler<A>(run: () => Promise<A>): Promise<A> {
+	running_remote_effect_handlers += 1;
 
-  try {
-    return await run();
-  } finally {
-    running_remote_effect_handlers -= 1;
-  }
+	try {
+		return await run();
+	} finally {
+		running_remote_effect_handlers -= 1;
+	}
 }

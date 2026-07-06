@@ -10,12 +10,12 @@ import type { NativeMethod } from "./types.ts";
  * @returns Whether the value has a function at `key`.
  */
 export function has_method<K extends PropertyKey>(
-  value: unknown,
-  key: K,
+	value: unknown,
+	key: K,
 ): value is Record<K, NativeMethod> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as Record<PropertyKey, unknown>)[key] === "function"
-  );
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		typeof (value as Record<PropertyKey, unknown>)[key] === "function"
+	);
 }

@@ -5,19 +5,14 @@ import { slice } from "./source.ts";
 import ts from "typescript";
 
 const ASYNC_EXPRESSION_RUNES = new Set([
-  "$derived",
-  "$state",
-  "$state.raw",
-  "$state.snapshot",
-  "$bindable",
+	"$derived",
+	"$state",
+	"$state.raw",
+	"$state.snapshot",
+	"$bindable",
 ]);
 
-const CALLBACK_RUNES = new Set([
-  "$derived.by",
-  "$effect",
-  "$effect.pre",
-  "$effect.root",
-]);
+const CALLBACK_RUNES = new Set(["$derived.by", "$effect", "$effect.pre", "$effect.root"]);
 
 /**
  * Validates that `yield*` only appears in rune positions the script-effect
@@ -29,105 +24,82 @@ const CALLBACK_RUNES = new Set([
  * @param filename - Source filename used for diagnostics.
  * @returns Nothing.
  */
-export function validate_rune_yield_usage(
-  node: ts.Node,
-  content: string,
-  filename: string,
-): void {
-  visit_rune_yield_usage(node, content, filename);
+export function validate_rune_yield_usage(node: ts.Node, content: string, filename: string): void {
+	visit_rune_yield_usage(node, content, filename);
 }
 
-function visit_rune_yield_usage(
-  node: ts.Node,
-  content: string,
-  filename: string,
-): void {
-  if (ts.isCallExpression(node)) {
-    validate_call_expression(node, content, filename);
-  }
+function visit_rune_yield_usage(node: ts.Node, content: string, filename: string): void {
+	if (ts.isCallExpression(node)) {
+		validate_call_expression(node, content, filename);
+	}
 
-  node.forEachChild((child) => {
-    visit_rune_yield_usage(child, content, filename);
-  });
+	node.forEachChild((child) => {
+		visit_rune_yield_usage(child, content, filename);
+	});
 }
 
 function validate_call_expression(
-  call: ts.CallExpression,
-  content: string,
-  filename: string,
+	call: ts.CallExpression,
+	content: string,
+	filename: string,
 ): void {
-  const rune_name = get_rune_name(call.expression);
+	const rune_name = get_rune_name(call.expression);
 
-  if (!rune_name) {
-    return;
-  }
+	if (!rune_name) {
+		return;
+	}
 
-  if (
-    !ASYNC_EXPRESSION_RUNES.has(rune_name) &&
-    contains_top_level_yield_star(call)
-  ) {
-    throw new AsyncEffectInSyncRuneError(
-      rune_name,
-      slice(content, call),
-      filename,
-    );
-  }
+	if (!ASYNC_EXPRESSION_RUNES.has(rune_name) && contains_top_level_yield_star(call)) {
+		throw new AsyncEffectInSyncRuneError(rune_name, slice(content, call), filename);
+	}
 
-  if (!CALLBACK_RUNES.has(rune_name)) {
-    return;
-  }
+	if (!CALLBACK_RUNES.has(rune_name)) {
+		return;
+	}
 
-  const callback = call.arguments[0];
+	const callback = call.arguments[0];
 
-  if (!callback || !callback_has_top_level_yield_star(callback)) {
-    return;
-  }
+	if (!callback || !callback_has_top_level_yield_star(callback)) {
+		return;
+	}
 
-  throw new AsyncEffectInSyncRuneError(
-    rune_name,
-    slice(content, call),
-    filename,
-  );
+	throw new AsyncEffectInSyncRuneError(rune_name, slice(content, call), filename);
 }
 
 function callback_has_top_level_yield_star(node: ts.Expression): boolean {
-  if (
-    (ts.isArrowFunction(node) ||
-      ts.isFunctionExpression(node)) &&
-    node.body !== undefined
-  ) {
-    return contains_top_level_yield_star(node.body);
-  }
+	if ((ts.isArrowFunction(node) || ts.isFunctionExpression(node)) && node.body !== undefined) {
+		return contains_top_level_yield_star(node.body);
+	}
 
-  return contains_top_level_yield_star(node);
+	return contains_top_level_yield_star(node);
 }
 
 function get_rune_name(expr: ts.Expression): string | undefined {
-  if (ts.isIdentifier(expr) && is_rune_root(expr.text)) {
-    return expr.text;
-  }
+	if (ts.isIdentifier(expr) && is_rune_root(expr.text)) {
+		return expr.text;
+	}
 
-  if (!ts.isPropertyAccessExpression(expr)) {
-    return undefined;
-  }
+	if (!ts.isPropertyAccessExpression(expr)) {
+		return undefined;
+	}
 
-  const root_name = get_rune_name(expr.expression);
+	const root_name = get_rune_name(expr.expression);
 
-  if (!root_name) {
-    return undefined;
-  }
+	if (!root_name) {
+		return undefined;
+	}
 
-  return `${root_name}.${expr.name.text}`;
+	return `${root_name}.${expr.name.text}`;
 }
 
 function is_rune_root(name: string): boolean {
-  return (
-    name === "$bindable" ||
-    name === "$derived" ||
-    name === "$effect" ||
-    name === "$host" ||
-    name === "$inspect" ||
-    name === "$props" ||
-    name === "$state"
-  );
+	return (
+		name === "$bindable" ||
+		name === "$derived" ||
+		name === "$effect" ||
+		name === "$host" ||
+		name === "$inspect" ||
+		name === "$props" ||
+		name === "$state"
+	);
 }

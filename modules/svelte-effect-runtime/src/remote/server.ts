@@ -6,9 +6,9 @@ import { Cause, Effect, Exit } from "effect";
 import { stringify } from "devalue";
 
 type CauseReason = {
-  readonly _tag: string;
-  readonly defect?: unknown;
-  readonly error?: unknown;
+	readonly _tag: string;
+	readonly defect?: unknown;
+	readonly error?: unknown;
 };
 
 type SvelteInvalid = (...issues: readonly (FormIssue | string)[]) => never;
@@ -16,7 +16,7 @@ type SvelteInvalid = (...issues: readonly (FormIssue | string)[]) => never;
 type SvelteError = (status: number, body: unknown) => never;
 
 const request_event_context_error_start =
-  "Can only read the current request event inside functions invoked during `handle`";
+	"Can only read the current request event inside functions invoked during `handle`";
 
 const request_store_context_error = "Could not get the request store.";
 
@@ -34,24 +34,22 @@ const request_store_context_error = "Could not get the request store.";
  * @internal
  */
 export async function run_remote_effect<A>(
-  effect: Effect.Effect<A, unknown, unknown>,
-  runtime: {
-    runPromise: (
-      e: Effect.Effect<unknown, unknown, unknown>,
-    ) => Promise<unknown>;
-  },
-  invalid: SvelteInvalid,
-  error: SvelteError,
+	effect: Effect.Effect<A, unknown, unknown>,
+	runtime: {
+		runPromise: (e: Effect.Effect<unknown, unknown, unknown>) => Promise<unknown>;
+	},
+	invalid: SvelteInvalid,
+	error: SvelteError,
 ): Promise<A> {
-  const exit: Exit.Exit<A, unknown> = await runtime.runPromise(
-    Effect.exit(effect) as Effect.Effect<unknown, unknown, unknown>,
-  ) as Exit.Exit<A, unknown>;
+	const exit: Exit.Exit<A, unknown> = (await runtime.runPromise(
+		Effect.exit(effect) as Effect.Effect<unknown, unknown, unknown>,
+	)) as Exit.Exit<A, unknown>;
 
-  if (Exit.isSuccess(exit)) {
-    return exit.value;
-  }
+	if (Exit.isSuccess(exit)) {
+		return exit.value;
+	}
 
-  handle_failure(exit.cause, invalid, error);
+	handle_failure(exit.cause, invalid, error);
 }
 
 /**
@@ -60,59 +58,58 @@ export async function run_remote_effect<A>(
  * and throws it via SvelteKit's `error`.
  */
 function handle_failure(
-  cause: Cause.Cause<unknown>,
-  invalid: SvelteInvalid,
-  error: SvelteError,
+	cause: Cause.Cause<unknown>,
+	invalid: SvelteInvalid,
+	error: SvelteError,
 ): never {
-  const reasons = get_cause_reasons(cause);
+	const reasons = get_cause_reasons(cause);
 
-  /**
-   * Phase 1 — let SvelteKit's thrown control-flow sentinels escape.
-   */
-  for (const reason of reasons) {
-    if (!Cause.isDieReason(reason as never)) {
-      continue;
-    }
+	/**
+	 * Phase 1 — let SvelteKit's thrown control-flow sentinels escape.
+	 */
+	for (const reason of reasons) {
+		if (!Cause.isDieReason(reason as never)) {
+			continue;
+		}
 
-    const defect = reason.defect;
+		const defect = reason.defect;
 
-    if (is_sveltekit_control_flow(defect)) {
-      throw defect;
-    }
-  }
+		if (is_sveltekit_control_flow(defect)) {
+			throw defect;
+		}
+	}
 
-  /**
-   * Phase 2 — let cancellation escape without becoming a remote failure.
-   */
-  if (Cause.hasInterruptsOnly(cause)) {
-    throw Cause.squash(cause);
-  }
+	/**
+	 * Phase 2 — let cancellation escape without becoming a remote failure.
+	 */
+	if (Cause.hasInterruptsOnly(cause)) {
+		throw Cause.squash(cause);
+	}
 
-  /**
-   * Phase 3 — preserve typed form validation failures.
-   */
-  for (const reason of reasons) {
-    if (Cause.isFailReason(reason as never)) {
-      const failure = reason.error;
-      if (
-        typeof failure === "object" &&
-        failure !== null &&
-        (failure as Record<string, unknown>)._tag === "FormError"
-      ) {
-        const issues = (failure as { issues?: readonly FormIssue[] }).issues ??
-          [];
-        invalid(...issues);
-      }
-    }
-  }
+	/**
+	 * Phase 3 — preserve typed form validation failures.
+	 */
+	for (const reason of reasons) {
+		if (Cause.isFailReason(reason as never)) {
+			const failure = reason.error;
+			if (
+				typeof failure === "object" &&
+				failure !== null &&
+				(failure as Record<string, unknown>)._tag === "FormError"
+			) {
+				const issues = (failure as { issues?: readonly FormIssue[] }).issues ?? [];
+				invalid(...issues);
+			}
+		}
+	}
 
-  /**
-   * Phase 4 — encode all other failures for the remote client.
-   */
-  const encoded = encode_remote_failure(cause);
-  const envelope = create_serialized_remote_failure_envelope(encoded);
+	/**
+	 * Phase 4 — encode all other failures for the remote client.
+	 */
+	const encoded = encode_remote_failure(cause);
+	const envelope = create_serialized_remote_failure_envelope(encoded);
 
-  error(500, envelope);
+	error(500, envelope);
 }
 
 /**
@@ -125,106 +122,127 @@ function handle_failure(
  * @internal
  */
 export function encode_remote_failure(cause: Cause.Cause<unknown>): string {
-  const reasons = get_cause_reasons(cause);
+	const reasons = get_cause_reasons(cause);
 
-  for (const reason of reasons) {
-    if (Cause.isFailReason(reason as never)) {
-      const failure = reason.error;
+	for (const reason of reasons) {
+		if (Cause.isFailReason(reason as never)) {
+			const failure = to_public_remote_failure(reason.error);
+			const encoded = stringify_failure(failure);
 
-      const encoded = stringify_failure(failure);
+			if (encoded !== undefined) {
+				return encoded;
+			}
+		}
+	}
 
-      if (encoded !== undefined) {
-        return encoded;
-      }
-
-      const serializable_failure = to_serializable_failure(failure);
-      const serializable_encoded = stringify_failure(serializable_failure);
-
-      if (serializable_encoded !== undefined) {
-        return serializable_encoded;
-      }
-    }
-  }
-
-  return stringify({ message: "[UNKNOWN_REMOTE_FAILURE]: Unknown error" });
+	return stringify_unknown_remote_failure();
 }
 
-function get_cause_reasons(
-  cause: Cause.Cause<unknown>,
-): readonly CauseReason[] {
-  const reasons = (cause as unknown as { reasons?: readonly CauseReason[] })
-    .reasons;
+function get_cause_reasons(cause: Cause.Cause<unknown>): readonly CauseReason[] {
+	const reasons = (cause as unknown as { reasons?: readonly CauseReason[] }).reasons;
 
-  return reasons ?? [];
+	return reasons ?? [];
 }
 
 function is_sveltekit_control_flow(value: unknown): boolean {
-  return isRedirect(value) || isHttpError(value) || isValidationError(value);
+	return isRedirect(value) || isHttpError(value) || isValidationError(value);
 }
 
 function stringify_failure(value: unknown): string | undefined {
-  try {
-    return stringify(value);
-  } catch {
-    return undefined;
-  }
+	try {
+		return stringify(value);
+	} catch {
+		return undefined;
+	}
 }
 
-function to_serializable_failure(
-  value: unknown,
-  seen = new WeakSet<object>(),
-): unknown {
-  if (typeof value === "function" || typeof value === "symbol") {
-    return undefined;
-  }
+function to_public_remote_failure(value: unknown): unknown {
+	if (!has_public_remote_failure_tag(value)) {
+		return create_unknown_remote_failure();
+	}
 
-  if (!is_object_like(value)) {
-    return value;
-  }
+	const serializable_failure = to_serializable_public_failure(value);
 
-  if (stringify_failure(value) !== undefined) {
-    return value;
-  }
-
-  if (seen.has(value)) {
-    return undefined;
-  }
-
-  seen.add(value);
-
-  const serializable = Array.isArray(value)
-    ? value.map((item) => to_serializable_failure(item, seen))
-    : to_plain_record(value, seen);
-
-  seen.delete(value);
-
-  return serializable;
+	return serializable_failure ?? create_unknown_remote_failure();
 }
 
-function to_plain_record(
-  value: object,
-  seen: WeakSet<object>,
-): Record<string, unknown> {
-  const descriptors = Object.getOwnPropertyDescriptors(value);
-  const record: Record<string, unknown> = {};
+function to_serializable_public_failure(value: unknown, seen = new WeakSet<object>()): unknown {
+	if (typeof value === "function" || typeof value === "symbol") {
+		return undefined;
+	}
 
-  for (const [key, descriptor] of Object.entries(descriptors)) {
-    if (key === "stack" || !("value" in descriptor)) {
-      continue;
-    }
+	if (!is_object_like(value)) {
+		return value;
+	}
 
-    record[key] = to_serializable_failure(descriptor.value, seen);
-  }
+	if (stringify_failure(value) !== undefined) {
+		return value;
+	}
 
-  if (value instanceof Error && !("message" in record)) {
-    record.message = value.message;
-  }
+	if (is_internal_object(value)) {
+		return undefined;
+	}
 
-  return record;
+	if (seen.has(value)) {
+		return undefined;
+	}
+
+	seen.add(value);
+
+	const serializable = Array.isArray(value)
+		? value.map((item) => to_serializable_public_failure(item, seen))
+		: to_plain_record(value, seen);
+
+	seen.delete(value);
+
+	return serializable;
+}
+
+function to_plain_record(value: object, seen: WeakSet<object>): Record<string, unknown> {
+	const descriptors = Object.getOwnPropertyDescriptors(value);
+	const record: Record<string, unknown> = {};
+
+	for (const [key, descriptor] of Object.entries(descriptors)) {
+		if (key === "stack" || !("value" in descriptor)) {
+			continue;
+		}
+
+		record[key] = to_serializable_public_failure(descriptor.value, seen);
+	}
+
+	if (value instanceof Error && !("message" in record)) {
+		record.message = value.message;
+	}
+
+	return record;
 }
 
 function is_object_like(value: unknown): value is object {
-  return typeof value === "object" && value !== null;
+	return typeof value === "object" && value !== null;
+}
+
+function has_public_remote_failure_tag(value: unknown): boolean {
+	return is_object_like(value) && typeof (value as { _tag?: unknown })._tag === "string";
+}
+
+function is_internal_object(value: object): boolean {
+	return (
+		!Array.isArray(value) && !is_plain_record(value) && !has_public_remote_failure_tag(value)
+	);
+}
+
+function is_plain_record(value: object): boolean {
+	const prototype = Object.getPrototypeOf(value);
+
+	return prototype === Object.prototype || prototype === null;
+}
+
+function create_unknown_remote_failure(): { readonly message: string } {
+	return { message: "[UNKNOWN_REMOTE_FAILURE]: Unknown error" };
+}
+
+function stringify_unknown_remote_failure(): string {
+	return stringify(create_unknown_remote_failure());
 }
 
 /**
@@ -244,11 +262,8 @@ function is_object_like(value: unknown): value is object {
  * @param invalid - SvelteKit's `invalid` helper bound to the current request.
  * @internal
  */
-export function throw_form_error(
-  issues: readonly FormIssue[],
-  invalid: SvelteInvalid,
-): never {
-  invalid(...issues);
+export function throw_form_error(issues: readonly FormIssue[], invalid: SvelteInvalid): never {
+	invalid(...issues);
 }
 
 /**
@@ -270,22 +285,21 @@ export function throw_form_error(
  * @returns A more descriptive error.
  * @internal
  */
-export function normalize_remote_helper_error(
-  err: unknown,
-  helper_name: string,
-): Error {
-  if (is_sveltekit_remote_context_error(err)) {
-    return new RemoteHelperContextError(helper_name);
-  }
+export function normalize_remote_helper_error(err: unknown, helper_name: string): Error {
+	if (is_sveltekit_remote_context_error(err)) {
+		return new RemoteHelperContextError(helper_name);
+	}
 
-  return err instanceof Error ? err : new RemoteHelperError(err);
+	return err instanceof Error ? err : new RemoteHelperError(err);
 }
 
 function is_sveltekit_remote_context_error(err: unknown): err is Error {
-  if (!(err instanceof Error)) {
-    return false;
-  }
+	if (!(err instanceof Error)) {
+		return false;
+	}
 
-  return err.message.startsWith(request_event_context_error_start) ||
-    err.message === request_store_context_error;
+	return (
+		err.message.startsWith(request_event_context_error_start) ||
+		err.message === request_store_context_error
+	);
 }

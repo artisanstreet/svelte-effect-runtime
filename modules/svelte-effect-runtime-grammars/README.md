@@ -15,18 +15,18 @@ The npm package also publishes raw grammar assets as package subpaths:
 From the repository root:
 
 ```sh
-cd modules/svelte-effect-runtime-grammars
-deno task build
-npm publish --access public
+corepack pnpm run build:grammars
+vp node build/pack.ts svelte-effect-runtime-grammars
+corepack pnpm publish .dist/svelte-effect-runtime-grammars/*.tgz --access public --provenance --no-git-checks
 ```
 
 For a publish rehearsal:
 
 ```sh
-cd modules/svelte-effect-runtime-grammars
-deno task build
-npm publish --access public --dry-run
+corepack pnpm run build:grammars
+vp node build/pack.ts svelte-effect-runtime-grammars
+corepack pnpm publish .dist/svelte-effect-runtime-grammars/*.tgz --access public --dry-run --no-git-checks
 ```
 
-Run `npm login` first. If npm asks for an OTP, pass it with
-`npm publish --access public --otp 123456`.
+Run `corepack pnpm login` first. If npm asks for an OTP, pass it with
+`--otp 123456`.

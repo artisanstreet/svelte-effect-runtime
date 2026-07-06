@@ -1,940 +1,903 @@
-import { assertEquals, assertRejects, assertThrows } from "@std/assert";
+import { test } from "vitest";
+import { assert_equals, assert_throws, assert_rejects } from "./helpers/assert.ts";
 import { isRedirect, redirect as svelte_redirect } from "@sveltejs/kit";
 import { Effect } from "effect";
 import { stringify } from "devalue";
 import {
-  create_remote_command_adapter,
-  create_remote_form_adapter,
-  create_remote_live_query_adapter,
-  create_remote_query_adapter,
+	create_remote_command_adapter,
+	create_remote_form_adapter,
+	create_remote_live_query_adapter,
+	create_remote_query_adapter,
 } from "../../../modules/svelte-effect-runtime/src/remote/client.ts";
 import { to_form_data } from "../../../modules/svelte-effect-runtime/src/remote/client/form-data.ts";
 import { normalize_native_error } from "../../../modules/svelte-effect-runtime/src/remote/client/failures.ts";
 import { create_serialized_remote_failure_envelope } from "../../../modules/svelte-effect-runtime/src/remote/shared.ts";
 import { reset_dispatcher } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
 
-Deno.test("remote query adapter preserves decoded domain failures", async () => {
-  const domain_error = { _tag: "DomainError", message: "nope" };
-  const native = {
-    load: () =>
-      Promise.resolve(
-        new Response(
-          JSON.stringify(
-            create_serialized_remote_failure_envelope(stringify(domain_error)),
-          ),
-          { status: 500 },
-        ),
-      ),
-  };
+test("remote query adapter preserves decoded domain failures", async () => {
+	const domain_error = { _tag: "DomainError", message: "nope" };
+	const native = {
+		load: () =>
+			Promise.resolve(
+				new Response(
+					JSON.stringify(
+						create_serialized_remote_failure_envelope(stringify(domain_error)),
+					),
+					{ status: 500 },
+				),
+			),
+	};
 
-  const query = create_remote_query_adapter(native, (value) => value, "");
+	const query = create_remote_query_adapter(native, (value) => value, "");
 
-  const error = await assertRejects(() => Effect.runPromise(query(undefined)));
+	const error = await assert_rejects(() => Effect.runPromise(query(undefined)));
 
-  assertEquals(error, domain_error);
+	assert_equals(error, domain_error);
 });
 
-Deno.test("remote failure decoder unwraps SvelteKit message envelopes", () => {
-  const domain_error = { _tag: "DomainError", message: "nope" };
-  const envelope = create_serialized_remote_failure_envelope(
-    stringify(domain_error),
-  );
-  const error = normalize_native_error({
-    body: { message: JSON.stringify(envelope) },
-    status: 500,
-  });
+test("remote failure decoder unwraps SvelteKit message envelopes", () => {
+	const domain_error = { _tag: "DomainError", message: "nope" };
+	const envelope = create_serialized_remote_failure_envelope(stringify(domain_error));
+	const error = normalize_native_error({
+		body: { message: JSON.stringify(envelope) },
+		status: 500,
+	});
 
-  assertEquals(error, domain_error);
+	assert_equals(error, domain_error);
 });
 
-Deno.test("remote failure decoder keeps envelopes with plain messages", () => {
-  const domain_error = { _tag: "DomainError", message: "nope" };
-  const envelope = {
-    ...create_serialized_remote_failure_envelope(stringify(domain_error)),
-    message: "Unknown Error",
-  };
-  const error = normalize_native_error({
-    body: envelope,
-    status: 500,
-  });
+test("remote failure decoder keeps envelopes with plain messages", () => {
+	const domain_error = { _tag: "DomainError", message: "nope" };
+	const envelope = {
+		...create_serialized_remote_failure_envelope(stringify(domain_error)),
+		message: "Unknown Error",
+	};
+	const error = normalize_native_error({
+		body: envelope,
+		status: 500,
+	});
 
-  assertEquals(error, domain_error);
+	assert_equals(error, domain_error);
 });
 
-Deno.test("native SvelteKit validation errors stay HTTP errors", () => {
-  const body = {
-    message: "Bad Request",
-    issues: [{ message: "missing", path: ["title"] }],
-  };
-  const error = normalize_native_error({
-    body,
-    status: 400,
-  });
+test("native SvelteKit validation errors stay HTTP errors", () => {
+	const body = {
+		message: "Bad Request",
+		issues: [{ message: "missing", path: ["title"] }],
+	};
+	const error = normalize_native_error({
+		body,
+		status: 400,
+	});
 
-  assertEquals((error as { _tag?: string })._tag, "RemoteHttpError");
-  assertEquals((error as { status?: number }).status, 400);
-  assertEquals((error as { body?: unknown }).body, body);
+	assert_equals((error as { _tag?: string })._tag, "RemoteHttpError");
+	assert_equals((error as { status?: number }).status, 400);
+	assert_equals((error as { body?: unknown }).body, body);
 });
 
-Deno.test("remote query adapter wraps network failures as transport errors", async () => {
-  const native = {
-    load: () => Promise.reject(new Error("network")),
-  };
+test("remote query adapter wraps network failures as transport errors", async () => {
+	const native = {
+		load: () => Promise.reject(new Error("network")),
+	};
 
-  const query = create_remote_query_adapter(native, (value) => value, "");
+	const query = create_remote_query_adapter(native, (value) => value, "");
 
-  const error = await assertRejects(() => Effect.runPromise(query(undefined)));
+	const error = await assert_rejects(() => Effect.runPromise(query(undefined)));
 
-  assertEquals((error as { _tag?: string })._tag, "RemoteTransportError");
+	assert_equals((error as { _tag?: string })._tag, "RemoteTransportError");
 });
 
-Deno.test("remote query adapter prefers callable query over hydratable load", async () => {
-  let called_query = false;
-  let called_load = false;
+test("remote query adapter prefers callable query over hydratable load", async () => {
+	let called_query = false;
+	let called_load = false;
 
-  const native = Object.assign(
-    (_input: undefined) => {
-      called_query = true;
+	const native = Object.assign(
+		(_input: undefined) => {
+			called_query = true;
 
-      return Promise.resolve({ source: "query" });
-    },
-    {
-      load: () => {
-        called_load = true;
+			return Promise.resolve({ source: "query" });
+		},
+		{
+			load: () => {
+				called_load = true;
 
-        throw new Error("missing hydratable");
-      },
-    },
-  );
+				throw new Error("missing hydratable");
+			},
+		},
+	);
 
-  const query = create_remote_query_adapter<
-    undefined,
-    { source: string }
-  >(native, (value) => value, "");
+	const query = create_remote_query_adapter<undefined, { source: string }>(
+		native,
+		(value) => value,
+		"",
+	);
 
-  const result = await Effect.runPromise(query(undefined));
+	const result = await Effect.runPromise(query(undefined));
 
-  assertEquals(result, { source: "query" });
-  assertEquals(called_query, true);
-  assertEquals(called_load, false);
+	assert_equals(result, { source: "query" });
+	assert_equals(called_query, true);
+	assert_equals(called_load, false);
 });
 
-Deno.test("remote query adapter awaits modern thenable resources before legacy run handles", async () => {
-  let run_called = false;
+test("remote query adapter awaits modern thenable resources before legacy run handles", async () => {
+	let run_called = false;
 
-  const native = () => {
-    const resource = Promise.resolve("ready") as Promise<string> & {
-      run: () => never;
-    };
+	const native = () => {
+		const resource = Promise.resolve("ready") as Promise<string> & {
+			run: () => never;
+		};
 
-    Object.defineProperty(resource, "run", {
-      value: () => {
-        run_called = true;
+		Object.defineProperty(resource, "run", {
+			value: () => {
+				run_called = true;
 
-        throw new Error("run removed");
-      },
-    });
+				throw new Error("run removed");
+			},
+		});
 
-    return resource;
-  };
+		return resource;
+	};
 
-  const query = create_remote_query_adapter<undefined, string>(
-    native,
-    (value) => value,
-    "",
-  );
+	const query = create_remote_query_adapter<undefined, string>(native, (value) => value, "");
 
-  const result = await Effect.runPromise(query(undefined));
+	const result = await Effect.runPromise(query(undefined));
 
-  assertEquals(result, "ready");
-  assertEquals(run_called, false);
+	assert_equals(result, "ready");
+	assert_equals(run_called, false);
 });
 
-Deno.test("remote query adapter maps SvelteKit app errors to HTTP errors", async () => {
-  const body = {
-    message: "Bad Request",
-    issues: [{ message: "missing", path: ["title"] }],
-  };
-  const native = {
-    load: () =>
-      Promise.resolve(
-        new Response(
-          JSON.stringify(body),
-          { status: 400 },
-        ),
-      ),
-  };
+test("remote query adapter maps SvelteKit app errors to HTTP errors", async () => {
+	const body = {
+		message: "Bad Request",
+		issues: [{ message: "missing", path: ["title"] }],
+	};
+	const native = {
+		load: () => Promise.resolve(new Response(JSON.stringify(body), { status: 400 })),
+	};
 
-  const query = create_remote_query_adapter(native, (value) => value, "");
+	const query = create_remote_query_adapter(native, (value) => value, "");
 
-  const error = await assertRejects(() => Effect.runPromise(query(undefined)));
+	const error = await assert_rejects(() => Effect.runPromise(query(undefined)));
 
-  assertEquals((error as { _tag?: string })._tag, "RemoteHttpError");
-  assertEquals((error as { status?: number }).status, 400);
-  assertEquals((error as { body?: unknown }).body, body);
+	assert_equals((error as { _tag?: string })._tag, "RemoteHttpError");
+	assert_equals((error as { status?: number }).status, 400);
+	assert_equals((error as { body?: unknown }).body, body);
 });
 
-Deno.test("remote query adapter maps plain http failures to http errors", async () => {
-  const native = {
-    load: () =>
-      Promise.resolve(
-        new Response(
-          JSON.stringify({ message: "not found" }),
-          { status: 404 },
-        ),
-      ),
-  };
+test("remote query adapter maps plain http failures to http errors", async () => {
+	const native = {
+		load: () =>
+			Promise.resolve(
+				new Response(JSON.stringify({ message: "not found" }), { status: 404 }),
+			),
+	};
 
-  const query = create_remote_query_adapter(native, (value) => value, "");
+	const query = create_remote_query_adapter(native, (value) => value, "");
 
-  const error = await assertRejects(() => Effect.runPromise(query(undefined)));
+	const error = await assert_rejects(() => Effect.runPromise(query(undefined)));
 
-  assertEquals((error as { _tag?: string })._tag, "RemoteHttpError");
-  assertEquals((error as { status?: number }).status, 404);
+	assert_equals((error as { _tag?: string })._tag, "RemoteHttpError");
+	assert_equals((error as { status?: number }).status, 404);
 });
 
-Deno.test("remote query adapter exposes http failures on the Effect error channel", async () => {
-  const native = {
-    load: () =>
-      Promise.resolve(
-        new Response(
-          JSON.stringify({ message: "not found" }),
-          { status: 404 },
-        ),
-      ),
-  };
+test("remote query adapter exposes http failures on the Effect error channel", async () => {
+	const native = {
+		load: () =>
+			Promise.resolve(
+				new Response(JSON.stringify({ message: "not found" }), { status: 404 }),
+			),
+	};
 
-  const query = create_remote_query_adapter(native, (value) => value, "");
-  const result = await Effect.runPromise(
-    query(undefined).pipe(
-      Effect.catchTag(
-        "RemoteHttpError",
-        (error) => Effect.succeed(error.status),
-      ),
-    ),
-  );
+	const query = create_remote_query_adapter(native, (value) => value, "");
+	const result = await Effect.runPromise(
+		query(undefined).pipe(
+			Effect.catchTag("RemoteHttpError", (error) => Effect.succeed(error.status)),
+		),
+	);
 
-  assertEquals(result, 404);
+	assert_equals(result, 404);
 });
 
-Deno.test("remote query adapter preserves SvelteKit redirects as control flow", async () => {
-  const native = () =>
-    Promise.resolve().then(() => svelte_redirect(303, "/oauth"));
+test("remote query adapter preserves SvelteKit redirects as control flow", async () => {
+	const native = () => Promise.resolve().then(() => svelte_redirect(303, "/oauth"));
 
-  const query = create_remote_query_adapter<undefined, never>(
-    native,
-    (value) => value,
-    "",
-  );
+	const query = create_remote_query_adapter<undefined, never>(native, (value) => value, "");
 
-  const error = await assertRejects(() => Effect.runPromise(query(undefined)));
+	const error = await assert_rejects(() => Effect.runPromise(query(undefined)));
 
-  assertEquals(isRedirect(error), true);
-  assertEquals((error as { status?: number }).status, 303);
-  assertEquals((error as { location?: string }).location, "/oauth");
+	assert_equals(isRedirect(error), true);
+	assert_equals((error as { status?: number }).status, 303);
+	assert_equals((error as { location?: string }).location, "/oauth");
 });
 
-Deno.test("remote query adapter preserves resource state and methods", async () => {
-  let refresh_called = false;
-  let override_called = false;
-  let set_value = 0;
+test("remote query adapter preserves resource state and methods", async () => {
+	let refresh_called = false;
+	let override_called = false;
+	let set_value = 0;
 
-  const native = () => {
-    const resource = Promise.resolve(1) as Promise<number> & {
-      current: number;
-      error: unknown;
-      loading: boolean;
-      ready: boolean;
-      refresh: () => Promise<void>;
-      set: (value: number) => void;
-      withOverride: (update: (current: number) => number) => () => void;
-    };
+	const native = () => {
+		const resource = Promise.resolve(1) as Promise<number> & {
+			current: number;
+			error: unknown;
+			loading: boolean;
+			ready: boolean;
+			refresh: () => Promise<void>;
+			set: (value: number) => void;
+			withOverride: (update: (current: number) => number) => () => void;
+		};
 
-    Object.defineProperties(resource, {
-      current: { get: () => 1 },
-      error: { get: () => undefined },
-      loading: { get: () => false },
-      ready: { get: () => true },
-      refresh: {
-        value: () => {
-          refresh_called = true;
+		Object.defineProperties(resource, {
+			current: { get: () => 1 },
+			error: { get: () => undefined },
+			loading: { get: () => false },
+			ready: { get: () => true },
+			refresh: {
+				value: () => {
+					refresh_called = true;
 
-          return Promise.resolve();
-        },
-      },
-      set: {
-        value: (value: number) => {
-          set_value = value;
-        },
-      },
-      withOverride: {
-        value: (update: (current: number) => number) => {
-          override_called = update(1) === 2;
+					return Promise.resolve();
+				},
+			},
+			set: {
+				value: (value: number) => {
+					set_value = value;
+				},
+			},
+			withOverride: {
+				value: (update: (current: number) => number) => {
+					override_called = update(1) === 2;
 
-          return () => {};
-        },
-      },
-    });
+					return () => {};
+				},
+			},
+		});
 
-    return resource;
-  };
+		return resource;
+	};
 
-  const query = create_remote_query_adapter<undefined, number>(
-    native,
-    (value) => value,
-    "",
-  )(undefined);
+	const query = create_remote_query_adapter<undefined, number>(
+		native,
+		(value) => value,
+		"",
+	)(undefined);
 
-  assertEquals(query.current, 1);
-  assertEquals(query.loading, false);
-  assertEquals(query.ready, true);
-  assertEquals(Effect.isEffect(query.refresh()), true);
+	assert_equals(query.current, 1);
+	assert_equals(query.loading, false);
+	assert_equals(query.ready, true);
+	assert_equals(Effect.isEffect(query.refresh()), true);
 
-  query.set(7);
-  query.withOverride((current) => current + 1);
+	query.set(7);
+	query.withOverride((current) => current + 1);
 
-  await Effect.runPromise(query.refresh());
-  const result = await Effect.runPromise(query);
+	await Effect.runPromise(query.refresh());
+	const result = await Effect.runPromise(query);
 
-  assertEquals(result, 1);
-  assertEquals(refresh_called, true);
-  assertEquals(set_value, 7);
-  assertEquals(override_called, true);
+	assert_equals(result, 1);
+	assert_equals(refresh_called, true);
+	assert_equals(set_value, 7);
+	assert_equals(override_called, true);
 });
 
-Deno.test("remote live query adapter preserves state and wraps reconnect", async () => {
-  let reconnect_called = false;
+test("remote live query adapter preserves state and wraps reconnect", async () => {
+	let reconnect_called = false;
 
-  const native = () => {
-    const resource = Promise.resolve("first") as Promise<string> & {
-      connected: boolean;
-      current: string;
-      done: boolean;
-      error: unknown;
-      loading: boolean;
-      ready: boolean;
-      reconnect: () => Promise<void>;
-      [Symbol.asyncIterator]: () => AsyncIterator<string>;
-    };
+	const native = () => {
+		const resource = Promise.resolve("first") as Promise<string> & {
+			connected: boolean;
+			current: string;
+			done: boolean;
+			error: unknown;
+			loading: boolean;
+			ready: boolean;
+			reconnect: () => Promise<void>;
+			[Symbol.asyncIterator]: () => AsyncIterator<string>;
+		};
 
-    Object.defineProperties(resource, {
-      [Symbol.asyncIterator]: {
-        value: async function* () {
-          yield "first";
-          yield "second";
-        },
-      },
-      connected: { get: () => true },
-      current: { get: () => "first" },
-      done: { get: () => false },
-      error: { get: () => undefined },
-      loading: { get: () => false },
-      ready: { get: () => true },
-      reconnect: {
-        value: () => {
-          reconnect_called = true;
+		Object.defineProperties(resource, {
+			[Symbol.asyncIterator]: {
+				value: async function* () {
+					yield "first";
+					yield "second";
+				},
+			},
+			connected: { get: () => true },
+			current: { get: () => "first" },
+			done: { get: () => false },
+			error: { get: () => undefined },
+			loading: { get: () => false },
+			ready: { get: () => true },
+			reconnect: {
+				value: () => {
+					reconnect_called = true;
 
-          return Promise.resolve();
-        },
-      },
-    });
+					return Promise.resolve();
+				},
+			},
+		});
 
-    return resource;
-  };
+		return resource;
+	};
 
-  const query_effect = create_remote_live_query_adapter<undefined, string>(
-    native,
-    (value) => value,
-    "",
-  )(undefined);
-  const query = await Effect.runPromise(query_effect);
+	const query_effect = create_remote_live_query_adapter<undefined, string>(
+		native,
+		(value) => value,
+		"",
+	)(undefined);
+	const query = await Effect.runPromise(query_effect);
 
-  const values: string[] = [];
+	const values: string[] = [];
 
-  for await (const value of query) {
-    values.push(value);
-  }
+	for await (const value of query) {
+		values.push(value);
+	}
 
-  assertEquals(query.connected, true);
-  assertEquals(query.current, "first");
-  assertEquals(query.done, false);
-  assertEquals(query.ready, true);
-  assertEquals(Effect.isEffect(query.reconnect()), true);
-  assertEquals(values, ["first", "second"]);
+	assert_equals(query.connected, true);
+	assert_equals(query.current, "first");
+	assert_equals(query.done, false);
+	assert_equals(query.ready, true);
+	assert_equals(Effect.isEffect(query.reconnect()), true);
+	assert_equals(values, ["first", "second"]);
 
-  await Effect.runPromise(query.reconnect());
+	await Effect.runPromise(query.reconnect());
 
-  assertEquals(reconnect_called, true);
+	assert_equals(reconnect_called, true);
 });
 
-Deno.test("remote command adapter resolves callable responses and tracks pending", async () => {
-  let release: (() => void) | undefined;
-  let pending_while_running = 0;
+test("remote command adapter resolves callable responses and tracks pending", async () => {
+	let release: (() => void) | undefined;
+	let pending_while_running = 0;
 
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
+	const gate = new Promise<void>((resolve) => {
+		release = resolve;
+	});
 
-  const native = async (input: { title: string }) => {
-    pending_while_running = command.pending;
+	const native = async (input: { title: string }) => {
+		pending_while_running = command.pending;
 
-    await gate;
+		await gate;
 
-    return new Response(JSON.stringify({ ok: input.title }));
-  };
+		return new Response(JSON.stringify({ ok: input.title }));
+	};
 
-  const command = create_remote_command_adapter(native, (value) => value);
+	const command = create_remote_command_adapter(native, (value) => value);
 
-  const promise = Effect.runPromise(command({ title: "publish" }));
+	const promise = Effect.runPromise(command({ title: "publish" }));
 
-  await new Promise((resolve) => setTimeout(resolve, 0));
+	await new Promise((resolve) => setTimeout(resolve, 0));
 
-  assertEquals(command.pending, 1);
-  assertEquals(pending_while_running, 1);
+	assert_equals(command.pending, 1);
+	assert_equals(pending_while_running, 1);
 
-  release?.();
+	release?.();
 
-  const result = await promise;
+	const result = await promise;
 
-  assertEquals(result, { ok: "publish" });
-  assertEquals(command.pending, 0);
+	assert_equals(result, { ok: "publish" });
+	assert_equals(command.pending, 0);
 });
 
-Deno.test("remote command adapter decodes empty successful responses", async () => {
-  const native = () => Promise.resolve(new Response(null, { status: 204 }));
-  const command = create_remote_command_adapter<void, void>(
-    native,
-    (value) => value,
-  );
+test("remote command adapter decodes empty successful responses", async () => {
+	const native = () => Promise.resolve(new Response(null, { status: 204 }));
+	const command = create_remote_command_adapter<void, void>(native, (value) => value);
 
-  const result = await Effect.runPromise(command(undefined));
+	const result = await Effect.runPromise(command(undefined));
 
-  assertEquals(result, undefined);
+	assert_equals(result, undefined);
 });
 
-Deno.test("remote command adapter supports invoke objects and rejects invalid factories", async () => {
-  const native = {
-    invoke(input: { id: number }) {
-      return Promise.resolve({ id: input.id, source: "invoke" });
-    },
-  };
+test("remote command adapter supports invoke objects and rejects invalid factories", async () => {
+	const native = {
+		invoke(input: { id: number }) {
+			return Promise.resolve({ id: input.id, source: "invoke" });
+		},
+	};
 
-  const command = create_remote_command_adapter<
-    { id: number },
-    { id: number; source: string }
-  >(native, (value) => value);
+	const command = create_remote_command_adapter<{ id: number }, { id: number; source: string }>(
+		native,
+		(value) => value,
+	);
 
-  const result = await Effect.runPromise(command({ id: 7 }));
+	const result = await Effect.runPromise(command({ id: 7 }));
 
-  assertEquals(result, { id: 7, source: "invoke" });
-  assertThrows(
-    () => {
-      create_remote_command_adapter({}, (value) => value);
-    },
-    Error,
-    "Invalid command factory",
-  );
+	assert_equals(result, { id: 7, source: "invoke" });
+	assert_throws(
+		() => {
+			create_remote_command_adapter({}, (value) => value);
+		},
+		Error,
+		"Invalid command factory",
+	);
 });
 
-Deno.test("remote form data encodes nested scalar, array, blob, and empty values", () => {
-  const blob = new Blob(["avatar"]);
-  const form_data = to_form_data({
-    active: true,
-    avatar: blob,
-    count: 2,
-    draft: false,
-    nested: {
-      missing: undefined,
-      nil: null,
-    },
-    tags: ["svelte", "effect"],
-    title: "Hello",
-  });
+test("remote form data encodes nested scalar, array, blob, and empty values", () => {
+	const blob = new Blob(["avatar"]);
+	const form_data = to_form_data({
+		active: true,
+		avatar: blob,
+		count: 2,
+		draft: false,
+		nested: {
+			missing: undefined,
+			nil: null,
+		},
+		tags: ["svelte", "effect"],
+		title: "Hello",
+	});
 
-  assertEquals(form_data.get("title"), "Hello");
-  assertEquals(form_data.get("n:count"), "2");
-  assertEquals(form_data.get("b:active"), "on");
-  assertEquals(form_data.has("b:draft"), false);
-  assertEquals(form_data.getAll("tags[]"), ["svelte", "effect"]);
-  assertEquals(form_data.get("nested.nil"), "");
-  assertEquals(form_data.has("nested.missing"), false);
-  assertEquals(form_data.get("avatar") instanceof Blob, true);
+	assert_equals(form_data.get("title"), "Hello");
+	assert_equals(form_data.get("n:count"), "2");
+	assert_equals(form_data.get("b:active"), "on");
+	assert_equals(form_data.has("b:draft"), false);
+	assert_equals(form_data.getAll("tags[]"), ["svelte", "effect"]);
+	assert_equals(form_data.get("nested.nil"), "");
+	assert_equals(form_data.has("nested.missing"), false);
+	assert_equals(form_data.get("avatar") instanceof Blob, true);
 });
 
-Deno.test("remote form adapter preserves descriptors and wraps validate in an Effect", async () => {
-  const attach = Symbol("attach");
-  let validate_called = false;
+test("remote form adapter preserves descriptors and wraps validate in an Effect", async () => {
+	const attach = Symbol("attach");
+	let validate_called = false;
 
-  const native: Record<PropertyKey, unknown> = {
-    method: "POST",
-    action: "?/remote=abc%2Fcreate",
-  };
+	const native: Record<PropertyKey, unknown> = {
+		method: "POST",
+		action: "?/remote=abc%2Fcreate",
+	};
 
-  Object.defineProperty(native, "enhance", {
-    value: () => ({ method: "POST", [attach]: "attached" }),
-  });
+	Object.defineProperty(native, "enhance", {
+		value: () => ({ method: "POST", [attach]: "attached" }),
+	});
 
-  Object.defineProperty(native, "validate", {
-    value: () => {
-      validate_called = true;
-      return Promise.resolve();
-    },
-  });
+	Object.defineProperty(native, "validate", {
+		value: () => {
+			validate_called = true;
+			return Promise.resolve();
+		},
+	});
 
-  Object.defineProperty(native, attach, {
-    enumerable: false,
-    value: "root-attachment",
-  });
+	Object.defineProperty(native, attach, {
+		enumerable: false,
+		value: "root-attachment",
+	});
 
-  const form = create_remote_form_adapter(native, (value) => value, "");
+	const form = create_remote_form_adapter(native, (value) => value, "");
 
-  assertEquals(Reflect.ownKeys(form).includes(attach), true);
-  assertEquals(typeof form.enhance, "function");
-  assertEquals(form.method, "POST");
-  assertEquals(form.action, "?/remote=abc%2Fcreate");
+	assert_equals(Reflect.ownKeys(form).includes(attach), true);
+	assert_equals(typeof form.enhance, "function");
+	assert_equals(form.method, "POST");
+	assert_equals(form.action, "?/remote=abc%2Fcreate");
 
-  await Effect.runPromise(form.validate());
+	await Effect.runPromise(form.validate());
 
-  assertEquals(validate_called, true);
+	assert_equals(validate_called, true);
 });
 
-Deno.test("remote form adapter posts explicit input when native submit is form-bound", async () => {
-  const original_fetch = globalThis.fetch;
+test("remote form adapter posts explicit input when native submit is form-bound", async () => {
+	const original_fetch = globalThis.fetch;
 
-  let native_submit_called = false;
-  let requested_url = "";
-  let posted_title: FormDataEntryValue | null = null;
+	let native_submit_called = false;
+	let requested_url = "";
+	let posted_title: FormDataEntryValue | null = null;
 
-  const native = {
-    method: "POST",
-    action: "?/remote=abc%2Fcreate",
-    submit() {
-      native_submit_called = true;
-      throw new Error("Cannot call submit() before the form is attached");
-    },
-  };
+	const native = {
+		method: "POST",
+		action: "?/remote=abc%2Fcreate",
+		submit() {
+			native_submit_called = true;
+			throw new Error("Cannot call submit() before the form is attached");
+		},
+	};
 
-  globalThis.fetch = ((url: string | URL | Request, init?: RequestInit) => {
-    requested_url = String(url);
-    posted_title = (init?.body as FormData).get("title");
+	globalThis.fetch = ((url: string | URL | Request, init?: RequestInit) => {
+		const body = init?.body as FormData;
 
-    return Promise.resolve(
-      new Response(
-        JSON.stringify({
-          type: "result",
-          result: stringify({ result: { ok: true } }),
-        }),
-      ),
-    );
-  }) as typeof fetch;
+		requested_url = String(url);
+		posted_title = body.get("title");
 
-  try {
-    const form = create_remote_form_adapter<
-      { title: string },
-      { ok: boolean }
-    >(native, (value) => value, "/_app/remote");
+		return Promise.resolve(
+			new Response(
+				JSON.stringify({
+					type: "result",
+					result: stringify({ result: { ok: true } }),
+				}),
+			),
+		);
+	}) as typeof fetch;
 
-    const result = await Effect.runPromise(form({ title: "hello" }));
+	try {
+		const form = create_remote_form_adapter<{ title: string }, { ok: boolean }>(
+			native,
+			(value) => value,
+			"/_app/remote",
+		);
 
-    assertEquals(result, { ok: true });
-    assertEquals(native_submit_called, false);
-    assertEquals(requested_url, "/_app/remote/abc/create");
-    assertEquals(posted_title, "hello");
-  } finally {
-    globalThis.fetch = original_fetch;
-  }
+		const result = await Effect.runPromise(form({ title: "hello" }));
+
+		assert_equals(result, { ok: true });
+		assert_equals(native_submit_called, false);
+		assert_equals(requested_url, "/_app/remote/abc/create");
+		assert_equals(posted_title, "hello");
+	} finally {
+		globalThis.fetch = original_fetch;
+	}
 });
 
-Deno.test("remote form adapter decodes SvelteKit data result envelopes", async () => {
-  const original_fetch = globalThis.fetch;
+test("remote form adapter decodes SvelteKit data result envelopes", async () => {
+	const original_fetch = globalThis.fetch;
 
-  globalThis.fetch = (() =>
-    Promise.resolve(
-      new Response(
-        JSON.stringify({
-          type: "result",
-          data: stringify({ result: { ok: true } }),
-        }),
-      ),
-    )) as typeof fetch;
+	globalThis.fetch = (() =>
+		Promise.resolve(
+			new Response(
+				JSON.stringify({
+					type: "result",
+					data: stringify({ result: { ok: true } }),
+				}),
+			),
+		)) as typeof fetch;
 
-  try {
-    const form = create_remote_form_adapter<
-      { title: string },
-      { ok: boolean }
-    >(
-      {
-        method: "POST",
-        action: "?/remote=abc%2Fcreate",
-      },
-      (value) => value,
-      "/_app/remote",
-    );
+	try {
+		const form = create_remote_form_adapter<{ title: string }, { ok: boolean }>(
+			{
+				method: "POST",
+				action: "?/remote=abc%2Fcreate",
+			},
+			(value) => value,
+			"/_app/remote",
+		);
 
-    const result = await Effect.runPromise(form({ title: "hello" }));
+		const result = await Effect.runPromise(form({ title: "hello" }));
 
-    assertEquals(result, { ok: true });
-  } finally {
-    globalThis.fetch = original_fetch;
-  }
+		assert_equals(result, { ok: true });
+	} finally {
+		globalThis.fetch = original_fetch;
+	}
 });
 
-Deno.test("remote form adapter uses native submit when no remote endpoint is configured", async () => {
-  let submitted_title = "";
+test("remote form adapter uses native submit when no remote endpoint is configured", async () => {
+	let submitted_title = "";
 
-  const native = {
-    method: "POST",
-    action: "?/remote=abc%2Fcreate",
-    submit(input: { title: string }) {
-      submitted_title = input.title;
+	const native = {
+		method: "POST",
+		action: "?/remote=abc%2Fcreate",
+		submit(input: { title: string }) {
+			submitted_title = input.title;
 
-      return Promise.resolve(`native ${input.title}`);
-    },
-  };
+			return Promise.resolve(`native ${input.title}`);
+		},
+	};
 
-  const form = create_remote_form_adapter<{ title: string }, string>(
-    native,
-    (value) => value,
-    "",
-  );
+	const form = create_remote_form_adapter<{ title: string }, string>(
+		native,
+		(value) => value,
+		"",
+	);
 
-  const result = await Effect.runPromise(form({ title: "draft" }));
+	const result = await Effect.runPromise(form({ title: "draft" }));
 
-  assertEquals(result, "native draft");
-  assertEquals(submitted_title, "draft");
+	assert_equals(result, "native draft");
+	assert_equals(submitted_title, "draft");
 });
 
-Deno.test("remote form adapter reports transport errors without submit or endpoint", async () => {
-  const form = create_remote_form_adapter<{ title: string }, string>(
-    { method: "POST" },
-    (value) => value,
-    "",
-  );
+test("remote form adapter reports transport errors without submit or endpoint", async () => {
+	const form = create_remote_form_adapter<{ title: string }, string>(
+		{ method: "POST" },
+		(value) => value,
+		"",
+	);
 
-  const error = await assertRejects(() =>
-    Effect.runPromise(form({ title: "draft" }))
-  );
+	const error = await assert_rejects(() => Effect.runPromise(form({ title: "draft" })));
 
-  assertEquals((error as { _tag?: string })._tag, "RemoteTransportError");
+	assert_equals((error as { _tag?: string })._tag, "RemoteTransportError");
 });
 
-Deno.test("remote form adapter maps endpoint validation issues to the Effect error channel", async () => {
-  const original_fetch = globalThis.fetch;
+test("remote form adapter maps endpoint validation issues to the Effect error channel", async () => {
+	const original_fetch = globalThis.fetch;
 
-  globalThis.fetch = (() =>
-    Promise.resolve(
-      new Response(
-        JSON.stringify({
-          type: "result",
-          result: stringify({
-            issues: [{ message: "Title too short", path: ["title"] }],
-          }),
-        }),
-      ),
-    )) as typeof fetch;
+	globalThis.fetch = (() =>
+		Promise.resolve(
+			new Response(
+				JSON.stringify({
+					type: "result",
+					result: stringify({
+						issues: [{ message: "Title too short", path: ["title"] }],
+					}),
+				}),
+			),
+		)) as typeof fetch;
 
-  try {
-    const form = create_remote_form_adapter<{ title: string }, string>(
-      {
-        method: "POST",
-        action: "?/remote=abc%2Fcreate",
-      },
-      (value) => value,
-      "/_app/remote",
-    );
+	try {
+		const form = create_remote_form_adapter<{ title: string }, string>(
+			{
+				method: "POST",
+				action: "?/remote=abc%2Fcreate",
+			},
+			(value) => value,
+			"/_app/remote",
+		);
 
-    const error = await assertRejects(() =>
-      Effect.runPromise(form({ title: "x" }))
-    );
+		const error = await assert_rejects(() => Effect.runPromise(form({ title: "x" })));
 
-    assertEquals((error as { _tag?: string })._tag, "RemoteValidationError");
-    assertEquals(
-      (error as { issues?: Array<{ message: string }> }).issues?.[0]?.message,
-      "Title too short",
-    );
-  } finally {
-    globalThis.fetch = original_fetch;
-  }
+		assert_equals((error as { _tag?: string })._tag, "RemoteValidationError");
+		assert_equals(
+			(error as { issues?: Array<{ message: string }> }).issues?.[0]?.message,
+			"Title too short",
+		);
+	} finally {
+		globalThis.fetch = original_fetch;
+	}
 });
 
-Deno.test("remote form adapter returns keyed forms from nested for calls", async () => {
-  const keys: Array<string | number | boolean> = [];
-  const native = {
-    method: "POST",
-    action: "?/remote=abc%2Froot",
-    for(key: string | number | boolean) {
-      keys.push(key);
+test("remote form adapter returns keyed forms from nested for calls", async () => {
+	const keys: Array<string | number | boolean> = [];
+	const native = {
+		method: "POST",
+		action: "?/remote=abc%2Froot",
+		for(key: string | number | boolean) {
+			keys.push(key);
 
-      return {
-        method: "POST",
-        action: `?/remote=abc%2F${key}`,
-        submit(input: { title: string }) {
-          return Promise.resolve(`${key}:${input.title}`);
-        },
-      };
-    },
-  };
+			return {
+				method: "POST",
+				action: `?/remote=abc%2F${key}`,
+				submit(input: { title: string }) {
+					return Promise.resolve(`${key}:${input.title}`);
+				},
+			};
+		},
+	};
 
-  const form = create_remote_form_adapter<{ title: string }, string>(
-    native,
-    (value) => value,
-    "",
-  );
+	const form = create_remote_form_adapter<{ title: string }, string>(
+		native,
+		(value) => value,
+		"",
+	);
 
-  const child = form.for("profile");
-  const result = await Effect.runPromise(child({ title: "saved" }));
+	const child = form.for("profile");
+	const result = await Effect.runPromise(child({ title: "saved" }));
 
-  assertEquals(keys, ["profile"]);
-  assertEquals(child.action, "?/remote=abc%2Fprofile");
-  assertEquals(result, "profile:saved");
+	assert_equals(keys, ["profile"]);
+	assert_equals(child.action, "?/remote=abc%2Fprofile");
+	assert_equals(result, "profile:saved");
 });
 
-Deno.test("remote form adapter preflight calls native preflight and keeps callable", async () => {
-  const schemas: unknown[] = [];
-  const schema = { name: "draft" };
-  const native = {
-    method: "POST",
-    action: "?/remote=abc%2Fcreate",
-    preflight(next_schema: unknown) {
-      schemas.push(next_schema);
+test("remote form adapter preflight calls native preflight and keeps callable", async () => {
+	const schemas: unknown[] = [];
+	const schema = { name: "draft" };
+	const native = {
+		method: "POST",
+		action: "?/remote=abc%2Fcreate",
+		preflight(next_schema: unknown) {
+			schemas.push(next_schema);
 
-      return native;
-    },
-    submit(input: { title: string }) {
-      return Promise.resolve(input.title);
-    },
-  };
+			return native;
+		},
+		submit(input: { title: string }) {
+			return Promise.resolve(input.title);
+		},
+	};
 
-  const form = create_remote_form_adapter<{ title: string }, string>(
-    native,
-    (value) => value,
-    "",
-  );
+	const form = create_remote_form_adapter<{ title: string }, string>(
+		native,
+		(value) => value,
+		"",
+	);
 
-  const preflighted = form.preflight(schema);
-  const result = await Effect.runPromise(preflighted({ title: "ok" }));
+	const preflighted = form.preflight(schema);
+	const result = await Effect.runPromise(preflighted({ title: "ok" }));
 
-  assertEquals(preflighted, form);
-  assertEquals(schemas, [schema]);
-  assertEquals(result, "ok");
+	assert_equals(preflighted, form);
+	assert_equals(schemas, [schema]);
+	assert_equals(result, "ok");
 });
 
-Deno.test("remote form adapter preserves SvelteKit 2.61 enhance instance descriptors", () => {
-  const fields = { title: { value: () => "draft" } };
+test("remote form adapter preserves SvelteKit 2.61 enhance instance descriptors", () => {
+	const fields = { title: { value: () => "draft" } };
 
-  let callback_fields: unknown;
-  let callback_pending: unknown;
-  let callback_submit_is_effect = false;
+	let callback_fields: unknown;
+	let callback_pending: unknown;
+	let callback_submit_is_effect = false;
 
-  const native = {
-    method: "POST",
-    action: "?/remote=abc%2Fcreate",
-    enhance(callback: (event: unknown) => unknown) {
-      const event = {};
+	const native = {
+		method: "POST",
+		action: "?/remote=abc%2Fcreate",
+		enhance(callback: (event: unknown) => unknown) {
+			const event = {};
 
-      Object.defineProperties(event, {
-        fields: {
-          get: () => fields,
-        },
-        pending: {
-          get: () => 1,
-        },
-        submit: {
-          value: () => Promise.resolve(true),
-        },
-      });
+			Object.defineProperties(event, {
+				fields: {
+					get: () => fields,
+				},
+				pending: {
+					get: () => 1,
+				},
+				submit: {
+					value: () => Promise.resolve(true),
+				},
+			});
 
-      callback(event);
+			callback(event);
 
-      return native;
-    },
-  };
+			return native;
+		},
+	};
 
-  const form = create_remote_form_adapter(native, (value) => value, "");
+	const form = create_remote_form_adapter(native, (value) => value, "");
 
-  form.enhance((event: unknown) => {
-    const wrapped = event as {
-      fields: unknown;
-      pending: number;
-      submit: () => unknown;
-    };
+	form.enhance((event: unknown) => {
+		const wrapped = event as {
+			fields: unknown;
+			pending: number;
+			submit: () => unknown;
+		};
 
-    callback_fields = wrapped.fields;
-    callback_pending = wrapped.pending;
-    callback_submit_is_effect = Effect.isEffect(wrapped.submit());
-  });
+		callback_fields = wrapped.fields;
+		callback_pending = wrapped.pending;
+		callback_submit_is_effect = Effect.isEffect(wrapped.submit());
+	});
 
-  assertEquals(callback_fields, fields);
-  assertEquals(callback_pending, 1);
-  assertEquals(callback_submit_is_effect, true);
+	assert_equals(callback_fields, fields);
+	assert_equals(callback_pending, 1);
+	assert_equals(callback_submit_is_effect, true);
 });
 
-Deno.test("remote form adapter wraps enhance submit callbacks as Effects", () => {
-  let callback_submit_is_effect = false;
+test("remote form adapter wraps enhance submit callbacks as Effects", () => {
+	let callback_submit_is_effect = false;
 
-  const native = {
-    method: "POST",
-    action: "?/remote=abc%2Fcreate",
-    enhance(callback: (event: unknown) => unknown) {
-      callback({
-        submit: () => Promise.resolve("ok"),
-      });
+	const native = {
+		method: "POST",
+		action: "?/remote=abc%2Fcreate",
+		enhance(callback: (event: unknown) => unknown) {
+			callback({
+				submit: () => Promise.resolve("ok"),
+			});
 
-      return { method: "POST" };
-    },
-  };
+			return { method: "POST" };
+		},
+	};
 
-  const form = create_remote_form_adapter(native, (value) => value, "");
+	const form = create_remote_form_adapter(native, (value) => value, "");
 
-  form.enhance((event: unknown) => {
-    const result = (event as { submit: () => unknown }).submit();
-    callback_submit_is_effect = Effect.isEffect(result);
-  });
+	form.enhance((event: unknown) => {
+		const result = (event as { submit: () => unknown }).submit();
+		callback_submit_is_effect = Effect.isEffect(result);
+	});
 
-  assertEquals(callback_submit_is_effect, true);
+	assert_equals(callback_submit_is_effect, true);
 });
 
-Deno.test("remote form adapter resolves enhance submit to form result", async () => {
-  let submit_effect: unknown;
-  let form_result: { id: string } | undefined;
+test("remote form adapter resolves enhance submit to form result", async () => {
+	let submit_effect: unknown;
+	let form_result: { id: string } | undefined;
 
-  const native = {
-    method: "POST",
-    action: "?/remote=abc%2Fcreate",
-    get result() {
-      return form_result;
-    },
-    enhance(callback: (event: unknown) => unknown) {
-      callback({
-        get result() {
-          return form_result;
-        },
-        submit: () => {
-          form_result = { id: "created" };
+	const native = {
+		method: "POST",
+		action: "?/remote=abc%2Fcreate",
+		get result() {
+			return form_result;
+		},
+		enhance(callback: (event: unknown) => unknown) {
+			callback({
+				get result() {
+					return form_result;
+				},
+				submit: () => {
+					form_result = { id: "created" };
 
-          return Promise.resolve(true);
-        },
-      });
+					return Promise.resolve(true);
+				},
+			});
 
-      return { method: "POST" };
-    },
-  };
+			return { method: "POST" };
+		},
+	};
 
-  const form = create_remote_form_adapter(native, (value) => value, "");
+	const form = create_remote_form_adapter(native, (value) => value, "");
 
-  form.enhance((event: unknown) => {
-    submit_effect = (event as { submit: () => unknown }).submit();
-  });
+	form.enhance((event: unknown) => {
+		submit_effect = (event as { submit: () => unknown }).submit();
+	});
 
-  const result = await Effect.runPromise(
-    submit_effect as Effect.Effect<
-      { id: string } | undefined,
-      unknown,
-      unknown
-    >,
-  );
+	const result = await Effect.runPromise(
+		submit_effect as Effect.Effect<{ id: string } | undefined, unknown, unknown>,
+	);
 
-  assertEquals(result, { id: "created" });
+	assert_equals(result, { id: "created" });
 });
 
-Deno.test("remote form enhance submit suppresses SvelteKit redirects as control flow", async () => {
-  let callback_result: unknown;
+test("remote form enhance submit suppresses SvelteKit redirects as control flow", async () => {
+	let callback_result: unknown;
 
-  const native = {
-    method: "POST",
-    action: "?/remote=abc%2Fcreate",
-    enhance(callback: (event: unknown) => unknown) {
-      callback_result = callback({
-        submit: () =>
-          Promise.resolve().then(() => svelte_redirect(303, "/oauth")),
-      });
+	const native = {
+		method: "POST",
+		action: "?/remote=abc%2Fcreate",
+		enhance(callback: (event: unknown) => unknown) {
+			callback_result = callback({
+				submit: () => Promise.resolve().then(() => svelte_redirect(303, "/oauth")),
+			});
 
-      return { method: "POST" };
-    },
-  };
+			return { method: "POST" };
+		},
+	};
 
-  const form = create_remote_form_adapter(native, (value) => value, "");
+	const form = create_remote_form_adapter(native, (value) => value, "");
 
-  form.enhance((event: unknown) =>
-    Effect.gen(function* () {
-      yield* (event as {
-        submit: () => Effect.Effect<unknown, unknown, never>;
-      }).submit();
-    })
-  );
+	form.enhance((event: unknown) =>
+		Effect.gen(function* () {
+			yield* (
+				event as {
+					submit: () => Effect.Effect<unknown, unknown, never>;
+				}
+			).submit();
+		}),
+	);
 
-  assertEquals(
-    typeof (callback_result as { then?: unknown } | undefined)?.then,
-    "function",
-  );
+	assert_equals(typeof (callback_result as { then?: unknown } | undefined)?.then, "function");
 
-  try {
-    const result = await callback_result as unknown;
+	try {
+		const result = (await callback_result) as unknown;
 
-    assertEquals(result, undefined);
-  } finally {
-    reset_dispatcher();
-  }
+		assert_equals(result, undefined);
+	} finally {
+		reset_dispatcher();
+	}
 });
 
-Deno.test("remote form adapter preserves enhance submit updates as an Effect", async () => {
-  let submit_started = false;
-  let updates_called = false;
-  let submit_effect: unknown;
-  let form_result: { id: string } | undefined;
+test("remote form adapter preserves enhance submit updates as an Effect", async () => {
+	let submit_started = false;
+	let updates_called = false;
+	let submit_effect: unknown;
+	let form_result: { id: string } | undefined;
 
-  const native = {
-    method: "POST",
-    action: "?/remote=abc%2Fcreate",
-    enhance(callback: (event: unknown) => unknown) {
-      callback({
-        get result() {
-          return form_result;
-        },
-        submit: () => {
-          submit_started = true;
+	const native = {
+		method: "POST",
+		action: "?/remote=abc%2Fcreate",
+		enhance(callback: (event: unknown) => unknown) {
+			callback({
+				get result() {
+					return form_result;
+				},
+				submit: () => {
+					submit_started = true;
 
-          const promise = Promise.resolve(true) as Promise<boolean> & {
-            updates: (...args: unknown[]) => Promise<boolean>;
-          };
+					const promise = Promise.resolve(true) as Promise<boolean> & {
+						updates: (...args: unknown[]) => Promise<boolean>;
+					};
 
-          promise.updates = (...args: unknown[]) => {
-            updates_called = args[0] === "refresh";
-            form_result = { id: "updated" };
+					promise.updates = (...args: unknown[]) => {
+						updates_called = args[0] === "refresh";
+						form_result = { id: "updated" };
 
-            return Promise.resolve(true);
-          };
+						return Promise.resolve(true);
+					};
 
-          return promise;
-        },
-      });
+					return promise;
+				},
+			});
 
-      return { method: "POST" };
-    },
-  };
+			return { method: "POST" };
+		},
+	};
 
-  const form = create_remote_form_adapter(native, (value) => value, "");
+	const form = create_remote_form_adapter(native, (value) => value, "");
 
-  form.enhance((event: unknown) => {
-    submit_effect = (event as {
-      submit: () => {
-        updates: (...args: unknown[]) => unknown;
-      };
-    }).submit().updates("refresh");
-  });
+	form.enhance((event: unknown) => {
+		submit_effect = (
+			event as {
+				submit: () => {
+					updates: (...args: unknown[]) => unknown;
+				};
+			}
+		)
+			.submit()
+			.updates("refresh");
+	});
 
-  assertEquals(Effect.isEffect(submit_effect), true);
-  assertEquals(submit_started, false);
+	assert_equals(Effect.isEffect(submit_effect), true);
+	assert_equals(submit_started, false);
 
-  const result = await Effect.runPromise(
-    submit_effect as Effect.Effect<
-      { id: string } | undefined,
-      unknown,
-      unknown
-    >,
-  );
+	const result = await Effect.runPromise(
+		submit_effect as Effect.Effect<{ id: string } | undefined, unknown, unknown>,
+	);
 
-  assertEquals(result, { id: "updated" });
-  assertEquals(submit_started, true);
-  assertEquals(updates_called, true);
+	assert_equals(result, { id: "updated" });
+	assert_equals(submit_started, true);
+	assert_equals(updates_called, true);
 });

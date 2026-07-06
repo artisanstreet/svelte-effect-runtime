@@ -11,10 +11,10 @@ import * as vscode from "vscode";
  * @since 2.0.0
  */
 export interface LanguageServerCommandHandlers {
-  start: () => Promise<void>;
-  stop: () => Promise<void>;
-  restart: () => Promise<void>;
-  show_output: () => void;
+	start: () => Promise<void>;
+	stop: () => Promise<void>;
+	restart: () => Promise<void>;
+	show_output: () => void;
 }
 
 /**
@@ -31,25 +31,19 @@ export interface LanguageServerCommandHandlers {
  * @returns Nothing.
  */
 export function register_language_server_commands(
-  context: vscode.ExtensionContext,
-  handlers: LanguageServerCommandHandlers,
+	context: vscode.ExtensionContext,
+	handlers: LanguageServerCommandHandlers,
 ): void {
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      "svelte-effect-runtime.startLanguageServer",
-      handlers.start,
-    ),
-    vscode.commands.registerCommand(
-      "svelte-effect-runtime.stopLanguageServer",
-      handlers.stop,
-    ),
-    vscode.commands.registerCommand(
-      "svelte-effect-runtime.restartLanguageServer",
-      handlers.restart,
-    ),
-    vscode.commands.registerCommand(
-      "svelte-effect-runtime.showOutput",
-      handlers.show_output,
-    ),
-  );
+	context.subscriptions.push(
+		vscode.commands.registerCommand(
+			"svelte-effect-runtime.startLanguageServer",
+			handlers.start,
+		),
+		vscode.commands.registerCommand("svelte-effect-runtime.stopLanguageServer", handlers.stop),
+		vscode.commands.registerCommand(
+			"svelte-effect-runtime.restartLanguageServer",
+			handlers.restart,
+		),
+		vscode.commands.registerCommand("svelte-effect-runtime.showOutput", handlers.show_output),
+	);
 }

@@ -1,42 +1,42 @@
 {
-  "name": "svelte-effect-runtime-language-server",
-  "version": "3.4.5",
-  "description": "Language server for Svelte Effect Runtime syntax in Svelte files.",
-  "license": "BSD-3-Clause",
-  "type": "commonjs",
-  "main": "./.dist/server.cjs",
-  "engines": {
-    "node": "^22.12.0 || >=24.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/usebarekey/svelte-effect-runtime.git",
-    "directory": "modules/svelte-effect-runtime-language-server"
-  },
-  "publishConfig": {
-    "access": "public"
-  },
-  "files": [
-    ".dist",
-    "runtime",
-    "README.md"
-  ],
-  "scripts": {
-    "build": "deno task build",
-    "clean": "deno task clean",
-    "prepare:runtime": "deno task prepare:runtime",
-    "start": "node ./.dist/server.cjs --stdio"
-  },
-  "dependencies": {
-    "@jridgewell/trace-mapping": "^0.3.31",
-    "magic-string": "^0.30.21",
-    "svelte-effect-runtime-grammars": "3.4.5",
-    "svelte": "^5.56.0",
-    "svelte-language-server": "^0.17.30",
-    "typescript": "^6.0.0",
-    "vscode-languageserver": "9.0.1"
-  },
-  "devDependencies": {
-    "rolldown": "^1.0.0-rc.13"
-  }
+	"name": "svelte-effect-runtime-language-server",
+	"version": "3.4.5",
+	"description": "Language server for Svelte Effect Runtime syntax in Svelte files.",
+	"license": "BSD-3-Clause",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/usebarekey/svelte-effect-runtime.git",
+		"directory": "modules/svelte-effect-runtime-language-server"
+	},
+	"files": [
+		".dist",
+		"runtime",
+		"README.md"
+	],
+	"type": "commonjs",
+	"main": "./.dist/server.cjs",
+	"publishConfig": {
+		"access": "public"
+	},
+	"scripts": {
+		"build": "corepack pnpm run clean && corepack pnpm run prepare:runtime && vp node ../../build/lsp.ts",
+		"clean": "vp node ../../build/clean.ts svelte-effect-runtime-language-server",
+		"prepare:runtime": "corepack pnpm --dir ../svelte-effect-runtime run build && vp node ../../build/assets.ts svelte-effect-runtime-language-server",
+		"start": "node ./.dist/server.cjs --stdio"
+	},
+	"dependencies": {
+		"@jridgewell/trace-mapping": "^0.3.31",
+		"magic-string": "^0.30.21",
+		"svelte": "^5.56.0",
+		"svelte-effect-runtime-grammars": "workspace:3.4.5",
+		"svelte-language-server": "^0.17.30",
+		"typescript": "^6.0.0",
+		"vscode-languageserver": "9.0.1"
+	},
+	"devDependencies": {
+		"rolldown": "^1.0.0-rc.13"
+	},
+	"engines": {
+		"node": "^22.12.0 || >=24.0.0"
+	}
 }

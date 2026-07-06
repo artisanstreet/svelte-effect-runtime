@@ -1,72 +1,42 @@
-import { dirname, fromFileUrl, join, resolve } from "@std/path";
-import { Effect, pipe } from "effect";
+import {
+	command_name,
+	join,
+	mkdir,
+	remove_path,
+	repo_root,
+	run_command,
+	writeFile,
+} from "./node-utils.ts";
+import { isAbsolute } from "node:path";
 
-import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
-
-const repo_root = resolve(dirname(fromFileUrl(import.meta.url)), "..");
-const code_root = resolve(repo_root, "..");
+const code_root = join(repo_root, "..");
 const smokes_root = join(code_root, "smokes");
 const smoke_dir = join(smokes_root, "ser-current");
 const package_dir = join(repo_root, "modules", "svelte-effect-runtime");
-const deno = Deno.execPath();
-const npm = Deno.build.os === "windows" ? "npm.cmd" : "npm";
-const npx = Deno.build.os === "windows" ? "npx.cmd" : "npx";
+const corepack = command_name("corepack");
 
-function write_json(
-  path: string,
-  value: unknown,
-) {
-  return write_text(path, `${JSON.stringify(value, null, 2)}\n`);
+function write_json(path: string, value: unknown): Promise<void> {
+	return write_text(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-function write_text(path: string, value: string) {
-  return Effect.tryPromise(() =>
-    Deno.writeTextFile(join(smoke_dir, path), value)
-  );
+function write_text(path: string, value: string): Promise<void> {
+	return writeFile(join(smoke_dir, path), value);
 }
 
-function run_command(
-  command: string,
-  args: Array<string>,
-  cwd: string,
-) {
-  return Effect.tryPromise(async () => {
-    const output = await new Deno.Command(command, {
-      args,
-      cwd,
-      stdout: "piped",
-      stderr: "piped",
-    }).output();
+function resolve_packed_tarball(stdout: string, package_name: string): string {
+	const parsed = JSON.parse(stdout);
+	const result = Array.isArray(parsed) ? parsed[0] : parsed;
+	const filename = result?.filename ?? result?.tarball;
 
-    const stdout = new TextDecoder().decode(output.stdout);
-    const stderr = new TextDecoder().decode(output.stderr);
+	if (!filename) {
+		throw new Error(`pnpm pack did not create a ${package_name} tarball.`);
+	}
 
-    if (!output.success) {
-      throw new Error(
-        [
-          `${command} ${args.join(" ")} failed`,
-          stdout.trim(),
-          stderr.trim(),
-        ].filter(Boolean).join("\n\n"),
-      );
-    }
+	if (isAbsolute(filename)) {
+		return filename;
+	}
 
-    return { stdout, stderr };
-  });
-}
-
-function resolve_packed_tarball(
-  stdout: string,
-  package_name: string,
-): string {
-  const [result] = JSON.parse(stdout) as Array<{ filename?: string }>;
-  const filename = result?.filename;
-
-  if (!filename) {
-    throw new Error(`npm pack did not create a ${package_name} tarball.`);
-  }
-
-  return filename;
+	return join(repo_root, ".dist", package_name, filename);
 }
 
 const app_html = `<!doctype html>
@@ -204,7 +174,7 @@ const playwright_config = `import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "tests",
   webServer: {
-    command: "npm run preview -- --port 49621 --strictPort",
+    command: "vp exec vite preview --host 127.0.0.1 --port 49621 --strictPort",
     port: 49621,
     reuseExistingServer: false,
     timeout: 30000,
@@ -239,108 +209,73 @@ test("current package drives script and markup effects", async ({ page }) => {
 });
 `;
 
-const validate_smoke_dir = Effect.sync(() => {
-  if (!smoke_dir.startsWith(smokes_root)) {
-    throw new Error(`Refusing to write outside smoke root: ${smoke_dir}`);
-  }
-});
-
-const reset_smoke_dir = Effect.tryPromise(async () => {
-  await Deno.remove(smoke_dir, { recursive: true }).catch(() => undefined);
-  await Deno.mkdir(join(smoke_dir, "src", "lib"), { recursive: true });
-  await Deno.mkdir(join(smoke_dir, "src", "routes"), { recursive: true });
-  await Deno.mkdir(join(smoke_dir, "tests"), { recursive: true });
-});
-
-const write_smoke_project = Effect.all([
-  write_json("package.json", {
-    name: "ser-current",
-    private: true,
-    type: "module",
-    scripts: {
-      build: "vite build",
-      preview: "vite preview --host 127.0.0.1",
-      smoke: "playwright test",
-    },
-    dependencies: {
-      "@playwright/test": "^1.60.0",
-      "@sveltejs/adapter-node": "6.0.0-next.0",
-      "@sveltejs/kit": "3.0.0-next.1",
-      "@sveltejs/vite-plugin-svelte": "^7.0.0",
-      effect: "^4.0.0-beta.66",
-      svelte: "^5.56.0",
-      typescript: "^6.0.0",
-      vite: "^8.0.0",
-    },
-    devDependencies: {},
-  }),
-  write_text("src/app.html", app_html),
-  write_text("src/lib/demo.remote.ts", demo_remote_ts),
-  write_text("src/routes/+layout.svelte", layout_svelte),
-  write_text("src/routes/+page.svelte", page_svelte),
-  write_text("vite.config.ts", vite_config),
-  write_text("playwright.config.ts", playwright_config),
-  write_text("tests/runtime.spec.ts", runtime_spec),
-], { discard: true });
-
-const install_smoke_dependencies = run_command(
-  npm,
-  ["install", "--legacy-peer-deps"],
-  smoke_dir,
-);
-const build_runtime_package = run_command(deno, ["task", "build"], package_dir);
-const pack_runtime = run_command(
-  npm,
-  ["pack", package_dir, "--json"],
-  smoke_dir,
-);
-
-function install_runtime_pack(runtime_pack: { stdout: string }) {
-  const runtime_tarball = resolve_packed_tarball(
-    runtime_pack.stdout,
-    "svelte-effect-runtime",
-  );
-
-  return run_command(
-    npm,
-    [
-      "install",
-      "--legacy-peer-deps",
-      join(smoke_dir, runtime_tarball),
-    ],
-    smoke_dir,
-  );
+if (!smoke_dir.startsWith(smokes_root)) {
+	throw new Error(`Refusing to write outside smoke root: ${smoke_dir}`);
 }
 
-const build_smoke_app = run_command(npm, ["run", "build"], smoke_dir);
-const install_playwright = run_command(
-  npx,
-  ["playwright", "install", "chromium"],
-  smoke_dir,
-);
-const run_smoke = run_command(npm, ["run", "smoke"], smoke_dir);
-const report_success = Effect.sync(() => {
-  console.log("[svelte-effect-runtime]", "current package smoke passed", {
-    smoke_dir,
-  });
+await remove_path(smoke_dir);
+await mkdir(join(smoke_dir, "src", "lib"), { recursive: true });
+await mkdir(join(smoke_dir, "src", "routes"), { recursive: true });
+await mkdir(join(smoke_dir, "tests"), { recursive: true });
+
+await Promise.all([
+	write_json("package.json", {
+		name: "ser-current",
+		private: true,
+		type: "module",
+		packageManager: "pnpm@11.10.0",
+		scripts: {
+			build: "vite build",
+			preview: "vite preview --host 127.0.0.1",
+			smoke: "playwright test",
+		},
+		dependencies: {
+			"@playwright/test": "^1.60.0",
+			"@sveltejs/adapter-node": "6.0.0-next.0",
+			"@sveltejs/kit": "3.0.0-next.1",
+			"@sveltejs/vite-plugin-svelte": "^7.0.0",
+			effect: "^4.0.0-beta.66",
+			svelte: "^5.56.0",
+			typescript: "^6.0.0",
+			vite: "8.1.3",
+		},
+		devDependencies: {},
+	}),
+	write_text("pnpm-workspace.yaml", "allowBuilds:\n    msgpackr-extract: true\n"),
+	write_text("src/app.html", app_html),
+	write_text("src/lib/demo.remote.ts", demo_remote_ts),
+	write_text("src/routes/+layout.svelte", layout_svelte),
+	write_text("src/routes/+page.svelte", page_svelte),
+	write_text("vite.config.ts", vite_config),
+	write_text("playwright.config.ts", playwright_config),
+	write_text("tests/runtime.spec.ts", runtime_spec),
+]);
+
+await run_command(corepack, ["pnpm", "install"], smoke_dir, { inherit: true });
+await run_command(corepack, ["pnpm", "run", "build"], package_dir, {
+	inherit: true,
 });
 
-const program = pipe(
-  Effect.gen(function* () {
-    yield* validate_smoke_dir;
-    yield* reset_smoke_dir;
-    yield* write_smoke_project;
-    yield* install_smoke_dependencies;
-    yield* build_runtime_package;
-
-    const runtime_pack = yield* pack_runtime;
-
-    yield* install_runtime_pack(runtime_pack);
-    yield* build_smoke_app;
-    yield* install_playwright;
-    yield* run_smoke;
-    yield* report_success;
-  }),
+const runtime_pack = await run_command(
+	"vp",
+	["node", "build/pack.ts", "svelte-effect-runtime"],
+	repo_root,
 );
+const runtime_tarball = resolve_packed_tarball(runtime_pack.stdout, "svelte-effect-runtime");
 
-NodeRuntime.runMain(program);
+await run_command(corepack, ["pnpm", "add", runtime_tarball], smoke_dir, {
+	inherit: true,
+});
+await run_command(corepack, ["pnpm", "run", "build"], smoke_dir, {
+	inherit: true,
+});
+await run_command(corepack, ["pnpm", "exec", "playwright", "install", "chromium"], smoke_dir, {
+	inherit: true,
+});
+await run_command(corepack, ["pnpm", "run", "smoke"], smoke_dir, {
+	inherit: true,
+});
+
+console.log("[svelte-effect-runtime]", "current package smoke passed", {
+	smoke_dir,
+});
