@@ -5,12 +5,12 @@ import type { HelperDeclaration } from "./types.ts";
 import MagicString from "magic-string";
 import ts from "typescript";
 
-const MATCH_EFFECT_MEMBERS = new Map([
+const match_effect_members = new Map([
   ["match", "matchEffect"],
   ["matchCause", "matchCauseEffect"],
 ]);
 
-const EFFECTFUL_CALLBACK_MEMBERS = new Set([
+const effectful_callback_members = new Set([
   "andThen",
   "catchAll",
   "catchAllCause",
@@ -23,10 +23,15 @@ const EFFECTFUL_CALLBACK_MEMBERS = new Set([
   "tapErrorCause",
 ]);
 
-const EFFECTFUL_HANDLER_MEMBERS = new Set([
+const effectful_handler_members = new Set([
   "matchCauseEffect",
   "matchEffect",
   "tapBoth",
+]);
+
+const effectful_handler_property_names = new Set([
+  "onFailure",
+  "onSuccess",
 ]);
 
 interface RewriteContext {
@@ -140,7 +145,7 @@ function rewrite_match_call(
   context: RewriteContext,
 ): void {
   const member = get_effect_member(call.expression, context);
-  const upgraded_name = member && MATCH_EFFECT_MEMBERS.get(member.name);
+  const upgraded_name = member && match_effect_members.get(member.name);
   const options = get_last_object_argument(call);
 
   if (!member || !upgraded_name || !options) {
@@ -180,7 +185,7 @@ function rewrite_effectful_handler_call(
   const member = get_effect_member(call.expression, context);
   const options = get_last_object_argument(call);
 
-  if (!member || !EFFECTFUL_HANDLER_MEMBERS.has(member.name) || !options) {
+  if (!member || !effectful_handler_members.has(member.name) || !options) {
     return;
   }
 
@@ -200,7 +205,7 @@ function rewrite_effectful_callback_arguments(
 ): void {
   const member = get_effect_member(call.expression, context);
 
-  if (!member || !EFFECTFUL_CALLBACK_MEMBERS.has(member.name)) {
+  if (!member || !effectful_callback_members.has(member.name)) {
     return;
   }
 
@@ -339,7 +344,7 @@ function get_handler_properties(
 
     const name = get_property_name(property.name);
 
-    if (name !== "onFailure" && name !== "onSuccess") {
+    if (!name || !effectful_handler_property_names.has(name)) {
       return [];
     }
 
