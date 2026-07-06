@@ -14,7 +14,7 @@ test("remote form preflight keeps enhance callback Effect-aware", async () => {
 	await assert_type_checks(
 		"preflight-enhance.ts",
 		`
-import { Effect, Stream } from "effect";
+import { Effect, Schema, Stream } from "effect";
 import { create_remote_form_adapter } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
 import type { RemoteFormInput } from "@sveltejs/kit";
 
@@ -33,6 +33,7 @@ const returning_form = create_remote_form_adapter<
 >({}, (value) => value);
 
 form.preflight(schema).enhance(() => Effect.void);
+form.preflight(Schema.Struct({ name: Schema.String })).enhance(() => Effect.void);
 form.preflight(schema).enhance(({ submit }) => submit());
 form.preflight(schema).enhance(({ submit }) => submit().updates());
 form.preflight(schema).enhance(({ submit }) =>
@@ -50,7 +51,7 @@ test("remote form preflight keeps validate Effect-yieldable", async () => {
 	await assert_type_checks(
 		"preflight-validate.ts",
 		`
-import { Effect, Stream } from "effect";
+import { Effect, Schema, Stream } from "effect";
 import { create_remote_form_adapter } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
 import type { RemoteFormInput } from "@sveltejs/kit";
 
@@ -66,6 +67,9 @@ const form = create_remote_form_adapter<RemoteFormInput, void>({}, (value) => va
 
 Effect.gen(function* () {
   yield* form.preflight(schema).validate();
+  yield* form.preflight(Schema.Struct({ name: Schema.String })).validate();
+  yield* form.validate({ all: true, preflightOnly: true });
+  yield* form.validate({ includeUntouched: true, preflightOnly: true });
 });
 `,
 	);
@@ -222,7 +226,7 @@ test("remote form types reject invalid preflight and command updates", async () 
 	await assert_type_checks(
 		"remote-form-negative-boundaries.ts",
 		`
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import {
   create_remote_command_adapter,
   create_remote_form_adapter,
@@ -254,7 +258,8 @@ const command = create_remote_command_adapter<void, string>(
 form();
 form.submit();
 form.preflight(schema);
-// @ts-expect-error preflight expects a Standard Schema
+form.preflight(Schema.Struct({ name: Schema.String }));
+// @ts-expect-error preflight expects a Standard Schema or Effect Schema
 form.preflight(123);
 
 form.enhance(({ submit }) =>

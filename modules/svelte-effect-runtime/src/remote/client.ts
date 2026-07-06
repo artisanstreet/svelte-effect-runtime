@@ -8,6 +8,8 @@ export {
 export type {
 	EffectRemoteForm,
 	EffectRemoteFormEnhanceOptions,
+	EffectRemoteFormPreflightSchema,
 	EffectRemoteFormSubmit,
+	EffectRemoteFormValidateOptions,
 	Pending,
 } from "./client/index.ts";
