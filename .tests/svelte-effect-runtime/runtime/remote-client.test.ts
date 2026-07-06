@@ -1,7 +1,7 @@
 import { test } from "vitest";
 import { assert_equals, assert_throws, assert_rejects } from "./helpers/assert.ts";
 import { isRedirect, redirect as svelte_redirect } from "@sveltejs/kit";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { stringify } from "devalue";
 import {
 	create_remote_command_adapter,
@@ -660,7 +660,13 @@ test("remote form adapter returns keyed forms from nested for calls", async () =
 
 test("remote form adapter preflight calls native preflight and keeps callable", async () => {
 	const schemas: unknown[] = [];
-	const schema = { name: "draft" };
+	const schema = {
+		"~standard": {
+			validate(value: unknown) {
+				return { value };
+			},
+		},
+	};
 	const native = {
 		method: "POST",
 		action: "?/remote=abc%2Fcreate",
@@ -686,6 +692,32 @@ test("remote form adapter preflight calls native preflight and keeps callable", 
 	assert_equals(preflighted, form);
 	assert_equals(schemas, [schema]);
 	assert_equals(result, "ok");
+});
+
+test("remote form adapter normalizes Effect Schema preflight input", () => {
+	const schemas: unknown[] = [];
+	const native = {
+		method: "POST",
+		action: "?/remote=abc%2Fcreate",
+		preflight(next_schema: unknown) {
+			schemas.push(next_schema);
+
+			return native;
+		},
+	};
+
+	const form = create_remote_form_adapter<{ title: string }, string>(
+		native,
+		(value) => value,
+		"",
+	);
+
+	form.preflight(Schema.Struct({ title: Schema.String }));
+
+	assert_equals(
+		typeof (schemas[0] as { "~standard"?: { validate?: unknown } })["~standard"]?.validate,
+		"function",
+	);
 });
 
 test("remote form adapter preserves SvelteKit 2.61 enhance instance descriptors", () => {

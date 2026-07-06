@@ -1,5 +1,6 @@
 import type { RemoteFormInput } from "@sveltejs/kit";
 
+import { normalize_validator } from "$/internal/schema.ts";
 import { decode_response_or_value } from "./responses.ts";
 import { MakeEffectFromPromise } from "./effect.ts";
 import { get_remote_action_id, submit_remote_form } from "./form-transport.ts";
@@ -108,7 +109,7 @@ export function create_remote_form_adapter<
 			configurable: true,
 			enumerable: false,
 			value: (schema: unknown) => {
-				form_obj.preflight(schema);
+				form_obj.preflight(normalize_validator(schema));
 
 				return callable;
 			},

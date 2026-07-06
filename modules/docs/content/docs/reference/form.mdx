@@ -33,6 +33,7 @@ type EffectForm<Input, Output, Error = never> =
       ): { method: "POST"; action: string; [attachment: symbol]: ... };
 
       validate(options?: {
+        all?: boolean;
         includeUntouched?: boolean;
         preflightOnly?: boolean;
       }): Effect<void, RemoteFailure<Error>, never>;

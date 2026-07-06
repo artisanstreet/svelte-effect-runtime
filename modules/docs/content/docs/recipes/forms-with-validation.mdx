@@ -41,11 +41,14 @@ return yield* invalid.name("Name is required");
 ```
 
 ```svelte
-<script lang="ts">
+<script lang="ts" effect>
   import { save_profile } from "./profile.remote";
 </script>
 
-<form {...save_profile} oninput={() => save_profile.validate()}>
+<form
+  {...save_profile}
+  oninput={yield* save_profile.validate({ all: true, preflightOnly: true })}
+>
   <input name="name" />
   <button>Save</button>
 </form>
