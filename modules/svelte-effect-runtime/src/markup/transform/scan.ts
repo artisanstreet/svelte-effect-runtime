@@ -425,6 +425,9 @@ function get_tag_info(trimmed: string): TagInfo {
 	}
 
 	/** Strip prefix-only tags — the expression starts after the tag keyword. */
+	if (trimmed.startsWith("@attach ")) {
+		return { kind: "plain", prefix_length: "@attach ".length };
+	}
 	if (trimmed.startsWith("#if ")) {
 		return { kind: "plain", prefix_length: "#if ".length };
 	}
@@ -442,6 +445,9 @@ function get_tag_info(trimmed: string): TagInfo {
 	}
 	if (trimmed.startsWith("@debug ")) {
 		return { kind: "plain", prefix_length: "@debug ".length };
+	}
+	if (trimmed.startsWith("...")) {
+		return { kind: "plain", prefix_length: "...".length };
 	}
 
 	return { kind: "plain", prefix_length: 0 };
