@@ -16,7 +16,7 @@ import { Form } from "svelte-effect-runtime/server";
 import { Effect, Schema } from "effect";
 
 const ProfileInput = Schema.Struct({
-  name: Schema.String,
+  name: Schema.NonEmptyString,
 });
 
 export const save_profile = Form(
@@ -42,14 +42,19 @@ return yield* invalid.name("Name is required");
 
 ```svelte
 <script lang="ts" effect>
+  import { Schema } from "effect";
   import { save_profile } from "./profile.remote";
+
+  const profile_form = save_profile.preflight(
+    Schema.Struct({ name: Schema.NonEmptyString }),
+  );
 </script>
 
 <form
-  {...save_profile}
-  oninput={yield* save_profile.validate({ all: true, preflightOnly: true })}
+  {...profile_form}
+  oninput={yield* profile_form.validate({ all: true, preflightOnly: true })}
 >
-  <input name="name" />
+  <input {...profile_form.fields.name.as("text")} />
   <button>Save</button>
 </form>
 ```

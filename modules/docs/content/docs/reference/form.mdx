@@ -16,10 +16,11 @@ import { Form } from "svelte-effect-runtime";
 
 ```ts
 type EffectForm<Input, Output, Error = never> =
-  & Omit<RemoteForm<Input, Output>, "enhance" | "validate" | "for">
+  & Omit<
+      RemoteForm<Input, Output>,
+      "enhance" | "for" | "preflight" | "submit" | "validate"
+    >
   & {
-      native: RemoteForm<Input, Output>;
-
       submit(
         data: OptionalArgument<Input>
       ): Effect<Output, RemoteFailure<Error>, never>;
@@ -38,13 +39,18 @@ type EffectForm<Input, Output, Error = never> =
         preflightOnly?: boolean;
       }): Effect<void, RemoteFailure<Error>, never>;
 
+      preflight(
+        schema: StandardSchema | EffectSchema
+      ): EffectForm<Input, Output, Error>;
+
       for(id): EffectForm<Input, Output, Error>;
     };
 ```
 
 The non-overridden properties from `RemoteForm` (`method`, `action`,
-`fields`, `result`, `pending`, `preflight`, the `@attach` symbol) keep
-their SvelteKit semantics.
+`fields`, `result`, `pending`, the `@attach` symbol) keep their
+SvelteKit semantics. `preflight` delegates to SvelteKit after converting
+Effect schemas to Standard Schema.
 
 ## `Form` overloads
 

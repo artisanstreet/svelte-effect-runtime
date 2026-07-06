@@ -420,6 +420,10 @@ test("remote form data encodes nested scalar, array, blob, and empty values", ()
 			missing: undefined,
 			nil: null,
 		},
+		rows: [
+			{ count: 1, title: "First" },
+			{ count: 2, title: "Second" },
+		],
 		tags: ["svelte", "effect"],
 		title: "Hello",
 	});
@@ -428,7 +432,10 @@ test("remote form data encodes nested scalar, array, blob, and empty values", ()
 	assert_equals(form_data.get("n:count"), "2");
 	assert_equals(form_data.get("b:active"), "on");
 	assert_equals(form_data.has("b:draft"), false);
-	assert_equals(form_data.getAll("tags[]"), ["svelte", "effect"]);
+	assert_equals(form_data.get("tags[0]"), "svelte");
+	assert_equals(form_data.get("tags[1]"), "effect");
+	assert_equals(form_data.get("rows[0].title"), "First");
+	assert_equals(form_data.get("n:rows[1].count"), "2");
 	assert_equals(form_data.get("nested.nil"), "");
 	assert_equals(form_data.has("nested.missing"), false);
 	assert_equals(form_data.get("avatar") instanceof Blob, true);
