@@ -78,7 +78,7 @@ export class PreprocessError extends RuntimeError {
  *
  * @since 2.4.0
  * @param plugin_names - Names of Vite plugins that declare pre-transform
- *   priority and may parse raw `.svelte` files before SER lowers them.
+ *   priority and may parse raw component files before SER lowers them.
  * @returns A runtime-authored Error describing the possible plugin ordering
  *   conflict.
  */
@@ -99,7 +99,7 @@ export class VitePreTransformPluginConflictError extends RuntimeError {
 				...plugin_names.map((plugin_name) => `  - ${plugin_name}`),
 				"",
 				`This is usually fine, but if you see Svelte parser errors around <script effect>`,
-				`or yield* in components, one of those plugins may be reading .svelte files before`,
+				`or yield* in components, one of those plugins may be reading component files before`,
 				`SER has lowered its syntax.`,
 			].join("\n"),
 		);

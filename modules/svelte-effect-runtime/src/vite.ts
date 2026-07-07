@@ -34,6 +34,29 @@ interface RemoteClientExport {
 	native_call: string;
 }
 
+interface SvelteComponentModuleFilter {
+	set_extensions(extensions: readonly string[]): void;
+	is_module(id: string): boolean;
+}
+
+interface VitePluginSvelteApi {
+	options?: {
+		extensions?: readonly unknown[];
+	};
+}
+
+type VitePluginSvelte = Plugin & {
+	api?: VitePluginSvelteApi;
+};
+
+type VitePluginSvelteWithExtensions = Plugin & {
+	api: {
+		options: {
+			extensions: readonly string[];
+		};
+	};
+};
+
 const remote_client_export_types = new Set<RemoteClientExportType>([
 	"query_batch",
 	"query_live",
@@ -42,6 +65,7 @@ const remote_client_export_types = new Set<RemoteClientExportType>([
 	"form",
 	"prerender",
 ]);
+const default_svelte_component_extensions = [".svelte"] as const;
 
 /**
  * Vite plugin for SvelteKit. The server import plugin rewrites server-side
@@ -61,23 +85,25 @@ const remote_client_export_types = new Set<RemoteClientExportType>([
  * @returns Vite plugins that integrate the runtime with SvelteKit.
  */
 export function effect(options?: EffectOptions): Plugin[] {
+	const component_filter = make_svelte_component_module_filter();
+
 	return [
-		make_diagnostics_plugin(),
-		make_reserved_helper_guard_plugin(),
-		make_svelte_transform_plugin(),
+		make_diagnostics_plugin(component_filter),
+		make_reserved_helper_guard_plugin(component_filter),
+		make_svelte_transform_plugin(component_filter),
 		make_server_rewrite_plugin(),
 		make_remote_client_wrapper_plugin(options),
 	];
 }
 
-function make_diagnostics_plugin(): Plugin {
+function make_diagnostics_plugin(component_filter: SvelteComponentModuleFilter): Plugin {
 	const warned_diagnostics = new Set<string>();
 
 	return {
 		name: "svelte-effect-runtime:diagnostics",
 
 		transform(code: string, id: string) {
-			if (!is_svelte_component_module(id)) {
+			if (!component_filter.is_module(id)) {
 				return undefined;
 			}
 
@@ -113,12 +139,12 @@ function make_diagnostics_plugin(): Plugin {
 	};
 }
 
-function make_reserved_helper_guard_plugin(): Plugin {
+function make_reserved_helper_guard_plugin(component_filter: SvelteComponentModuleFilter): Plugin {
 	return {
 		name: "svelte-effect-runtime:reserved-helper-guard",
 
 		transform(code: string, id: string) {
-			if (!is_svelte_component_module(id) || !has_ser_syntax(code)) {
+			if (!component_filter.is_module(id) || !has_ser_syntax(code)) {
 				return undefined;
 			}
 
@@ -135,12 +161,17 @@ function make_reserved_helper_guard_plugin(): Plugin {
 	};
 }
 
-function make_svelte_transform_plugin(): Plugin {
+function make_svelte_transform_plugin(component_filter: SvelteComponentModuleFilter): Plugin {
 	return {
 		name: "svelte-effect-runtime:svelte-transform",
 
 		configResolved(config) {
+			const extensions = find_svelte_component_extensions(config.plugins);
 			const conflicting_plugin_names = find_pre_transform_plugin_names(config.plugins);
+
+			if (extensions) {
+				component_filter.set_extensions(extensions);
+			}
 
 			if (conflicting_plugin_names.length === 0) {
 				return;
@@ -150,7 +181,7 @@ function make_svelte_transform_plugin(): Plugin {
 		},
 
 		async transform(code: string, id: string, options?: { ssr?: boolean }) {
-			if (!is_svelte_component_module(id)) {
+			if (!component_filter.is_module(id)) {
 				return undefined;
 			}
 
@@ -166,6 +197,55 @@ function make_svelte_transform_plugin(): Plugin {
 			return { code: result.code, map: null };
 		},
 	};
+}
+
+function make_svelte_component_module_filter(): SvelteComponentModuleFilter {
+	let extensions: readonly string[] = default_svelte_component_extensions;
+
+	return {
+		set_extensions(next_extensions) {
+			const normalized_extensions = normalize_svelte_component_extensions(next_extensions);
+
+			if (normalized_extensions.length === 0) {
+				return;
+			}
+
+			extensions = normalized_extensions;
+		},
+
+		is_module(id) {
+			return is_svelte_component_module(id, extensions);
+		},
+	};
+}
+
+function normalize_svelte_component_extensions(extensions: readonly string[]): string[] {
+	const normalized_extensions = extensions
+		.filter((extension) => extension.length > 0)
+		.map((extension) => (extension.startsWith(".") ? extension : `.${extension}`));
+
+	return [...new Set(normalized_extensions)];
+}
+
+function find_svelte_component_extensions(
+	plugins: readonly Plugin[],
+): readonly string[] | undefined {
+	const svelte_plugin = plugins.find(has_svelte_component_extensions);
+
+	return svelte_plugin?.api?.options?.extensions;
+}
+
+function has_svelte_component_extensions(plugin: Plugin): plugin is VitePluginSvelteWithExtensions {
+	const candidate = plugin as VitePluginSvelte;
+	const extensions = candidate.api?.options?.extensions;
+
+	if (!plugin.name.startsWith("vite-plugin-svelte")) {
+		return false;
+	}
+
+	return (
+		Array.isArray(extensions) && extensions.every((extension) => typeof extension === "string")
+	);
 }
 
 function find_pre_transform_plugin_names(plugins: readonly Plugin[]): string[] {
@@ -192,7 +272,7 @@ function make_pre_transform_plugin_notice(plugin_names: readonly string[]): stri
 		formatted_plugins,
 		"",
 		"This is usually fine, but if you see Svelte parser errors around <script effect>",
-		"or yield* in components, one of those plugins may be reading .svelte files before",
+		"or yield* in components, one of those plugins may be reading component files before",
 		"SER has lowered its syntax.",
 	].join("\n");
 }
@@ -311,10 +391,10 @@ function is_remote_module(id: string): boolean {
 	return /\.(remote|remote\.[cm]?)\.[jt]s(?:\?.*)?$/.test(id) || id.includes(".remote.");
 }
 
-function is_svelte_component_module(id: string): boolean {
+function is_svelte_component_module(id: string, extensions: readonly string[]): boolean {
 	const [filename, query = ""] = id.split("?", 2);
 
-	if (!filename.endsWith(".svelte")) {
+	if (!extensions.some((extension) => filename.endsWith(extension))) {
 		return false;
 	}
 
