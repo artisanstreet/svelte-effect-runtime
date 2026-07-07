@@ -13,16 +13,16 @@ import { defineConfig } from "vite";
 import { effect } from "svelte-effect-runtime";
 
 export default defineConfig({
-  plugins: [effect(), sveltekit()],
+	plugins: [effect(), sveltekit()],
 });
 ```
 
 ## Notes
 
-- The plugin is required for `<script effect>`, markup `yield*`, remote client wrappers, and server runtime import rewrites.
+- The plugin is required for `<script effect>`, markup `yield*`, remote client wrappers, and server runtime import rewrites in configured Svelte component modules.
 - Remote functions also require SvelteKit's `kit.experimental.remoteFunctions` flag.
 - Keep plugin configuration close to the default unless you are debugging transform behavior.
-- Parser-style Vite plugins that run their `.svelte` transform with
+- Parser-style Vite plugins that run their Svelte component transform with
   `transform.order = "pre"` can be incompatible because they may parse SER
   syntax before normal source transforms run.
 

@@ -719,6 +719,59 @@ test("vite plugin lowers svelte yield through its transform hook", async () => {
 	}
 });
 
+test("vite plugin lowers svelte yield in configured extension modules", async () => {
+	const plugins = effect();
+	const plugin = plugins.find(
+		(candidate) => candidate.name === "svelte-effect-runtime:svelte-transform",
+	);
+
+	if (!plugin) {
+		throw new Error("svelte transform plugin should exist");
+	}
+
+	plugin.configResolved?.({
+		plugins: [
+			{
+				name: "vite-plugin-svelte:config",
+				api: {
+					options: {
+						extensions: [".svelte", ".sv"],
+					},
+				},
+			},
+		],
+		logger: {
+			info() {},
+		},
+	} as never);
+
+	const source = [
+		`<script effect lang="ts">`,
+		`  let value = $state(yield* loadValue());`,
+		`</script>`,
+		``,
+		`<button onclick={yield* save(value)}>Save</button>`,
+	].join("\n");
+
+	const result = await run_svelte_transform(plugin, source, "C:/src/routes/Test.sv");
+
+	assert_string_includes(result.code, `<script lang="ts">`);
+	assert_string_includes(result.code, `await get_dispatcher().promise({`);
+	assert_string_includes(result.code, `$state(await`);
+	assert_string_includes(result.code, `Code.Markup.Run`);
+	assert_not_match(result.code, /\$effect\(\(\) =>/);
+
+	parse(result.code, { filename: "Test.sv" });
+
+	if (/script[^>]*\beffect\b/.test(result.code)) {
+		throw new Error("effect attribute should be removed");
+	}
+
+	if (result.code.includes(`onclick={yield*`)) {
+		throw new Error("markup yield should be lowered");
+	}
+});
+
 test("vite plugin emits client and server promises", async () => {
 	const plugins = effect();
 	const plugin = plugins.find(

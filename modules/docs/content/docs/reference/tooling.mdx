@@ -10,7 +10,8 @@ the VSIX extension.
 ## Vite layer
 
 These are advanced subpath exports. Most SvelteKit apps should use `effect()`
-from `"svelte-effect-runtime"` and compose it with `sveltekit()`.
+from `"svelte-effect-runtime"` and compose it with `sveltekit()`. The Vite
+plugin lowers SER syntax in configured Svelte component modules.
 
 ```ts
 import { effect, type EffectOptions } from "svelte-effect-runtime";
@@ -18,7 +19,7 @@ import { effect, type EffectOptions } from "svelte-effect-runtime";
 
 ```ts
 export interface EffectOptions {
-  debug?: boolean;
+	debug?: boolean;
 }
 
 export function effect(options?: EffectOptions): Plugin[];
