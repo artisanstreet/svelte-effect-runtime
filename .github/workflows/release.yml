@@ -326,6 +326,14 @@ jobs:
 
           exit "$TFX_EXIT_CODE"
 
+      - name: pack_release_assets
+        if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          vp node build/pack.ts svelte-effect-runtime-grammars
+          vp node build/pack.ts svelte-effect-runtime
+          vp node build/pack.ts svelte-effect-runtime-language-server
+
       - name: create_or_update_release
         if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')
         env:
