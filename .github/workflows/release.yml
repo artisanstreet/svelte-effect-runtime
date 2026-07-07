@@ -278,7 +278,25 @@ jobs:
             exit 1
           fi
 
-          vp dlx ovsx publish "$VSIX_PATH" -p "${{ secrets.OPEN_VSX_TOKEN }}"
+          set +e
+          OVSX_OUTPUT="$(
+            vp dlx ovsx publish "$VSIX_PATH" -p "${{ secrets.OPEN_VSX_TOKEN }}" 2>&1
+          )"
+          OVSX_EXIT_CODE=$?
+          set -e
+
+          printf '%s\n' "$OVSX_OUTPUT"
+
+          if [ "$OVSX_EXIT_CODE" -eq 0 ]; then
+            exit 0
+          fi
+
+          if printf '%s' "$OVSX_OUTPUT" | grep -Fq "is already published"; then
+            echo "OpenVSX already has version $RELEASE_VERSION. Skipping republish."
+            exit 0
+          fi
+
+          exit "$OVSX_EXIT_CODE"
 
       - name: publish_extension_to_marketplace
         if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')
