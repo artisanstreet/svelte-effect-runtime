@@ -44,7 +44,7 @@ jobs:
       - name: build_docs
         run: corepack pnpm --dir modules/docs run build
 
-      - name: prepare_vercel_output
+      - name: prepare_vercel_project
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -58,13 +58,14 @@ jobs:
           fi
 
           vp dlx vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
-          vp dlx vercel build --prod --token="$VERCEL_TOKEN"
+          rm -rf .next .vercel/output
 
       - name: deploy_to_vercel
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        working-directory: ${{ github.workspace }}/modules/docs
         shell: bash
         run: |
           if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_ORG_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
@@ -73,8 +74,6 @@ jobs:
           fi
 
           vp dlx vercel deploy \
-            --prebuilt \
             --prod \
             --yes \
-            --token="$VERCEL_TOKEN" \
-            "${{ github.workspace }}/modules/docs"
+            --token="$VERCEL_TOKEN"
