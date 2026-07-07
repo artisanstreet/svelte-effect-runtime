@@ -1,9 +1,6 @@
 import { find_svelte_effect_diagnostics } from "./diagnostics.ts";
 import type { Plugin } from "vite";
 
-import MagicString from "magic-string";
-import ts from "typescript";
-
 /**
  * Options for the {@link effect} Vite plugin.
  *
@@ -12,26 +9,6 @@ import ts from "typescript";
 export interface EffectOptions {
 	/** Whether to emit debug logging in the generated remote client module. */
 	debug?: boolean;
-}
-
-type RemoteClientExportType =
-	| "query_batch"
-	| "query_live"
-	| "query"
-	| "command"
-	| "form"
-	| "prerender";
-
-interface RemoteNamespaceImport {
-	name: string;
-	statement: ts.ImportDeclaration;
-}
-
-interface RemoteClientExport {
-	name: string;
-	type: RemoteClientExportType;
-	statement: ts.VariableStatement;
-	native_call: string;
 }
 
 interface SvelteComponentModuleFilter {
@@ -57,14 +34,6 @@ type VitePluginSvelteWithExtensions = Plugin & {
 	};
 };
 
-const remote_client_export_types = new Set<RemoteClientExportType>([
-	"query_batch",
-	"query_live",
-	"query",
-	"command",
-	"form",
-	"prerender",
-]);
 const default_svelte_component_extensions = [".svelte"] as const;
 
 /**
@@ -74,7 +43,7 @@ const default_svelte_component_extensions = [".svelte"] as const;
  *
  * @example
  * ```ts
- * import { effect } from "svelte-effect-runtime";
+ * import { effect } from "svelte-effect-runtime/vite";
  * import { sveltekit } from "@sveltejs/kit/vite";
  *
  * export default defineConfig({ plugins: [effect(), sveltekit()] });
@@ -362,12 +331,12 @@ function make_remote_client_wrapper_plugin(options?: EffectOptions): Plugin {
 			);
 		},
 
-		transform(code: string, id: string) {
+		async transform(code: string, id: string) {
 			if (!is_remote_module(id) || !code.includes("__sveltekit/remote")) {
 				return undefined;
 			}
 
-			const rewritten = rewrite_remote_client_exports(code, options);
+			const rewritten = await rewrite_remote_client_exports(code, options);
 
 			if (rewritten === code) {
 				return undefined;
@@ -449,206 +418,22 @@ function make_reserved_helper_warning(names: string[]): string {
  *
  * into an Effect-aware wrapper around the same native function.
  *
+ * @example
+ * ```ts
+ * const rewritten = await rewrite_remote_client_exports(remote_module_code);
+ * ```
+ *
  * @since 2.0.0
  * @param code - The generated client remote module code.
  * @param options - Optional plugin options.
- * @returns The rewritten module code.
+ * @returns A promise that resolves to the rewritten module code.
  * @internal
  */
-export function rewrite_remote_client_exports(code: string, options?: EffectOptions): string {
-	const source_file = ts.createSourceFile(
-		"sveltekit-remote-client.ts",
-		code,
-		ts.ScriptTarget.Latest,
-		true,
-		ts.ScriptKind.TS,
-	);
-	const namespace_import = find_remote_namespace_import(source_file);
-
-	if (!namespace_import) {
-		return code;
-	}
-
-	const remote_exports = collect_remote_client_exports(source_file, code, namespace_import.name);
-
-	if (remote_exports.length === 0) {
-		return code;
-	}
-
-	const magic = new MagicString(code);
-	const imports = [
-		`import { app_dir, base } from "$app/paths/internal/client";`,
-		`import { create_remote_query_adapter, create_remote_live_query_adapter, create_remote_command_adapter, create_remote_form_adapter } from "svelte-effect-runtime/internal/remote-client";`,
-	].join("\n");
-
-	const helpers = [
-		`const __SER___remote_base = \`\${base}/\${app_dir}/remote\`;`,
-		`function __SER___decode_payload(value) { return value; }`,
-	].join("\n");
-
-	const debug_line = options?.debug ? `console.log("[ser] remote client wrappers loaded");` : "";
-
-	const injected = [imports, helpers, debug_line].filter(Boolean).join("\n");
-
-	magic.appendRight(namespace_import.statement.end, `\n${injected}`);
-
-	for (const remote_export of remote_exports) {
-		magic.overwrite(
-			remote_export.statement.getStart(source_file),
-			remote_export.statement.end,
-			make_remote_export(remote_export.name, remote_export.type, remote_export.native_call),
-		);
-	}
-
-	return magic.toString();
-}
-
-function make_remote_export(
-	name: string,
-	type: RemoteClientExportType,
-	native_call: string,
-): string {
-	if (type === "command") {
-		return `export const ${name} = create_remote_command_adapter(${native_call}, __SER___decode_payload);`;
-	}
-
-	if (type === "form") {
-		return `export const ${name} = create_remote_form_adapter(${native_call}, __SER___decode_payload, __SER___remote_base);`;
-	}
-
-	if (type === "query_live") {
-		return `export const ${name} = create_remote_live_query_adapter(${native_call}, __SER___decode_payload);`;
-	}
-
-	return `export const ${name} = create_remote_query_adapter(${native_call}, __SER___decode_payload);`;
-}
-
-function find_remote_namespace_import(
-	source_file: ts.SourceFile,
-): RemoteNamespaceImport | undefined {
-	for (const statement of source_file.statements) {
-		if (!ts.isImportDeclaration(statement)) {
-			continue;
-		}
-
-		const namespace_import = get_remote_namespace_import(statement);
-
-		if (namespace_import) {
-			return namespace_import;
-		}
-	}
-
-	return undefined;
-}
-
-function get_remote_namespace_import(
-	statement: ts.ImportDeclaration,
-): RemoteNamespaceImport | undefined {
-	if (
-		!ts.isStringLiteral(statement.moduleSpecifier) ||
-		statement.moduleSpecifier.text !== "__sveltekit/remote"
-	) {
-		return undefined;
-	}
-
-	const import_clause = statement.importClause;
-	const bindings = import_clause?.namedBindings;
-
-	if (import_clause?.isTypeOnly || !bindings || !ts.isNamespaceImport(bindings)) {
-		return undefined;
-	}
-
-	return {
-		name: bindings.name.text,
-		statement,
-	};
-}
-
-function collect_remote_client_exports(
-	source_file: ts.SourceFile,
+export async function rewrite_remote_client_exports(
 	code: string,
-	namespace: string,
-): RemoteClientExport[] {
-	return source_file.statements.flatMap((statement) =>
-		collect_remote_client_export(source_file, code, namespace, statement),
-	);
-}
+	options?: EffectOptions,
+): Promise<string> {
+	const remote_client = await import("./vite/remote-client.ts");
 
-function collect_remote_client_export(
-	source_file: ts.SourceFile,
-	code: string,
-	namespace: string,
-	statement: ts.Statement,
-): RemoteClientExport[] {
-	if (
-		!ts.isVariableStatement(statement) ||
-		!is_export_statement(statement) ||
-		!is_const_declaration_list(statement.declarationList) ||
-		statement.declarationList.declarations.length !== 1
-	) {
-		return [];
-	}
-
-	const declaration = statement.declarationList.declarations[0];
-	const initializer = declaration.initializer;
-
-	if (!ts.isIdentifier(declaration.name) || !initializer) {
-		return [];
-	}
-
-	const type = get_remote_client_export_type(initializer, namespace);
-
-	if (!type) {
-		return [];
-	}
-
-	return [
-		{
-			name: declaration.name.text,
-			type,
-			statement,
-			native_call: code.slice(initializer.getStart(source_file), initializer.end),
-		},
-	];
-}
-
-function get_remote_client_export_type(
-	initializer: ts.Expression,
-	namespace: string,
-): RemoteClientExportType | undefined {
-	if (!ts.isCallExpression(initializer)) {
-		return undefined;
-	}
-
-	const expression = initializer.expression;
-
-	if (!ts.isPropertyAccessExpression(expression)) {
-		return undefined;
-	}
-
-	if (!ts.isIdentifier(expression.expression) || expression.expression.text !== namespace) {
-		return undefined;
-	}
-
-	const type = expression.name.text;
-
-	if (!is_remote_client_export_type(type)) {
-		return undefined;
-	}
-
-	return type;
-}
-
-function is_remote_client_export_type(value: string): value is RemoteClientExportType {
-	return remote_client_export_types.has(value as RemoteClientExportType);
-}
-
-function is_export_statement(statement: ts.Statement): boolean {
-	const modifiers = ts.canHaveModifiers(statement) ? ts.getModifiers(statement) : undefined;
-
-	return modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) ?? false;
-}
-
-function is_const_declaration_list(declaration_list: ts.VariableDeclarationList): boolean {
-	return (ts.getCombinedNodeFlags(declaration_list) & ts.NodeFlags.Const) !== 0;
+	return remote_client.rewrite_remote_client_exports(code, options);
 }

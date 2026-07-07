@@ -145,7 +145,7 @@ export const get_snapshot = Prerender(
 );
 `;
 
-const vite_config = `import { effect } from "svelte-effect-runtime";
+const vite_config = `import { effect } from "svelte-effect-runtime/vite";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig } from "vite";
 

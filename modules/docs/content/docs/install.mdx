@@ -72,7 +72,7 @@ Then add the Vite plugin before `sveltekit()`:
 ```ts
 import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig } from "vite";
-import { effect } from "svelte-effect-runtime";
+import { effect } from "svelte-effect-runtime/vite";
 
 export default defineConfig({
   plugins: [effect(), sveltekit()],

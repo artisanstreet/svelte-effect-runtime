@@ -997,22 +997,33 @@ test("package manifests expose vite and transform entrypoints", async () => {
 	assert_equals(package_manifest.exports["./runtime/preprocess"], undefined);
 });
 
-test("vite entrypoint defers svelte transformer import until transform hook", async () => {
+test("vite entrypoint defers compiler-only imports until transform hooks", async () => {
 	const source = await readFile(
 		new URL("../../../modules/svelte-effect-runtime/src/vite.ts", import.meta.url),
 		"utf8",
 	);
 	const static_import_pattern = /^import\s+.*["']\.\/runtime\/transform\.ts["'];/m;
+	const static_typescript_import_pattern = /^import\s+.*["']typescript["'];/m;
+	const static_magic_string_import_pattern = /^import\s+.*["']magic-string["'];/m;
 
 	if (static_import_pattern.test(source)) {
 		throw new Error("vite entrypoint should not statically import transformer");
 	}
 
+	if (static_typescript_import_pattern.test(source)) {
+		throw new Error("vite entrypoint should not statically import TypeScript");
+	}
+
+	if (static_magic_string_import_pattern.test(source)) {
+		throw new Error("vite entrypoint should not statically import MagicString");
+	}
+
 	assert_string_includes(source, `await import(`);
 	assert_string_includes(source, `"./runtime/transform.ts"`);
+	assert_string_includes(source, `"./vite/remote-client.ts"`);
 });
 
-test("vite remote client wrapper preserves native SvelteKit remote module", () => {
+test("vite remote client wrapper preserves native SvelteKit remote module", async () => {
 	const source = [
 		`import * as __remote from '__sveltekit/remote';`,
 		``,
@@ -1023,7 +1034,7 @@ test("vite remote client wrapper preserves native SvelteKit remote module", () =
 		`export const create_post = __remote.form('abc/create_post');`,
 	].join("\n");
 
-	const result = rewrite_remote_client_exports(source);
+	const result = await rewrite_remote_client_exports(source);
 
 	assert_string_includes(result, `from '__sveltekit/remote';`);
 	assert_string_includes(result, `create_remote_query_adapter`);
