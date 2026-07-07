@@ -210,22 +210,22 @@ jobs:
       - name: pack_runtime
         run: vp node build/pack.ts svelte-effect-runtime
 
-      - name: publish_runtime_to_npm
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: wait_for_runtime_on_npm
         shell: bash
         run: |
-          if corepack pnpm view "svelte-effect-runtime@${RELEASE_VERSION}" version >/dev/null 2>&1; then
-            echo "svelte-effect-runtime@${RELEASE_VERSION} is already published. Skipping npm publish."
-            exit 0
-          fi
+          for attempt in {1..60}; do
+            if corepack pnpm view "svelte-effect-runtime@${RELEASE_VERSION}" version >/dev/null 2>&1; then
+              echo "svelte-effect-runtime@${RELEASE_VERSION} is published."
+              exit 0
+            fi
 
-          if [ -n "${NPM_TOKEN}" ]; then
-            printf '//registry.npmjs.org/:_authToken=%s\n' "${NPM_TOKEN}" > "${HOME}/.npmrc"
-          fi
+            echo "Waiting for svelte-effect-runtime@${RELEASE_VERSION} to appear on npm (${attempt}/60)."
+            sleep 10
+          done
 
-          RUNTIME_TGZ="$(find .dist/svelte-effect-runtime -maxdepth 1 -name '*.tgz' -print -quit)"
-          corepack pnpm publish "$RUNTIME_TGZ" --access public --provenance --no-git-checks
+          echo "Timed out waiting for svelte-effect-runtime@${RELEASE_VERSION} on npm." >&2
+          echo "Check the runtime workflow, which owns publishing the runtime package." >&2
+          exit 1
 
       - name: build_lsp
         run: corepack pnpm --dir modules/svelte-effect-runtime-language-server run build
