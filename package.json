@@ -29,6 +29,7 @@
 		"@types/node": "^24.6.1",
 		"devalue": "5.8.1",
 		"effect": "4.0.0-beta.93",
+		"rolldown": "1.1.4",
 		"shiki": "4.3.1",
 		"svelte": "^5.56.0",
 		"typescript": "^6.0.3",
