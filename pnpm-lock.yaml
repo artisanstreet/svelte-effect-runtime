@@ -219,9 +219,15 @@ importers:
       '@types/node':
         specifier: ^24.6.1
         version: 24.6.1
+      devalue:
+        specifier: 5.8.1
+        version: 5.8.1
       effect:
         specifier: 4.0.0-beta.93
         version: 4.0.0-beta.93
+      shiki:
+        specifier: 4.3.1
+        version: 4.3.1
       svelte:
         specifier: ^5.56.0
         version: 5.56.4
