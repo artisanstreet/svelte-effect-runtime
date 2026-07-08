@@ -58,6 +58,13 @@ test("VS Code extension activates for .sv Svelte files", () => {
 	);
 });
 
+test("VS Code extension enables Emmet markup completions for Svelte files", () => {
+	const emmet_include_languages =
+		extension_manifest.contributes.configurationDefaults["emmet.includeLanguages"];
+
+	assert_equals(emmet_include_languages.svelte, "html");
+});
+
 test("VS Code extension server path installs with corepack pnpm policy", async () => {
 	const server_path_source = await readFile(
 		new URL(

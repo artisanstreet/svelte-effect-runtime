@@ -38,6 +38,11 @@
 				]
 			}
 		],
+		"configurationDefaults": {
+			"emmet.includeLanguages": {
+				"svelte": "html"
+			}
+		},
 		"commands": [
 			{
 				"command": "svelte-effect-runtime.startLanguageServer",
