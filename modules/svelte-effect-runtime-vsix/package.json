@@ -15,7 +15,7 @@
 		"README.md"
 	],
 	"type": "module",
-	"main": "./.dist/extension.js",
+	"main": "./.dist/extension.cjs",
 	"scripts": {
 		"build": "corepack pnpm run clean && vp node ../../build/ext.ts",
 		"clean": "vp node ../../build/clean.ts svelte-effect-runtime-vsix",

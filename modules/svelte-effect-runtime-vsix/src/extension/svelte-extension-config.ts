@@ -5,12 +5,14 @@ import {
 } from "./constants.ts";
 import {
 	assert_safe_language_server_path,
+	can_configure_svelte_language_server_path,
 	get_workspace_configured_server_path,
 	normalize_configured_server_path,
 	type ScopedServerPathConfiguration,
 } from "./server-path-policy.ts";
 import { paths_equal } from "./paths.ts";
 
+import { access } from "node:fs/promises";
 import path from "node:path";
 
 import * as vscode from "vscode";
@@ -62,11 +64,15 @@ export async function configure_svelte_extension_language_server(
 	const workspace_path = get_workspace_configured_server_path(scoped_path);
 	const svelte_config = vscode.workspace.getConfiguration("svelte");
 	const current_path = normalize_configured_server_path(scoped_path.global_path);
+	const current_path_exists = current_path ? await file_exists(current_path) : false;
 	const managed_path = context.globalState.get<string | undefined>(LEGACY_STATE_MANAGED_PATH);
-	const can_configure =
-		!current_path ||
-		paths_equal(current_path, managed_path) ||
-		paths_equal(current_path, server_path);
+	const can_configure = can_configure_svelte_language_server_path({
+		current_path,
+		current_path_exists,
+		force: options.force,
+		managed_path,
+		server_path,
+	});
 
 	assert_safe_language_server_path(server_path);
 
@@ -80,6 +86,7 @@ export async function configure_svelte_extension_language_server(
 
 	if (
 		current_path &&
+		current_path_exists &&
 		!paths_equal(current_path, server_path) &&
 		!paths_equal(current_path, managed_path)
 	) {
@@ -140,4 +147,14 @@ function read_scoped_svelte_language_server_path_configuration(): ScopedServerPa
 		workspace_language_path: inspection?.workspaceLanguageValue,
 		workspace_folder_language_path: inspection?.workspaceFolderLanguageValue,
 	};
+}
+
+async function file_exists(path: string): Promise<boolean> {
+	try {
+		await access(path);
+
+		return true;
+	} catch {
+		return false;
+	}
 }

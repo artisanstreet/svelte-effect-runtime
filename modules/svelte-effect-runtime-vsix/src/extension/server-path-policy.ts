@@ -1,3 +1,5 @@
+import { paths_equal } from "./paths.ts";
+
 import { isAbsolute, normalize, parse } from "node:path";
 
 /**
@@ -44,6 +46,36 @@ export interface ResolvedServerPathConfiguration {
 	ignored_workspace_path: string | undefined;
 	/** User or machine configured path that was ignored because it is unsafe. */
 	invalid_global_path: string | undefined;
+}
+
+/**
+ * Configuration used to decide whether this extension may update the official
+ * Svelte extension's language-server path.
+ *
+ * @example
+ * ```ts
+ * const can_configure = can_configure_svelte_language_server_path({
+ *   current_path,
+ *   current_path_exists: true,
+ *   force: false,
+ *   managed_path,
+ *   server_path,
+ * });
+ * ```
+ *
+ * @since 3.4.8
+ */
+export interface SvelteLanguageServerPathConfiguration {
+	/** Currently configured official Svelte language-server path. */
+	current_path: string | undefined;
+	/** Whether the currently configured path exists on disk. */
+	current_path_exists: boolean;
+	/** Whether user settings allow replacing existing custom paths. */
+	force: boolean;
+	/** Path previously written and tracked by this extension. */
+	managed_path: string | undefined;
+	/** SER language-server path this extension wants the Svelte extension to use. */
+	server_path: string;
 }
 
 /**
@@ -101,6 +133,39 @@ export function get_workspace_configured_server_path(
 	]
 		.map(normalize_configured_server_path)
 		.find((configured_path) => configured_path !== undefined);
+}
+
+/**
+ * Determines whether the official Svelte extension path can be updated safely.
+ *
+ * @example
+ * ```ts
+ * if (can_configure_svelte_language_server_path(config)) update_setting();
+ * ```
+ *
+ * @since 3.4.8
+ * @param configuration - Current path ownership and existence information.
+ * @returns Whether the SER extension may write the Svelte language-server path.
+ */
+export function can_configure_svelte_language_server_path(
+	configuration: SvelteLanguageServerPathConfiguration,
+): boolean {
+	if (!configuration.current_path) {
+		return true;
+	}
+
+	if (configuration.force) {
+		return true;
+	}
+
+	if (!configuration.current_path_exists) {
+		return true;
+	}
+
+	return (
+		paths_equal(configuration.current_path, configuration.managed_path) ||
+		paths_equal(configuration.current_path, configuration.server_path)
+	);
 }
 
 /**

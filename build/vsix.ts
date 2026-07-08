@@ -15,7 +15,7 @@ import {
 
 const package_dir = join(repo_root, "modules", "svelte-effect-runtime-vsix");
 const output_dir = join(repo_root, ".dist", "svelte-effect-runtime-vsix");
-const extension_files = ["extension.js", "extension.js.map"] as const;
+const extension_files = ["extension.cjs", "extension.cjs.map"] as const;
 
 const staging_dir = await make_temp_dir("svelte-effect-runtime-vsix-");
 const staging_dist_dir = join(staging_dir, ".dist");

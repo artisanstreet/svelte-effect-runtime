@@ -12,8 +12,8 @@ await build({
 	},
 	output: {
 		dir: output_dir,
-		format: "esm",
-		entryFileNames: "[name].js",
+		format: "cjs",
+		entryFileNames: "[name].cjs",
 		chunkFileNames: "chunks/[name]-[hash].js",
 		sourcemap: true,
 	},

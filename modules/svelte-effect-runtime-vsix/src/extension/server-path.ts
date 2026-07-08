@@ -50,7 +50,7 @@ export async function get_server_path(
 	context: vscode.ExtensionContext,
 	output_channel: vscode.OutputChannel,
 ): Promise<string> {
-	const configured_path = get_configured_server_path(output_channel);
+	const configured_path = await get_configured_server_path(output_channel);
 
 	if (configured_path) {
 		return configured_path;
@@ -70,7 +70,7 @@ export async function get_server_path(
  *
  * @example
  * ```ts
- * const configured = get_configured_server_path();
+ * const configured = await get_configured_server_path();
  * ```
  *
  * @since 2.0.0
@@ -78,9 +78,9 @@ export async function get_server_path(
  *   unsafe configuration.
  * @returns The configured path, or undefined when the setting is empty.
  */
-export function get_configured_server_path(
+export async function get_configured_server_path(
 	output_channel?: vscode.OutputChannel,
-): string | undefined {
+): Promise<string | undefined> {
 	const result = resolve_configured_server_path(read_scoped_server_path_configuration());
 
 	if (result.ignored_workspace_path) {
@@ -95,7 +95,11 @@ export function get_configured_server_path(
 		);
 	}
 
-	return result.path;
+	if (!result.path) {
+		return undefined;
+	}
+
+	return await resolve_existing_configured_server_path(result.path, output_channel);
 }
 
 function read_scoped_server_path_configuration(): ScopedServerPathConfiguration {
@@ -150,6 +154,33 @@ async function read_installed_package_version(install_root: string): Promise<str
 		return typeof package_json.version === "string" ? package_json.version : undefined;
 	} catch {
 		return undefined;
+	}
+}
+
+async function resolve_existing_configured_server_path(
+	configured_path: string,
+	output_channel?: vscode.OutputChannel,
+): Promise<string | undefined> {
+	const exists = await file_exists(configured_path);
+
+	if (exists) {
+		return configured_path;
+	}
+
+	output_channel?.appendLine(
+		"Ignoring svelte-effect-runtime.languageServer.path because the configured file does not exist.",
+	);
+
+	return undefined;
+}
+
+async function file_exists(path: string): Promise<boolean> {
+	try {
+		await access(path);
+
+		return true;
+	} catch {
+		return false;
 	}
 }
 
