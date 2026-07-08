@@ -45,6 +45,19 @@ test("VS Code extension packages a CommonJS activation entry", async () => {
 	assert_false(package_source.includes('"extension.js", "extension.js.map"'));
 });
 
+test("VS Code extension activates for .sv Svelte files", () => {
+	const language = extension_manifest.contributes.languages.find(
+		(language) => language.id === "svelte",
+	);
+
+	assert_truthy(language);
+	assert_truthy(language.extensions.includes(".svelte"));
+	assert_truthy(language.extensions.includes(".sv"));
+	assert_truthy(
+		extension_manifest.activationEvents.includes("workspaceContains:**/*.{svelte,sv}"),
+	);
+});
+
 test("VS Code extension server path installs with corepack pnpm policy", async () => {
 	const server_path_source = await readFile(
 		new URL(

@@ -1,6 +1,7 @@
 import { DocumentSnapshot, import_runtime_module, patch_marker } from "./svelte-internals.ts";
 import { normalize_transform_result } from "./transform-results.ts";
 import {
+	patch_svelte_file_extensions,
 	patch_svelte_compiler_path,
 	patch_typescript_code_actions,
 	patch_typescript_snapshot_path,
@@ -13,6 +14,7 @@ export async function bootstrap_language_server() {
 
 	const runtime_module = await import_runtime_module("runtime/transform.js");
 
+	patch_svelte_file_extensions();
 	patch_svelte_compiler_path(runtime_module.transform_svelte_effect);
 	patch_typescript_snapshot_path({
 		transformEffectMarkup: (code, options) =>

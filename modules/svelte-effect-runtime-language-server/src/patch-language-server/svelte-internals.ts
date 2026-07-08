@@ -28,6 +28,15 @@ export const { extractScriptTags } = require(
 export const { DocumentSnapshot } = require(
 	path.join(language_server_root, "plugins", "typescript", "DocumentSnapshot.js"),
 ) as { DocumentSnapshot: any };
+export const TypeScriptSnapshotManagerModule = require(
+	path.join(language_server_root, "plugins", "typescript", "SnapshotManager.js"),
+) as { SnapshotManager: any };
+export const TypeScriptSvelteSysModule = require(
+	path.join(language_server_root, "plugins", "typescript", "svelte-sys.js"),
+) as { createSvelteSys: (tsSystem: any) => any };
+export const TypeScriptSvelteUtils = require(
+	path.join(language_server_root, "plugins", "typescript", "utils.js"),
+) as Record<string, any>;
 export const { CodeActionsProviderImpl } = require(
 	path.join(language_server_root, "plugins", "typescript", "features", "CodeActionsProvider.js"),
 ) as { CodeActionsProviderImpl: any };

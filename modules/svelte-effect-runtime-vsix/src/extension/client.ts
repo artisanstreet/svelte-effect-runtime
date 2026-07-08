@@ -110,7 +110,7 @@ function create_client_options(output_channel: vscode.OutputChannel): LanguageCl
 		outputChannel: output_channel,
 		synchronize: {
 			fileEvents: vscode.workspace.createFileSystemWatcher(
-				"**/*.{svelte,ts,js,mjs,cjs,json}",
+				"**/*.{svelte,sv,ts,js,mjs,cjs,json}",
 			),
 		},
 	};

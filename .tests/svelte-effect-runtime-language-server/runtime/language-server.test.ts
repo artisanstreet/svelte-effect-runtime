@@ -13,7 +13,10 @@ import {
 	ts,
 } from "../../../modules/svelte-effect-runtime-language-server/src/patch-language-server/svelte-internals.ts";
 import { normalize_transform_result } from "../../../modules/svelte-effect-runtime-language-server/src/patch-language-server/transform-results.ts";
-import { patch_svelte_compiler_path } from "../../../modules/svelte-effect-runtime-language-server/src/patch-language-server/patches.ts";
+import {
+	patch_svelte_compiler_path,
+	patch_svelte_file_extensions,
+} from "../../../modules/svelte-effect-runtime-language-server/src/patch-language-server/patches.ts";
 import { prepare_virtual_document } from "../../../modules/svelte-effect-runtime-language-server/src/patch-language-server/virtual-document.ts";
 import { rebind_snapshot_to_original_document } from "../../../modules/svelte-effect-runtime-language-server/src/patch-language-server/snapshot.ts";
 import {
@@ -178,8 +181,39 @@ test("virtual TS snapshot scopes bare const declaration tags", () => {
 	assert_equals(scoped_diagnostics, []);
 });
 
-function make_document(content: string) {
-	const filename = fileURLToPath(new URL("language-server-fixture.svelte", import.meta.url));
+test("virtual TS snapshot treats .sv files as Svelte documents", () => {
+	patch_svelte_file_extensions();
+
+	const source = [
+		`<script lang="ts">`,
+		`  const route = "docs";`,
+		`</script>`,
+		``,
+		`<Frame>`,
+		`  {#snippet sidebar()}`,
+		`    <Sidebar {route} />`,
+		`  {/snippet}`,
+		`</Frame>`,
+	].join("\n");
+	const filename = fileURLToPath(new URL("language-server-fixture.sv", import.meta.url));
+	const snapshot = DocumentSnapshot.fromFilePath(
+		filename,
+		(path, text) => make_document(text, path),
+		make_snapshot_options(),
+		{
+			readFile: (path: string) => (path === filename ? source : undefined),
+		},
+	);
+
+	assert_equals(snapshot.parserError, null);
+	assert_false(snapshot.getFullText().startsWith("<script"));
+	assert_string_includes(snapshot.getFullText(), "sidebar");
+});
+
+function make_document(
+	content: string,
+	filename = fileURLToPath(new URL("language-server-fixture.svelte", import.meta.url)),
+) {
 	const uri = make_file_uri(filename);
 	const document = Document.createForTest(uri, content);
 
