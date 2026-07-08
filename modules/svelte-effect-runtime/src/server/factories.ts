@@ -16,6 +16,8 @@ import {
 	query as native_query,
 } from "$app/server";
 import type { RemoteFormInput } from "@sveltejs/kit";
+import { make_remote_live_stream } from "$/live.ts";
+import { create_remote_transport_error } from "$/remote/shared.ts";
 import { Effect, type Schema } from "effect";
 
 import { is_handler, is_unchecked, normalize_validator } from "./schema.ts";
@@ -33,7 +35,6 @@ import type {
 	EffectRemoteFunction,
 	EffectRemoteLiveQuery,
 	EffectRemoteLiveQueryFunction,
-	EffectRemoteLiveQueryResource,
 	EffectRemoteQuery,
 	EffectRemoteQueryFunction,
 	PrerenderOptions,
@@ -41,6 +42,7 @@ import type {
 	RemoteFormHandler,
 	RemoteHandler,
 	RemoteLiveHandler,
+	RemoteLiveSource,
 	SchemaEncodedInput,
 	SchemaInput,
 	StandardSchema,
@@ -78,9 +80,7 @@ type OptionalFormKeys<Value> = {
 
 type NativeQueryLike<Input = unknown> = (input: Input) => unknown;
 
-type EffectRemoteResource<Output, ErrorType = never> =
-	| EffectRemoteLiveQueryResource<Output>
-	| EffectRemoteQuery<Output, ErrorType>;
+type EffectRemoteResource<Output, ErrorType = never> = EffectRemoteQuery<Output, ErrorType>;
 
 type CurrentRemoteRequestDetection =
 	| {
@@ -168,16 +168,12 @@ function to_effect_live_query<Input, Output, ErrorType = never>(
 	native: NativeQueryLike<Input>,
 ): EffectRemoteLiveQueryFunction<Input, Output, ErrorType> {
 	const wrapped = ((input: Input) => {
-		const effect = Effect.try({
-			try: () => {
-				const resource = (native as (input: Input) => unknown)(input);
+		const resource = (native as (input: Input) => unknown)(input);
 
-				return make_live_resource<Output>(resource);
-			},
-			catch: (error: unknown) => error,
-		}) as unknown as EffectRemoteLiveQuery<Output, ErrorType>;
-
-		return effect;
+		return make_remote_live_stream<Output, ErrorType>(
+			resource,
+			create_remote_transport_error,
+		) as EffectRemoteLiveQuery<Output, ErrorType>;
 	}) as unknown as EffectRemoteLiveQueryFunction<Input, Output, ErrorType>;
 
 	copy_property_descriptors(native, wrapped);
@@ -198,20 +194,7 @@ type NativeQueryResource<Output> = NativeRemoteResource<Output> & {
 	readonly withOverride?: (update: (current: Output) => Output) => unknown;
 };
 
-type NativeLiveQueryResource<Output> = NativeRemoteResource<Output> &
-	Partial<AsyncIterable<Output>> & {
-		readonly connected?: boolean;
-		readonly done?: boolean;
-		readonly reconnect?: () => Promise<void>;
-	};
-
 function is_query_resource<Output>(resource: unknown): resource is NativeQueryResource<Output> {
-	const resource_type = typeof resource;
-
-	return (resource_type === "object" && resource !== null) || resource_type === "function";
-}
-
-function is_live_resource<Output>(resource: unknown): resource is NativeLiveQueryResource<Output> {
 	const resource_type = typeof resource;
 
 	return (resource_type === "object" && resource !== null) || resource_type === "function";
@@ -279,57 +262,6 @@ function attach_query_resource_methods<Output, ErrorType = never>(
 			value: (update: (current: Output) => Output) => with_override.call(resource, update),
 		});
 	}
-}
-
-function attach_live_resource_methods<Output>(
-	resource: unknown,
-	effect: EffectRemoteLiveQueryResource<Output>,
-): void {
-	const methods = is_live_resource<Output>(resource) ? resource : undefined;
-	const reconnect = methods?.reconnect;
-	const async_iterator = methods?.[Symbol.asyncIterator];
-	const keys = ["connected", "current", "done", "error", "loading", "ready"] as const;
-
-	if (!methods) {
-		return;
-	}
-
-	for (const key of keys) {
-		if (!(key in methods)) {
-			continue;
-		}
-
-		Object.defineProperty(effect, key, {
-			configurable: true,
-			get: () => methods[key],
-		});
-	}
-
-	if (typeof reconnect === "function") {
-		Object.defineProperty(effect, "reconnect", {
-			configurable: true,
-			value: () =>
-				Effect.tryPromise({
-					try: () => Promise.resolve(reconnect.call(resource)),
-					catch: (error: unknown) => error,
-				}),
-		});
-	}
-
-	if (typeof async_iterator === "function") {
-		Object.defineProperty(effect, Symbol.asyncIterator, {
-			configurable: true,
-			value: () => async_iterator.call(resource),
-		});
-	}
-}
-
-function make_live_resource<Output>(resource: unknown): EffectRemoteLiveQueryResource<Output> {
-	const live_resource = {} as EffectRemoteLiveQueryResource<Output>;
-
-	attach_live_resource_methods(resource, live_resource);
-
-	return live_resource;
 }
 
 /**
@@ -433,7 +365,7 @@ function QueryBatch(validate_or_handler: unknown, maybe_handler?: unknown): unkn
  * @returns A SvelteKit live query function.
  */
 function QueryLive<A, E = never, R = never>(
-	validate_or_handler: RemoteLiveHandler<void, A, E, R>,
+	validate_or_handler: RemoteLiveSource<A, E, R> | RemoteLiveHandler<void, A, E, R>,
 ): EffectRemoteLiveQueryFunction<void, A, E>;
 function QueryLive<Input, A, E = never, R = never>(
 	validate_or_handler: "unchecked",

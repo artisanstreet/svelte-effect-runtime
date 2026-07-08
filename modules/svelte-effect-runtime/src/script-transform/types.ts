@@ -181,6 +181,10 @@ export interface ScriptLoweringContext {
 	dispatcher_name: string;
 	/** Binding name used for the Effect namespace in generated code. */
 	effect_name: string;
+	/** Binding name used for the yieldable normalization helper. */
+	yieldable_name: string;
+	/** Binding name used for yieldable success type extraction. */
+	yield_success_name: string;
 	/** Whether generated state placeholders should carry TypeScript types. */
 	emit_types: boolean;
 	/**
@@ -236,4 +240,8 @@ export interface RuntimeImportBindings {
 	cancel: string;
 	/** Binding name used for Svelte's untrack helper. */
 	untrack: string;
+	/** Binding name used for the yieldable normalization helper. */
+	yieldable: string;
+	/** Binding name used for yieldable success type extraction. */
+	yield_success: string;
 }

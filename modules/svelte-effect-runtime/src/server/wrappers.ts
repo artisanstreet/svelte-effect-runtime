@@ -5,7 +5,13 @@ import { run_handler_effect, run_live_handler_source } from "./effects.ts";
 import { make_invalid_proxy } from "./invalid.ts";
 import { is_handler } from "./schema.ts";
 import type { RequestEvent } from "./runtime.ts";
-import type { EffectLike, RemoteFormHandler, RemoteHandler, RemoteLiveHandler } from "./types.ts";
+import type {
+	EffectLike,
+	RemoteFormHandler,
+	RemoteHandler,
+	RemoteLiveHandler,
+	RemoteLiveSource,
+} from "./types.ts";
 
 let running_remote_effect_handlers = 0;
 
@@ -69,7 +75,7 @@ export function make_remote_wrapper(
  * @returns Native SvelteKit live query wrapper.
  */
 export function make_remote_live_wrapper<Input, A>(
-	handler: RemoteLiveHandler<Input, A, unknown, unknown>,
+	handler: RemoteLiveSource<A, unknown, unknown> | RemoteLiveHandler<Input, A, unknown, unknown>,
 	helper_name: string,
 ): (input: unknown) => Promise<unknown> {
 	return async (input: unknown) => {

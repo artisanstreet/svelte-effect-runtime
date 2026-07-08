@@ -153,7 +153,7 @@ test("rewrites yielded markup expressions using Effect import aliases", () => {
 	const result = transform_markup_effect(source, "Test.svelte");
 
 	assert_string_includes(result.code, `await Dispatcher.emit({ type: Code.Markup.Promise`);
-	assert_string_includes(result.code, `yield* E.succeed(42)`);
+	assert_string_includes(result.code, `yield* ToEffect(E.succeed(42))`);
 	assert_string_includes(result.code, `import { Effect as E } from "effect";`);
 
 	compile(result.code, {
@@ -244,7 +244,7 @@ test("rewrites yield inside render tag arguments without double-calling snippet 
 		result.code,
 		`{@render child(await Dispatcher.emit({ type: Code.Markup.Promise`,
 	);
-	assert_string_includes(result.code, `return (yield* load());`);
+	assert_string_includes(result.code, `return (yield* ToEffect(load()));`);
 	if (result.code.includes(`)()}`)) {
 		throw new Error("render arguments must not double-call snippet output");
 	}
@@ -618,7 +618,7 @@ test("rewrites onclick event effect expressions as run wrappers", () => {
 	assert_string_includes(result.code, `Code.Markup.Run`);
 	assert_string_includes(
 		result.code,
-		`Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* trackEvent(); } });`,
+		`Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* ToEffect(trackEvent()); } });`,
 	);
 	if (result.code.includes("void Code.Markup.Run")) {
 		throw new Error("event handler wrappers should not emit void");
@@ -635,7 +635,7 @@ test("rewrites event effect expressions with generated event parameter", () => {
 	assert_string_includes(result.code, `event.currentTarget.value`);
 	assert_string_includes(
 		result.code,
-		`Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* validate(event.currentTarget.value); } });`,
+		`Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* ToEffect(validate(event.currentTarget.value)); } });`,
 	);
 
 	compile(result.code, {
@@ -651,7 +651,7 @@ test("rewrites onsubmit event effect expressions", () => {
 
 	assert_string_includes(result.code, `onsubmit={(event) =>`);
 	assert_string_includes(result.code, `Code.Markup.Run`);
-	assert_string_includes(result.code, `yield* submit()`);
+	assert_string_includes(result.code, `yield* ToEffect(submit())`);
 });
 
 test("rewrites on:click event effect expressions", () => {
@@ -660,7 +660,7 @@ test("rewrites on:click event effect expressions", () => {
 
 	assert_string_includes(result.code, `on:click={(event) =>`);
 	assert_string_includes(result.code, `Code.Markup.Run`);
-	assert_string_includes(result.code, `yield* save(event)`);
+	assert_string_includes(result.code, `yield* ToEffect(save(event))`);
 });
 
 test("rewrites custom event-like handler attributes", () => {
@@ -668,7 +668,7 @@ test("rewrites custom event-like handler attributes", () => {
 	const result = transform_markup_effect(source, "Test.svelte");
 
 	assert_string_includes(result.code, `oncustom={(event) =>`);
-	assert_string_includes(result.code, `yield* handle(event)`);
+	assert_string_includes(result.code, `yield* ToEffect(handle(event))`);
 });
 
 test("rewrites native-style form validation handlers only when marked with yield*", () => {
@@ -678,7 +678,7 @@ test("rewrites native-style form validation handlers only when marked with yield
 	assert_string_includes(result.code, `oninput={(event) =>`);
 	assert_string_includes(
 		result.code,
-		`Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* createPost.validate(); } });`,
+		`Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* ToEffect(createPost.validate()); } });`,
 	);
 	assert_string_includes(result.code, `from "svelte-effect-runtime/internal/generators"`);
 	if (!result.has_yield) throw new Error("has_yield should be true");
@@ -703,11 +703,11 @@ test("injects dispatcher import when another generated helper import already exi
 	assert_equals(value_imports, 1);
 	assert_string_includes(
 		result.code,
-		`import { Dispatcher, Code } from "svelte-effect-runtime/internal/generators";`,
+		`import { Dispatcher, Code, ToEffect } from "svelte-effect-runtime/internal/generators";`,
 	);
 	assert_string_includes(
 		result.code,
-		`Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* Effect.gen(function* () {`,
+		`Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* ToEffect(Effect.gen(function* () {`,
 	);
 
 	compile(result.code, {
@@ -772,7 +772,10 @@ test("allows direct explicit Effect.gen event composition", () => {
 	const result = transform_markup_effect(source, "Test.svelte");
 
 	assert_string_includes(result.code, `onclick={(event) =>`);
-	assert_string_includes(result.code, `yield* Effect.gen(function* () { yield* save(); })`);
+	assert_string_includes(
+		result.code,
+		`yield* ToEffect(Effect.gen(function* () { yield* save(); }))`,
+	);
 
 	compile(result.code, {
 		filename: "Test.svelte",
@@ -1135,8 +1138,8 @@ test("records source relocations for lowered markup hover spans", () => {
 	const result = transform_markup_effect(source, "Test.svelte");
 	const relocations = result.relocations ?? [];
 
-	const each_original_start = source.indexOf("yield* GetPosts()");
-	const event_original_start = source.indexOf("yield* UpvotePost(id)");
+	const each_original_start = source.indexOf("GetPosts()");
+	const event_original_start = source.indexOf("UpvotePost(id)");
 
 	const each_relocation = relocations.find(
 		(relocation) => relocation.originalStart === each_original_start,
@@ -1155,19 +1158,19 @@ test("records source relocations for lowered markup hover spans", () => {
 
 	assert_equals(
 		source.slice(each_relocation.originalStart, each_relocation.originalEnd),
-		"yield* GetPosts()",
+		"GetPosts()",
 	);
 	assert_equals(
 		result.code.slice(each_relocation.generatedStart, each_relocation.generatedEnd),
-		"yield* GetPosts()",
+		"GetPosts()",
 	);
 	assert_equals(
 		source.slice(event_relocation.originalStart, event_relocation.originalEnd),
-		"yield* UpvotePost(id)",
+		"UpvotePost(id)",
 	);
 	assert_equals(
 		result.code.slice(event_relocation.generatedStart, event_relocation.generatedEnd),
-		"yield* UpvotePost(id)",
+		"UpvotePost(id)",
 	);
 });
 
