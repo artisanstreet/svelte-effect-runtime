@@ -666,7 +666,7 @@ test("rewrites event effect expressions inside snippet blocks", () => {
 
 	assert_string_includes(result.code, `onchange={(event) =>`);
 	assert_string_includes(result.code, `Code.Markup.Run`);
-	assert_string_includes(result.code, `yield* Effect.gen(function* () {})`);
+	assert_string_includes(result.code, `yield* ToEffect(Effect.gen(function* () {}))`);
 
 	compile(result.code, {
 		filename: "Creation.svelte",
@@ -681,7 +681,7 @@ test("rewrites mixed-case DOM event effect attributes as lowercase handlers", ()
 
 	assert_string_includes(result.code, `onchange={(event) =>`);
 	assert_string_includes(result.code, `Code.Markup.Run`);
-	assert_string_includes(result.code, `yield* validate(event)`);
+	assert_string_includes(result.code, `yield* ToEffect(validate(event))`);
 
 	const compiled = compile(result.code, {
 		filename: "Test.svelte",
@@ -710,7 +710,7 @@ test("rewrites mixed-case legacy DOM event directives as lowercase handlers", ()
 
 	assert_string_includes(result.code, `on:click={(event) =>`);
 	assert_string_includes(result.code, `Code.Markup.Run`);
-	assert_string_includes(result.code, `yield* save(event)`);
+	assert_string_includes(result.code, `yield* ToEffect(save(event))`);
 });
 
 test("rewrites custom event-like handler attributes", () => {

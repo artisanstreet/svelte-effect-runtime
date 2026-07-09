@@ -18,7 +18,7 @@ import {
 import {
 	effect,
 	rewrite_remote_client_exports,
-} from "../../../modules/svelte-effect-runtime/src/vite.ts";
+} from "../../../modules/svelte-effect-runtime/src/compiler.ts";
 import {
 	get_server_runtime_or_throw,
 	reset_server_runtime,
@@ -1045,7 +1045,7 @@ test("root server-only exports throw before Vite rewrites imports", async () => 
 	}
 });
 
-test("package manifests expose vite and transform entrypoints", async () => {
+test("package manifests expose compiler and transform entrypoints", async () => {
 	const package_manifest = JSON.parse(
 		await readFile(
 			new URL("../../../modules/svelte-effect-runtime/package.json", import.meta.url),
@@ -1053,9 +1053,9 @@ test("package manifests expose vite and transform entrypoints", async () => {
 		),
 	);
 
-	assert_equals(package_manifest.exports["./vite"], {
-		types: "./.dist/vite.d.ts",
-		default: "./.dist/vite.js",
+	assert_equals(package_manifest.exports["./compiler"], {
+		types: "./.dist/compiler.d.ts",
+		default: "./.dist/compiler.js",
 	});
 	assert_equals(package_manifest.exports["./runtime/transform"], {
 		types: "./.dist/runtime/transform.d.ts",
@@ -1063,12 +1063,13 @@ test("package manifests expose vite and transform entrypoints", async () => {
 	});
 	assert_equals(package_manifest.exports["./grammars"], undefined);
 	assert_equals(package_manifest.dependencies["svelte-effect-runtime-grammars"], undefined);
+	assert_equals(package_manifest.exports["./vite"], undefined);
 	assert_equals(package_manifest.exports["./runtime/preprocess"], undefined);
 });
 
-test("vite entrypoint defers compiler-only imports until transform hooks", async () => {
+test("compiler entrypoint defers compiler-only imports until transform hooks", async () => {
 	const source = await readFile(
-		new URL("../../../modules/svelte-effect-runtime/src/vite.ts", import.meta.url),
+		new URL("../../../modules/svelte-effect-runtime/src/compiler.ts", import.meta.url),
 		"utf8",
 	);
 	const static_import_pattern = /^import\s+.*["']\.\/runtime\/transform\.ts["'];/m;
@@ -1089,7 +1090,7 @@ test("vite entrypoint defers compiler-only imports until transform hooks", async
 
 	assert_string_includes(source, `await import(`);
 	assert_string_includes(source, `"./runtime/transform.ts"`);
-	assert_string_includes(source, `"./vite/remote-client.ts"`);
+	assert_string_includes(source, `"./compiler/remote-client.ts"`);
 });
 
 test("vite remote client wrapper preserves native SvelteKit remote module", async () => {

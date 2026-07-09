@@ -45,7 +45,7 @@ export default {
 ```ts
 import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig } from "vite";
-import { effect } from "svelte-effect-runtime/vite";
+import { effect } from "svelte-effect-runtime/compiler";
 
 export default defineConfig({
   plugins: [effect(), sveltekit()],

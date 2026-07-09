@@ -25,7 +25,7 @@ await build({
 	input: {
 		mod: join(src_dir, "mod.ts"),
 		server: join(src_dir, "server.ts"),
-		vite: join(src_dir, "vite.ts"),
+		compiler: join(src_dir, "compiler.ts"),
 		"runtime/transform": join(src_dir, "runtime", "transform.ts"),
 		"internal/generators": join(src_dir, "internal", "generators.ts"),
 		"internal/remote-client": join(src_dir, "internal", "remote-client.ts"),

@@ -251,7 +251,7 @@ export {
 } from "$/remote/shared.ts";
 
 /** Re-export app setup helpers so users can import them from root. */
-export { effect, type EffectOptions } from "$/vite.ts";
+export { effect, type EffectOptions } from "$/compiler.ts";
 
 /** Re-export server helper types from the root entrypoint. */
 export type {

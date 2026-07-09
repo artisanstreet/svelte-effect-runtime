@@ -10,7 +10,7 @@ The `effect()` Vite plugin handles runtime integration around SvelteKit: compone
 ```ts
 import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig } from "vite";
-import { effect } from "svelte-effect-runtime/vite";
+import { effect } from "svelte-effect-runtime/compiler";
 
 export default defineConfig({
 	plugins: [effect(), sveltekit()],

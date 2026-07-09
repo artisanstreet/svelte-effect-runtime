@@ -43,7 +43,7 @@ const default_svelte_component_extensions = [".svelte"] as const;
  *
  * @example
  * ```ts
- * import { effect } from "svelte-effect-runtime/vite";
+ * import { effect } from "svelte-effect-runtime/compiler";
  * import { sveltekit } from "@sveltejs/kit/vite";
  *
  * export default defineConfig({ plugins: [effect(), sveltekit()] });
@@ -433,7 +433,7 @@ export async function rewrite_remote_client_exports(
 	code: string,
 	options?: EffectOptions,
 ): Promise<string> {
-	const remote_client = await import("./vite/remote-client.ts");
+	const remote_client = await import("./compiler/remote-client.ts");
 
 	return remote_client.rewrite_remote_client_exports(code, options);
 }
