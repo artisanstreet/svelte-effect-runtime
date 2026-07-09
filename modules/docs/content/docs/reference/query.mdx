@@ -64,4 +64,4 @@ Unlike `Query`, `Query.batch` does not support the no-validator overload.
 - `Query.live("unchecked", fn)`
 - `Query.live(schema, fn)`
 
-Use `Live.status(stream)` for transport state and `Live.reconnect(stream)` for manual reconnects.
+Use `stream.pipe(Live.status)` for transport state and `stream.pipe(Live.reconnect)` for manual reconnects.

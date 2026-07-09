@@ -20,20 +20,20 @@ Registers the layer used by browser-side Effect programs. Call it once from `src
 ```ts
 import { Live } from "svelte-effect-runtime";
 
-const status = Live.status(clock);
+const status = clock.pipe(Live.status);
 ```
 
-Returns a Stream of transport status snapshots for a `RemoteLiveStream`.
+Returns a Stream of transport status snapshots for a `RemoteLiveStream`. The helper can also be called directly as `Live.status(clock)`.
 
 ## Live.reconnect
 
 ```ts
 import { Live } from "svelte-effect-runtime";
 
-const reconnect = Live.reconnect(clock);
+const reconnect = clock.pipe(Live.reconnect);
 ```
 
-Returns an Effect that asks the live query transport to reconnect.
+Returns an Effect that asks the live query transport to reconnect. The helper can also be called directly as `Live.reconnect(clock)`.
 
 ## RemoteLiveStream
 

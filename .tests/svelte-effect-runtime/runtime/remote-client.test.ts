@@ -308,7 +308,7 @@ test("remote live query adapter returns a stream with separate controls", async 
 	)(undefined);
 	const derived_query = query.pipe(Stream.map((value) => value.toUpperCase()));
 	const status = await Effect.runPromise(
-		Stream.runCollect(Live.status(derived_query).pipe(Stream.take(1))),
+		Stream.runCollect(derived_query.pipe(Live.status, Stream.take(1))),
 	);
 	const values = await Effect.runPromise(Stream.runCollect(derived_query));
 
@@ -319,7 +319,7 @@ test("remote live query adapter returns a stream with separate controls", async 
 	assert_equals("ready" in query, false);
 	assert_equals("reconnect" in query, false);
 
-	await Effect.runPromise(Live.reconnect(derived_query));
+	await Effect.runPromise(derived_query.pipe(Live.reconnect));
 
 	assert_equals(reconnect_called, true);
 });
@@ -337,7 +337,7 @@ test("remote live status reports failed resources before closed resources", asyn
 		"",
 	)(undefined);
 	const status = await Effect.runPromise(
-		Stream.runCollect(Live.status(query).pipe(Stream.take(1))),
+		Stream.runCollect(query.pipe(Live.status, Stream.take(1))),
 	);
 
 	assert_equals(status[0]?._tag, "Failed");
