@@ -250,6 +250,53 @@ test("direct svelte transform emits async rune output Svelte can compile", () =>
 	}
 });
 
+test("direct svelte transform lowers snippet event attributes in full components", () => {
+	const source = [
+		`<script>`,
+		`  import { Effect } from "effect";`,
+		`</script>`,
+		``,
+		`{#snippet row()}`,
+		`  <input onchange={yield* Effect.gen(function* () {})} />`,
+		`{/snippet}`,
+		``,
+		`{@render row()}`,
+	].join("\n");
+
+	const result = transform_svelte_effect(source, "Creation.svelte");
+
+	assert_string_includes(result.code, `onchange={(event) =>`);
+	assert_string_includes(result.code, `Code.Markup.Run`);
+
+	compile(result.code, {
+		filename: "Creation.svelte",
+		generate: "server",
+		experimental: { async: true },
+	});
+});
+
+test("direct svelte transform lowers event-like attributes on component tags", () => {
+	const source = [
+		`<script>`,
+		`  import { Effect } from "effect";`,
+		`  import Child from "./Child.svelte";`,
+		`</script>`,
+		``,
+		`<Child onselect={yield* Effect.succeed(event)} />`,
+	].join("\n");
+
+	const result = transform_svelte_effect(source, "Parent.svelte");
+
+	assert_string_includes(result.code, `<Child onselect={(event) =>`);
+	assert_string_includes(result.code, `Code.Markup.Run`);
+
+	compile(result.code, {
+		filename: "Parent.svelte",
+		generate: "server",
+		experimental: { async: true },
+	});
+});
+
 test("direct svelte transform accepts optional filename", () => {
 	const source = `<p>{yield* loadValue()}</p>`;
 
