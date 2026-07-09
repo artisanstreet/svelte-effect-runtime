@@ -215,6 +215,7 @@ export interface Insertion {
 export interface MarkupHelperBindings {
 	codes: string;
 	dispatcher: string;
+	yieldable: string;
 }
 
 /**

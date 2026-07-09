@@ -1,7 +1,7 @@
 import { test } from "vitest";
 import { assert_equals, assert_throws, assert_rejects } from "./helpers/assert.ts";
 import { isRedirect, redirect as svelte_redirect } from "@sveltejs/kit";
-import { Effect } from "effect";
+import { Effect, Stream } from "effect";
 import { stringify } from "devalue";
 import {
 	create_remote_command_adapter,
@@ -13,6 +13,7 @@ import { to_form_data } from "../../../modules/svelte-effect-runtime/src/remote/
 import { normalize_native_error } from "../../../modules/svelte-effect-runtime/src/remote/client/failures.ts";
 import { create_serialized_remote_failure_envelope } from "../../../modules/svelte-effect-runtime/src/remote/shared.ts";
 import { reset_dispatcher } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
+import { Live } from "../../../modules/svelte-effect-runtime/src/live.ts";
 
 test("remote query adapter preserves decoded domain failures", async () => {
 	const domain_error = { _tag: "DomainError", message: "nope" };
@@ -278,69 +279,68 @@ test("remote query adapter preserves resource state and methods", async () => {
 	assert_equals(override_called, true);
 });
 
-test("remote live query adapter preserves state and wraps reconnect", async () => {
+test("remote live query adapter returns a stream with separate controls", async () => {
 	let reconnect_called = false;
 
 	const native = () => {
-		const resource = Promise.resolve("first") as Promise<string> & {
-			connected: boolean;
-			current: string;
-			done: boolean;
-			error: unknown;
-			loading: boolean;
-			ready: boolean;
-			reconnect: () => Promise<void>;
-			[Symbol.asyncIterator]: () => AsyncIterator<string>;
+		const resource = {
+			connected: true,
+			done: false,
+			error: undefined,
+			reconnect: () => {
+				reconnect_called = true;
+
+				return Promise.resolve();
+			},
+			[Symbol.asyncIterator]: async function* () {
+				yield "first";
+				yield "second";
+			},
 		};
-
-		Object.defineProperties(resource, {
-			[Symbol.asyncIterator]: {
-				value: async function* () {
-					yield "first";
-					yield "second";
-				},
-			},
-			connected: { get: () => true },
-			current: { get: () => "first" },
-			done: { get: () => false },
-			error: { get: () => undefined },
-			loading: { get: () => false },
-			ready: { get: () => true },
-			reconnect: {
-				value: () => {
-					reconnect_called = true;
-
-					return Promise.resolve();
-				},
-			},
-		});
 
 		return resource;
 	};
 
-	const query_effect = create_remote_live_query_adapter<undefined, string>(
+	const query = create_remote_live_query_adapter<undefined, string>(
 		native,
 		(value) => value,
 		"",
 	)(undefined);
-	const query = await Effect.runPromise(query_effect);
+	const derived_query = query.pipe(Stream.map((value) => value.toUpperCase()));
+	const status = await Effect.runPromise(
+		Stream.runCollect(Live.status(derived_query).pipe(Stream.take(1))),
+	);
+	const values = await Effect.runPromise(Stream.runCollect(derived_query));
 
-	const values: string[] = [];
+	assert_equals(Stream.isStream(query), true);
+	assert_equals(status, [{ _tag: "Open" }]);
+	assert_equals(values, ["FIRST", "SECOND"]);
+	assert_equals("current" in query, false);
+	assert_equals("ready" in query, false);
+	assert_equals("reconnect" in query, false);
 
-	for await (const value of query) {
-		values.push(value);
-	}
-
-	assert_equals(query.connected, true);
-	assert_equals(query.current, "first");
-	assert_equals(query.done, false);
-	assert_equals(query.ready, true);
-	assert_equals(Effect.isEffect(query.reconnect()), true);
-	assert_equals(values, ["first", "second"]);
-
-	await Effect.runPromise(query.reconnect());
+	await Effect.runPromise(Live.reconnect(derived_query));
 
 	assert_equals(reconnect_called, true);
+});
+
+test("remote live status reports failed resources before closed resources", async () => {
+	const native = () => ({
+		connected: false,
+		done: true,
+		error: new Error("connection lost"),
+		[Symbol.asyncIterator]: async function* () {},
+	});
+	const query = create_remote_live_query_adapter<undefined, string>(
+		native,
+		(value) => value,
+		"",
+	)(undefined);
+	const status = await Effect.runPromise(
+		Stream.runCollect(Live.status(query).pipe(Stream.take(1))),
+	);
+
+	assert_equals(status[0]?._tag, "Failed");
 });
 
 test("remote command adapter resolves callable responses and tracks pending", async () => {

@@ -2,6 +2,8 @@ export { Command, Form, Prerender, Query } from "./factories.ts";
 export { Error, Redirect } from "./control-flow.ts";
 export { get_server_runtime_or_throw, RequestEvent, ServerRuntime } from "./runtime.ts";
 export { RuntimeAlreadyInitializedError } from "$/errors.ts";
+export { Live } from "$/live.ts";
+export type { LiveFactory, LiveStatus, RemoteLiveStream } from "$/live.ts";
 
 export type {
 	ErrorBody,
@@ -24,8 +26,6 @@ export type {
 	EffectRemoteFunction,
 	EffectRemoteLiveQuery,
 	EffectRemoteLiveQueryFunction,
-	EffectRemoteLiveQueryResource,
-	EffectRemoteLiveSource,
 	EffectRemoteQuery,
 	EffectRemoteQueryFunction,
 	FormFactory,
@@ -38,6 +38,7 @@ export type {
 	RemoteFormHandler,
 	RemoteHandler,
 	RemoteLiveHandler,
+	RemoteLiveSource,
 	SchemaEncodedInput,
 	SchemaInput,
 	ServerRuntimeFactory,
