@@ -35,10 +35,13 @@ export function make_runtime_block_with_bindings(
 	blocks: EffectBlock[],
 	bindings: RuntimeImportBindings,
 ): string {
-	const merged_block = merge_effect_blocks(blocks);
-	const dep_reads = merged_block.deps.map((dep) => `  ${dep};`);
+	return blocks.map((block) => make_runtime_effect_block(block, bindings)).join("\n");
+}
 
-	const body = merged_block.statements.map((statement) => `    ${statement}`).join("\n");
+function make_runtime_effect_block(block: EffectBlock, bindings: RuntimeImportBindings): string {
+	const dep_reads = block.deps.map((dep) => `  ${dep};`);
+
+	const body = block.statements.map((statement) => `    ${statement}`).join("\n");
 
 	return [
 		"",
@@ -54,14 +57,4 @@ export function make_runtime_block_with_bindings(
 		"});",
 		"",
 	].join("\n");
-}
-
-function merge_effect_blocks(blocks: EffectBlock[]): EffectBlock {
-	const statements = blocks.flatMap((block) => block.statements);
-	const deps = blocks.flatMap((block) => block.deps);
-
-	return {
-		statements,
-		deps: [...new Set(deps)],
-	};
 }

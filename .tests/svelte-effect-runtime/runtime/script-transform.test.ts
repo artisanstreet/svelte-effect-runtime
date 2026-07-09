@@ -290,6 +290,25 @@ test("runs compound assignments after yielded operands resolve", () => {
 	assert_not_match(result.code, /count \+= __SER___count;\n\n\$effect/);
 });
 
+test("splits independent assignment effects into separate runtime blocks", () => {
+	const source = [
+		`let user = $state();`,
+		`let theme = $state();`,
+		`user = yield* getUser(userId);`,
+		`theme = yield* getTheme(themeId);`,
+	].join("\n");
+	const result = transform_script_effect(source, "Test.svelte");
+	const runtime_blocks = result.code.split("$effect(() => {").slice(1);
+
+	assert_equals(runtime_blocks.length, 2);
+	assert_string_includes(runtime_blocks[0], `getUser;`);
+	assert_string_includes(runtime_blocks[0], `userId;`);
+	assert_not_match(runtime_blocks[0], /getTheme;|themeId;/);
+	assert_string_includes(runtime_blocks[1], `getTheme;`);
+	assert_string_includes(runtime_blocks[1], `themeId;`);
+	assert_not_match(runtime_blocks[1], /getUser;|userId;/);
+});
+
 test("runs ordinary call statements after yielded arguments resolve", () => {
 	const source = `recordValue(yield* loadValue());`;
 	const result = transform_script_effect(source, "Test.svelte");
