@@ -7,16 +7,13 @@ import {
 	resolve_configured_server_path,
 	type ScopedServerPathConfiguration,
 } from "./server-path-policy.ts";
+import { run_package_manager_install } from "./package-manager-install.ts";
 
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { join } from "node:path";
-import process from "node:process";
 
 import * as vscode from "vscode";
 
-const exec_file = promisify(execFile);
 const LANGUAGE_SERVER_CACHE_DIR = "language-server";
 const LANGUAGE_SERVER_SCRIPT_PATH = [
 	"node_modules",
@@ -34,7 +31,7 @@ const LANGUAGE_SERVER_RUNTIME_PATH = [
 let install_task: Promise<string> | undefined;
 
 /**
- * Resolves the language-server script path from settings or a pnpm install.
+ * Resolves the language-server script path from settings or an auto install.
  *
  * @example
  * ```ts
@@ -126,15 +123,21 @@ async function install_language_server(
 	await mkdir(install_root, { recursive: true });
 
 	if (installed_version !== target_version) {
-		output_channel.appendLine(
-			`Installing ${LANGUAGE_SERVER_PACKAGE_NAME}@${target_version} with corepack pnpm.`,
-		);
+		output_channel.appendLine(`Installing ${LANGUAGE_SERVER_PACKAGE_NAME}@${target_version}.`);
 
 		await writeFile(
 			join(install_root, "package.json"),
 			`${JSON.stringify(install_manifest, null, 2)}\n`,
 		);
-		await run_pnpm_install(install_root);
+		const package_manager = await run_package_manager_install({
+			install_root,
+			reporter: output_channel,
+			verify_install: async () => {
+				await verify_language_server_install(install_root, target_version);
+			},
+		});
+
+		output_channel.appendLine(`Installed with ${package_manager}.`);
 	}
 
 	return await verify_language_server_install(install_root, target_version);
@@ -204,39 +207,4 @@ async function verify_language_server_install(
 	}
 
 	return script_path;
-}
-
-async function run_pnpm_install(install_root: string): Promise<void> {
-	await run_corepack_pnpm(
-		["install", "--prod", "--ignore-scripts", "--no-frozen-lockfile"],
-		install_root,
-	);
-}
-
-async function run_corepack_pnpm(args: string[], cwd?: string) {
-	const invocation = corepack_pnpm_invocation(args);
-
-	return await exec_file(invocation.command, invocation.args, {
-		cwd,
-		env: {
-			...process.env,
-			COREPACK_ENABLE_DOWNLOAD_PROMPT: "0",
-		},
-		windowsHide: true,
-		maxBuffer: 10 * 1024 * 1024,
-	});
-}
-
-function corepack_pnpm_invocation(args: string[]) {
-	if (process.platform === "win32") {
-		return {
-			command: "cmd.exe",
-			args: ["/d", "/s", "/c", "corepack", "pnpm", ...args],
-		};
-	}
-
-	return {
-		command: "corepack",
-		args: ["pnpm", ...args],
-	};
 }
