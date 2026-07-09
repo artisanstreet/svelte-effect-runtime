@@ -210,6 +210,22 @@ test("direct svelte transform lowers script effect and removes effect attribute"
 	}
 });
 
+test("direct svelte transform scans quoted script attributes", () => {
+	const source = [
+		`<script data-note="a > b" effect lang="ts">`,
+		`  const marker = "</scripture>";`,
+		`  let value = $state(yield* loadValue());`,
+		`</script>`,
+		`<p>{value}</p>`,
+	].join("\n");
+	const result = transform_svelte_effect(source, "QuotedScript.svelte");
+
+	assert_string_includes(result.code, `<script data-note="a > b" lang="ts">`);
+	assert_string_includes(result.code, `const marker = "</scripture>";`);
+	assert_string_includes(result.code, `await get_dispatcher().promise({`);
+	assert_not_match(result.code, /<script[^>]*\beffect\b/);
+});
+
 test("direct svelte transform emits async rune output Svelte can compile", () => {
 	const sources = [
 		[

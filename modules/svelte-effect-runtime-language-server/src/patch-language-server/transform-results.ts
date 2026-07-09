@@ -1,4 +1,5 @@
 import type { RequiredTransformResult, TransformResult } from "./types.ts";
+import { scan_svelte_effect_source } from "../../../svelte-effect-runtime/src/compiler/source-scan.ts";
 
 import MagicString from "magic-string";
 
@@ -230,76 +231,9 @@ function make_transform_error_code(error: unknown): string {
 }
 
 function find_first_script_content_start(source: string): number | undefined {
-	const lower_source = source.toLowerCase();
+	const scan = scan_svelte_effect_source(source);
 
-	let index = 0;
-
-	while (index < source.length) {
-		const script_start = find_next_script_start(lower_source, index);
-
-		if (script_start === -1) {
-			return undefined;
-		}
-
-		const tag_end = find_tag_end_from(source, script_start);
-
-		if (tag_end === -1) {
-			return undefined;
-		}
-
-		return tag_end + 1;
-	}
-
-	return undefined;
-}
-
-function find_next_script_start(lower_source: string, start: number): number {
-	let index = start;
-
-	while (index < lower_source.length) {
-		const script_start = lower_source.indexOf("<script", index);
-
-		if (script_start === -1) {
-			return -1;
-		}
-
-		const boundary = lower_source[script_start + "<script".length];
-
-		if (boundary === undefined || boundary === ">" || boundary === "/" || /\s/.test(boundary)) {
-			return script_start;
-		}
-
-		index = script_start + "<script".length;
-	}
-
-	return -1;
-}
-
-function find_tag_end_from(source: string, start: number): number {
-	let quote: string | undefined;
-
-	for (let index = start; index < source.length; index += 1) {
-		const char = source[index];
-
-		if (quote) {
-			if (char === quote) {
-				quote = undefined;
-			}
-
-			continue;
-		}
-
-		if (char === '"' || char === "'") {
-			quote = char;
-			continue;
-		}
-
-		if (char === ">") {
-			return index;
-		}
-	}
-
-	return -1;
+	return scan.scripts[0]?.content_start;
 }
 
 function create_source_map(magic: MagicString, filename: string): Record<string, unknown> {

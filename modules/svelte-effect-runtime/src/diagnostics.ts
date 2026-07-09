@@ -1,3 +1,5 @@
+import type { MarkupBraceExpression, ScriptRegion } from "$/compiler/source-scan.ts";
+import { scan_svelte_effect_source } from "$/compiler/source-scan.ts";
 import { is_event_attribute_name } from "./markup/event-attributes.ts";
 
 /**
@@ -7,13 +9,6 @@ interface Diagnostic {
 	message: string;
 	line: number;
 	column: number;
-}
-
-interface MarkupExpression {
-	start: number;
-	end: number;
-	expression_text: string;
-	attribute_name?: string;
 }
 
 /**
@@ -36,23 +31,21 @@ export function find_svelte_effect_diagnostics(
 	code: string,
 	filename: string,
 ): Array<{ message: string; line: number; column: number }> {
-	const effect_names = find_effect_local_names(code);
-	const expressions = find_markup_expressions(code);
+	const scan = scan_svelte_effect_source(code, filename);
+	const effect_names = find_effect_local_names(scan.scripts);
 
-	return expressions.flatMap((expression) =>
+	return scan.markup_expressions.flatMap((expression) =>
 		make_expression_diagnostics(code, filename, effect_names, expression),
 	);
 }
 
-function find_effect_local_names(code: string): Set<string> {
+function find_effect_local_names(scripts: readonly ScriptRegion[]): Set<string> {
 	const names = new Set<string>(["Effect"]);
-	const script_pattern = /<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi;
 
-	for (const script_match of code.matchAll(script_pattern)) {
-		const script = script_match[1];
+	for (const script of scripts) {
 		const import_pattern = /import\s+(type\s+)?\{([^}]+)\}\s+from\s+["']effect["']/g;
 
-		for (const import_match of script.matchAll(import_pattern)) {
+		for (const import_match of script.text.matchAll(import_pattern)) {
 			const is_type_only_import = import_match[1] !== undefined;
 			const specifiers = import_match[2].split(",");
 
@@ -84,54 +77,18 @@ function parse_effect_import_local_name(specifier: string): string | undefined {
 	return match[1] ?? "Effect";
 }
 
-function find_markup_expressions(code: string): MarkupExpression[] {
-	const expressions: MarkupExpression[] = [];
-	let cursor = 0;
-
-	while (cursor < code.length) {
-		const open = code.indexOf("{", cursor);
-
-		if (open === -1) {
-			break;
-		}
-
-		if (is_inside_svelte_excluded_block(code, open)) {
-			cursor = open + 1;
-			continue;
-		}
-
-		const close = find_closing_brace(code, open + 1);
-
-		if (close === -1) {
-			cursor = open + 1;
-			continue;
-		}
-
-		expressions.push({
-			start: open,
-			end: close,
-			expression_text: code.slice(open + 1, close).trim(),
-			attribute_name: find_attribute_name_before_expression(code, open),
-		});
-
-		cursor = close + 1;
-	}
-
-	return expressions;
-}
-
 function make_expression_diagnostics(
 	code: string,
 	filename: string,
 	effect_names: Set<string>,
-	expression: MarkupExpression,
+	expression: MarkupBraceExpression,
 ): Diagnostic[] {
 	const attribute_name = expression.attribute_name;
 	const expression_text = expression.expression_text;
 	const is_event_attribute =
 		attribute_name !== undefined && is_event_attribute_name(attribute_name);
 	const is_attribute = attribute_name !== undefined;
-	const loc = get_line_column(code, expression.start);
+	const loc = get_line_column(code, expression.open);
 
 	if (!contains_effect_reference(expression_text, effect_names)) {
 		return [];
@@ -359,121 +316,6 @@ function is_callback_expression(expression_text: string): boolean {
 		/^(?:async\s+)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/.test(expression_text) ||
 		/^(?:async\s+)?function\b/.test(expression_text)
 	);
-}
-
-function find_attribute_name_before_expression(code: string, open: number): string | undefined {
-	const tag_start = code.lastIndexOf("<", open);
-	const last_tag_end = code.lastIndexOf(">", open);
-
-	if (tag_start === -1 || tag_start < last_tag_end) {
-		return undefined;
-	}
-
-	const before_expression = code.slice(tag_start + 1, open);
-	const match = before_expression.match(/(?:^|\s)([A-Za-z_$:][\w$:-]*)\s*=\s*$/);
-
-	return match?.[1];
-}
-
-function is_inside_svelte_excluded_block(code: string, pos: number): boolean {
-	const script = find_svelte_tag_range(code, "script", pos);
-	const style = find_svelte_tag_range(code, "style", pos);
-
-	return (
-		(script !== undefined && pos < script.end && pos > script.start) ||
-		(style !== undefined && pos < style.end && pos > style.start)
-	);
-}
-
-function find_svelte_tag_range(
-	code: string,
-	tag: string,
-	after_pos: number,
-): { start: number; end: number } | undefined {
-	const pattern = new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}\\s*>`, "gi");
-
-	for (const match of code.matchAll(pattern)) {
-		if (match.index === undefined) {
-			continue;
-		}
-
-		const end = match.index + match[0].length;
-
-		if (match.index <= after_pos && after_pos < end) {
-			return { start: match.index, end };
-		}
-	}
-
-	return undefined;
-}
-
-function find_closing_brace(code: string, start: number): number {
-	let depth = 0;
-
-	for (let i = start; i < code.length; i += 1) {
-		const ch = code[i];
-
-		if (ch === "{" && code[i - 1] !== "$") {
-			depth += 1;
-		} else if (ch === "}") {
-			if (depth === 0) {
-				return i;
-			}
-
-			depth -= 1;
-		} else if (ch === "'" || ch === '"' || ch === "`") {
-			i = skip_string(code, i, ch);
-
-			if (i === -1) {
-				return -1;
-			}
-		} else if (ch === "/" && code[i + 1] === "/") {
-			i = skip_line_comment(code, i);
-		} else if (ch === "/" && code[i + 1] === "*") {
-			i = skip_block_comment(code, i);
-
-			if (i === -1) {
-				return -1;
-			}
-		}
-	}
-
-	return -1;
-}
-
-function skip_string(code: string, start: number, quote: string): number {
-	for (let i = start + 1; i < code.length; i += 1) {
-		if (code[i] === "\\") {
-			i += 1;
-			continue;
-		}
-
-		if (code[i] === quote) {
-			return i;
-		}
-	}
-
-	return -1;
-}
-
-function skip_line_comment(code: string, start: number): number {
-	for (let i = start + 2; i < code.length; i += 1) {
-		if (code[i] === "\n") {
-			return i;
-		}
-	}
-
-	return code.length;
-}
-
-function skip_block_comment(code: string, start: number): number {
-	for (let i = start + 2; i < code.length; i += 1) {
-		if (code[i] === "*" && code[i + 1] === "/") {
-			return i + 1;
-		}
-	}
-
-	return -1;
 }
 
 function get_line_column(code: string, position: number): { line: number; column: number } {
