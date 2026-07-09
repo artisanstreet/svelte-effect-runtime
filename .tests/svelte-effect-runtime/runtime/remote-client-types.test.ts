@@ -605,9 +605,27 @@ async function check_generated_markup_helpers() {
   const derived_clock_stream: RemoteLiveStream<string> = clock_query.pipe(
     Stream.map((value) => String(value))
   );
-  const status_stream = Live.status(derived_clock_stream);
+  const status_stream = derived_clock_stream.pipe(Live.status);
+  const direct_status_stream = Live.status(derived_clock_stream);
+  const piped_status_stream = derived_clock_stream.pipe(
+    Live.status,
+    Stream.take(1)
+  );
   const reconnect_effect: Effect.Effect<void, RemoteFailure<never>, never> =
-    Live.reconnect(clock_query);
+    clock_query.pipe(Live.reconnect);
+  const direct_reconnect_effect: Effect.Effect<
+    void,
+    RemoteFailure<never>,
+    never
+  > = Live.reconnect(clock_query);
+  const piped_reconnect_effect: Effect.Effect<
+    void,
+    RemoteFailure<never>,
+    never
+  > = clock_query.pipe(
+    Live.reconnect,
+    Effect.tap(() => Effect.void)
+  );
   const summary_id: string = summary.id;
   const summary_index: number = summary.index;
   const summary_known: boolean = summary.known;
@@ -674,7 +692,11 @@ async function check_generated_markup_helpers() {
   void remote_clock_stream;
   void derived_clock_stream;
   void status_stream;
+  void direct_status_stream;
+  void piped_status_stream;
   void reconnect_effect;
+  void direct_reconnect_effect;
+  void piped_reconnect_effect;
   void clock_head;
   void summary_id;
   void summary_index;
