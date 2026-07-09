@@ -67,7 +67,7 @@
 				"svelte-effect-runtime.languageServer.enabled": {
 					"type": "boolean",
 					"default": true,
-					"description": "Start the pnpm-installed Svelte Effect Runtime language server automatically for .svelte and .sv files."
+					"description": "Start the auto-installed Svelte Effect Runtime language server automatically for .svelte and .sv files."
 				},
 				"svelte-effect-runtime.languageServer.client": {
 					"type": "string",
