@@ -275,20 +275,16 @@ function make_server_rewrite_plugin(): Plugin {
 			return { optimizeDeps: { exclude: ["svelte-effect-runtime"] } };
 		},
 
-		transform(code: string, id: string) {
+		async transform(code: string, id: string) {
 			if (!is_server_runtime_module(id)) {
 				return undefined;
 			}
 
-			const rewritten = code
-				.replace(
-					/from\s+["']svelte-effect-runtime["']/g,
-					`from "svelte-effect-runtime/server"`,
-				)
-				.replace(
-					/from\s+["']svelte-effect-runtime\/internal\/generators["']/g,
-					`from "svelte-effect-runtime/server"`,
-				);
+			if (!code.includes("svelte-effect-runtime")) {
+				return undefined;
+			}
+
+			const rewritten = await rewrite_server_imports(code, id);
 
 			if (rewritten === code) {
 				return undefined;
@@ -297,6 +293,94 @@ function make_server_rewrite_plugin(): Plugin {
 			return { code: rewritten, map: null };
 		},
 	};
+}
+
+async function rewrite_server_imports(code: string, id: string): Promise<string> {
+	const [{ default: MagicString }, ts] = await Promise.all([
+		import("magic-string"),
+		import("typescript"),
+	]);
+	const filename = id.split("?", 2)[0] ?? id;
+	const source_file = ts.createSourceFile(
+		filename,
+		code,
+		ts.ScriptTarget.Latest,
+		true,
+		get_script_kind(filename, ts),
+	);
+	const magic = new MagicString(code);
+	let changed = false;
+
+	const rewrite_specifier = (specifier: import("typescript").StringLiteralLike) => {
+		const replacement = get_server_import_replacement(specifier.text);
+
+		if (!replacement) {
+			return;
+		}
+
+		magic.overwrite(
+			specifier.getStart(source_file),
+			specifier.end,
+			JSON.stringify(replacement),
+		);
+		changed = true;
+	};
+
+	const visit = (node: import("typescript").Node) => {
+		if (ts.isImportDeclaration(node) && ts.isStringLiteralLike(node.moduleSpecifier)) {
+			rewrite_specifier(node.moduleSpecifier);
+		}
+
+		if (
+			ts.isExportDeclaration(node) &&
+			node.moduleSpecifier &&
+			ts.isStringLiteralLike(node.moduleSpecifier)
+		) {
+			rewrite_specifier(node.moduleSpecifier);
+		}
+
+		if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+			const [specifier] = node.arguments;
+
+			if (specifier && ts.isStringLiteralLike(specifier)) {
+				rewrite_specifier(specifier);
+			}
+		}
+
+		ts.forEachChild(node, visit);
+	};
+
+	visit(source_file);
+
+	return changed ? magic.toString() : code;
+}
+
+function get_server_import_replacement(specifier: string): string | undefined {
+	if (specifier === "svelte-effect-runtime") {
+		return "svelte-effect-runtime/server";
+	}
+
+	if (specifier === "svelte-effect-runtime/internal/generators") {
+		return "svelte-effect-runtime/server";
+	}
+
+	return undefined;
+}
+
+function get_script_kind(filename: string, ts: typeof import("typescript")) {
+	if (/\.[cm]?tsx(?:\?.*)?$/.test(filename)) {
+		return ts.ScriptKind.TSX;
+	}
+
+	if (/\.[cm]?jsx(?:\?.*)?$/.test(filename)) {
+		return ts.ScriptKind.JSX;
+	}
+
+	if (/\.[cm]?js(?:\?.*)?$/.test(filename)) {
+		return ts.ScriptKind.JS;
+	}
+
+	return ts.ScriptKind.TS;
 }
 
 function make_remote_client_wrapper_plugin(options?: EffectOptions): Plugin {

@@ -398,6 +398,26 @@ test("vite server import rewrite handles query-suffixed server modules", async (
 	}
 });
 
+test("vite server import rewrite parses imports instead of rewriting text", async () => {
+	const source = [
+		`import type { RequestEvent } from "svelte-effect-runtime";`,
+		`export { Query } from "svelte-effect-runtime";`,
+		`const generators = import("svelte-effect-runtime/internal/generators");`,
+		`const example = 'from "svelte-effect-runtime"';`,
+		`/** from "svelte-effect-runtime/internal/generators" */`,
+	].join("\n");
+	const result = await run_server_import_transform(source, "C:/src/routes/auth.remote.ts");
+
+	assert_string_includes(
+		result,
+		`import type { RequestEvent } from "svelte-effect-runtime/server";`,
+	);
+	assert_string_includes(result, `export { Query } from "svelte-effect-runtime/server";`);
+	assert_string_includes(result, `import("svelte-effect-runtime/server")`);
+	assert_string_includes(result, `const example = 'from "svelte-effect-runtime"';`);
+	assert_string_includes(result, `/** from "svelte-effect-runtime/internal/generators" */`);
+});
+
 test("vite diagnostics plugin warns for bare Effect.gen event handlers", async () => {
 	const warnings: string[] = [];
 	const diagnostics_plugin = get_diagnostics_plugin();
