@@ -282,12 +282,12 @@ test("direct svelte transform lowers event-like attributes on component tags", (
 		`  import Child from "./Child.svelte";`,
 		`</script>`,
 		``,
-		`<Child onselect={yield* Effect.succeed(event)} />`,
+		`<Child onChange={yield* Effect.succeed(event)} />`,
 	].join("\n");
 
 	const result = transform_svelte_effect(source, "Parent.svelte");
 
-	assert_string_includes(result.code, `<Child onselect={(event) =>`);
+	assert_string_includes(result.code, `<Child onChange={(event) =>`);
 	assert_string_includes(result.code, `Code.Markup.Run`);
 
 	compile(result.code, {

@@ -17,6 +17,18 @@ import type {
 	TagKind,
 } from "./types.ts";
 
+interface ClassifiedCandidate {
+	candidate: MarkupCandidate;
+	kind: TagKind;
+	attribute_name_replacement?: AttributeNameReplacement;
+}
+
+interface AttributeNameReplacement {
+	start: number;
+	end: number;
+	text: string;
+}
+
 /**
  * Emits source edits for classified markup Effect expressions.
  *
@@ -27,15 +39,48 @@ import type {
  * @returns Replacements ready to apply to the original component source.
  */
 export function emit_replacements(
-	classified: Array<{ candidate: MarkupCandidate; kind: TagKind }>,
+	classified: ClassifiedCandidate[],
 	effect_context: EffectCallbackRewriteContext,
 	helper_bindings: MarkupHelperBindings,
 	name_allocator: MarkupNameAllocator,
 	target: MarkupTransformTarget,
 ): Replacement[] {
-	return classified.map(({ candidate, kind }) =>
+	const expression_replacements = classified.map(({ candidate, kind }) =>
 		emit_replacement(candidate, kind, effect_context, helper_bindings, name_allocator, target),
 	);
+	const attribute_replacements = unique_attribute_name_replacements(classified).map(
+		(replacement) => ({
+			start: replacement.start,
+			end: replacement.end,
+			text: replacement.text,
+		}),
+	);
+
+	return [...attribute_replacements, ...expression_replacements];
+}
+
+function unique_attribute_name_replacements(
+	classified: ClassifiedCandidate[],
+): AttributeNameReplacement[] {
+	const seen = new Set<string>();
+
+	return classified
+		.map((entry) => entry.attribute_name_replacement)
+		.filter((replacement): replacement is AttributeNameReplacement => {
+			if (!replacement) {
+				return false;
+			}
+
+			const key = `${replacement.start}:${replacement.end}:${replacement.text}`;
+
+			if (seen.has(key)) {
+				return false;
+			}
+
+			seen.add(key);
+
+			return true;
+		});
 }
 
 function emit_replacement(

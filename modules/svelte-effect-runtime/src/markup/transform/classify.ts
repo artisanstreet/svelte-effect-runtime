@@ -1,7 +1,19 @@
 import type { AST } from "svelte/compiler";
 
-import { is_event_attribute_name } from "../event-attributes.ts";
+import { is_event_attribute_name, normalize_event_attribute_name } from "../event-attributes.ts";
 import type { MarkupCandidate, TagKind } from "./types.ts";
+
+interface ClassifiedCandidate {
+	candidate: MarkupCandidate;
+	kind: TagKind;
+	attribute_name_replacement?: AttributeNameReplacement;
+}
+
+interface AttributeNameReplacement {
+	start: number;
+	end: number;
+	text: string;
+}
 
 /**
  * Matches sanitized placeholders back to their Svelte AST context.
@@ -15,12 +27,12 @@ import type { MarkupCandidate, TagKind } from "./types.ts";
 export function classify_candidates(
 	ast: AST.Root,
 	candidates: MarkupCandidate[],
-): Array<{ candidate: MarkupCandidate; kind: TagKind }> {
+): ClassifiedCandidate[] {
 	const by_placeholder = new Map(
 		candidates.map((candidate) => [candidate.placeholder, candidate]),
 	);
 
-	const classified: Array<{ candidate: MarkupCandidate; kind: TagKind }> = [];
+	const classified: ClassifiedCandidate[] = [];
 	const matched = new Set<string>();
 
 	walk_ast(ast.fragment, by_placeholder, matched, classified);
@@ -32,7 +44,7 @@ function walk_ast(
 	fragment: AST.Fragment,
 	candidates: Map<string, MarkupCandidate>,
 	matched: Set<string>,
-	classified: Array<{ candidate: MarkupCandidate; kind: TagKind }>,
+	classified: ClassifiedCandidate[],
 ): void {
 	for (const node of fragment.nodes) {
 		visit_ast_node(node, candidates, matched, classified);
@@ -43,7 +55,7 @@ function visit_ast_node(
 	node: AST.Fragment["nodes"][number],
 	candidates: Map<string, MarkupCandidate>,
 	matched: Set<string>,
-	classified: Array<{ candidate: MarkupCandidate; kind: TagKind }>,
+	classified: ClassifiedCandidate[],
 ): void {
 	switch (node.type) {
 		case "ExpressionTag":
@@ -127,7 +139,7 @@ function classify_debug_tag(
 	_node: Extract<AST.Fragment["nodes"][number], { type: "DebugTag" }>,
 	_candidates: Map<string, MarkupCandidate>,
 	_matched: Set<string>,
-	_classified: Array<{ candidate: MarkupCandidate; kind: TagKind }>,
+	_classified: ClassifiedCandidate[],
 ): void {
 	return;
 }
@@ -136,7 +148,7 @@ function classify_declaration_tag(
 	node: Extract<AST.Fragment["nodes"][number], { type: "ConstTag" | "DeclarationTag" }>,
 	candidates: Map<string, MarkupCandidate>,
 	matched: Set<string>,
-	classified: Array<{ candidate: MarkupCandidate; kind: TagKind }>,
+	classified: ClassifiedCandidate[],
 ): void {
 	for (const decl of node.declaration.declarations) {
 		classify_expression(decl as ExpressionLike, "plain", candidates, matched, classified);
@@ -144,8 +156,10 @@ function classify_declaration_tag(
 }
 
 interface ElementLikeNode {
+	type: string;
 	attributes: Array<{
 		type: string;
+		start?: number;
 		name?: string;
 		value?: unknown;
 		expression?: unknown;
@@ -157,31 +171,86 @@ function visit_element_attributes(
 	node: ElementLikeNode,
 	candidates: Map<string, MarkupCandidate>,
 	matched: Set<string>,
-	classified: Array<{ candidate: MarkupCandidate; kind: TagKind }>,
+	classified: ClassifiedCandidate[],
 ): void {
 	for (const attr of node.attributes) {
 		if (attr.type === "Attribute" && attr.name && is_event_attribute_name(attr.name)) {
+			const attribute_name_replacement = make_attribute_name_replacement(node, attr);
+
 			visit_attribute_value(
 				attr.value as true | AST.ExpressionTag | Array<AST.Text | AST.ExpressionTag>,
 				"event",
 				candidates,
 				matched,
 				classified,
+				attribute_name_replacement,
 			);
 			continue;
 		}
 
 		if (attr.type === "OnDirective" && attr.expression) {
+			const attribute_name_replacement = make_directive_name_replacement(node, attr);
+
 			classify_expression(
 				attr.expression as ExpressionLike,
 				"event",
 				candidates,
 				matched,
 				classified,
+				attribute_name_replacement,
 			);
 			continue;
 		}
 	}
+}
+
+function make_attribute_name_replacement(
+	node: ElementLikeNode,
+	attr: { start?: number; name?: string },
+): AttributeNameReplacement | undefined {
+	if (!attr.name || !should_normalize_event_attribute_name(node) || attr.start === undefined) {
+		return undefined;
+	}
+
+	const normalized_name = normalize_event_attribute_name(attr.name);
+
+	if (normalized_name === attr.name) {
+		return undefined;
+	}
+
+	return {
+		start: attr.start,
+		end: attr.start + attr.name.length,
+		text: normalized_name,
+	};
+}
+
+function make_directive_name_replacement(
+	node: ElementLikeNode,
+	attr: { start?: number; name?: string },
+): AttributeNameReplacement | undefined {
+	if (!attr.name || !should_normalize_event_attribute_name(node) || attr.start === undefined) {
+		return undefined;
+	}
+
+	const original_name = `on:${attr.name}`;
+	const normalized_name = normalize_event_attribute_name(original_name);
+
+	if (normalized_name === original_name) {
+		return undefined;
+	}
+
+	return {
+		start: attr.start,
+		end: attr.start + original_name.length,
+		text: normalized_name,
+	};
+}
+
+function should_normalize_event_attribute_name(node: ElementLikeNode): boolean {
+	return (
+		node.type !== "Component" && node.type !== "SvelteComponent" && node.type !== "SvelteSelf"
+	);
 }
 
 function visit_attribute_value(
@@ -189,7 +258,8 @@ function visit_attribute_value(
 	kind: TagKind,
 	candidates: Map<string, MarkupCandidate>,
 	matched: Set<string>,
-	classified: Array<{ candidate: MarkupCandidate; kind: TagKind }>,
+	classified: ClassifiedCandidate[],
+	attribute_name_replacement?: AttributeNameReplacement,
 ): void {
 	if (value === true) {
 		return;
@@ -198,13 +268,27 @@ function visit_attribute_value(
 	if (Array.isArray(value)) {
 		for (const part of value) {
 			if (part.type === "ExpressionTag") {
-				classify_expression(part.expression, kind, candidates, matched, classified);
+				classify_expression(
+					part.expression,
+					kind,
+					candidates,
+					matched,
+					classified,
+					attribute_name_replacement,
+				);
 			}
 		}
 		return;
 	}
 
-	classify_expression(value.expression, kind, candidates, matched, classified);
+	classify_expression(
+		value.expression,
+		kind,
+		candidates,
+		matched,
+		classified,
+		attribute_name_replacement,
+	);
 }
 
 type ExpressionLike = {
@@ -218,7 +302,8 @@ function classify_expression(
 	kind: TagKind,
 	candidates: Map<string, MarkupCandidate>,
 	matched: Set<string>,
-	classified: Array<{ candidate: MarkupCandidate; kind: TagKind }>,
+	classified: ClassifiedCandidate[],
+	attribute_name_replacement?: AttributeNameReplacement,
 ): void {
 	if (!expression) {
 		return;
@@ -235,6 +320,7 @@ function classify_expression(
 		classified.push({
 			candidate,
 			kind: resolve_candidate_kind(candidate, kind),
+			attribute_name_replacement,
 		});
 	}
 }

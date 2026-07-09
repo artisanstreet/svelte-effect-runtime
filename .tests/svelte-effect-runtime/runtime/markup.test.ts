@@ -675,17 +675,37 @@ test("rewrites event effect expressions inside snippet blocks", () => {
 	});
 });
 
-test("rewrites mixed-case event effect attributes", () => {
+test("rewrites mixed-case DOM event effect attributes as lowercase handlers", () => {
 	const source = `<input onChange={yield* validate(event)} />`;
 	const result = transform_markup_effect(source, "Test.svelte");
 
-	assert_string_includes(result.code, `onChange={(event) =>`);
+	assert_string_includes(result.code, `onchange={(event) =>`);
 	assert_string_includes(result.code, `Code.Markup.Run`);
 	assert_string_includes(result.code, `yield* validate(event)`);
+
+	const compiled = compile(result.code, {
+		filename: "Test.svelte",
+		generate: "client",
+		experimental: { async: true },
+	});
+
+	assert_string_includes(compiled.js.code, `change`);
+	if (compiled.js.code.includes(`Change`)) {
+		throw new Error("DOM event names should compile as lowercase events");
+	}
 });
 
 test("rewrites on:click event effect expressions", () => {
 	const source = `<button on:click={yield* save(event)}>save</button>`;
+	const result = transform_markup_effect(source, "Test.svelte");
+
+	assert_string_includes(result.code, `on:click={(event) =>`);
+	assert_string_includes(result.code, `Code.Markup.Run`);
+	assert_string_includes(result.code, `yield* save(event)`);
+});
+
+test("rewrites mixed-case legacy DOM event directives as lowercase handlers", () => {
+	const source = `<button on:Click={yield* save(event)}>save</button>`;
 	const result = transform_markup_effect(source, "Test.svelte");
 
 	assert_string_includes(result.code, `on:click={(event) =>`);
