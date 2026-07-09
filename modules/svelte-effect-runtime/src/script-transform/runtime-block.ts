@@ -15,6 +15,8 @@ export function make_runtime_block(blocks: EffectBlock[]): string {
 		effect: "Effect",
 		program: "__SER___program",
 		untrack: "untrack",
+		yield_success: "YieldSuccess",
+		yieldable: "ToEffect",
 	};
 
 	return make_runtime_block_with_bindings(blocks, bindings);

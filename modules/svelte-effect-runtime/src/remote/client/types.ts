@@ -6,7 +6,7 @@ import type {
 	RemoteQueryOverride,
 } from "@sveltejs/kit";
 import type { RemoteFailure } from "$/remote/shared.ts";
-import type { Effect } from "effect";
+import type { Effect, Stream } from "effect";
 
 /**
  * Type-only marker attached to SER query and live-query adapter functions so
@@ -63,23 +63,13 @@ type EffectRemoteQueryUpdateFunction = EffectRemoteQueryUpdateBrand &
 	((input: never) => EffectRemoteQueryUpdateResource);
 
 type EffectRemoteLiveQueryUpdateFunction = EffectRemoteQueryUpdateBrand &
-	((input: never) => Effect.Effect<EffectRemoteLiveQueryUpdateResource, unknown>);
+	((input: never) => Stream.Stream<unknown, unknown, unknown>);
 
 type EffectRemoteQueryUpdateResource = Effect.Effect<unknown, unknown> & {
 	readonly refresh: () => Effect.Effect<void, unknown, never>;
 	readonly set: (value: never) => void;
 	readonly withOverride: (update: (current: never) => unknown) => unknown;
 };
-
-type EffectRemoteLiveQueryUpdateResource = {
-	readonly connected: boolean;
-	readonly current: unknown;
-	readonly done: boolean;
-	readonly error: unknown;
-	readonly loading: boolean;
-	readonly ready: boolean;
-	readonly reconnect: () => Effect.Effect<void, unknown, never>;
-} & AsyncIterable<unknown>;
 
 /**
  * Represents a pending operation counter that remote command adapters

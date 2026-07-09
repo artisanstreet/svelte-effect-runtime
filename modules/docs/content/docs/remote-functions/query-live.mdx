@@ -3,11 +3,11 @@ title: Query.live
 description: Stream remote query values with Effect Streams.
 ---
 
-Use `Query.live` when server data should stay connected while the UI is using it. It returns a live query resource on the client and accepts Effect Streams on the server.
+Use `Query.live` when the server should keep sending values while the client is still interested in them. The server handler returns an Effect `Stream.Stream`, and the client call returns a `RemoteLiveStream`: an Effect Stream with transport metadata for `Live`.
 
 ## When to use this
 
-Use `Query.live` for changing values such as clocks, presence, notification counts, job progress, or event feeds. Use a normal `Query` when the user can refresh explicitly.
+Use `Query.live` for clocks, presence, notification counts, job progress, or event feeds. Use `Query` when the value is a snapshot the user can refresh explicitly.
 
 ## Minimal working example
 
@@ -16,91 +16,145 @@ import { Query } from "svelte-effect-runtime/server";
 import { Schema, Stream } from "effect";
 
 export const get_clock = Query.live(Schema.String, (_clock_id) =>
-  Stream.tick(1000).pipe(
-    Stream.map(() => new Date().toISOString()),
-  ),
+	Stream.tick("1 second").pipe(Stream.map(() => new Date().toISOString())),
 );
 ```
 
 ```svelte
 <script lang="ts" effect>
-  import { get_clock } from "./clock.remote";
+	import { Effect, Stream } from "effect";
+	import { Live } from "svelte-effect-runtime";
+	import { get_clock } from "./clock.remote";
 
-  const clock = get_clock("main");
+	let time = $state("Connecting...");
+
+	const clock = get_clock("main");
+
+	yield* clock.pipe(
+		Stream.runForEach((next) =>
+			Effect.sync(() => {
+				time = next;
+			}),
+		),
+	);
 </script>
 
-{#await yield* clock}
-  <p>Connecting...</p>
-{:then time}
-  <p>{time}</p>
-{/await}
-
-<p>{clock.connected ? "Connected" : "Disconnected"}</p>
-<button onclick={() => yield* clock.reconnect()}>Reconnect</button>
+<p>{time}</p>
+<button onclick={yield* Live.reconnect(clock)}>Reconnect</button>
 ```
 
 ## Stream sources
 
-Effect Streams are the idiomatic source:
+`Query.live` handlers return Effect Streams:
 
 ```ts
 import { Query } from "svelte-effect-runtime/server";
 import { Stream } from "effect";
 
 export const watch_jobs = Query.live(() =>
-  Stream.tick(1000).pipe(
-    Stream.map(() => ({ checked_at: Date.now() })),
-  ),
+	Stream.tick("1 second").pipe(Stream.map(() => ({ checked_at: Date.now() }))),
 );
 ```
 
-Native async iterables also work, which keeps SvelteKit examples easy to migrate:
+Native iterables are not accepted directly. Wrap them before returning:
 
 ```ts
 import { Query } from "svelte-effect-runtime/server";
+import { Stream } from "effect";
 
-export const watch_counter = Query.live(async function* () {
-  let count = 0;
+async function* make_counter() {
+	let count = 0;
 
-  while (count < 3) {
-    yield count;
-    count += 1;
-  }
-});
+	while (count < 3) {
+		yield count;
+		count += 1;
+	}
+}
+
+export const watch_counter = Query.live(() =>
+	Stream.fromAsyncIterable(make_counter(), (error) => error),
+);
 ```
 
 ## Client shape
 
-`Query.live` returns an Effect-backed live resource. `yield* live_query` waits for the current or first value. The same object also exposes live state:
+Calling a live query returns a `RemoteLiveStream`. It behaves like an Effect Stream:
 
 ```ts
+import type { RemoteLiveStream } from "svelte-effect-runtime";
+
 const clock = get_clock("main");
+const typed_clock: RemoteLiveStream<string> = clock;
 
-clock.current;
-clock.connected;
-clock.done;
-clock.loading;
-clock.ready;
-clock.error;
+const labels = clock.pipe(Stream.map((time) => `Updated at ${time}`));
 ```
 
-Use `clock.reconnect()` from Effect-aware handlers. For lower-level consumers, the resource is async iterable:
+In SER markup and `<script effect>`, `yield* clock` resolves the first emitted value. To keep state updated as values arrive, consume the stream with `Stream.runForEach`.
+
+Transport state is separate from the data stream:
 
 ```ts
-for await (const value of clock) {
-  console.log(value);
-}
+const status = Live.status(clock);
 ```
+
+`Live.status(clock)` is also a stream. Consume it the same way as the live query when the UI needs to show connection state.
+
+Manual reconnect is an Effect:
+
+```svelte
+<button onclick={yield* Live.reconnect(clock)}>Reconnect</button>
+```
+
+Automatic reconnect is ordinary Effect composition. Put the retry policy on the stream you consume:
+
+```ts
+import { Schedule, Stream } from "effect";
+
+const resilient_clock = clock.pipe(
+	Stream.retry(Schedule.exponential("100 millis").pipe(Schedule.take(5))),
+);
+```
+
+## Migrating from live resources
+
+Old live query resources mixed data, connection state, and transport methods on one object. `Query.live` now separates those concerns.
+
+For values, keep local component state and update it from the stream:
+
+```svelte
+<script lang="ts" effect>
+	import { Effect, Stream } from "effect";
+	import { get_clock } from "./clock.remote";
+
+	let time = $state<string | undefined>();
+	const clock = get_clock("main");
+
+	yield* clock.pipe(
+		Stream.runForEach((next) =>
+			Effect.sync(() => {
+				time = next;
+			}),
+		),
+	);
+</script>
+```
+
+For transport state, use `Live.status(clock)` instead of `clock.ready`, `clock.loading`, `clock.connected`, or `clock.done`.
+
+For manual reconnects, use `yield* Live.reconnect(clock)` instead of `clock.reconnect()`.
+
+For async generators or native iterables, wrap the source in a Stream before returning it from the server handler.
 
 ## Common mistakes
 
 - Using live queries for data that only changes after a user action.
 - Forgetting that every active live query keeps server work alive.
-- Returning a plain `Promise` from `Query.live`. Return an Effect Stream, iterable, or async iterable.
-- Calling `reconnect()` without yielding or running the returned Effect.
+- Returning a `Promise`, async generator, or native iterable from `Query.live`. Return a `Stream`.
+- Reading `clock.current`, `clock.ready`, or `clock.connected`. Use stream state in your component, and use `Live.status(clock)` for transport state.
+- Calling `Live.reconnect(clock)` without yielding or running the returned Effect.
 
 ## Related pages
 
 - [Query](/docs/remote-functions/query)
 - [Query.batch](/docs/remote-functions/query-batch)
-- [Remote client API](/docs/reference/remote-client-api)
+- [Client API](/docs/reference/client-api)

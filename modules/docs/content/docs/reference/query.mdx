@@ -13,31 +13,31 @@ import { Query } from "svelte-effect-runtime";
 ## Signatures
 
 ```ts
-type EffectQueryFunction<Input, Output, Error = never> =
-  ((arg: OptionalArgument<Input>) =>
-    Effect.Effect<Output, RemoteFailure<Error>, never>) & {
-      native: RemoteQueryFunction<Input, Output>;
-    };
+type EffectQueryFunction<Input, Output, Error = never> = ((
+	arg: OptionalArgument<Input>,
+) => Effect.Effect<Output, RemoteFailure<Error>, never>) & {
+	native: RemoteQueryFunction<Input, Output>;
+};
 ```
 
 ```ts
 interface EffectQueryFactory {
-  <Output, ErrorType, Requirements>(
-    fn: () => Effect.Effect<Output, ErrorType, Requirements>
-  ): EffectQueryFunction<void, Output, ErrorType>;
+	<Output, ErrorType, Requirements>(
+		fn: () => Effect.Effect<Output, ErrorType, Requirements>,
+	): EffectQueryFunction<void, Output, ErrorType>;
 
-  <Input, Output, ErrorType, Requirements>(
-    validate: "unchecked",
-    fn: (arg: Input) => Effect.Effect<Output, ErrorType, Requirements>
-  ): EffectQueryFunction<Input, Output, ErrorType>;
+	<Input, Output, ErrorType, Requirements>(
+		validate: "unchecked",
+		fn: (arg: Input) => Effect.Effect<Output, ErrorType, Requirements>,
+	): EffectQueryFunction<Input, Output, ErrorType>;
 
-  <SchemaType extends EffectSchema, Output, ErrorType, Requirements>(
-    validate: SchemaType,
-    fn: (arg: SchemaOutput<SchemaType>) =>
-      Effect.Effect<Output, ErrorType, Requirements>
-  ): EffectQueryFunction<SchemaInput<SchemaType>, Output, ErrorType>;
+	<SchemaType extends EffectSchema, Output, ErrorType, Requirements>(
+		validate: SchemaType,
+		fn: (arg: SchemaOutput<SchemaType>) => Effect.Effect<Output, ErrorType, Requirements>,
+	): EffectQueryFunction<SchemaInput<SchemaType>, Output, ErrorType>;
 
-  batch: typeof query_batch_factory;
+	batch: typeof query_batch_factory;
+	live: typeof query_live_factory;
 }
 ```
 
@@ -55,3 +55,13 @@ interface EffectQueryFactory {
 - `Query.batch(schema, fn)`
 
 Unlike `Query`, `Query.batch` does not support the no-validator overload.
+
+## `Query.live`
+
+`Query.live` returns a `RemoteLiveStream` on the client. Server handlers must return an Effect `Stream.Stream`.
+
+- `Query.live(fn)`
+- `Query.live("unchecked", fn)`
+- `Query.live(schema, fn)`
+
+Use `Live.status(stream)` for transport state and `Live.reconnect(stream)` for manual reconnects.
