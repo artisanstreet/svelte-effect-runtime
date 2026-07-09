@@ -41,7 +41,7 @@ export type RemoteHandler<Input = unknown, A = unknown, E = unknown, R = unknown
  * const source: RemoteLiveSource<number> = Stream.make(1, 2, 3);
  * ```
  *
- * @since 4.0.0
+ * @since 3.4.8
  */
 export type RemoteLiveSource<A = unknown, E = unknown, R = unknown> = Stream.Stream<A, E, R>;
 
@@ -517,7 +517,7 @@ export type EffectRemoteQueryFunction<Input, A, E = never> = [Input] extends [vo
  * const first = yield* Stream.runHead(clock);
  * ```
  *
- * @since 4.0.0
+ * @since 3.4.8
  */
 export type EffectRemoteLiveQuery<A, E = never> = RemoteLiveStream<A, E>;
 
@@ -529,7 +529,7 @@ export type EffectRemoteLiveQuery<A, E = never> = RemoteLiveStream<A, E>;
  * const clock = getClock();
  * ```
  *
- * @since 4.0.0
+ * @since 3.4.8
  */
 export type EffectRemoteLiveQueryFunction<Input, A, E = never> = [Input] extends [void]
 	? () => EffectRemoteLiveQuery<A, E>

@@ -6,7 +6,7 @@ import type { RemoteFailure } from "$/remote/shared.ts";
 /**
  * Runtime marker attached to remote live streams created by SER.
  *
- * @since 4.0.0
+ * @since 3.4.8
  */
 export const REMOTE_LIVE_STREAM: unique symbol = Symbol.for("ser.remote-live-stream") as never;
 
@@ -39,7 +39,7 @@ type RemoteLivePipe<A, E> = {
  * const Label = Time.pipe(Stream.map((time) => time.toISOString()));
  * ```
  *
- * @since 4.0.0
+ * @since 3.4.8
  */
 export type RemoteLiveStream<A, E = never> = Omit<
 	Stream.Stream<A, RemoteFailure<E>, never>,
@@ -57,7 +57,7 @@ export type RemoteLiveStream<A, E = never> = Omit<
  * const Status = Live.status(GetTime());
  * ```
  *
- * @since 4.0.0
+ * @since 3.4.8
  */
 export type LiveStatus =
 	| {
@@ -85,7 +85,7 @@ export type LiveStatus =
  * yield* Live.reconnect(GetNotifications());
  * ```
  *
- * @since 4.0.0
+ * @since 3.4.8
  */
 export interface LiveFactory {
 	/**
@@ -140,7 +140,7 @@ type PipeableStream<A, E, R> = Stream.Stream<A, E, R> & {
  * const stream = make_remote_live_stream(resource, normalize_native_error);
  * ```
  *
- * @since 4.0.0
+ * @since 3.4.8
  * @param resource - Native SvelteKit live query resource.
  * @param on_error - Error mapper used for stream and reconnect failures.
  * @returns A remote live stream carrying hidden transport metadata.
@@ -163,7 +163,7 @@ export function make_remote_live_stream<A, ErrorType = never>(
 /**
  * Remote live transport helpers.
  *
- * @since 4.0.0
+ * @since 3.4.8
  */
 export const Live: LiveFactory = {
 	status(stream) {

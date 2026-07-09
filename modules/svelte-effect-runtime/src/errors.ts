@@ -516,7 +516,7 @@ export class InvalidLiveQueryReturnError extends RuntimeError {
  * throw new EmptyStreamYieldError();
  * ```
  *
- * @since 4.0.0
+ * @since 3.4.8
  * @returns An Error describing an empty Stream in a value position.
  */
 export class EmptyStreamYieldError extends RuntimeError {

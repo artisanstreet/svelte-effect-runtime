@@ -9,7 +9,7 @@ import { Effect, Option, Stream } from "effect";
  * const value: Yieldable<number> = Stream.make(1);
  * ```
  *
- * @since 4.0.0
+ * @since 3.4.8
  */
 export type Yieldable<A = unknown, E = unknown, R = unknown> =
 	| Effect.Effect<A, E, R>
@@ -24,7 +24,7 @@ export type Yieldable<A = unknown, E = unknown, R = unknown> =
  * type User = YieldSuccess<ReturnType<typeof loadUser>>;
  * ```
  *
- * @since 4.0.0
+ * @since 3.4.8
  */
 export type YieldSuccess<Value> = Value extends Stream.Stream<infer A, unknown, unknown>
 	? A
@@ -42,7 +42,7 @@ export type YieldSuccess<Value> = Value extends Stream.Stream<infer A, unknown, 
  * const first = yield* ToEffect(Stream.make("ready"));
  * ```
  *
- * @since 4.0.0
+ * @since 3.4.8
  * @param value - Effect, generator return object, or Stream emitted from a
  *   lowered component `yield*` expression.
  * @returns An Effect that resolves with the original Effect success value or
