@@ -374,6 +374,28 @@ test("vite diagnostics plugin warns for bare Effect.gen event handlers", async (
 	assert_string_includes(warnings[0], "onclick={yield* Effect.gen(function* () { ... })}");
 });
 
+test("vite diagnostics plugin recognizes mixed-case event attributes", async () => {
+	const warnings: string[] = [];
+	const diagnostics_plugin = get_diagnostics_plugin();
+	const source = [
+		`<script lang="ts">`,
+		`  import { Effect } from "effect";`,
+		`</script>`,
+		``,
+		`<button onChange={Effect.gen}>save</button>`,
+	].join("\n");
+
+	await diagnostics_plugin.transform.call(
+		make_warning_context(warnings),
+		source,
+		"src/routes/+page.svelte",
+	);
+
+	assert_equals(warnings.length, 1);
+	assert_string_includes(warnings[0], "onChange={Effect.gen}");
+	assert_string_includes(warnings[0], "onChange={yield* Effect.gen(function* () { ... })}");
+});
+
 test("vite diagnostics plugin ignores yielded Effect handlers", async () => {
 	const warnings: string[] = [];
 	const diagnostics_plugin = get_diagnostics_plugin();

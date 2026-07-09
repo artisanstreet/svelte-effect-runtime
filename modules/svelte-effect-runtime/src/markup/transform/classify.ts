@@ -1,5 +1,6 @@
 import type { AST } from "svelte/compiler";
 
+import { is_event_attribute_name } from "../event-attributes.ts";
 import type { MarkupCandidate, TagKind } from "./types.ts";
 
 /**
@@ -96,6 +97,10 @@ function visit_ast_node(
 			walk_ast(node.fragment, candidates, matched, classified);
 			return;
 
+		case "SnippetBlock":
+			walk_ast(node.body, candidates, matched, classified);
+			return;
+
 		case "RegularElement":
 		case "Component":
 		case "TitleElement":
@@ -177,10 +182,6 @@ function visit_element_attributes(
 			continue;
 		}
 	}
-}
-
-function is_event_attribute_name(name: string): boolean {
-	return name.startsWith("on:") || /^on[a-z]/.test(name);
 }
 
 function visit_attribute_value(

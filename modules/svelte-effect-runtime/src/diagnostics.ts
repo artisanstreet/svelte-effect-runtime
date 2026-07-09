@@ -1,3 +1,5 @@
+import { is_event_attribute_name } from "./markup/event-attributes.ts";
+
 /**
  * Warning diagnostic produced by the SER Vite diagnostics plugin.
  */
@@ -357,10 +359,6 @@ function is_callback_expression(expression_text: string): boolean {
 		/^(?:async\s+)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/.test(expression_text) ||
 		/^(?:async\s+)?function\b/.test(expression_text)
 	);
-}
-
-function is_event_attribute_name(name: string): boolean {
-	return /^on(?::[A-Za-z_$][\w$-]*|[a-z][\w$-]*)$/.test(name);
 }
 
 function find_attribute_name_before_expression(code: string, open: number): string | undefined {

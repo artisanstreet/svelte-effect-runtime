@@ -654,6 +654,36 @@ test("rewrites onsubmit event effect expressions", () => {
 	assert_string_includes(result.code, `yield* submit()`);
 });
 
+test("rewrites event effect expressions inside snippet blocks", () => {
+	const source = [
+		`{#snippet row()}`,
+		`  <input onchange={yield* Effect.gen(function* () {})} />`,
+		`{/snippet}`,
+		`{@render row()}`,
+	].join("\n");
+
+	const result = transform_markup_effect(source, "Creation.svelte");
+
+	assert_string_includes(result.code, `onchange={(event) =>`);
+	assert_string_includes(result.code, `Code.Markup.Run`);
+	assert_string_includes(result.code, `yield* Effect.gen(function* () {})`);
+
+	compile(result.code, {
+		filename: "Creation.svelte",
+		generate: "server",
+		experimental: { async: true },
+	});
+});
+
+test("rewrites mixed-case event effect attributes", () => {
+	const source = `<input onChange={yield* validate(event)} />`;
+	const result = transform_markup_effect(source, "Test.svelte");
+
+	assert_string_includes(result.code, `onChange={(event) =>`);
+	assert_string_includes(result.code, `Code.Markup.Run`);
+	assert_string_includes(result.code, `yield* validate(event)`);
+});
+
 test("rewrites on:click event effect expressions", () => {
 	const source = `<button on:click={yield* save(event)}>save</button>`;
 	const result = transform_markup_effect(source, "Test.svelte");
