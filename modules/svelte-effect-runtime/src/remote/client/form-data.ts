@@ -19,8 +19,8 @@ function append_form_value(form_data: FormData, path: string, value: unknown): v
 	}
 
 	if (Array.isArray(value)) {
-		for (const item of value) {
-			append_form_value(form_data, `${path}[]`, item);
+		for (const [index, item] of value.entries()) {
+			append_form_value(form_data, `${path}[${index}]`, item);
 		}
 
 		return;

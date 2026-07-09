@@ -428,10 +428,26 @@ test("remote form data encodes nested scalar, array, blob, and empty values", ()
 	assert_equals(form_data.get("n:count"), "2");
 	assert_equals(form_data.get("b:active"), "on");
 	assert_equals(form_data.has("b:draft"), false);
-	assert_equals(form_data.getAll("tags[]"), ["svelte", "effect"]);
+	assert_equals(form_data.get("tags[0]"), "svelte");
+	assert_equals(form_data.get("tags[1]"), "effect");
 	assert_equals(form_data.get("nested.nil"), "");
 	assert_equals(form_data.has("nested.missing"), false);
 	assert_equals(form_data.get("avatar") instanceof Blob, true);
+});
+
+test("remote form data indexes arrays of objects", () => {
+	const form_data = to_form_data({
+		variants: [
+			{ content_type: "image/avif", suffix: 400 },
+			{ content_type: "image/webp", suffix: 800 },
+		],
+	});
+
+	assert_equals(form_data.get("variants[0].content_type"), "image/avif");
+	assert_equals(form_data.get("n:variants[0].suffix"), "400");
+	assert_equals(form_data.get("variants[1].content_type"), "image/webp");
+	assert_equals(form_data.get("n:variants[1].suffix"), "800");
+	assert_equals(form_data.has("n:variants[].suffix"), false);
 });
 
 test("remote form adapter preserves descriptors and wraps validate in an Effect", async () => {
