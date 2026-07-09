@@ -1,6 +1,5 @@
 import { AsyncEffectInEventCallbackError, YieldStarInEventCallbackError } from "$/errors.ts";
 import type { EffectCallbackRewriteContext } from "./effect-bindings.ts";
-import { collect_yield_star_nodes } from "$/script-transform/ast.ts";
 import {
 	analyze_event_body_yield_star,
 	collect_free_identifiers,
@@ -17,15 +16,6 @@ import type {
 	Replacement,
 	TagKind,
 } from "./types.ts";
-
-import ts from "typescript";
-
-type ExpressionRelocation = {
-	originalStart: number;
-	originalEnd: number;
-	generatedStart: number;
-	generatedEnd: number;
-};
 
 /**
  * Emits source edits for classified markup Effect expressions.
@@ -71,7 +61,7 @@ function emit_replacement(
 	let relocation: PendingRelocation | undefined;
 
 	if (kind === "await") {
-		const effect = make_effect_helper(normalized_candidate, helper_name, helper_bindings);
+		const effect = make_effect_helper(normalized_candidate, helper_name);
 
 		replacement_text = emit_promise_expression(
 			id_text,
@@ -82,7 +72,7 @@ function emit_replacement(
 		);
 		helpers = [...normalized.helpers, effect.helper];
 	} else if (kind === "render") {
-		const effect = make_effect_helper(normalized_candidate, helper_name, helper_bindings);
+		const effect = make_effect_helper(normalized_candidate, helper_name);
 
 		replacement_text = emit_render_expression(
 			id_text,
@@ -93,7 +83,7 @@ function emit_replacement(
 		);
 		helpers = [...normalized.helpers, effect.helper];
 	} else if (kind === "render_argument") {
-		const effect = make_effect_helper(normalized_candidate, helper_name, helper_bindings);
+		const effect = make_effect_helper(normalized_candidate, helper_name);
 
 		replacement_text = emit_await_expression(
 			id_text,
@@ -103,7 +93,7 @@ function emit_replacement(
 		);
 		helpers = [...normalized.helpers, effect.helper];
 	} else if (kind === "each") {
-		const effect = make_effect_helper(normalized_candidate, helper_name, helper_bindings);
+		const effect = make_effect_helper(normalized_candidate, helper_name);
 
 		replacement_text = emit_await_expression(
 			id_text,
@@ -117,14 +107,13 @@ function emit_replacement(
 
 		replacement_text = event.text;
 		helpers = normalized.helpers;
-		relocation = make_pending_relocation(
-			candidate,
-			replacement_text,
-			event.expr_text,
-			event.relocation,
-		);
+		relocation = make_relocation(candidate, replacement_text, {
+			originalStart: 0,
+			originalEnd: candidate.expr_text.length,
+			generatedText: event.expr_text,
+		});
 	} else {
-		const effect = make_effect_helper(normalized_candidate, helper_name, helper_bindings);
+		const effect = make_effect_helper(normalized_candidate, helper_name);
 
 		replacement_text = emit_await_expression(
 			id_text,
@@ -147,7 +136,7 @@ function emit_replacement(
 function make_event_handler(
 	candidate: MarkupCandidate,
 	helper_bindings: MarkupHelperBindings,
-): { text: string; expr_text: string; relocation: ExpressionRelocation | undefined } {
+): { text: string; expr_text: string } {
 	const expr_text = candidate.expr_text;
 
 	if (is_callback_function_expression(expr_text)) {
@@ -160,12 +149,9 @@ function make_event_handler(
 		throw new AsyncEffectInEventCallbackError(candidate.filename, expr_text);
 	}
 
-	const wrapped_expr_text = wrap_yield_stars(expr_text, helper_bindings);
-
 	return {
-		expr_text: wrapped_expr_text,
-		relocation: make_yield_operand_relocation(expr_text, wrapped_expr_text, helper_bindings),
-		text: `(event) => { ${helper_bindings.dispatcher}.emit({ type: ${helper_bindings.codes}.Markup.Run, fn: function* () { ${wrapped_expr_text}; } }); }`,
+		expr_text,
+		text: `(event) => { ${helper_bindings.dispatcher}.emit({ type: ${helper_bindings.codes}.Markup.Run, fn: function* () { ${expr_text}; } }); }`,
 	};
 }
 
@@ -228,31 +214,13 @@ interface EffectHelper {
 	deps_text: string;
 }
 
-function make_effect_helper(
-	candidate: MarkupCandidate,
-	helper_name: string,
-	helper_bindings: Pick<MarkupHelperBindings, "yieldable">,
-): EffectHelper {
+function make_effect_helper(candidate: MarkupCandidate, helper_name: string): EffectHelper {
 	const deps = collect_free_identifiers(candidate.expr_text);
 	const args_text = deps.join(", ");
 	const deps_text = deps.length === 0 ? "[]" : `[${args_text}]`;
 	const call = `${helper_name}()`;
-	const effect_text = wrap_yield_stars(candidate.expr_text, helper_bindings);
-	const text = `function* ${helper_name}() { return (${effect_text}); }`;
-	const generated_start = text.indexOf(effect_text);
-	const operand_relocation = make_yield_operand_relocation(
-		candidate.expr_text,
-		effect_text,
-		helper_bindings,
-	);
-	const relocation =
-		operand_relocation ??
-		({
-			originalStart: 0,
-			originalEnd: candidate.expr_text.length,
-			generatedStart: 0,
-			generatedEnd: effect_text.length,
-		} satisfies ExpressionRelocation);
+	const text = `function* ${helper_name}() { return (${candidate.expr_text}); }`;
+	const generated_start = text.indexOf(candidate.expr_text);
 
 	return {
 		call,
@@ -260,102 +228,12 @@ function make_effect_helper(
 		helper: {
 			text,
 			relocation: {
-				originalStart: candidate.start + relocation.originalStart,
-				originalEnd: candidate.start + relocation.originalEnd,
-				generatedStartInReplacement: generated_start + relocation.generatedStart,
-				generatedEndInReplacement: generated_start + relocation.generatedEnd,
+				originalStart: candidate.start,
+				originalEnd: candidate.end,
+				generatedStartInReplacement: generated_start,
+				generatedEndInReplacement: generated_start + candidate.expr_text.length,
 			},
 		},
-	};
-}
-
-function wrap_yield_stars(
-	text: string,
-	helper_bindings: Pick<MarkupHelperBindings, "yieldable">,
-): string {
-	const source_file = ts.createSourceFile(
-		"markup-yield.ts",
-		text,
-		ts.ScriptTarget.Latest,
-		true,
-		ts.ScriptKind.TS,
-	);
-	const replacements: Array<{
-		start: number;
-		end: number;
-		text: string;
-	}> = [];
-
-	collect_yield_star_nodes(source_file, (node) => {
-		const yield_text = text.slice(node.getStart(source_file), node.end).trim();
-
-		replacements.push({
-			start: node.getStart(source_file),
-			end: node.end,
-			text: `yield* ${helper_bindings.yieldable}(${strip_yield_star(yield_text)})`,
-		});
-	});
-
-	if (replacements.length === 0) {
-		return text;
-	}
-
-	replacements.sort((a, b) => b.start - a.start);
-
-	let output = text;
-
-	for (const replacement of replacements) {
-		output =
-			output.slice(0, replacement.start) + replacement.text + output.slice(replacement.end);
-	}
-
-	return output;
-}
-
-function strip_yield_star(yield_text: string): string {
-	return yield_text.replace(/^yield\s*\*\s*/, "");
-}
-
-function make_yield_operand_relocation(
-	original_text: string,
-	generated_text: string,
-	helper_bindings: Pick<MarkupHelperBindings, "yieldable">,
-): ExpressionRelocation | undefined {
-	const source_file = ts.createSourceFile(
-		"markup-yield-relocation.ts",
-		original_text,
-		ts.ScriptTarget.Latest,
-		true,
-		ts.ScriptKind.TS,
-	);
-	let yield_node: ts.Node | undefined;
-
-	collect_yield_star_nodes(source_file, (node) => {
-		yield_node ??= node;
-	});
-
-	if (!yield_node || !ts.isBinaryExpression(yield_node)) {
-		return undefined;
-	}
-
-	const operand = yield_node.right;
-	const original_start = operand.getStart(source_file);
-	const original_end = operand.end;
-	const operand_text = original_text.slice(original_start, original_end).trim();
-	const wrapper_text = `${helper_bindings.yieldable}(${operand_text})`;
-	const wrapper_start = generated_text.indexOf(wrapper_text);
-
-	if (wrapper_start === -1) {
-		return undefined;
-	}
-
-	const generated_start = wrapper_start + wrapper_text.indexOf(operand_text);
-
-	return {
-		originalStart: original_start,
-		originalEnd: original_end,
-		generatedStart: generated_start,
-		generatedEnd: generated_start + operand_text.length,
 	};
 }
 
@@ -369,26 +247,25 @@ function make_helper_name(candidate: MarkupCandidate, name_allocator: MarkupName
 	return name_allocator.reserve(`__SER___markup_effect_${candidate.start}_${candidate.end}`);
 }
 
-function make_pending_relocation(
+function make_relocation(
 	candidate: MarkupCandidate,
 	replacement_text: string,
-	expression_text: string,
-	relocation: ExpressionRelocation | undefined,
+	inner: {
+		originalStart: number;
+		originalEnd: number;
+		generatedText: string;
+	},
 ): PendingRelocation | undefined {
-	if (!relocation) {
-		return undefined;
-	}
-
-	const generated_start = replacement_text.indexOf(expression_text);
+	const generated_start = replacement_text.indexOf(inner.generatedText);
 
 	if (generated_start === -1) {
 		return undefined;
 	}
 
 	return {
-		originalStart: candidate.start + relocation.originalStart,
-		originalEnd: candidate.start + relocation.originalEnd,
-		generatedStartInReplacement: generated_start + relocation.generatedStart,
-		generatedEndInReplacement: generated_start + relocation.generatedEnd,
+		originalStart: candidate.start + inner.originalStart,
+		originalEnd: candidate.start + inner.originalEnd,
+		generatedStartInReplacement: generated_start,
+		generatedEndInReplacement: generated_start + inner.generatedText.length,
 	};
 }

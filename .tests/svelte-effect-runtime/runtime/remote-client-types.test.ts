@@ -14,7 +14,7 @@ test("remote form preflight keeps enhance callback Effect-aware", async () => {
 	await assert_type_checks(
 		"preflight-enhance.ts",
 		`
-import { Effect, Stream } from "effect";
+import { Effect } from "effect";
 import { create_remote_form_adapter } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
 import type { RemoteFormInput } from "@sveltejs/kit";
 
@@ -50,7 +50,7 @@ test("remote form preflight keeps validate Effect-yieldable", async () => {
 	await assert_type_checks(
 		"preflight-validate.ts",
 		`
-import { Effect, Stream } from "effect";
+import { Effect } from "effect";
 import { create_remote_form_adapter } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
 import type { RemoteFormInput } from "@sveltejs/kit";
 
@@ -166,13 +166,12 @@ test("remote form updates accepts Effect query wrappers", async () => {
 	await assert_type_checks(
 		"remote-updates-query-wrapper.ts",
 		`
-import { Effect, Stream } from "effect";
+import { Effect } from "effect";
 import {
   create_remote_form_adapter,
   create_remote_live_query_adapter,
   create_remote_query_adapter,
 } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
-import type { RemoteFailure } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/shared.ts";
 
 const posts = create_remote_query_adapter<void, string[]>(
   () => Promise.resolve(["one"]),
@@ -202,7 +201,6 @@ const form = create_remote_form_adapter<{ title: string }, { id: string }>(
 
 const post_result = posts();
 const clock_result = clock();
-const clock_stream: Stream.Stream<number, RemoteFailure<never>> = clock();
 
 form.enhance(({ submit }) =>
   Effect.gen(function* () {
@@ -213,7 +211,6 @@ form.enhance(({ submit }) =>
 
 void post_result;
 void clock_result;
-void clock_stream;
 `,
 	);
 });
@@ -350,7 +347,7 @@ test("server schema remotes preserve encoded input and domain errors", async () 
 	await assert_type_checks(
 		"server-schema-remote-types.ts",
 		`
-import { Effect, Schema, Stream } from "effect";
+import { Effect, Schema } from "effect";
 import { Command, Form, Prerender, Query } from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
 
 type Equal<Left, Right> =
@@ -382,7 +379,7 @@ const BatchNumber = Query.batch(Schema.NumberFromString, (values) =>
 );
 
 const WatchNumber = Query.live(Schema.NumberFromString, (value) =>
-  Stream.make(value)
+  Effect.succeed([value])
 );
 
 const SaveNumber = Command(Schema.NumberFromString, (value) =>
@@ -451,11 +448,11 @@ test("server remote helpers stay Effect-yieldable in markup helpers", async () =
 		"server-remote-markup.ts",
 		`
 import { Effect, Schema, Stream } from "effect";
-import { Command, Form, Live, Query } from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
+import { Command, Form, Query } from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
 import type {
-  RemoteLiveStream,
+  EffectRemoteLiveQueryResource,
+  EffectRemoteLiveSource,
 } from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
-import type { RemoteFailure } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/shared.ts";
 import { promise } from "__RUNTIME__/modules/svelte-effect-runtime/src/markup/promise.ts";
 import { run } from "__RUNTIME__/modules/svelte-effect-runtime/src/markup/run.ts";
 import { Dispatcher, Code } from "__RUNTIME__/modules/svelte-effect-runtime/src/generators.ts";
@@ -484,13 +481,10 @@ const GetPostSummary = Query.batch(Schema.String, (ids) =>
 const GetClock = Query.live("unchecked", (_key: string) =>
   Stream.make(1, 2, 3)
 );
-// @ts-expect-error live query handlers must return Effect Streams
 const GetNativeClock = Query.live(async function* () {
   yield "tick";
 });
-const live_source: Stream.Stream<number> = Stream.make(1);
-// @ts-expect-error input-bearing live query handlers must be functions
-const BadSchemaLive = Query.live(Schema.String, Stream.make("bad"));
+const live_source: EffectRemoteLiveSource<number> = Stream.make(1);
 
 const UpvotePost = Command(Schema.String, (id) =>
   Effect.gen(function* () {
@@ -549,6 +543,7 @@ const SignOut = Form(Effect.succeed({ signedOut: true }));
 type GetPostsParameters = Parameters<typeof GetPosts>;
 type GetPostSummaryParameters = Parameters<typeof GetPostSummary>;
 type GetClockParameters = Parameters<typeof GetClock>;
+type GetNativeClockParameters = Parameters<typeof GetNativeClock>;
 type UpvotePostParameters = Parameters<typeof UpvotePost>;
 type SignInParameters = Parameters<typeof SignIn>;
 type UpdateQuantityParameters = Parameters<typeof UpdateQuantity>;
@@ -561,6 +556,7 @@ type GetPostSummaryRequiresInput = Assert<
   Equal<GetPostSummaryParameters, [input: string]>
 >;
 type GetClockRequiresInput = Assert<Equal<GetClockParameters, [input: string]>>;
+type GetNativeClockHasNoInput = Assert<Equal<GetNativeClockParameters, []>>;
 type UpvotePostStillRequiresInput = Assert<
   Equal<UpvotePostParameters, [input: string]>
 >;
@@ -581,7 +577,7 @@ type OptionalPostKeepsOptionalSummaryField = Assert<
 async function check_generated_markup_helpers() {
   const posts_query = GetPosts();
   const summary_query = GetPostSummary("one");
-  const clock_query = GetClock("main");
+  const clock_query_effect = GetClock("main");
   const refresh_effect: Effect.Effect<void, unknown, never> =
     posts_query.refresh();
   const sign_out_effect = SignOut();
@@ -594,35 +590,37 @@ async function check_generated_markup_helpers() {
   await Effect.runPromise(summary_query.refresh());
   const sign_out_result = await Effect.runPromise(sign_out_effect);
   const summary = await Effect.runPromise(summary_query);
+  const clock_query = await Effect.runPromise(clock_query_effect);
+  const native_clock_query = await Effect.runPromise(GetNativeClock());
+  const reconnect_effect: Effect.Effect<void, unknown, never> =
+    clock_query.reconnect();
+  const native_reconnect_effect: Effect.Effect<void, unknown, never> =
+    native_clock_query.reconnect();
   const signed_out: boolean = sign_out_result.signedOut;
-  const clock_stream: Stream.Stream<number, RemoteFailure<never>> = clock_query;
-  const remote_clock_stream: RemoteLiveStream<number> = clock_query;
-  const derived_clock_stream: RemoteLiveStream<string> = clock_query.pipe(
-    Stream.map((value) => String(value))
-  );
-  const status_stream = Live.status(derived_clock_stream);
-  const reconnect_effect: Effect.Effect<void, RemoteFailure<never>, never> =
-    Live.reconnect(clock_query);
+  const clock_resource: EffectRemoteLiveQueryResource<number> = clock_query;
+  const connected: boolean = clock_query.connected;
+  const done: boolean = clock_query.done;
   const summary_id: string = summary.id;
   const summary_index: number = summary.index;
   const summary_known: boolean = summary.known;
 
-  // @ts-expect-error live stream transport controls are exposed through Live helpers
-  clock_query.reconnect();
-  // @ts-expect-error live stream resources do not expose cache-style readiness
-  clock_query.ready;
-  // @ts-expect-error live stream resources do not expose a mutable current value
-  clock_query.current;
-  // @ts-expect-error arbitrary streams do not carry live transport metadata
-  Live.status(live_source);
-  // @ts-expect-error arbitrary streams do not carry live transport metadata
-  Live.reconnect(live_source);
-
+  await Effect.runPromise(reconnect_effect);
+  await Effect.runPromise(native_reconnect_effect);
   const optional_title: string | undefined = OptionalPost.fields.title.value();
   const optional_summary: string | undefined =
     OptionalPost.fields.summary.value();
 
-  const clock_head = Stream.runHead(clock_query);
+  for await (const value of clock_query) {
+    const streamed_value: number = value;
+
+    break;
+  }
+
+  for await (const value of native_clock_query) {
+    const streamed_value: string = value;
+
+    break;
+  }
 
   const loaded = await promise("posts", [], function* () {
     return yield* GetPosts();
@@ -665,12 +663,9 @@ async function check_generated_markup_helpers() {
     },
   });
 
-  void clock_stream;
-  void remote_clock_stream;
-  void derived_clock_stream;
-  void status_stream;
-  void reconnect_effect;
-  void clock_head;
+  void connected;
+  void done;
+  void clock_resource;
   void summary_id;
   void summary_index;
   void summary_known;

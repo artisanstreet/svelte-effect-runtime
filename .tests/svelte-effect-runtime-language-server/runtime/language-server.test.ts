@@ -143,38 +143,6 @@ test("virtual TS snapshot maps SER hover positions to generated symbols", () => 
 	);
 });
 
-test("virtual TS snapshot maps SER markup yield operands to generated operands", () => {
-	const source = [
-		`<script lang="ts">`,
-		`  import { GetPosts, UpvotePost } from "./posts.remote";`,
-		`</script>`,
-		``,
-		`{#each yield* GetPosts() as post}`,
-		`  <button onclick={yield* UpvotePost(post.id)}>{post.name}</button>`,
-		`{/each}`,
-	].join("\n");
-	const document = make_document(source);
-	const prepared = prepare_virtual_document(document, make_transforms());
-
-	assert_truthy(prepared);
-
-	const snapshot = DocumentSnapshot.fromDocument(prepared.document, make_snapshot_options());
-	const rebound_snapshot = rebind_snapshot_to_original_document(snapshot, document, prepared);
-
-	assert_maps_to_generated_text(
-		rebound_snapshot,
-		document,
-		source.indexOf("GetPosts()"),
-		"GetPosts()",
-	);
-	assert_maps_to_generated_text(
-		rebound_snapshot,
-		document,
-		source.indexOf("UpvotePost(post.id)"),
-		"UpvotePost(post.id)",
-	);
-});
-
 test("virtual TS snapshot scopes bare const declaration tags", () => {
 	const source = [
 		`<script lang="ts">`,

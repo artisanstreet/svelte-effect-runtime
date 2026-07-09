@@ -35,12 +35,11 @@ export function lower_statement(
 	}
 
 	const text = slice(content, stmt);
-	const wrapped_text = wrap_yield_stars_in_node(stmt, content, context);
 
 	return {
 		temps: [],
 		rewritten_text: "",
-		effect_blocks: [make_effect_block([wrapped_text], collect_deps(text))],
+		effect_blocks: [make_effect_block([text], collect_deps(text))],
 		range: { start: stmt.getFullStart(), end: stmt.end },
 	};
 }
@@ -105,12 +104,11 @@ function lower_expression_statement(
 
 	if (is_yield_star_expression(expr)) {
 		const text = slice(content, expr).trim();
-		const yield_text = wrap_yield_text(text, context);
 
 		return {
 			temps: [],
 			rewritten_text: "",
-			effect_blocks: [make_effect_block([yield_text + ";"], collect_deps(text))],
+			effect_blocks: [make_effect_block([text + ";"], collect_deps(text))],
 			range: { start: stmt.getFullStart(), end: stmt.end },
 		};
 	}
@@ -124,14 +122,13 @@ function lower_expression_statement(
 			is_yield_star_expression(expr.right)
 		) {
 			const yield_text = extract_yield_star_full_text(expr.right, content);
-			const wrapped_yield_text = wrap_yield_text(yield_text, context);
 
 			return {
 				temps: [],
 				rewritten_text: "",
 				effect_blocks: [
 					make_effect_block(
-						[`${target} = ${wrapped_yield_text};`],
+						[`${target} = ${yield_text};`],
 						collect_deps(yield_text, target_names),
 					),
 				],
@@ -231,7 +228,7 @@ function lower_expression_yields(
 			temps.push({ name: temp_name });
 		}
 
-		statements.push(`${temp_name} = ${wrap_yield_text(yield_text, context)};`);
+		statements.push(`${temp_name} = ${yield_text};`);
 		deps.push(...collect_deps(yield_text));
 		replacements.push({
 			start: node.getStart(),
@@ -328,10 +325,9 @@ function make_awaited_yield_expression(
 	const helper_id = make_script_effect_id(node, context);
 	const deps = collect_deps(yield_text);
 	const deps_text = `[${deps.join(", ")}]`;
-	const wrapped_yield_text = wrap_yield_text(yield_text, context);
 
 	return {
-		declaration: `function* ${helper_name}() { return (${wrapped_yield_text}); }`,
+		declaration: `function* ${helper_name}() { return (${yield_text}); }`,
 		expression: [
 			`await ${context.dispatcher_name}().promise({`,
 			`id: ${JSON.stringify(helper_id)}, `,
@@ -356,52 +352,12 @@ function make_yield_type_helper(
 
 	return {
 		declaration: `function ${helper_name}() { return (${effect_text}); }`,
-		type: `${context.yield_success_name}<ReturnType<typeof ${helper_name}>> | undefined`,
+		type: `${context.effect_name}.Success<ReturnType<typeof ${helper_name}>> | undefined`,
 	};
 }
 
 function strip_yield_star(yield_text: string): string {
-	return yield_text.replace(/^yield\s*\*\s*/, "");
-}
-
-function wrap_yield_text(yield_text: string, context: ScriptLoweringContext): string {
-	return `yield* ${context.yieldable_name}(${strip_yield_star(yield_text)})`;
-}
-
-function wrap_yield_stars_in_node(
-	node: ts.Node,
-	content: string,
-	context: ScriptLoweringContext,
-): string {
-	const replacements: Array<{
-		start: number;
-		end: number;
-		text: string;
-	}> = [];
-
-	collect_yield_star_nodes(node, (yield_node) => {
-		const yield_text = slice_start(content, yield_node).trim();
-
-		replacements.push({
-			start: yield_node.getStart(),
-			end: yield_node.end,
-			text: wrap_yield_text(yield_text, context),
-		});
-	});
-
-	replacements.sort((a, b) => b.start - a.start);
-
-	const offset = node.getFullStart();
-	let text = slice(content, node);
-
-	for (const replacement of replacements) {
-		text =
-			text.slice(0, replacement.start - offset) +
-			replacement.text +
-			text.slice(replacement.end - offset);
-	}
-
-	return text.trim();
+	return yield_text.replace(/^yield\*\s*/, "");
 }
 
 function make_script_effect_id(expr: ts.Node, context: ScriptLoweringContext): string {

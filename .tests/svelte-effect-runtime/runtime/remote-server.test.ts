@@ -33,7 +33,6 @@ import {
 	throw_form_error,
 } from "../../../modules/svelte-effect-runtime/src/remote/server.ts";
 import { create_form_error } from "../../../modules/svelte-effect-runtime/src/remote/shared.ts";
-import { InvalidLiveQueryReturnError } from "../../../modules/svelte-effect-runtime/src/errors.ts";
 import * as sveltekit_server from "../../../modules/svelte-effect-runtime/src/internal/sveltekit-server.ts";
 
 // ─── normalize_remote_helper_error ─────────────────────────────
@@ -587,72 +586,22 @@ test("run_live_handler_source converts Effect Streams to async iterables", async
 	assert_equals(values, [1, 2, 3]);
 });
 
-test("run_live_handler_source wraps stream failures before the first value", async () => {
-	class LiveDomainError extends Data.TaggedError("LiveDomainError")<{
-		readonly reason: string;
-	}> {}
-
-	const source = await run_live_handler_source(
-		Stream.fail(new LiveDomainError({ reason: "before" })),
-		make_request_event(),
-	);
-	const values: unknown[] = [];
-	const error = await assert_rejects(async () => {
-		for await (const value of source) {
-			values.push(value);
-		}
-	});
-
-	assert_equals(values, []);
-	assert_live_failure_envelope(error, "before");
-});
-
-test("run_live_handler_source wraps stream failures after emitted values", async () => {
-	class LiveDomainError extends Data.TaggedError("LiveDomainError")<{
-		readonly reason: string;
-	}> {}
-
-	const source = await run_live_handler_source(
-		Stream.make("first").pipe(
-			Stream.concat(Stream.fail(new LiveDomainError({ reason: "after" }))),
-		),
-		make_request_event(),
-	);
-	const iterator = source[Symbol.asyncIterator]();
-
-	assert_equals(await iterator.next(), { done: false, value: "first" });
-
-	const error = await assert_rejects(() => iterator.next());
-
-	assert_live_failure_envelope(error, "after");
-});
-
-test("run_live_handler_source rejects native async iterables", async () => {
+test("run_live_handler_source passes through native async iterables", async () => {
 	async function* make_source(): AsyncGenerator<string> {
 		yield "first";
 		yield "second";
 	}
 
-	const error = await assert_rejects(() =>
-		run_live_handler_source(make_source() as never, make_request_event()),
-	);
+	const source = await run_live_handler_source(make_source(), make_request_event());
 
-	assert_truthy(error instanceof InvalidLiveQueryReturnError);
+	const values: string[] = [];
+
+	for await (const value of source as AsyncIterable<string>) {
+		values.push(value);
+	}
+
+	assert_equals(values, ["first", "second"]);
 });
-
-function assert_live_failure_envelope(error: unknown, reason: string): void {
-	assert_truthy(isHttpError(error, 500));
-
-	const body = (error as { body?: unknown }).body as {
-		__svelte_effect_remote__: true;
-		encoded: string;
-	};
-	const parsed = parse(body.encoded);
-
-	assert_equals(body.__svelte_effect_remote__, true);
-	assert_equals(parsed._tag, "LiveDomainError");
-	assert_equals(parsed.reason, reason);
-}
 
 function make_request_event() {
 	return {

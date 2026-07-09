@@ -501,30 +501,9 @@ export class UncheckedPrerenderHandlerMissingError extends RuntimeError {
 export class InvalidLiveQueryReturnError extends RuntimeError {
 	constructor() {
 		super(
-			"Query.live handler must return an Effect Stream. Wrap native iterables with Stream.fromIterable, Stream.fromAsyncIterable, or another Stream constructor before returning them.",
+			"Query.live handler must return an Effect Stream, Iterable, or AsyncIterable; resolved values must expose a streaming protocol that SER can bridge to SvelteKit.",
 		);
 		this.name = "InvalidLiveQueryReturnError";
-	}
-}
-
-/**
- * Thrown when generated component code yields a Stream that completes before
- * producing a value.
- *
- * @example
- * ```ts
- * throw new EmptyStreamYieldError();
- * ```
- *
- * @since 3.4.8
- * @returns An Error describing an empty Stream in a value position.
- */
-export class EmptyStreamYieldError extends RuntimeError {
-	constructor() {
-		super(
-			"Cannot resolve yield* stream expression because the Stream completed without emitting a value.",
-		);
-		this.name = "EmptyStreamYieldError";
 	}
 }
 

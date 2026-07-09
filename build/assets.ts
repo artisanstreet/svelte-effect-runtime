@@ -1,10 +1,10 @@
 import {
 	copyFile,
 	cp,
+	is_not_found_error,
 	join,
 	mkdir,
 	path_exists,
-	readdir,
 	readFile,
 	remove_path,
 	repo_root,
@@ -17,6 +17,13 @@ const runtime_manifest_path = join(repo_root, "modules", "svelte-effect-runtime"
 const target_dist_dir = join(repo_root, ".dist", target ?? "");
 const runtime_dir = join(target_dist_dir, "runtime");
 
+const optional_runtime_files = [
+	"preprocess.js",
+	"mod.js",
+	"generators.js",
+	"dispatcher.js",
+	"detect.js",
+] as const;
 const runtime_directories = ["chunks", "internal", "markup", "remote", "runtime"];
 
 if (!target) {
@@ -45,14 +52,14 @@ await writeFile(
 	`${JSON.stringify(runtime_package_json, null, 2)}\n`,
 );
 
-const runtime_root_files = await readdir(runtime_dist, { withFileTypes: true });
-
-for (const file of runtime_root_files) {
-	if (!file.isFile() || !is_runtime_asset_file(file.name)) {
-		continue;
+for (const filename of optional_runtime_files) {
+	try {
+		await copyFile(join(runtime_dist, filename), join(runtime_dir, filename));
+	} catch (error) {
+		if (!is_not_found_error(error)) {
+			throw error;
+		}
 	}
-
-	await copyFile(join(runtime_dist, file.name), join(runtime_dir, file.name));
 }
 
 for (const directory of runtime_directories) {
@@ -72,7 +79,3 @@ for (const directory of runtime_directories) {
 
 await writeFile(join(runtime_dir, "transform.js"), `export * from "./runtime/transform.js";\n`);
 await writeFile(join(runtime_dir, "transform.d.ts"), `export * from "./runtime/transform";\n`);
-
-function is_runtime_asset_file(filename: string): boolean {
-	return filename.endsWith(".js") || filename.endsWith(".js.map") || filename.endsWith(".d.ts");
-}

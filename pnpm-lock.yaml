@@ -345,7 +345,7 @@ importers:
         specifier: ^5.56.0
         version: 5.56.4
       svelte-effect-runtime-grammars:
-        specifier: workspace:3.4.8
+        specifier: workspace:3.4.9
         version: link:../svelte-effect-runtime-grammars
       svelte-language-server:
         specifier: ^0.17.30

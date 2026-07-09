@@ -10,45 +10,46 @@ form-validation error helpers.
 ## `RemoteFailure<Error>`
 
 The error channel of every Effect returned by a remote call. A union of
-your own tagged error (placed directly on the channel, no wrapper) and
+your own tagged error (placed directly on the channel — no wrapper) and
 SvelteKit's transport-level failures:
 
 ```ts
 type RemoteFailure<Error = unknown> =
-	| Error // your tagged domain error, surfaced as-is
-	| RemoteValidationError // SER form validation rejected the payload
-	| RemoteHttpError // SvelteKit HTTP/App.Error response
-	| RemoteTransportError; // network or decode failure (no HTTP status)
+  | Error                      // your tagged domain error, surfaced as-is
+  | RemoteValidationError      // SER form validation rejected the payload
+  | RemoteHttpError            // SvelteKit HTTP/App.Error response
+  | RemoteTransportError;      // network or decode failure (no HTTP status)
 ```
 
 Recovering a typed domain error:
 
 ```ts
-yield *
-	create_post.submit(data).pipe(Effect.catchTag("YourTag", (err) => Effect.succeed(/* ... */)));
+yield* create_post.submit(data).pipe(
+  Effect.catchTag("YourTag", (err) => Effect.succeed(/* ... */))
+);
 ```
 
 ## Variant shapes
 
 ```ts
 interface RemoteValidationError {
-	readonly _tag: "RemoteValidationError";
-	readonly body?: unknown;
-	readonly issues: ReadonlyArray<FormIssue>;
-	readonly status: number; // defaults to 400
+  readonly _tag: "RemoteValidationError";
+  readonly body?: unknown;
+  readonly issues: ReadonlyArray<FormIssue>;
+  readonly status: number;        // defaults to 400
 }
 
 interface RemoteHttpError {
-	readonly _tag: "RemoteHttpError";
-	readonly body?: unknown;
-	readonly cause: unknown;
-	readonly status: number;
+  readonly _tag: "RemoteHttpError";
+  readonly body?: unknown;
+  readonly cause: unknown;
+  readonly status: number;
 }
 
 interface RemoteTransportError {
-	readonly _tag: "RemoteTransportError";
-	readonly body?: unknown;
-	readonly cause: unknown;
+  readonly _tag: "RemoteTransportError";
+  readonly body?: unknown;
+  readonly cause: unknown;
 }
 ```
 
@@ -58,14 +59,14 @@ Issued by the `invalid` proxy inside `Form` handlers:
 
 ```ts
 interface FormIssue {
-	readonly message: string;
-	readonly path: ReadonlyArray<string | number>;
+  readonly message: string;
+  readonly path: ReadonlyArray<string | number>;
 }
 
 interface FormError<SchemaType = unknown> {
-	readonly _tag: "FormError";
-	readonly issues: ReadonlyArray<FormIssue>;
-	readonly _schema?: SchemaType;
+  readonly _tag: "FormError";
+  readonly issues: ReadonlyArray<FormIssue>;
+  readonly _schema?: SchemaType;
 }
 ```
 
@@ -78,21 +79,14 @@ the server calls `handleValidationError`, defaults to `{ message: "Bad Request" 
 and the client sees a `RemoteHttpError` whose `body` is that `App.Error`
 object.
 
-## `EmptyStreamYieldError`
-
-Thrown when generated component code evaluates `yield* stream` and the
-stream completes without emitting a value. Use `Stream.runForEach` when
-the component should stay subscribed to every value, or make sure the
-stream emits at least once before it completes.
-
 ## Deprecated: `RemoteDomainError`
 
 ```ts
 /** @deprecated */
 interface RemoteDomainError<Error = unknown> {
-	readonly _tag: "RemoteDomainError";
-	readonly cause: Error;
-	readonly status: number;
+  readonly _tag: "RemoteDomainError";
+  readonly cause: Error;
+  readonly status: number;
 }
 ```
 

@@ -17,7 +17,7 @@ Write effectful code without any hassle. Seriously!
 ```svelte
 <script lang="ts" effect>
   import * as StockCard from "./ticker-card.ts";
-  import { GetAllStocks, GetPrice } from "./tickers.remote.ts";
+  import { GetAllStocks, GetLivePrice } from "./tickers.remote.ts";
   import { GetUser } from "user.ts";
 </script>
 
@@ -25,7 +25,8 @@ Write effectful code without any hassle. Seriously!
   {const currency = $derived((yield* GetUser()).preferredCurrency)}
 
   {#each yield* GetAllStocks() as stock}
-    {const price = yield* GetPrice(stock.ticker)}
+    {const liveQuery = yield* GetLivePrice(stock.ticker)}
+    {const price = $derived(liveQuery.current ?? stock.initialPrice)}
 
     <StockCard.Root>
       <StockCard.Header>{stock.name}</StockCard.Header>
