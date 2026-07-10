@@ -1,18 +1,36 @@
 /**
- * Checks whether a Svelte attribute name should be treated as an event handler
- * boundary for markup effect lowering.
+ * Checks whether a parsed Svelte attribute has the same event shape that
+ * Svelte's compiler recognizes.
  *
  * @example
  * ```ts
- * is_event_attribute_name("onChange");
+ * is_svelte_event_attribute({
+ *   type: "Attribute",
+ *   name: "onclick",
+ *   value: { type: "ExpressionTag" },
+ * });
  * ```
  *
- * @since 3.4.11
- * @param name - Attribute name read from Svelte source or the parsed AST.
- * @returns Whether the attribute is an event-like Svelte handler attribute.
+ * @since 4.0.0
+ * @param attribute - Parsed Svelte attribute with its name and complete value
+ *   shape.
+ * @returns Whether Svelte treats the attribute as an event attribute.
  */
-export function is_event_attribute_name(name: string): boolean {
-	return /^on(?::[A-Za-z_$][\w$-]*|[A-Za-z_$][\w$-]*)$/i.test(name);
+export function is_svelte_event_attribute(attribute: {
+	type: string;
+	name?: string;
+	value?: unknown;
+}): boolean {
+	if (attribute.type !== "Attribute" || !attribute.name?.startsWith("on")) {
+		return false;
+	}
+
+	const value = attribute.value;
+
+	return (
+		(value !== true && !Array.isArray(value)) ||
+		(Array.isArray(value) && value.length === 1 && value[0]?.type === "ExpressionTag")
+	);
 }
 
 /**

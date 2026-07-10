@@ -721,6 +721,44 @@ test("rewrites custom event-like handler attributes", () => {
 	assert_string_includes(result.code, `yield* ToEffect(handle(event))`);
 });
 
+test("rejects mixed-value attributes that Svelte does not classify as events", () => {
+	const source = `<button onclick="prefix-{yield* handle(event)}">save</button>`;
+	const error = assert_throws(() => transform_markup_effect(source, "Test.svelte"));
+
+	assert_string_includes(error.message, "[UNSUPPORTED_MARKUP_EFFECT_POSITION]:");
+	assert_string_includes(error.message, `yield* handle(event)`);
+});
+
+test("rewrites quoted single-expression attributes that Svelte classifies as events", () => {
+	const source = `<button onclick="{yield* handle(event)}">save</button>`;
+	const result = transform_markup_effect(source, "Test.svelte");
+
+	assert_string_includes(result.code, `onclick="{(event) =>`);
+	assert_string_includes(result.code, `yield* ToEffect(handle(event))`);
+
+	compile(result.code, {
+		filename: "Test.svelte",
+		generate: "server",
+		experimental: { async: true },
+	});
+});
+
+test("matches Svelte event attribute classification for hyphenated names", () => {
+	const source = `<button on-custom={yield* handle(event)}>save</button>`;
+	const result = transform_markup_effect(source, "Test.svelte");
+
+	assert_string_includes(result.code, `on-custom={(event) =>`);
+	assert_string_includes(result.code, `yield* ToEffect(handle(event))`);
+});
+
+test("rejects uppercase names that Svelte does not classify as events", () => {
+	const source = `<button ONCLICK={yield* handle(event)}>save</button>`;
+	const error = assert_throws(() => transform_markup_effect(source, "Test.svelte"));
+
+	assert_string_includes(error.message, "[UNSUPPORTED_MARKUP_EFFECT_POSITION]:");
+	assert_string_includes(error.message, `yield* handle(event)`);
+});
+
 test("rewrites native-style form validation handlers only when marked with yield*", () => {
 	const source = `<form {...createPost} oninput={yield* createPost.validate()}></form>`;
 	const result = transform_markup_effect(source, "Test.svelte");

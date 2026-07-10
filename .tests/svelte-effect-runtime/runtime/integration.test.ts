@@ -479,6 +479,73 @@ test("vite diagnostics plugin recognizes mixed-case event attributes", async () 
 	assert_string_includes(warnings[0], "onChange={yield* Effect.gen(function* () { ... })}");
 });
 
+test("vite diagnostics plugin follows Svelte's case-sensitive event classification", async () => {
+	const warnings: string[] = [];
+	const diagnostics_plugin = get_diagnostics_plugin();
+	const source = [
+		`<script lang="ts">`,
+		`  import { Effect } from "effect";`,
+		`</script>`,
+		``,
+		`<button ONCLICK={() => Effect.sync(() => save())}>save</button>`,
+	].join("\n");
+
+	await diagnostics_plugin.transform.call(
+		make_warning_context(warnings),
+		source,
+		"src/routes/+page.svelte",
+	);
+
+	assert_equals(warnings.length, 1);
+	assert_string_includes(warnings[0], "Svelte attributes need the resolved Effect value");
+});
+
+test("vite diagnostics plugin does not treat mixed attribute values as events", async () => {
+	const warnings: string[] = [];
+	const diagnostics_plugin = get_diagnostics_plugin();
+	const source = [
+		`<script lang="ts">`,
+		`  import { Effect } from "effect";`,
+		`</script>`,
+		``,
+		`<button onclick="prefix-{Effect.sync(() => save())}">save</button>`,
+	].join("\n");
+
+	await diagnostics_plugin.transform.call(
+		make_warning_context(warnings),
+		source,
+		"src/routes/+page.svelte",
+	);
+
+	assert_equals(warnings.length, 1);
+	assert_string_includes(warnings[0], "markup expression");
+
+	if (warnings[0].includes("event attribute")) {
+		throw new Error("mixed attribute values should not be diagnosed as event attributes");
+	}
+});
+
+test("vite diagnostics plugin recognizes quoted single-expression event attributes", async () => {
+	const warnings: string[] = [];
+	const diagnostics_plugin = get_diagnostics_plugin();
+	const source = [
+		`<script lang="ts">`,
+		`  import { Effect } from "effect";`,
+		`</script>`,
+		``,
+		`<button onclick="{() => Effect.sync(() => save())}">save</button>`,
+	].join("\n");
+
+	await diagnostics_plugin.transform.call(
+		make_warning_context(warnings),
+		source,
+		"src/routes/+page.svelte",
+	);
+
+	assert_equals(warnings.length, 1);
+	assert_string_includes(warnings[0], "event callback that returns an Effect");
+});
+
 test("vite diagnostics plugin ignores yielded Effect handlers", async () => {
 	const warnings: string[] = [];
 	const diagnostics_plugin = get_diagnostics_plugin();

@@ -1,6 +1,5 @@
 import type { MarkupBraceExpression, ScriptRegion } from "$/compiler/source-scan.ts";
 import { scan_svelte_effect_source } from "$/compiler/source-scan.ts";
-import { is_event_attribute_name } from "./markup/event-attributes.ts";
 
 /**
  * Warning diagnostic produced by the SER Vite diagnostics plugin.
@@ -85,8 +84,8 @@ function make_expression_diagnostics(
 ): Diagnostic[] {
 	const attribute_name = expression.attribute_name;
 	const expression_text = expression.expression_text;
-	const is_event_attribute =
-		attribute_name !== undefined && is_event_attribute_name(attribute_name);
+	/** The source scanner exposes a name only for a direct single-expression value. */
+	const is_event_attribute = attribute_name !== undefined && attribute_name.startsWith("on");
 	const is_attribute = attribute_name !== undefined;
 	const loc = get_line_column(code, expression.open);
 

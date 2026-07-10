@@ -471,7 +471,7 @@ function collect_markup_expressions(
 			inner_end,
 			inner,
 			expression_text: inner.trim(),
-			attribute_name: find_attribute_name_before_expression(source, open),
+			attribute_name: find_attribute_name_before_expression(source, open, close),
 		});
 
 		cursor = close + 1;
@@ -496,7 +496,11 @@ function make_bare_const_tag(
 	];
 }
 
-function find_attribute_name_before_expression(source: string, open: number): string | undefined {
+function find_attribute_name_before_expression(
+	source: string,
+	open: number,
+	close: number,
+): string | undefined {
 	const tag_start = source.lastIndexOf("<", open);
 	const last_tag_end = source.lastIndexOf(">", open);
 
@@ -505,7 +509,12 @@ function find_attribute_name_before_expression(source: string, open: number): st
 	}
 
 	const before_expression = source.slice(tag_start + 1, open);
-	const match = before_expression.match(/(?:^|\s)([A-Za-z_$:][\w$:-]*)\s*=\s*$/);
+	const match = before_expression.match(/(?:^|\s)([A-Za-z_$:][\w$:-]*)\s*=\s*(["']?)$/);
+	const quote = match?.[2];
+
+	if (quote && source[close + 1] !== quote) {
+		return undefined;
+	}
 
 	return match?.[1];
 }

@@ -1,6 +1,6 @@
 import type { AST } from "svelte/compiler";
 
-import { is_event_attribute_name, normalize_event_attribute_name } from "../event-attributes.ts";
+import { is_svelte_event_attribute, normalize_event_attribute_name } from "../event-attributes.ts";
 import type { MarkupCandidate, TagKind } from "./types.ts";
 
 interface ClassifiedCandidate {
@@ -174,7 +174,7 @@ function visit_element_attributes(
 	classified: ClassifiedCandidate[],
 ): void {
 	for (const attr of node.attributes) {
-		if (attr.type === "Attribute" && attr.name && is_event_attribute_name(attr.name)) {
+		if (is_svelte_event_attribute(attr)) {
 			const attribute_name_replacement = make_attribute_name_replacement(node, attr);
 
 			visit_attribute_value(
