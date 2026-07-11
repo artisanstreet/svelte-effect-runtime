@@ -3,7 +3,6 @@ packages:
     - "modules/svelte-effect-runtime-grammars"
     - "modules/svelte-effect-runtime-language-server"
     - "modules/svelte-effect-runtime-vsix"
-    - "modules/docs"
 
 allowBuilds:
     esbuild: true
