@@ -5,6 +5,8 @@ export { create_remote_live_query_adapter, create_remote_query_adapter } from ".
 export type {
 	EffectRemoteForm,
 	EffectRemoteFormEnhanceOptions,
+	EffectRemoteFormPreflightSchema,
 	EffectRemoteFormSubmit,
+	EffectRemoteFormValidateOptions,
 	Pending,
 } from "./types.ts";

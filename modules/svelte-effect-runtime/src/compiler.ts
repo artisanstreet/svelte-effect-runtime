@@ -368,19 +368,25 @@ function get_server_import_replacement(specifier: string): string | undefined {
 }
 
 function get_script_kind(filename: string, ts: typeof import("typescript")) {
-	if (/\.[cm]?tsx(?:\?.*)?$/.test(filename)) {
+	const normalized_filename = filename.toLowerCase();
+
+	if (has_file_extension(normalized_filename, [".tsx"])) {
 		return ts.ScriptKind.TSX;
 	}
 
-	if (/\.[cm]?jsx(?:\?.*)?$/.test(filename)) {
+	if (has_file_extension(normalized_filename, [".jsx"])) {
 		return ts.ScriptKind.JSX;
 	}
 
-	if (/\.[cm]?js(?:\?.*)?$/.test(filename)) {
+	if (has_file_extension(normalized_filename, [".js", ".mjs", ".cjs"])) {
 		return ts.ScriptKind.JS;
 	}
 
 	return ts.ScriptKind.TS;
+}
+
+function has_file_extension(filename: string, extensions: readonly string[]): boolean {
+	return extensions.some((extension) => filename.endsWith(extension));
 }
 
 function make_remote_client_wrapper_plugin(options?: EffectOptions): Plugin {

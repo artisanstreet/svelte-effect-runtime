@@ -19,6 +19,31 @@ export type EffectLike<A = unknown, E = unknown, R = unknown> =
 	| Effect.gen.Return<A, E, R>;
 
 /**
+ * Effect-producing callback adapted by {@link Handler} to a native SvelteKit
+ * server handler. The callback must resolve every typed failure before the
+ * server boundary, while its service requirements are supplied by
+ * {@link ServerRuntime}.
+ *
+ * @example
+ * ```ts
+ * import type { RequestHandler } from "./$types";
+ *
+ * const get_post: EffectHandler<RequestHandler> = ({ params }) =>
+ *   Posts.get(params.slug).pipe(
+ *     Effect.map((post) => Response.json(post)),
+ *   );
+ * ```
+ *
+ * @since 4.0.0
+ */
+export type EffectHandler<
+	NativeHandler extends (...arguments_: never[]) => unknown,
+	R = unknown,
+> = (
+	...arguments_: Parameters<NativeHandler>
+) => EffectLike<Awaited<ReturnType<NativeHandler>>, never, R>;
+
+/**
  * Handler shape accepted by query, command, and prerender helpers.
  *
  * @example

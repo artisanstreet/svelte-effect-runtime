@@ -113,6 +113,12 @@ function visit_ast_node(
 			walk_ast(node.body, candidates, matched, classified);
 			return;
 
+		case "SvelteElement":
+			classify_expression(node.tag as ExpressionLike, "plain", candidates, matched, classified);
+			visit_element_attributes(node, candidates, matched, classified);
+			walk_ast(node.fragment, candidates, matched, classified);
+			return;
+
 		case "RegularElement":
 		case "Component":
 		case "TitleElement":
@@ -121,7 +127,6 @@ function visit_ast_node(
 		case "SvelteBoundary":
 		case "SvelteComponent":
 		case "SvelteDocument":
-		case "SvelteElement":
 		case "SvelteFragment":
 		case "SvelteHead":
 		case "SvelteSelf":

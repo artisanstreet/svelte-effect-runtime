@@ -175,6 +175,54 @@ test("virtual TS snapshot maps SER markup yield operands to generated operands",
 	);
 });
 
+test("virtual TS document normalizes bare const tags without brace rescans", () => {
+	const count = 6_000;
+	const max_elapsed_ms = 1_000;
+	const script_filler = Array.from(
+		{ length: count },
+		(_, index) => `{ const skipped_${index} = ${index}; }`,
+	).join("\n");
+	const style_filler = Array.from(
+		{ length: count },
+		(_, index) => `.item_${index} { color: red; }`,
+	).join("\n");
+	const comment_filler = Array.from(
+		{ length: count },
+		(_, index) => `{ const commented_${index} = ${index}; }`,
+	).join("\n");
+	const outside_filler = Array.from({ length: count }, (_, index) => `{ value_${index} }`).join(
+		"\n",
+	);
+	const source = [
+		`<script>`,
+		script_filler,
+		`</script>`,
+		``,
+		`<style>`,
+		style_filler,
+		`</style>`,
+		``,
+		`<!--`,
+		comment_filler,
+		`-->`,
+		``,
+		`{const title = "ok"}`,
+		outside_filler,
+	].join("\n");
+	const document = make_document(source);
+	const started_at = performance.now();
+	const prepared = prepare_virtual_document(document, make_identity_transforms());
+	const elapsed_ms = performance.now() - started_at;
+
+	assert_truthy(prepared);
+	assert_string_includes(prepared.document.getText(), `{@const title = "ok"}`);
+	assert_false(prepared.document.getText().includes(`{@ const skipped_`));
+	assert_false(prepared.document.getText().includes(`{@ const commented_`));
+	if (elapsed_ms >= max_elapsed_ms) {
+		throw new Error(`normalization took ${elapsed_ms.toFixed(1)}ms`);
+	}
+});
+
 test("virtual TS snapshot scopes bare const declaration tags", () => {
 	const source = [
 		`<script lang="ts">`,
@@ -307,6 +355,13 @@ function make_transforms() {
 				code,
 				options.filename,
 			),
+	};
+}
+
+function make_identity_transforms() {
+	return {
+		transformEffectMarkup: (code: string) => ({ code, map: {} }),
+		transformEffectScript: (code: string) => ({ code, map: {} }),
 	};
 }
 

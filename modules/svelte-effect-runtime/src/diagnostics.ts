@@ -10,6 +10,11 @@ interface Diagnostic {
 	column: number;
 }
 
+interface SourceLocation {
+	line: number;
+	column: number;
+}
+
 /**
  * Finds best-effort SER usage diagnostics in Svelte component markup.
  *
@@ -32,9 +37,10 @@ export function find_svelte_effect_diagnostics(
 ): Array<{ message: string; line: number; column: number }> {
 	const scan = scan_svelte_effect_source(code, filename);
 	const effect_names = find_effect_local_names(scan.scripts);
+	const line_starts = make_line_starts(code);
 
 	return scan.markup_expressions.flatMap((expression) =>
-		make_expression_diagnostics(code, filename, effect_names, expression),
+		make_expression_diagnostics(filename, effect_names, expression, line_starts),
 	);
 }
 
@@ -77,17 +83,16 @@ function parse_effect_import_local_name(specifier: string): string | undefined {
 }
 
 function make_expression_diagnostics(
-	code: string,
 	filename: string,
 	effect_names: Set<string>,
 	expression: MarkupBraceExpression,
+	line_starts: number[],
 ): Diagnostic[] {
 	const attribute_name = expression.attribute_name;
 	const expression_text = expression.expression_text;
 	/** The source scanner exposes a name only for a direct single-expression value. */
 	const is_event_attribute = attribute_name !== undefined && attribute_name.startsWith("on");
 	const is_attribute = attribute_name !== undefined;
-	const loc = get_line_column(code, expression.open);
 
 	if (!contains_effect_reference(expression_text, effect_names)) {
 		return [];
@@ -96,6 +101,8 @@ function make_expression_diagnostics(
 	if (starts_with_yield_star(expression_text)) {
 		return [];
 	}
+
+	const loc = get_line_column(line_starts, expression.open);
 
 	if (
 		is_event_attribute &&
@@ -317,13 +324,39 @@ function is_callback_expression(expression_text: string): boolean {
 	);
 }
 
-function get_line_column(code: string, position: number): { line: number; column: number } {
-	const before = code.slice(0, position);
-	const lines = before.split("\n");
-	const line = lines.length;
-	const column = lines.at(-1)?.length ?? 0;
+function get_line_column(line_starts: number[], position: number): SourceLocation {
+	let low = 0;
+	let high = line_starts.length - 1;
+
+	while (low <= high) {
+		const mid = Math.floor((low + high) / 2);
+
+		if (line_starts[mid] <= position) {
+			low = mid + 1;
+		} else {
+			high = mid - 1;
+		}
+	}
+
+	const line_index = Math.max(0, high);
+	const line = line_index + 1;
+	const column = position - line_starts[line_index];
 
 	return { line, column };
+}
+
+function make_line_starts(code: string): number[] {
+	const line_starts = [0];
+
+	for (let i = 0; i < code.length; i += 1) {
+		if (code[i] !== "\n") {
+			continue;
+		}
+
+		line_starts.push(i + 1);
+	}
+
+	return line_starts;
 }
 
 function escape_regexp(value: string): string {

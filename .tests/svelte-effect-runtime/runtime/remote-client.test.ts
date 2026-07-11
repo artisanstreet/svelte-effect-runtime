@@ -1,7 +1,7 @@
 import { test } from "vitest";
 import { assert_equals, assert_throws, assert_rejects } from "./helpers/assert.ts";
 import { isRedirect, redirect as svelte_redirect } from "@sveltejs/kit";
-import { Effect, Stream } from "effect";
+import { Effect, Schema, Stream } from "effect";
 import { stringify } from "devalue";
 import {
 	create_remote_command_adapter,
@@ -308,7 +308,7 @@ test("remote live query adapter returns a stream with separate controls", async 
 	)(undefined);
 	const derived_query = query.pipe(Stream.map((value) => value.toUpperCase()));
 	const status = await Effect.runPromise(
-		Stream.runCollect(Live.status(derived_query).pipe(Stream.take(1))),
+		Stream.runCollect(derived_query.pipe(Live.status, Stream.take(1))),
 	);
 	const values = await Effect.runPromise(Stream.runCollect(derived_query));
 
@@ -319,7 +319,7 @@ test("remote live query adapter returns a stream with separate controls", async 
 	assert_equals("ready" in query, false);
 	assert_equals("reconnect" in query, false);
 
-	await Effect.runPromise(Live.reconnect(derived_query));
+	await Effect.runPromise(derived_query.pipe(Live.reconnect));
 
 	assert_equals(reconnect_called, true);
 });
@@ -337,7 +337,7 @@ test("remote live status reports failed resources before closed resources", asyn
 		"",
 	)(undefined);
 	const status = await Effect.runPromise(
-		Stream.runCollect(Live.status(query).pipe(Stream.take(1))),
+		Stream.runCollect(query.pipe(Live.status, Stream.take(1))),
 	);
 
 	assert_equals(status[0]?._tag, "Failed");
@@ -420,6 +420,10 @@ test("remote form data encodes nested scalar, array, blob, and empty values", ()
 			missing: undefined,
 			nil: null,
 		},
+		rows: [
+			{ count: 1, title: "First" },
+			{ count: 2, title: "Second" },
+		],
 		tags: ["svelte", "effect"],
 		title: "Hello",
 	});
@@ -430,6 +434,8 @@ test("remote form data encodes nested scalar, array, blob, and empty values", ()
 	assert_equals(form_data.has("b:draft"), false);
 	assert_equals(form_data.get("tags[0]"), "svelte");
 	assert_equals(form_data.get("tags[1]"), "effect");
+	assert_equals(form_data.get("rows[0].title"), "First");
+	assert_equals(form_data.get("n:rows[1].count"), "2");
 	assert_equals(form_data.get("nested.nil"), "");
 	assert_equals(form_data.has("nested.missing"), false);
 	assert_equals(form_data.get("avatar") instanceof Blob, true);
@@ -487,11 +493,79 @@ test("remote form adapter preserves descriptors and wraps validate in an Effect"
 	assert_equals(validate_called, true);
 });
 
+test("remote form adapter maps all to includeUntouched for stable Kit validate", async () => {
+	let received_options: Record<string, unknown> | undefined;
+
+	const native = {
+		method: "POST",
+		action: "?/remote=abc%2Fcreate",
+	};
+
+	Object.defineProperty(native, "validate", {
+		value: async function validate({
+			includeUntouched = false,
+			preflightOnly = false,
+		}: {
+			includeUntouched?: boolean;
+			preflightOnly?: boolean;
+		} = {}) {
+			received_options = arguments[0] as Record<string, unknown>;
+
+			return { includeUntouched, preflightOnly };
+		},
+	});
+
+	const form = create_remote_form_adapter(native, (value) => value, "");
+
+	await Effect.runPromise(form.validate({ all: true, preflightOnly: true }));
+
+	assert_equals(received_options?.all, true);
+	assert_equals(received_options?.includeUntouched, true);
+	assert_equals(received_options?.preflightOnly, true);
+});
+
+test("remote form adapter keeps all for next Kit validate", async () => {
+	let received_options: Record<string, unknown> | undefined;
+
+	const native = {
+		method: "POST",
+		action: "?/remote=abc%2Fcreate",
+	};
+
+	Object.defineProperty(native, "validate", {
+		value: async function validate({
+			all = false,
+			preflightOnly = false,
+			includeUntouched,
+		}: {
+			all?: boolean;
+			preflightOnly?: boolean;
+			includeUntouched?: boolean;
+		} = {}) {
+			received_options = arguments[0] as Record<string, unknown>;
+
+			return { all, includeUntouched, preflightOnly };
+		},
+	});
+
+	const form = create_remote_form_adapter(native, (value) => value, "");
+
+	await Effect.runPromise(form.validate({ all: true, preflightOnly: true }));
+
+	assert_equals(received_options?.all, true);
+	assert_equals("includeUntouched" in (received_options ?? {}), false);
+	assert_equals(received_options?.preflightOnly, true);
+});
+
 test("remote form adapter posts explicit input when native submit is form-bound", async () => {
 	const original_fetch = globalThis.fetch;
+	const had_location = "location" in globalThis;
+	const original_location = globalThis.location;
 
 	let native_submit_called = false;
 	let requested_url = "";
+	let request_pathname: string | null = null;
+	let request_search: string | null = null;
 	let posted_title: FormDataEntryValue | null = null;
 
 	const native = {
@@ -503,10 +577,18 @@ test("remote form adapter posts explicit input when native submit is form-bound"
 		},
 	};
 
+	Object.defineProperty(globalThis, "location", {
+		configurable: true,
+		value: new URL("https://example.test/profile?tab=settings"),
+	});
+
 	globalThis.fetch = ((url: string | URL | Request, init?: RequestInit) => {
 		const body = init?.body as FormData;
+		const headers = new Headers(init?.headers);
 
 		requested_url = String(url);
+		request_pathname = headers.get("x-sveltekit-pathname");
+		request_search = headers.get("x-sveltekit-search");
 		posted_title = body.get("title");
 
 		return Promise.resolve(
@@ -531,9 +613,20 @@ test("remote form adapter posts explicit input when native submit is form-bound"
 		assert_equals(result, { ok: true });
 		assert_equals(native_submit_called, false);
 		assert_equals(requested_url, "/_app/remote/abc/create");
+		assert_equals(request_pathname, "/profile");
+		assert_equals(request_search, "?tab=settings");
 		assert_equals(posted_title, "hello");
 	} finally {
 		globalThis.fetch = original_fetch;
+
+		if (had_location) {
+			Object.defineProperty(globalThis, "location", {
+				configurable: true,
+				value: original_location,
+			});
+		} else {
+			Reflect.deleteProperty(globalThis, "location");
+		}
 	}
 });
 
@@ -676,7 +769,13 @@ test("remote form adapter returns keyed forms from nested for calls", async () =
 
 test("remote form adapter preflight calls native preflight and keeps callable", async () => {
 	const schemas: unknown[] = [];
-	const schema = { name: "draft" };
+	const schema = {
+		"~standard": {
+			validate(value: unknown) {
+				return { value };
+			},
+		},
+	};
 	const native = {
 		method: "POST",
 		action: "?/remote=abc%2Fcreate",
@@ -702,6 +801,78 @@ test("remote form adapter preflight calls native preflight and keeps callable", 
 	assert_equals(preflighted, form);
 	assert_equals(schemas, [schema]);
 	assert_equals(result, "ok");
+});
+
+test("remote form adapter normalizes Effect Schema preflight input", () => {
+	const schemas: unknown[] = [];
+	const native = {
+		method: "POST",
+		action: "?/remote=abc%2Fcreate",
+		preflight(next_schema: unknown) {
+			schemas.push(next_schema);
+
+			return native;
+		},
+	};
+
+	const form = create_remote_form_adapter<{ title: string }, string>(
+		native,
+		(value) => value,
+		"",
+	);
+
+	form.preflight(Schema.Struct({ title: Schema.String }));
+
+	assert_equals(
+		typeof (schemas[0] as { "~standard"?: { validate?: unknown } })["~standard"]?.validate,
+		"function",
+	);
+});
+
+test("remote form adapter runs preflight before direct endpoint submit", async () => {
+	const original_fetch = globalThis.fetch;
+	let fetch_called = false;
+
+	const schema = {
+		"~standard": {
+			validate() {
+				return {
+					issues: [{ message: "missing", path: ["title"] }],
+				};
+			},
+		},
+	};
+	const native = {
+		method: "POST",
+		action: "?/remote=abc%2Fcreate",
+		preflight() {
+			return native;
+		},
+	};
+
+	globalThis.fetch = (() => {
+		fetch_called = true;
+
+		return Promise.resolve(new Response());
+	}) as typeof fetch;
+
+	try {
+		const form = create_remote_form_adapter<{ title: string }, string>(
+			native,
+			(value) => value,
+			"/_app/remote",
+		);
+
+		form.preflight(schema);
+
+		const error = await assert_rejects(() => Effect.runPromise(form({ title: "" })));
+
+		assert_equals((error as { _tag?: string })._tag, "RemoteValidationError");
+		assert_equals((error as { issues?: Array<{ message: string }> }).issues?.[0]?.message, "missing");
+		assert_equals(fetch_called, false);
+	} finally {
+		globalThis.fetch = original_fetch;
+	}
 });
 
 test("remote form adapter preserves SvelteKit 2.61 enhance instance descriptors", () => {

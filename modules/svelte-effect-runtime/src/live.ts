@@ -12,14 +12,31 @@ export const REMOTE_LIVE_STREAM: unique symbol = Symbol.for("ser.remote-live-str
 
 const LIVE_METADATA: unique symbol = Symbol.for("ser.remote-live-metadata") as never;
 
+const LIVE_OPERATOR: unique symbol = Symbol.for("ser.live-operator") as never;
+
 type RemoteLivePipe<A, E> = {
 	(): RemoteLiveStream<A, E>;
+	(ab: LiveFactory["status"]): Stream.Stream<LiveStatus, never, never>;
+	(ab: LiveFactory["reconnect"]): Effect.Effect<void, RemoteFailure<E>, never>;
+	<B>(ab: LiveFactory["status"], bc: (_: Stream.Stream<LiveStatus, never, never>) => B): B;
 	<B>(
-		ab: (_: Stream.Stream<A, RemoteFailure<E>, never>) => Stream.Stream<
-			B,
-			RemoteFailure<E>,
-			never
-		>,
+		ab: LiveFactory["reconnect"],
+		bc: (_: Effect.Effect<void, RemoteFailure<E>, never>) => B,
+	): B;
+	<B, C>(
+		ab: LiveFactory["status"],
+		bc: (_: Stream.Stream<LiveStatus, never, never>) => B,
+		cd: (_: B) => C,
+	): C;
+	<B, C>(
+		ab: LiveFactory["reconnect"],
+		bc: (_: Effect.Effect<void, RemoteFailure<E>, never>) => B,
+		cd: (_: B) => C,
+	): C;
+	<B>(
+		ab: (
+			_: Stream.Stream<A, RemoteFailure<E>, never>,
+		) => Stream.Stream<B, RemoteFailure<E>, never>,
 	): RemoteLiveStream<B, E>;
 	<B>(ab: (_: Stream.Stream<A, RemoteFailure<E>, never>) => B): B;
 	<B, C>(ab: (_: Stream.Stream<A, RemoteFailure<E>, never>) => B, bc: (_: B) => C): C;
@@ -54,7 +71,7 @@ export type RemoteLiveStream<A, E = never> = Omit<
  *
  * @example
  * ```ts
- * const Status = Live.status(GetTime());
+ * const Status = GetTime().pipe(Live.status);
  * ```
  *
  * @since 3.4.8
@@ -82,30 +99,42 @@ export type LiveStatus =
  *
  * @example
  * ```ts
- * yield* Live.reconnect(GetNotifications());
+ * yield* GetNotifications().pipe(Live.reconnect);
  * ```
  *
  * @since 3.4.8
  */
 export interface LiveFactory {
-	/**
-	 * Creates a stream of transport status updates for a remote live stream.
-	 *
-	 * @param stream - Remote live stream whose transport status should be read.
-	 * @returns A stream of transport status snapshots.
-	 */
-	status<A, E>(stream: RemoteLiveStream<A, E>): Stream.Stream<LiveStatus, never, never>;
-	/**
-	 * Reconnects the transport behind a remote live stream.
-	 *
-	 * @param stream - Remote live stream whose transport should reconnect.
-	 * @returns An Effect that completes after the reconnect request is sent.
-	 */
-	reconnect<A, E>(stream: RemoteLiveStream<A, E>): Effect.Effect<
-		void,
-		RemoteFailure<E>,
-		never
-	>;
+	readonly status: {
+		readonly [LIVE_OPERATOR]: true;
+		/**
+		 * Creates a stream of transport status updates for a remote live stream.
+		 *
+		 * @example
+		 * ```ts
+		 * const Status = GetTime().pipe(Live.status);
+		 * ```
+		 *
+		 * @param stream - Remote live stream whose transport status should be read.
+		 * @returns A stream of transport status snapshots.
+		 */
+		<A, E>(stream: RemoteLiveStream<A, E>): Stream.Stream<LiveStatus, never, never>;
+	};
+	readonly reconnect: {
+		readonly [LIVE_OPERATOR]: true;
+		/**
+		 * Reconnects the transport behind a remote live stream.
+		 *
+		 * @example
+		 * ```ts
+		 * yield* GetNotifications().pipe(Live.reconnect);
+		 * ```
+		 *
+		 * @param stream - Remote live stream whose transport should reconnect.
+		 * @returns An Effect that completes after the reconnect request is sent.
+		 */
+		<A, E>(stream: RemoteLiveStream<A, E>): Effect.Effect<void, RemoteFailure<E>, never>;
+	};
 }
 
 type NativeLiveResource<A> = {
@@ -160,13 +189,8 @@ export function make_remote_live_stream<A, ErrorType = never>(
 	return attach_live_metadata(stream, metadata) as RemoteLiveStream<A, ErrorType>;
 }
 
-/**
- * Remote live transport helpers.
- *
- * @since 3.4.8
- */
-export const Live: LiveFactory = {
-	status(stream) {
+const live_status = Object.assign(
+	function status<A, E>(stream: RemoteLiveStream<A, E>): Stream.Stream<LiveStatus, never, never> {
 		const metadata = get_live_metadata(stream);
 
 		if (!metadata) {
@@ -175,12 +199,19 @@ export const Live: LiveFactory = {
 
 		return Stream.succeed(read_live_status(metadata.resource)).pipe(
 			Stream.concat(
-				Stream.tick("250 millis").pipe(Stream.map(() => read_live_status(metadata.resource))),
+				Stream.tick("250 millis").pipe(
+					Stream.map(() => read_live_status(metadata.resource)),
+				),
 			),
 		);
 	},
+	{ [LIVE_OPERATOR]: true as const },
+) satisfies LiveFactory["status"];
 
-	reconnect<A, E>(stream: RemoteLiveStream<A, E>) {
+const live_reconnect = Object.assign(
+	function reconnect<A, E>(
+		stream: RemoteLiveStream<A, E>,
+	): Effect.Effect<void, RemoteFailure<E>, never> {
 		const metadata = get_live_metadata(stream);
 		const reconnect = metadata?.resource.reconnect;
 
@@ -197,6 +228,17 @@ export const Live: LiveFactory = {
 			catch: metadata.on_error,
 		}) as Effect.Effect<void, RemoteFailure<E>, never>;
 	},
+	{ [LIVE_OPERATOR]: true as const },
+) satisfies LiveFactory["reconnect"];
+
+/**
+ * Remote live transport helpers.
+ *
+ * @since 3.4.8
+ */
+export const Live: LiveFactory = {
+	status: live_status,
+	reconnect: live_reconnect,
 };
 
 function as_native_live_resource<A>(resource: unknown): NativeLiveResource<A> & AsyncIterable<A> {
@@ -268,9 +310,7 @@ function propagate_live_metadata_through_pipe<A, E, R>(
 	});
 }
 
-function get_live_metadata<A, E>(
-	stream: RemoteLiveStream<A, E>,
-): LiveMetadata<A, E> | undefined;
+function get_live_metadata<A, E>(stream: RemoteLiveStream<A, E>): LiveMetadata<A, E> | undefined;
 function get_live_metadata(
 	stream: Stream.Stream<unknown, unknown, unknown>,
 ): LiveMetadata<unknown, unknown> | undefined;

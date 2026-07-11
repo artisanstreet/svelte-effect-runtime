@@ -23,7 +23,7 @@ export const Clock = Query.live(Stream.repeatEffect(Effect.succeed(new Date().to
   import { Live } from "svelte-effect-runtime";
 
   const clock = Clock();
-  const status = Live.status(clock);
+  const status = clock.pipe(Live.status);
 </script>
 
 <p>{yield* clock}</p>
@@ -34,8 +34,8 @@ export const Clock = Query.live(Stream.repeatEffect(Effect.succeed(new Date().to
   queries.
 - `Query.live(schema, stream)` is intentionally rejected because an input schema
   needs an input-aware stream factory.
-- `Live.status(stream)` returns transport state for a `RemoteLiveStream`.
-- `Live.reconnect(stream)` reconnects a `RemoteLiveStream`.
+- `stream.pipe(Live.status)` returns transport state for a `RemoteLiveStream`.
+- `stream.pipe(Live.reconnect)` reconnects a `RemoteLiveStream`.
 - Regular Effect `Stream` operators remain the primary composition model.
 
 ## Runtime model
@@ -78,10 +78,10 @@ The docs now describe `Query.live` as stream-native:
 
 - Server snippets return Effect streams.
 - Client snippets treat live query calls as `RemoteLiveStream`.
-- Status and reconnect are shown through `Live`.
+- Status and reconnect are shown as pipeable `Live` operators.
 - The migration note replaces `.current`, `.ready`, `.connected`, and
-  `.reconnect()` resource usage with `yield* stream`, `Live.status(stream)`,
-  and `Live.reconnect(stream)`.
+  `.reconnect()` resource usage with `yield* stream`, `stream.pipe(Live.status)`,
+  and `stream.pipe(Live.reconnect)`.
 
 The README hero avoids implying that `yield*` subscribes forever by using a
 non-live price example there.
@@ -101,7 +101,6 @@ non-live price example there.
 ## Verification
 
 - `vp test run`
-- `corepack pnpm run docs:build`
 - `vp check --no-lint @files`
 - `corepack pnpm --dir modules/svelte-effect-runtime run check`
 - `corepack pnpm --dir modules/svelte-effect-runtime-language-server run build`

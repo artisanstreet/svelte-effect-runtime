@@ -236,10 +236,8 @@ export {
 	UncheckedLiveQueryHandlerMissingError,
 	UncheckedPrerenderHandlerMissingError,
 	UncheckedQueryHandlerMissingError,
-	UnknownRuntimeError,
 	UnsupportedMarkupEffectPositionError,
 	UnsupportedRemoteFormResponseError,
-	VitePreTransformPluginConflictError,
 	YieldStarInEventCallbackError,
 } from "$/errors.ts";
 
