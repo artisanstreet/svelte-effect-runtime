@@ -6,6 +6,8 @@ interface RuntimeImportOptions {
 	needs_dispatcher?: boolean;
 	needs_effect?: boolean;
 	needs_untrack?: boolean;
+	needs_yield_success?: boolean;
+	needs_yieldable?: boolean;
 }
 
 /**
@@ -31,17 +33,23 @@ export function make_imports(
 		effect: "Effect",
 		program: "__SER___program",
 		untrack: "untrack",
+		yield_success: "YieldSuccess",
+		yieldable: "ToEffect",
 	},
 	options: RuntimeImportOptions = {},
 ): string {
 	const needs_dispatcher = options.needs_dispatcher ?? true;
 	const needs_effect = options.needs_effect ?? true;
 	const needs_untrack = options.needs_untrack ?? true;
+	const needs_yield_success = options.needs_yield_success ?? false;
+	const needs_yieldable = options.needs_yieldable ?? false;
 
-	const dispatcher_import =
-		bindings.dispatcher === "get_dispatcher"
-			? `import { get_dispatcher } from "svelte-effect-runtime/internal/generators";`
-			: `import { get_dispatcher as ${bindings.dispatcher} } from "svelte-effect-runtime/internal/generators";`;
+	const generator_import = make_generator_import(
+		bindings,
+		needs_dispatcher && !has_dispatcher_import,
+		needs_yieldable,
+		needs_yield_success,
+	);
 
 	const untrack_import =
 		bindings.untrack === "untrack"
@@ -55,12 +63,39 @@ export function make_imports(
 			: `import { Effect as ${bindings.effect} } from "effect";`;
 
 	return [
-		needs_dispatcher && !has_dispatcher_import && dispatcher_import,
+		generator_import,
 		needs_untrack && !has_untrack_import && untrack_import,
 		needs_effect && effect_import,
 	]
 		.filter(Boolean)
 		.join("\n");
+}
+
+function make_generator_import(
+	bindings: RuntimeImportBindings,
+	needs_dispatcher: boolean,
+	needs_yieldable: boolean,
+	needs_yield_success: boolean,
+): string | false {
+	const specifiers = [
+		needs_dispatcher && make_named_import("get_dispatcher", bindings.dispatcher),
+		needs_yieldable && make_named_import("ToEffect", bindings.yieldable),
+		needs_yield_success && make_named_import("YieldSuccess", bindings.yield_success, true),
+	].filter((specifier): specifier is string => specifier !== false);
+
+	if (specifiers.length === 0) {
+		return false;
+	}
+
+	return `import { ${specifiers.join(", ")} } from "svelte-effect-runtime/internal/generators";`;
+}
+
+function make_named_import(imported_name: string, local_name: string, type_only = false): string {
+	const prefix = type_only ? "type " : "";
+
+	return imported_name === local_name
+		? `${prefix}${imported_name}`
+		: `${prefix}${imported_name} as ${local_name}`;
 }
 
 /**

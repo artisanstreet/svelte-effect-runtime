@@ -13,7 +13,6 @@ const ignored_paths = [
 	"**/*.tgz",
 	"**/*.vsix",
 	"coverage/**",
-	"modules/docs/.next/**",
 	"modules/svelte-effect-runtime-language-server/runtime/**",
 	"modules/svelte-effect-runtime-vsix/runtime/**",
 	"pnpm-lock.yaml",

@@ -1,6 +1,6 @@
 {
 	"name": "svelte-effect-runtime",
-	"version": "3.4.11",
+	"version": "4.0.0",
 	"description": "Core module that houses the Vite plugin to enable effectful execution.",
 	"license": "BSD-3-Clause",
 	"repository": {
@@ -21,9 +21,9 @@
 			"types": "./.dist/server.d.ts",
 			"default": "./.dist/server.js"
 		},
-		"./vite": {
-			"types": "./.dist/vite.d.ts",
-			"default": "./.dist/vite.js"
+		"./compiler": {
+			"types": "./.dist/compiler.d.ts",
+			"default": "./.dist/compiler.js"
 		},
 		"./runtime/transform": {
 			"types": "./.dist/runtime/transform.d.ts",

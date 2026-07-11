@@ -17,7 +17,7 @@ Write effectful code without any hassle. Seriously!
 ```svelte
 <script lang="ts" effect>
   import * as StockCard from "./ticker-card.ts";
-  import { GetAllStocks, GetLivePrice } from "./tickers.remote.ts";
+  import { GetAllStocks, GetPrice } from "./tickers.remote.ts";
   import { GetUser } from "user.ts";
 </script>
 
@@ -25,8 +25,7 @@ Write effectful code without any hassle. Seriously!
   {const currency = $derived((yield* GetUser()).preferredCurrency)}
 
   {#each yield* GetAllStocks() as stock}
-    {const liveQuery = yield* GetLivePrice(stock.ticker)}
-    {const price = $derived(liveQuery.current ?? stock.initialPrice)}
+    {const price = yield* GetPrice(stock.ticker)}
 
     <StockCard.Root>
       <StockCard.Header>{stock.name}</StockCard.Header>
@@ -45,4 +44,4 @@ Write effectful code without any hassle. Seriously!
 | [`svelte-effect-runtime-language-server`](./modules/svelte-effect-runtime-language-server) | Standalone npm package for the SER language server used by editor tools.  |
 | [`svelte-effect-runtime-vsix`](./modules/svelte-effect-runtime-vsix)                       | VS Code extension that launches the SER language server for Svelte files. |
 
-Visit the **[docs](https://ser.barekey.dev)** for guides and API reference.
+Visit the **[docs](https://barekey.dev/docs/ser)** for guides and API reference.

@@ -30,7 +30,7 @@
 		"./src/dispatcher.ts",
 		"./src/generators.ts",
 		"./src/server.ts",
-		"./src/vite.ts",
+		"./src/compiler.ts",
 		"./src/remote/shared.ts",
 		"./src/remote/server.ts",
 		"./src/remote/client.ts",

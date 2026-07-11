@@ -6,7 +6,7 @@ import type {
 	RemoteQueryOverride,
 } from "@sveltejs/kit";
 import type { RemoteFailure } from "$/remote/shared.ts";
-import type { Effect } from "effect";
+import type { Effect, Schema, Stream } from "effect";
 
 /**
  * Type-only marker attached to SER query and live-query adapter functions so
@@ -34,6 +34,51 @@ type EffectRemoteFormCallable<Input extends RemoteFormInput | void, Output, Erro
 	: undefined extends Input
 		? (input?: Input) => Effect.Effect<Output, RemoteFailure<ErrorType>>
 		: (input: Input) => Effect.Effect<Output, RemoteFailure<ErrorType>>;
+
+type NativeRemoteFormPreflightSchema<Input extends RemoteFormInput | void, Output> = Parameters<
+	RemoteForm<Input, Output>["preflight"]
+>[0];
+
+type NativeRemoteFormValidateOptions<Input extends RemoteFormInput | void, Output> = NonNullable<
+	Parameters<RemoteForm<Input, Output>["validate"]>[0]
+>;
+
+/**
+ * Schema values accepted by SER's remote form preflight adapter.
+ *
+ * @example
+ * ```ts
+ * form.preflight(Schema.Struct({ email: Schema.String }));
+ * ```
+ *
+ * @since 3.4.6
+ */
+export type EffectRemoteFormPreflightSchema<
+	Input extends RemoteFormInput | void,
+	Output = unknown,
+> = NativeRemoteFormPreflightSchema<Input, Output> | Schema.Schema<unknown>;
+
+/**
+ * Options accepted by SER's remote form validation adapter.
+ *
+ * @example
+ * ```ts
+ * yield* form.validate({ all: true, preflightOnly: true });
+ * ```
+ *
+ * @since 3.4.6
+ */
+export type EffectRemoteFormValidateOptions<
+	Input extends RemoteFormInput | void,
+	Output = unknown,
+> = Omit<
+	NativeRemoteFormValidateOptions<Input, Output>,
+	"all" | "includeUntouched" | "preflightOnly"
+> & {
+	readonly all?: boolean;
+	readonly includeUntouched?: boolean;
+	readonly preflightOnly?: boolean;
+};
 
 type EffectRemoteQueryUpdate =
 	| NativeRemoteQueryUpdate
@@ -63,23 +108,13 @@ type EffectRemoteQueryUpdateFunction = EffectRemoteQueryUpdateBrand &
 	((input: never) => EffectRemoteQueryUpdateResource);
 
 type EffectRemoteLiveQueryUpdateFunction = EffectRemoteQueryUpdateBrand &
-	((input: never) => Effect.Effect<EffectRemoteLiveQueryUpdateResource, unknown>);
+	((input: never) => Stream.Stream<unknown, unknown, unknown>);
 
 type EffectRemoteQueryUpdateResource = Effect.Effect<unknown, unknown> & {
 	readonly refresh: () => Effect.Effect<void, unknown, never>;
 	readonly set: (value: never) => void;
 	readonly withOverride: (update: (current: never) => unknown) => unknown;
 };
-
-type EffectRemoteLiveQueryUpdateResource = {
-	readonly connected: boolean;
-	readonly current: unknown;
-	readonly done: boolean;
-	readonly error: unknown;
-	readonly loading: boolean;
-	readonly ready: boolean;
-	readonly reconnect: () => Effect.Effect<void, unknown, never>;
-} & AsyncIterable<unknown>;
 
 /**
  * Represents a pending operation counter that remote command adapters
@@ -188,10 +223,10 @@ export type EffectRemoteForm<
 			id: Parameters<RemoteForm<Input, Output>["for"]>[0],
 		): Omit<EffectRemoteForm<Input, Output, ErrorType>, "for">;
 		preflight(
-			schema: Parameters<RemoteForm<Input, Output>["preflight"]>[0],
+			schema: EffectRemoteFormPreflightSchema<Input, Output>,
 		): EffectRemoteForm<Input, Output, ErrorType>;
 		submit: EffectRemoteFormCallable<Input, Output, ErrorType>;
 		validate(
-			options?: Parameters<RemoteForm<Input, Output>["validate"]>[0],
+			options?: EffectRemoteFormValidateOptions<Input, Output>,
 		): Effect.Effect<void, RemoteFailure<ErrorType>>;
 	};

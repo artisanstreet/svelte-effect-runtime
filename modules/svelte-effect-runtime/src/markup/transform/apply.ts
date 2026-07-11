@@ -94,6 +94,7 @@ export function make_markup_helper_bindings(content: string): {
 		bindings: {
 			codes: name_allocator.reserve(HELPERS.codes),
 			dispatcher: name_allocator.reserve(HELPERS.dispatcher),
+			yieldable: name_allocator.reserve(HELPERS.yieldable),
 		},
 		name_allocator,
 	};
@@ -163,8 +164,9 @@ function make_import_helper(content: string, import_text: string): string | unde
 function make_dispatcher_import(bindings: MarkupHelperBindings): string {
 	const dispatcher = make_import_specifier(HELPERS.dispatcher, bindings.dispatcher);
 	const codes = make_import_specifier(HELPERS.codes, bindings.codes);
+	const yieldable = make_import_specifier(HELPERS.yieldable, bindings.yieldable);
 
-	return `import { ${dispatcher}, ${codes} } from "svelte-effect-runtime/internal/generators";`;
+	return `import { ${dispatcher}, ${codes}, ${yieldable} } from "svelte-effect-runtime/internal/generators";`;
 }
 
 function make_import_specifier(imported_name: string, local_name: string): string {

@@ -1,9 +1,10 @@
-import { validate_rune_yield_usage } from "$/script-transform/runes.ts";
-import { collect_yield_star_nodes } from "$/script-transform/ast.ts";
-import { contains_top_level_yield_star } from "$/detect.ts";
 import { analyze_event_body_yield_star, strip_arrow_function } from "./expressions.ts";
-import { HELPERS } from "./constants.ts";
+import { collect_yield_star_nodes } from "$/script-transform/ast.ts";
+import { scan_svelte_effect_source } from "$/compiler/source-scan.ts";
+import { validate_rune_yield_usage } from "$/script-transform/runes.ts";
+import { contains_top_level_yield_star } from "$/detect.ts";
 import type { MarkupCandidate, TagKind } from "./types.ts";
+import { HELPERS } from "./constants.ts";
 
 import MagicString from "magic-string";
 
@@ -18,11 +19,6 @@ interface DeclarationYieldExpression {
 	start: number;
 	end: number;
 	expr_text: string;
-}
-
-interface SourceRange {
-	start: number;
-	end: number;
 }
 
 /**
@@ -47,37 +43,17 @@ interface SourceRange {
  */
 export function sanitize_markup(content: string, filename: string): SanitizeResult {
 	const candidates: MarkupCandidate[] = [];
-	const excluded_ranges = collect_excluded_ranges(content);
+	const source_scan = scan_svelte_effect_source(content, filename);
 	const magic = new MagicString(content);
 	let helper_index = 0;
-	let cursor = 0;
 
-	while (cursor < content.length) {
-		const open = content.indexOf("{", cursor);
-		if (open === -1) break;
-
-		/** Skip braces inside <script> and <style> blocks. */
-		const excluded_range = find_excluded_range(excluded_ranges, open);
-
-		if (excluded_range) {
-			cursor = excluded_range.end;
-			continue;
-		}
-
-		/** Find the matching closing brace. */
-		const close = find_closing_brace(content, open + 1);
-		if (close === -1) {
-			cursor = open + 1;
-			continue;
-		}
-
-		const inner = content.slice(open + 1, close);
-
+	for (const expression of source_scan.markup_expressions) {
+		const open = expression.open;
+		const close = expression.close;
+		const inner = expression.inner;
 		const trimmed = inner.trimStart();
 		const leading_ws = inner.length - trimmed.length;
-
 		const tag_info = get_tag_info(trimmed);
-
 		const declaration_yields = collect_declaration_yield_expressions(
 			content,
 			open,
@@ -103,7 +79,6 @@ export function sanitize_markup(content: string, filename: string): SanitizeResu
 				magic.overwrite(declaration_yield.start, declaration_yield.end, placeholder);
 			}
 
-			cursor = close + 1;
 			continue;
 		}
 
@@ -124,7 +99,6 @@ export function sanitize_markup(content: string, filename: string): SanitizeResu
 			event_yield?.has_top_level_yield_star ?? contains_yield_star_in_text(expr_body);
 
 		if (!has_yield) {
-			cursor = close + 1;
 			continue;
 		}
 
@@ -162,7 +136,6 @@ export function sanitize_markup(content: string, filename: string): SanitizeResu
 		const expr_text = content.slice(expr_start, expr_end).trim();
 
 		if (expr_text.length === 0) {
-			cursor = close + 1;
 			continue;
 		}
 
@@ -193,7 +166,6 @@ export function sanitize_markup(content: string, filename: string): SanitizeResu
 					magic.overwrite(render_arg_yield.start, render_arg_yield.end, placeholder);
 				}
 
-				cursor = close + 1;
 				continue;
 			}
 		}
@@ -212,8 +184,6 @@ export function sanitize_markup(content: string, filename: string): SanitizeResu
 		});
 
 		magic.overwrite(expr_start, expr_end, key === "render" ? `${placeholder}()` : placeholder);
-
-		cursor = close + 1;
 	}
 
 	return { code: magic.toString(), candidates };
@@ -264,150 +234,6 @@ function collect_expression_yield_expressions(
 	return expressions;
 }
 
-function collect_excluded_ranges(content: string): SourceRange[] {
-	const ranges = [
-		...collect_tag_ranges(content, "script"),
-		...collect_tag_ranges(content, "style"),
-		...collect_html_comment_ranges(content),
-	];
-
-	ranges.sort((a, b) => a.start - b.start);
-
-	return merge_ranges(ranges);
-}
-
-function collect_tag_ranges(content: string, tag: string): SourceRange[] {
-	const pattern = new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}\\s*>`, "gi");
-
-	return [...content.matchAll(pattern)].flatMap((match) => {
-		if (match.index === undefined) {
-			return [];
-		}
-
-		return [
-			{
-				start: match.index,
-				end: match.index + match[0].length,
-			},
-		];
-	});
-}
-
-function collect_html_comment_ranges(content: string): SourceRange[] {
-	const ranges: SourceRange[] = [];
-	let cursor = 0;
-
-	while (cursor < content.length) {
-		const start = content.indexOf("<!--", cursor);
-
-		if (start === -1) {
-			break;
-		}
-
-		const close = content.indexOf("-->", start + "<!--".length);
-		const end = close === -1 ? content.length : close + "-->".length;
-
-		ranges.push({ start, end });
-
-		cursor = end;
-	}
-
-	return ranges;
-}
-
-function merge_ranges(ranges: SourceRange[]): SourceRange[] {
-	const merged: SourceRange[] = [];
-
-	for (const range of ranges) {
-		const previous = merged.at(-1);
-
-		if (!previous || range.start > previous.end) {
-			merged.push({ ...range });
-			continue;
-		}
-
-		previous.end = Math.max(previous.end, range.end);
-	}
-
-	return merged;
-}
-
-function find_excluded_range(ranges: SourceRange[], pos: number): SourceRange | undefined {
-	let low = 0;
-	let high = ranges.length - 1;
-
-	while (low <= high) {
-		const mid = Math.floor((low + high) / 2);
-		const range = ranges[mid];
-
-		if (pos <= range.start) {
-			high = mid - 1;
-			continue;
-		}
-
-		if (pos >= range.end) {
-			low = mid + 1;
-			continue;
-		}
-
-		return range;
-	}
-
-	return undefined;
-}
-
-/** Brace matching helpers for extracting complete markup expressions. */
-
-function find_closing_brace(content: string, start: number): number {
-	let depth = 0;
-
-	for (let i = start; i < content.length; i += 1) {
-		const ch = content[i];
-
-		if (ch === "{" && content[i - 1] !== "$") {
-			depth += 1;
-		} else if (ch === "}") {
-			if (depth === 0) return i;
-			depth -= 1;
-		} else if (ch === "'" || ch === '"' || ch === "`") {
-			i = skip_string(content, i, ch);
-			if (i === -1) return -1;
-		} else if (ch === "/" && content[i + 1] === "/") {
-			i = skip_line_comment(content, i);
-		} else if (ch === "/" && content[i + 1] === "*") {
-			i = skip_block_comment(content, i);
-			if (i === -1) return -1;
-		}
-	}
-
-	return -1;
-}
-
-function skip_string(content: string, start: number, quote: string): number {
-	for (let i = start + 1; i < content.length; i += 1) {
-		if (content[i] === "\\") {
-			i += 1;
-			continue;
-		}
-		if (content[i] === quote) return i;
-	}
-	return -1;
-}
-
-function skip_line_comment(content: string, start: number): number {
-	for (let i = start + 2; i < content.length; i += 1) {
-		if (content[i] === "\n") return i;
-	}
-	return content.length;
-}
-
-function skip_block_comment(content: string, start: number): number {
-	for (let i = start + 2; i < content.length; i += 1) {
-		if (content[i] === "*" && content[i + 1] === "/") return i + 1;
-	}
-	return -1;
-}
-
 interface TagInfo {
 	kind: TagKind;
 	prefix_length: number;
@@ -425,6 +251,9 @@ function get_tag_info(trimmed: string): TagInfo {
 	}
 
 	/** Strip prefix-only tags — the expression starts after the tag keyword. */
+	if (trimmed.startsWith("@attach ")) {
+		return { kind: "plain", prefix_length: "@attach ".length };
+	}
 	if (trimmed.startsWith("#if ")) {
 		return { kind: "plain", prefix_length: "#if ".length };
 	}
@@ -442,6 +271,9 @@ function get_tag_info(trimmed: string): TagInfo {
 	}
 	if (trimmed.startsWith("@debug ")) {
 		return { kind: "plain", prefix_length: "@debug ".length };
+	}
+	if (trimmed.startsWith("...")) {
+		return { kind: "plain", prefix_length: "...".length };
 	}
 
 	return { kind: "plain", prefix_length: 0 };

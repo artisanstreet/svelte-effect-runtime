@@ -18,7 +18,7 @@ import {
 import {
 	effect,
 	rewrite_remote_client_exports,
-} from "../../../modules/svelte-effect-runtime/src/vite.ts";
+} from "../../../modules/svelte-effect-runtime/src/compiler.ts";
 import {
 	get_server_runtime_or_throw,
 	reset_server_runtime,
@@ -210,6 +210,22 @@ test("direct svelte transform lowers script effect and removes effect attribute"
 	}
 });
 
+test("direct svelte transform scans quoted script attributes", () => {
+	const source = [
+		`<script data-note="a > b" effect lang="ts">`,
+		`  const marker = "</scripture>";`,
+		`  let value = $state(yield* loadValue());`,
+		`</script>`,
+		`<p>{value}</p>`,
+	].join("\n");
+	const result = transform_svelte_effect(source, "QuotedScript.svelte");
+
+	assert_string_includes(result.code, `<script data-note="a > b" lang="ts">`);
+	assert_string_includes(result.code, `const marker = "</scripture>";`);
+	assert_string_includes(result.code, `await get_dispatcher().promise({`);
+	assert_not_match(result.code, /<script[^>]*\beffect\b/);
+});
+
 test("direct svelte transform emits async rune output Svelte can compile", () => {
 	const sources = [
 		[
@@ -385,8 +401,18 @@ test("vite server import rewrite handles query-suffixed server modules", async (
 	].join("\n");
 	const ids = [
 		"C:/src/routes/auth.remote.ts?server",
+		"C:/src/routes/auth.remote.m.ts?server",
+		"C:/src/routes/auth.remote.c.ts?server",
+		"C:/src/routes/auth.remote.js?server",
+		"C:/src/routes/auth.remote.m.js?server",
+		"C:/src/routes/auth.remote.c.js?server",
 		"C:/src/routes/+page.server.ts?ts=123",
 		"C:/src/hooks.server.ts?hmr=1",
+		"C:/src/hooks.server.m.ts?hmr=1",
+		"C:/src/hooks.server.c.ts?hmr=1",
+		"C:/src/hooks.server.js?hmr=1",
+		"C:/src/hooks.server.m.js?hmr=1",
+		"C:/src/hooks.server.c.js?hmr=1",
 	];
 
 	for (const id of ids) {
@@ -396,6 +422,26 @@ test("vite server import rewrite handles query-suffixed server modules", async (
 		assert_not_match(result, /from\s+["']svelte-effect-runtime["']/);
 		assert_not_match(result, /from\s+["']svelte-effect-runtime\/internal\/generators["']/);
 	}
+});
+
+test("vite server import rewrite parses imports instead of rewriting text", async () => {
+	const source = [
+		`import type { RequestEvent } from "svelte-effect-runtime";`,
+		`export { Query } from "svelte-effect-runtime";`,
+		`const generators = import("svelte-effect-runtime/internal/generators");`,
+		`const example = 'from "svelte-effect-runtime"';`,
+		`/** from "svelte-effect-runtime/internal/generators" */`,
+	].join("\n");
+	const result = await run_server_import_transform(source, "C:/src/routes/auth.remote.ts");
+
+	assert_string_includes(
+		result,
+		`import type { RequestEvent } from "svelte-effect-runtime/server";`,
+	);
+	assert_string_includes(result, `export { Query } from "svelte-effect-runtime/server";`);
+	assert_string_includes(result, `import("svelte-effect-runtime/server")`);
+	assert_string_includes(result, `const example = 'from "svelte-effect-runtime"';`);
+	assert_string_includes(result, `/** from "svelte-effect-runtime/internal/generators" */`);
 });
 
 test("vite diagnostics plugin warns for bare Effect.gen event handlers", async () => {
@@ -441,6 +487,73 @@ test("vite diagnostics plugin recognizes mixed-case event attributes", async () 
 	assert_equals(warnings.length, 1);
 	assert_string_includes(warnings[0], "onChange={Effect.gen}");
 	assert_string_includes(warnings[0], "onChange={yield* Effect.gen(function* () { ... })}");
+});
+
+test("vite diagnostics plugin follows Svelte's case-sensitive event classification", async () => {
+	const warnings: string[] = [];
+	const diagnostics_plugin = get_diagnostics_plugin();
+	const source = [
+		`<script lang="ts">`,
+		`  import { Effect } from "effect";`,
+		`</script>`,
+		``,
+		`<button ONCLICK={() => Effect.sync(() => save())}>save</button>`,
+	].join("\n");
+
+	await diagnostics_plugin.transform.call(
+		make_warning_context(warnings),
+		source,
+		"src/routes/+page.svelte",
+	);
+
+	assert_equals(warnings.length, 1);
+	assert_string_includes(warnings[0], "Svelte attributes need the resolved Effect value");
+});
+
+test("vite diagnostics plugin does not treat mixed attribute values as events", async () => {
+	const warnings: string[] = [];
+	const diagnostics_plugin = get_diagnostics_plugin();
+	const source = [
+		`<script lang="ts">`,
+		`  import { Effect } from "effect";`,
+		`</script>`,
+		``,
+		`<button onclick="prefix-{Effect.sync(() => save())}">save</button>`,
+	].join("\n");
+
+	await diagnostics_plugin.transform.call(
+		make_warning_context(warnings),
+		source,
+		"src/routes/+page.svelte",
+	);
+
+	assert_equals(warnings.length, 1);
+	assert_string_includes(warnings[0], "markup expression");
+
+	if (warnings[0].includes("event attribute")) {
+		throw new Error("mixed attribute values should not be diagnosed as event attributes");
+	}
+});
+
+test("vite diagnostics plugin recognizes quoted single-expression event attributes", async () => {
+	const warnings: string[] = [];
+	const diagnostics_plugin = get_diagnostics_plugin();
+	const source = [
+		`<script lang="ts">`,
+		`  import { Effect } from "effect";`,
+		`</script>`,
+		``,
+		`<button onclick="{() => Effect.sync(() => save())}">save</button>`,
+	].join("\n");
+
+	await diagnostics_plugin.transform.call(
+		make_warning_context(warnings),
+		source,
+		"src/routes/+page.svelte",
+	);
+
+	assert_equals(warnings.length, 1);
+	assert_string_includes(warnings[0], "event callback that returns an Effect");
 });
 
 test("vite diagnostics plugin ignores yielded Effect handlers", async () => {
@@ -1045,7 +1158,7 @@ test("root server-only exports throw before Vite rewrites imports", async () => 
 	}
 });
 
-test("package manifests expose vite and transform entrypoints", async () => {
+test("package manifests expose compiler and transform entrypoints", async () => {
 	const package_manifest = JSON.parse(
 		await readFile(
 			new URL("../../../modules/svelte-effect-runtime/package.json", import.meta.url),
@@ -1053,9 +1166,9 @@ test("package manifests expose vite and transform entrypoints", async () => {
 		),
 	);
 
-	assert_equals(package_manifest.exports["./vite"], {
-		types: "./.dist/vite.d.ts",
-		default: "./.dist/vite.js",
+	assert_equals(package_manifest.exports["./compiler"], {
+		types: "./.dist/compiler.d.ts",
+		default: "./.dist/compiler.js",
 	});
 	assert_equals(package_manifest.exports["./runtime/transform"], {
 		types: "./.dist/runtime/transform.d.ts",
@@ -1063,12 +1176,13 @@ test("package manifests expose vite and transform entrypoints", async () => {
 	});
 	assert_equals(package_manifest.exports["./grammars"], undefined);
 	assert_equals(package_manifest.dependencies["svelte-effect-runtime-grammars"], undefined);
+	assert_equals(package_manifest.exports["./vite"], undefined);
 	assert_equals(package_manifest.exports["./runtime/preprocess"], undefined);
 });
 
-test("vite entrypoint defers compiler-only imports until transform hooks", async () => {
+test("compiler entrypoint defers compiler-only imports until transform hooks", async () => {
 	const source = await readFile(
-		new URL("../../../modules/svelte-effect-runtime/src/vite.ts", import.meta.url),
+		new URL("../../../modules/svelte-effect-runtime/src/compiler.ts", import.meta.url),
 		"utf8",
 	);
 	const static_import_pattern = /^import\s+.*["']\.\/runtime\/transform\.ts["'];/m;
@@ -1089,7 +1203,7 @@ test("vite entrypoint defers compiler-only imports until transform hooks", async
 
 	assert_string_includes(source, `await import(`);
 	assert_string_includes(source, `"./runtime/transform.ts"`);
-	assert_string_includes(source, `"./vite/remote-client.ts"`);
+	assert_string_includes(source, `"./compiler/remote-client.ts"`);
 });
 
 test("vite remote client wrapper preserves native SvelteKit remote module", async () => {

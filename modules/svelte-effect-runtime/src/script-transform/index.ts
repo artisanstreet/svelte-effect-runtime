@@ -72,7 +72,7 @@ export function transform_script_effect(
 
 	let has_effect = false;
 	let uses_dispatcher_promise = false;
-	let uses_effect_types = false;
+	let uses_yield_success_types = false;
 
 	/** Phase 1: detect imports already provided by the user. */
 	const has_effect_import = has_local_import_binding(source_file, "effect", "Effect");
@@ -99,6 +99,8 @@ export function transform_script_effect(
 		effect: has_effect_import ? "Effect" : reserve_runtime_import("Effect"),
 		program: name_allocator.reserve("__SER___program"),
 		untrack: has_untrack_import ? "untrack" : reserve_runtime_import("untrack"),
+		yield_success: reserve_runtime_import("YieldSuccess"),
+		yieldable: reserve_runtime_import("ToEffect"),
 	};
 
 	const context: ScriptLoweringContext = {
@@ -106,6 +108,8 @@ export function transform_script_effect(
 		dispatcher_name: runtime_bindings.dispatcher,
 		effect_name: runtime_bindings.effect,
 		emit_types,
+		yield_success_name: runtime_bindings.yield_success,
+		yieldable_name: runtime_bindings.yieldable,
 		next_helper_name(hint?: string) {
 			return name_allocator.reserve(make_generated_name(hint ?? "helper", ""));
 		},
@@ -157,8 +161,8 @@ export function transform_script_effect(
 
 		effect_blocks.push(...lowered.effect_blocks);
 		uses_dispatcher_promise ||= lowered.uses_dispatcher_promise ?? false;
-		uses_effect_types ||= lowered.temps.some(
-			(temp) => temp.type?.includes(`${runtime_bindings.effect}.Success`) ?? false,
+		uses_yield_success_types ||= lowered.temps.some(
+			(temp) => temp.type?.includes(runtime_bindings.yield_success) ?? false,
 		);
 	}
 
@@ -176,8 +180,10 @@ export function transform_script_effect(
 		runtime_bindings,
 		{
 			needs_dispatcher: effect_blocks.length > 0 || uses_dispatcher_promise,
-			needs_effect: effect_blocks.length > 0 || uses_effect_types,
+			needs_effect: effect_blocks.length > 0,
 			needs_untrack: effect_blocks.length > 0,
+			needs_yield_success: uses_yield_success_types,
+			needs_yieldable: effect_blocks.length > 0 || uses_dispatcher_promise,
 		},
 	);
 
@@ -206,7 +212,12 @@ export function transform_script_effect(
 		code,
 		blocks: block_refs,
 		map: create_source_map(magic, filename),
-		relocations: create_script_relocations(content, code, source_file),
+		relocations: create_script_relocations(
+			content,
+			code,
+			source_file,
+			runtime_bindings.yieldable,
+		),
 	};
 }
 
@@ -214,6 +225,7 @@ function create_script_relocations(
 	content: string,
 	code: string,
 	source_file: ts.SourceFile,
+	yieldable_name: string,
 ): Relocation[] {
 	const candidates = source_file.statements.flatMap((stmt) => {
 		const relocations: RelocationCandidate[] = [];
@@ -225,13 +237,15 @@ function create_script_relocations(
 		}
 
 		collect_yield_star_nodes(stmt, (node) => {
-			const text = content.slice(node.getStart(), node.end).trim();
+			const expression = ts.isBinaryExpression(node) ? node.right : node;
+			const text = content.slice(expression.getStart(), expression.end).trim();
 
 			relocations.push({
-				originalStart: node.getStart(),
-				originalEnd: node.end,
+				originalStart: expression.getStart(),
+				originalEnd: expression.end,
 				text,
-				match: "exact",
+				match: "yield_operand",
+				wrapper: `${yieldable_name}(${text})`,
 			});
 		});
 
@@ -239,16 +253,26 @@ function create_script_relocations(
 	});
 
 	const used_ranges: Array<{ start: number; end: number }> = [];
+	const search_cursors = new Map<string, number>();
 
 	return candidates.flatMap((candidate) => {
-		const generated_start = find_available_generated_text(code, candidate, used_ranges);
+		const search_key = make_relocation_search_key(candidate);
+		const generated_start = find_available_generated_text(
+			code,
+			candidate,
+			used_ranges,
+			search_cursors.get(search_key) ?? 0,
+		);
 
 		if (generated_start < 0) {
+			search_cursors.set(search_key, code.length);
+
 			return [];
 		}
 
 		const generated_end = generated_start + candidate.text.length;
 		used_ranges.push({ start: generated_start, end: generated_end });
+		search_cursors.set(search_key, generated_end);
 
 		return [
 			{
@@ -265,8 +289,13 @@ type RelocationCandidate = {
 	originalStart: number;
 	originalEnd: number;
 	text: string;
-	match: "exact" | "identifier";
+	match: "exact" | "identifier" | "yield_operand";
+	wrapper?: string;
 };
+
+function make_relocation_search_key(candidate: RelocationCandidate): string {
+	return `${candidate.match}:${candidate.text}`;
+}
 
 function collect_binding_relocation_candidates(
 	name: ts.BindingName,
@@ -296,28 +325,39 @@ function find_available_generated_text(
 	code: string,
 	candidate: RelocationCandidate,
 	used_ranges: Array<{ start: number; end: number }>,
+	search_start: number,
 ): number {
-	let search_start = 0;
-
 	while (search_start < code.length) {
-		const index = code.indexOf(candidate.text, search_start);
+		const search_text =
+			candidate.match === "yield_operand" ? candidate.wrapper : candidate.text;
+
+		if (!search_text) {
+			return -1;
+		}
+
+		const index = code.indexOf(search_text, search_start);
 
 		if (index < 0) {
 			return -1;
 		}
 
-		const end = index + candidate.text.length;
+		const operand_offset =
+			candidate.match === "yield_operand" && candidate.wrapper
+				? candidate.wrapper.indexOf(candidate.text)
+				: 0;
+		const start = index + Math.max(operand_offset, 0);
+		const end = start + candidate.text.length;
 		const overlaps_used_range = used_ranges.some(
-			(range) => index < range.end && end > range.start,
+			(range) => start < range.end && end > range.start,
 		);
 		const is_text_match =
-			candidate.match === "exact" || is_identifier_text_match(code, index, end);
+			candidate.match !== "identifier" || is_identifier_text_match(code, start, end);
 
 		if (!overlaps_used_range && is_text_match) {
-			return index;
+			return start;
 		}
 
-		search_start = candidate.match === "identifier" ? index + 1 : end;
+		search_start = candidate.match === "identifier" ? index + 1 : index + search_text.length;
 	}
 
 	return -1;

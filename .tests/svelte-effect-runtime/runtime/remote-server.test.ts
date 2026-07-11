@@ -15,7 +15,7 @@ import {
 	isValidationError,
 	redirect as svelte_redirect,
 } from "@sveltejs/kit";
-import { Data, Effect, Stream } from "effect";
+import { Cause, Data, Effect, Stream } from "effect";
 import { parse } from "devalue";
 import {
 	Error as RootError,
@@ -32,7 +32,9 @@ import {
 	run_remote_effect,
 	throw_form_error,
 } from "../../../modules/svelte-effect-runtime/src/remote/server.ts";
+import { classify_remote_cause } from "../../../modules/svelte-effect-runtime/src/remote/cause-codec.ts";
 import { create_form_error } from "../../../modules/svelte-effect-runtime/src/remote/shared.ts";
+import { InvalidLiveQueryReturnError } from "../../../modules/svelte-effect-runtime/src/errors.ts";
 import * as sveltekit_server from "../../../modules/svelte-effect-runtime/src/internal/sveltekit-server.ts";
 
 // ─── normalize_remote_helper_error ─────────────────────────────
@@ -109,6 +111,79 @@ test("throw_form_error calls invalid with issues", () => {
 	} catch {
 		assert_equals(captured_issues, [{ message: "bad input", path: ["field"] }]);
 	}
+});
+
+test("classify_remote_cause preserves SvelteKit control-flow defects", () => {
+	let defect: unknown = undefined;
+
+	try {
+		svelte_redirect(303, "/oauth");
+	} catch (error: unknown) {
+		defect = error;
+	}
+
+	const resolution = classify_remote_cause(Cause.die(defect));
+
+	assert_equals(resolution._tag, "SvelteKitControlFlow");
+
+	if (resolution._tag !== "SvelteKitControlFlow") {
+		throw new Error("expected SvelteKit control flow resolution");
+	}
+
+	assert_equals(resolution.value, defect);
+});
+
+test("classify_remote_cause preserves interrupt-only causes", () => {
+	const cause = Cause.interrupt();
+	const resolution = classify_remote_cause(cause);
+
+	assert_equals(resolution._tag, "InterruptOnly");
+
+	if (resolution._tag !== "InterruptOnly") {
+		throw new Error("expected interrupt-only resolution");
+	}
+
+	assert_equals(resolution.cause, cause);
+});
+
+test("classify_remote_cause preserves form validation failures", () => {
+	const issues = [{ message: "bad input", path: ["field"] }];
+	const resolution = classify_remote_cause(Cause.fail(create_form_error(issues)));
+
+	assert_equals(resolution._tag, "FormInvalid");
+
+	if (resolution._tag !== "FormInvalid") {
+		throw new Error("expected form invalid resolution");
+	}
+
+	assert_equals(resolution.issues, issues);
+});
+
+test("classify_remote_cause preserves tag-only form validation failures", () => {
+	const resolution = classify_remote_cause(Cause.fail({ _tag: "FormError" }));
+
+	assert_equals(resolution._tag, "FormInvalid");
+
+	if (resolution._tag !== "FormInvalid") {
+		throw new Error("expected form invalid resolution");
+	}
+
+	assert_equals(resolution.issues, []);
+});
+
+test("classify_remote_cause encodes tagged domain failures", () => {
+	const resolution = classify_remote_cause(Cause.fail({ _tag: "DbError", code: 42 }));
+
+	assert_equals(resolution._tag, "RemoteFailure");
+
+	if (resolution._tag !== "RemoteFailure") {
+		throw new Error("expected remote failure resolution");
+	}
+
+	const parsed = parse(resolution.encoded);
+
+	assert_equals(parsed._tag, "DbError");
+	assert_equals(parsed.code, 42);
 });
 
 // ─── encode_remote_failure ─────────────────────────────────────
@@ -586,22 +661,72 @@ test("run_live_handler_source converts Effect Streams to async iterables", async
 	assert_equals(values, [1, 2, 3]);
 });
 
-test("run_live_handler_source passes through native async iterables", async () => {
+test("run_live_handler_source wraps stream failures before the first value", async () => {
+	class LiveDomainError extends Data.TaggedError("LiveDomainError")<{
+		readonly reason: string;
+	}> {}
+
+	const source = await run_live_handler_source(
+		Stream.fail(new LiveDomainError({ reason: "before" })),
+		make_request_event(),
+	);
+	const values: unknown[] = [];
+	const error = await assert_rejects(async () => {
+		for await (const value of source) {
+			values.push(value);
+		}
+	});
+
+	assert_equals(values, []);
+	assert_live_failure_envelope(error, "before");
+});
+
+test("run_live_handler_source wraps stream failures after emitted values", async () => {
+	class LiveDomainError extends Data.TaggedError("LiveDomainError")<{
+		readonly reason: string;
+	}> {}
+
+	const source = await run_live_handler_source(
+		Stream.make("first").pipe(
+			Stream.concat(Stream.fail(new LiveDomainError({ reason: "after" }))),
+		),
+		make_request_event(),
+	);
+	const iterator = source[Symbol.asyncIterator]();
+
+	assert_equals(await iterator.next(), { done: false, value: "first" });
+
+	const error = await assert_rejects(() => iterator.next());
+
+	assert_live_failure_envelope(error, "after");
+});
+
+test("run_live_handler_source rejects native async iterables", async () => {
 	async function* make_source(): AsyncGenerator<string> {
 		yield "first";
 		yield "second";
 	}
 
-	const source = await run_live_handler_source(make_source(), make_request_event());
+	const error = await assert_rejects(() =>
+		run_live_handler_source(make_source() as never, make_request_event()),
+	);
 
-	const values: string[] = [];
-
-	for await (const value of source as AsyncIterable<string>) {
-		values.push(value);
-	}
-
-	assert_equals(values, ["first", "second"]);
+	assert_truthy(error instanceof InvalidLiveQueryReturnError);
 });
+
+function assert_live_failure_envelope(error: unknown, reason: string): void {
+	assert_truthy(isHttpError(error, 500));
+
+	const body = (error as { body?: unknown }).body as {
+		__svelte_effect_remote__: true;
+		encoded: string;
+	};
+	const parsed = parse(body.encoded);
+
+	assert_equals(body.__svelte_effect_remote__, true);
+	assert_equals(parsed._tag, "LiveDomainError");
+	assert_equals(parsed.reason, reason);
+}
 
 function make_request_event() {
 	return {

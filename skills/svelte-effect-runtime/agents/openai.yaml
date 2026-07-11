@@ -1,0 +1,4 @@
+interface:
+  display_name: "Svelte Effect Runtime"
+  short_description: "Use SER syntax without false fixes"
+  default_prompt: "Use $svelte-effect-runtime when editing a SvelteKit app that has SER installed."

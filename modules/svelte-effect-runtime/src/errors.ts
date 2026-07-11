@@ -68,47 +68,6 @@ export class PreprocessError extends RuntimeError {
 }
 
 /**
- * Retained for compatibility when callers need a structured representation of
- * possible Vite plugin ordering conflicts.
- *
- * @example
- * ```ts
- * throw new VitePreTransformPluginConflictError(["wuchale"]);
- * ```
- *
- * @since 2.4.0
- * @param plugin_names - Names of Vite plugins that declare pre-transform
- *   priority and may parse raw component files before SER lowers them.
- * @returns A runtime-authored Error describing the possible plugin ordering
- *   conflict.
- */
-export class VitePreTransformPluginConflictError extends RuntimeError {
-	/**
-	 * Names of conflicting Vite plugins.
-	 *
-	 * @since 2.4.0
-	 */
-	readonly plugin_names: readonly string[];
-
-	constructor(plugin_names: readonly string[]) {
-		super(
-			[
-				`Svelte Effect Runtime noticed possible Vite plugin ordering conflicts.`,
-				"",
-				`These plugins run before normal Svelte component transforms:`,
-				...plugin_names.map((plugin_name) => `  - ${plugin_name}`),
-				"",
-				`This is usually fine, but if you see Svelte parser errors around <script effect>`,
-				`or yield* in components, one of those plugins may be reading component files before`,
-				`SER has lowered its syntax.`,
-			].join("\n"),
-		);
-		this.name = "VitePreTransformPluginConflictError";
-		this.plugin_names = plugin_names;
-	}
-}
-
-/**
  * Thrown when a statement mixes JavaScript `await` with Effect `yield*` work
  * that must be lowered into an `Effect.gen` program.
  *
@@ -501,9 +460,30 @@ export class UncheckedPrerenderHandlerMissingError extends RuntimeError {
 export class InvalidLiveQueryReturnError extends RuntimeError {
 	constructor() {
 		super(
-			"Query.live handler must return an Effect Stream, Iterable, or AsyncIterable; resolved values must expose a streaming protocol that SER can bridge to SvelteKit.",
+			"Query.live handler must return an Effect Stream. Wrap native iterables with Stream.fromIterable, Stream.fromAsyncIterable, or another Stream constructor before returning them.",
 		);
 		this.name = "InvalidLiveQueryReturnError";
+	}
+}
+
+/**
+ * Thrown when generated component code yields a Stream that completes before
+ * producing a value.
+ *
+ * @example
+ * ```ts
+ * throw new EmptyStreamYieldError();
+ * ```
+ *
+ * @since 3.4.8
+ * @returns An Error describing an empty Stream in a value position.
+ */
+export class EmptyStreamYieldError extends RuntimeError {
+	constructor() {
+		super(
+			"Cannot resolve yield* stream expression because the Stream completed without emitting a value.",
+		);
+		this.name = "EmptyStreamYieldError";
 	}
 }
 
@@ -835,33 +815,6 @@ export class RemoteHelperError extends RuntimeError {
 	constructor(value: unknown) {
 		super(make_error_message("REMOTE_HELPER_ERROR", String(value)));
 		this.name = "RemoteHelperError";
-		this.value = value;
-	}
-}
-
-/**
- * Thrown when a non-Error value must be normalized into an Error instance.
- *
- * @example
- * ```ts
- * throw new UnknownRuntimeError("raw failure");
- * ```
- *
- * @since 2.4.0
- * @param value - Non-Error value that needs Error normalization.
- * @returns An Error preserving the string representation of an unknown value.
- */
-export class UnknownRuntimeError extends RuntimeError {
-	/**
-	 * Non-Error value that was normalized.
-	 *
-	 * @since 2.4.0
-	 */
-	readonly value: unknown;
-
-	constructor(value: unknown) {
-		super(String(value));
-		this.name = "UnknownRuntimeError";
 		this.value = value;
 	}
 }

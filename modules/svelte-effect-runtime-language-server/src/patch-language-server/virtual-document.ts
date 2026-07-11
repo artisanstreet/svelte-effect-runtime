@@ -5,6 +5,8 @@ import {
 	create_source_map_mapper,
 	SequentialDocumentMapper,
 } from "./document-mappers.ts";
+import type { SvelteEffectSourceScan } from "../../../svelte-effect-runtime/src/compiler/source-scan.ts";
+import { scan_svelte_effect_source } from "../../../svelte-effect-runtime/src/compiler/source-scan.ts";
 import { safe_markup_transform_result, safe_script_transform_result } from "./transform-results.ts";
 import { Document, extractScriptTags } from "./svelte-internals.ts";
 import type { Mapper, TransformSet } from "./types.ts";
@@ -15,12 +17,24 @@ export function prepare_virtual_document(originalDocument: any, transforms: Tran
 	const originalText = originalDocument.getText();
 	const filename = originalDocument.getFilePath() ?? "Component.svelte";
 	const sourceUri = originalDocument.uri;
-	const normalizedDeclarations = normalize_bare_const_declaration_tags(originalText, sourceUri);
+	const originalScan = scan_svelte_effect_source(originalText, filename);
+	const normalizedDeclarations = normalize_bare_const_declaration_tags(
+		originalText,
+		sourceUri,
+		originalScan,
+	);
 	const normalizationMapper = normalizedDeclarations
 		? create_source_map_mapper(normalizedDeclarations.map, sourceUri)
 		: null;
 	const normalizedCode = normalizedDeclarations?.code ?? originalText;
-	const globalTypescript = add_global_typescript_scripts(normalizedCode, sourceUri);
+	const normalizedScan = normalizedDeclarations
+		? scan_svelte_effect_source(normalizedCode, filename)
+		: originalScan;
+	const globalTypescript = add_global_typescript_scripts(
+		normalizedCode,
+		sourceUri,
+		normalizedScan,
+	);
 	const globalTypescriptMapper = globalTypescript
 		? create_source_map_mapper(globalTypescript.map, sourceUri)
 		: null;
@@ -128,22 +142,21 @@ export function prepare_virtual_document(originalDocument: any, transforms: Tran
 function add_global_typescript_scripts(
 	code: string,
 	source_uri: string,
+	scan: SvelteEffectSourceScan,
 ): { code: string; map: Record<string, unknown> } | null {
-	const tags = find_script_open_tags(code);
 	const magic = new MagicString(code);
-
 	let changed = false;
 
-	for (const tag of tags) {
-		if (tag.has_lang) {
+	for (const script of scan.scripts) {
+		if (script.has_lang) {
 			continue;
 		}
 
-		magic.appendLeft(tag.insert_position, ' lang="ts"');
+		magic.appendLeft(script.tag_name_end, ' lang="ts"');
 		changed = true;
 	}
 
-	if (tags.length === 0) {
+	if (scan.scripts.length === 0) {
 		magic.prepend('<script lang="ts"></script>\n');
 		changed = true;
 	}
@@ -162,93 +175,6 @@ function add_global_typescript_scripts(
 	};
 }
 
-function find_script_open_tags(
-	source: string,
-): Array<{ has_lang: boolean; insert_position: number }> {
-	const lower_source = source.toLowerCase();
-	const tags: Array<{ has_lang: boolean; insert_position: number }> = [];
-
-	let index = 0;
-
-	while (index < source.length) {
-		const script_start = find_next_script_start(lower_source, index);
-
-		if (script_start === -1) {
-			break;
-		}
-
-		const tag_end = find_tag_end_from(source, script_start);
-
-		if (tag_end === -1) {
-			break;
-		}
-
-		const tag = source.slice(script_start, tag_end + 1);
-
-		tags.push({
-			has_lang: tag_has_lang_attribute(tag),
-			insert_position: script_start + "<script".length,
-		});
-
-		index = tag_end + 1;
-	}
-
-	return tags;
-}
-
-function find_next_script_start(lower_source: string, start: number): number {
-	let index = start;
-
-	while (index < lower_source.length) {
-		const script_start = lower_source.indexOf("<script", index);
-
-		if (script_start === -1) {
-			return -1;
-		}
-
-		const boundary = lower_source[script_start + "<script".length];
-
-		if (boundary === undefined || boundary === ">" || boundary === "/" || /\s/.test(boundary)) {
-			return script_start;
-		}
-
-		index = script_start + "<script".length;
-	}
-
-	return -1;
-}
-
-function find_tag_end_from(source: string, start: number): number {
-	let quote: string | undefined;
-
-	for (let index = start; index < source.length; index += 1) {
-		const char = source[index];
-
-		if (quote) {
-			if (char === quote) {
-				quote = undefined;
-			}
-
-			continue;
-		}
-
-		if (char === '"' || char === "'") {
-			quote = char;
-			continue;
-		}
-
-		if (char === ">") {
-			return index;
-		}
-	}
-
-	return -1;
-}
-
-function tag_has_lang_attribute(tag: string): boolean {
-	return /\slang(?:\s*=|\s|>|\/)/i.test(tag);
-}
-
 function has_own(object: object, key: PropertyKey) {
 	return Object.prototype.hasOwnProperty.call(object, key);
 }
@@ -256,33 +182,14 @@ function has_own(object: object, key: PropertyKey) {
 function normalize_bare_const_declaration_tags(
 	code: string,
 	source_uri: string,
+	scan: SvelteEffectSourceScan,
 ): { code: string; map: Record<string, unknown> } | null {
 	const magic = new MagicString(code);
 	let changed = false;
-	let cursor = 0;
 
-	while (cursor < code.length) {
-		const open = code.indexOf("{", cursor);
-
-		if (open === -1) {
-			break;
-		}
-
-		if (is_inside_excluded_block(code, open) || is_inside_html_comment(code, open)) {
-			cursor = open + 1;
-			continue;
-		}
-
-		const match = /^(\s*)const\s/.exec(code.slice(open + 1));
-
-		if (!match) {
-			cursor = open + 1;
-			continue;
-		}
-
-		magic.appendRight(open + 1, "@");
+	for (const tag of scan.bare_const_tags) {
+		magic.appendRight(tag.insert_position, "@");
 		changed = true;
-		cursor = open + 1 + match[0].length;
 	}
 
 	if (!changed) {
@@ -299,35 +206,6 @@ function normalize_bare_const_declaration_tags(
 	};
 }
 
-function is_inside_excluded_block(content: string, pos: number): boolean {
-	const script = find_tag_end(content, "script", pos);
-	const style = find_tag_end(content, "style", pos);
-
-	return script > pos || style > pos;
-}
-
-function is_inside_html_comment(content: string, pos: number): boolean {
-	const open = content.lastIndexOf("<!--", pos);
-	const close = content.lastIndexOf("-->", pos);
-
-	return open > close;
-}
-
-function find_tag_end(content: string, tag: "script" | "style", pos: number): number {
-	const pattern = new RegExp(`<${tag}\\b[^>]*>[\\s\\S]*?<\\/${tag}\\s*>`, "gi");
-
-	for (const match of content.matchAll(pattern)) {
-		const start = match.index ?? -1;
-		const end = start + match[0].length;
-
-		if (start <= pos && pos < end) {
-			return end;
-		}
-	}
-
-	return -1;
-}
-
 function find_effect_attribute_range(
 	code: string,
 	script: { container?: { start?: unknown }; start?: unknown },
@@ -339,15 +217,11 @@ function find_effect_attribute_range(
 		return null;
 	}
 
-	const opening_tag = code.slice(container_start, content_start);
-	const match = /\s+effect(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?/.exec(opening_tag);
+	const scan = scan_svelte_effect_source(code);
+	const script_region = scan.scripts.find(
+		(region) =>
+			region.opening_tag_start === container_start && region.content_start === content_start,
+	);
 
-	if (!match) {
-		return null;
-	}
-
-	return {
-		start: container_start + match.index,
-		end: container_start + match.index + match[0].length,
-	};
+	return script_region?.effect_attribute ?? null;
 }

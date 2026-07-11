@@ -4,7 +4,6 @@
 	"type": "module",
 	"scripts": {
 		"build": "corepack pnpm run build:grammars && corepack pnpm run build:runtime && corepack pnpm run build:lsp && corepack pnpm run build:extension",
-		"build:docs": "corepack pnpm --dir modules/docs run build",
 		"build:extension": "corepack pnpm --dir modules/svelte-effect-runtime-vsix run build",
 		"build:grammars": "corepack pnpm --dir modules/svelte-effect-runtime-grammars run build",
 		"build:lsp": "corepack pnpm --dir modules/svelte-effect-runtime-language-server run build",
@@ -13,13 +12,10 @@
 		"check:grammars": "corepack pnpm --dir modules/svelte-effect-runtime-grammars run check",
 		"check:runtime": "corepack pnpm --dir modules/svelte-effect-runtime run check",
 		"clean": "vp node build/clean.ts",
-		"docs:build": "corepack pnpm run build:docs",
-		"docs:dev": "corepack pnpm --dir modules/docs run dev",
 		"format": "corepack pnpm run fmt",
 		"fmt": "vp fmt package.json pnpm-workspace.yaml vite.config.ts build modules/svelte-effect-runtime modules/svelte-effect-runtime-grammars modules/svelte-effect-runtime-language-server modules/svelte-effect-runtime-vsix .tests --write",
 		"lint": "vp lint vite.config.ts build modules/svelte-effect-runtime modules/svelte-effect-runtime-grammars modules/svelte-effect-runtime-language-server modules/svelte-effect-runtime-vsix .tests",
 		"package:extension": "corepack pnpm --dir modules/svelte-effect-runtime-vsix run package",
-		"smoke:docs": "vp node build/smoke-docs.ts",
 		"smoke:runtime": "vp node build/smoke-runtime.ts",
 		"test": "vp test run"
 	},

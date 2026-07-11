@@ -147,6 +147,8 @@ export const Form: FormFactory = make_server_only_function("Form") as never;
  */
 export const Prerender: PrerenderFactory = make_server_only_function("Prerender") as never;
 
+export { Live } from "$/live.ts";
+
 /**
  * SvelteKit redirect control-flow export for `.remote.ts` files imported from
  * the root entrypoint. The Vite plugin rewrites it to the real server
@@ -213,6 +215,7 @@ export {
 	AwaitInEffectWorkError,
 	BatchQueryHandlerMissingError,
 	DispatcherDisposedError,
+	EmptyStreamYieldError,
 	InvalidCommandFactoryError,
 	InvalidLiveQueryFactoryError,
 	InvalidLiveQueryReturnError,
@@ -233,10 +236,8 @@ export {
 	UncheckedLiveQueryHandlerMissingError,
 	UncheckedPrerenderHandlerMissingError,
 	UncheckedQueryHandlerMissingError,
-	UnknownRuntimeError,
 	UnsupportedMarkupEffectPositionError,
 	UnsupportedRemoteFormResponseError,
-	VitePreTransformPluginConflictError,
 	YieldStarInEventCallbackError,
 } from "$/errors.ts";
 
@@ -248,7 +249,7 @@ export {
 } from "$/remote/shared.ts";
 
 /** Re-export app setup helpers so users can import them from root. */
-export { effect, type EffectOptions } from "$/vite.ts";
+export { effect, type EffectOptions } from "$/compiler.ts";
 
 /** Re-export server helper types from the root entrypoint. */
 export type {
@@ -264,6 +265,9 @@ export type {
 } from "$/server/control-flow.ts";
 
 /** Re-export server helper types from the root entrypoint. */
+export type { LiveFactory, LiveStatus, RemoteLiveStream } from "$/live.ts";
+
+/** Re-export server helper types from the root entrypoint. */
 export type {
 	CommandFactory,
 	EffectLike,
@@ -273,8 +277,6 @@ export type {
 	EffectRemoteFunction,
 	EffectRemoteLiveQuery,
 	EffectRemoteLiveQueryFunction,
-	EffectRemoteLiveQueryResource,
-	EffectRemoteLiveSource,
 	EffectRemoteQuery,
 	EffectRemoteQueryFunction,
 	FormFactory,
@@ -287,6 +289,7 @@ export type {
 	RemoteFormHandler,
 	RemoteHandler,
 	RemoteLiveHandler,
+	RemoteLiveSource,
 	SchemaEncodedInput,
 	SchemaInput,
 	ServerRuntimeFactory,

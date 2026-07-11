@@ -3,6 +3,7 @@ import {
 	assert_match,
 	assert_equals,
 	assert_throws,
+	assert_truthy,
 	assert_not_match,
 	assert_string_includes,
 } from "./helpers/assert.ts";
@@ -112,7 +113,7 @@ test("preserves $state(yield* expr) as writable state", () => {
 	assert_transform(
 		source,
 		[
-			`function* __SER___effect_user() { return (yield* getUser(id)); }`,
+			`function* __SER___effect_user() { return (yield* ToEffect(getUser(id))); }`,
 			`let user = $state(await get_dispatcher().promise({`,
 			`deps: [getUser, id]`,
 			`factory: () => __SER___effect_user()`,
@@ -127,11 +128,11 @@ test("preserves $state expressions with multiple yield points", () => {
 
 	assert_string_includes(
 		result.code,
-		`function* __SER___effect_label() { return (yield* getFirst()); }`,
+		`function* __SER___effect_label() { return (yield* ToEffect(getFirst())); }`,
 	);
 	assert_string_includes(
 		result.code,
-		`function* __SER___effect_label_1() { return (yield* getLast()); }`,
+		`function* __SER___effect_label_1() { return (yield* ToEffect(getLast())); }`,
 	);
 	assert_string_includes(result.code, "let label = $state(`${await get_dispatcher().promise({");
 	assert_string_includes(result.code, `deps: [getFirst]`);
@@ -147,7 +148,7 @@ test("preserves $state.raw(yield* expr) as raw state", () => {
 
 	assert_string_includes(
 		result.code,
-		`function* __SER___effect_raw() { return (yield* getRaw(id)); }`,
+		`function* __SER___effect_raw() { return (yield* ToEffect(getRaw(id))); }`,
 	);
 	assert_string_includes(result.code, `let raw = $state.raw(await get_dispatcher().promise({`);
 	assert_string_includes(result.code, `deps: [getRaw, id]`);
@@ -159,8 +160,8 @@ test("preserves $state.raw(yield* expr) as raw state", () => {
 test("extracts bare yield const sugar into a boundary-compatible await", () => {
 	const source = `const user = yield* getUser(id);`;
 	const result = assert_transform(source, [
-		`function* __SER___effect_user() { return (yield* getUser(id)); }`,
-		`import { get_dispatcher } from "svelte-effect-runtime/internal/generators"`,
+		`function* __SER___effect_user() { return (yield* ToEffect(getUser(id))); }`,
+		`import { get_dispatcher, ToEffect } from "svelte-effect-runtime/internal/generators"`,
 		`const user = await get_dispatcher().promise({`,
 		`id: "Test.svelte:13:31"`,
 		`deps: [getUser, id]`,
@@ -179,7 +180,10 @@ test("keeps state declarations out of dependency-tracked Effect.gen", () => {
 	const result = transform_script_effect(source, "Test.svelte");
 
 	assert_string_includes(result.code, `let x = $state(await get_dispatcher().promise({`);
-	assert_string_includes(result.code, `function* __SER___effect_x() { return (yield* f()); }`);
+	assert_string_includes(
+		result.code,
+		`function* __SER___effect_x() { return (yield* ToEffect(f())); }`,
+	);
 	assert_not_match(result.code, /Effect\.gen\(function\*/);
 	assert_not_match(result.code, /\$effect\(\(\) =>/);
 	assert_not_match(result.code, /untrack\(\(\) =>/);
@@ -197,7 +201,7 @@ test("tracks reactive identifiers read by yielded remote arguments", () => {
 	assert_string_includes(result.code, `deps: [getPost, params]`);
 	assert_string_includes(
 		result.code,
-		`function* __SER___effect_result() { return (yield* getPost({ param: params.page_parameter })); }`,
+		`function* __SER___effect_result() { return (yield* ToEffect(getPost({ param: params.page_parameter }))); }`,
 	);
 	assert_not_match(result.code, /\$effect\(\(\) =>/);
 });
@@ -210,7 +214,7 @@ test("lowers destructuring yield* into a boundary-compatible await", () => {
 
 	assert_string_includes(
 		result.code,
-		`function* __SER___effect_destructure() { return (yield* getPost(id)); }`,
+		`function* __SER___effect_destructure() { return (yield* ToEffect(getPost(id))); }`,
 	);
 	assert_string_includes(result.code, `const { title, body } = await get_dispatcher().promise({`);
 	assert_string_includes(result.code, `deps: [getPost, id]`);
@@ -226,7 +230,7 @@ test("preserves $derived(yield* expr) as an async derived", () => {
 
 	assert_string_includes(
 		result.code,
-		`function* __SER___effect_msg() { return (yield* format(user)); }`,
+		`function* __SER___effect_msg() { return (yield* ToEffect(format(user))); }`,
 	);
 	assert_string_includes(result.code, `let msg = $derived(await get_dispatcher().promise({`);
 	assert_string_includes(result.code, `deps: [format, user]`);
@@ -250,7 +254,7 @@ test("moves count = yield* expr into the effect body", () => {
 	const result = transform_script_effect(source, "Test.svelte");
 
 	assert_string_includes(result.code, `let count = $state(0);`);
-	assert_string_includes(result.code, `count = yield* getCount();`);
+	assert_string_includes(result.code, `count = yield* ToEffect(getCount());`);
 	assert_not_match(result.code, /count = __SER___/);
 });
 
@@ -260,7 +264,7 @@ test("does not track assignment targets as reactive dependencies", () => {
 	);
 	const result = transform_script_effect(source, "Test.svelte");
 
-	assert_string_includes(result.code, `count = yield* Effect.succeed(count + 1);`);
+	assert_string_includes(result.code, `count = yield* ToEffect(Effect.succeed(count + 1));`);
 	assert_string_includes(result.code, `  Effect;`);
 	assert_not_match(result.code, /\n\s*count;\n/);
 	assert_not_match(result.code, /void \[/);
@@ -271,7 +275,7 @@ test("preserves surrounding assignment RHS expressions", () => {
 	const result = transform_script_effect(source, "Test.svelte");
 
 	assert_string_includes(result.code, `let __SER___value = $state<`);
-	assert_string_includes(result.code, `__SER___value = yield* loadValue();`);
+	assert_string_includes(result.code, `__SER___value = yield* ToEffect(loadValue());`);
 	assert_string_includes(result.code, `value = (__SER___value) + 1;`);
 	assert_not_match(result.code, /^\s{4}value = yield\* loadValue\(\);$/m);
 });
@@ -281,9 +285,28 @@ test("runs compound assignments after yielded operands resolve", () => {
 	const result = transform_script_effect(source, "Test.svelte");
 
 	assert_string_includes(result.code, `let __SER___count = $state<`);
-	assert_string_includes(result.code, `__SER___count = yield* getDelta();`);
+	assert_string_includes(result.code, `__SER___count = yield* ToEffect(getDelta());`);
 	assert_string_includes(result.code, `count += __SER___count;`);
 	assert_not_match(result.code, /count \+= __SER___count;\n\n\$effect/);
+});
+
+test("splits independent assignment effects into separate runtime blocks", () => {
+	const source = [
+		`let user = $state();`,
+		`let theme = $state();`,
+		`user = yield* getUser(userId);`,
+		`theme = yield* getTheme(themeId);`,
+	].join("\n");
+	const result = transform_script_effect(source, "Test.svelte");
+	const runtime_blocks = result.code.split("$effect(() => {").slice(1);
+
+	assert_equals(runtime_blocks.length, 2);
+	assert_string_includes(runtime_blocks[0], `getUser;`);
+	assert_string_includes(runtime_blocks[0], `userId;`);
+	assert_not_match(runtime_blocks[0], /getTheme;|themeId;/);
+	assert_string_includes(runtime_blocks[1], `getTheme;`);
+	assert_string_includes(runtime_blocks[1], `themeId;`);
+	assert_not_match(runtime_blocks[1], /getUser;|userId;/);
 });
 
 test("runs ordinary call statements after yielded arguments resolve", () => {
@@ -291,7 +314,7 @@ test("runs ordinary call statements after yielded arguments resolve", () => {
 	const result = transform_script_effect(source, "Test.svelte");
 
 	assert_string_includes(result.code, `let __SER___call = $state<`);
-	assert_string_includes(result.code, `__SER___call = yield* loadValue();`);
+	assert_string_includes(result.code, `__SER___call = yield* ToEffect(loadValue());`);
 	assert_string_includes(result.code, `recordValue(__SER___call);`);
 	assert_not_match(result.code, /^recordValue\(__SER___call\);/m);
 });
@@ -302,8 +325,45 @@ test("moves bare yield* statements into the effect body", () => {
 	const source = `yield* logView(userId);`;
 	const result = transform_script_effect(source, "Test.svelte");
 
-	assert_string_includes(result.code, `yield* logView(userId);`);
+	assert_string_includes(result.code, `yield* ToEffect(logView(userId));`);
 	assert_string_includes(result.code, `Effect.gen(function*`);
+});
+
+test("wraps yield* inside control-flow statements moved into effect bodies", () => {
+	const source = [
+		`let count = $state(0);`,
+		`if (yield* getFlag()) {`,
+		`  count = yield* getCount();`,
+		`}`,
+	].join("\n");
+	const result = transform_script_effect(source, "Test.svelte");
+
+	assert_string_includes(result.code, `if (yield* ToEffect(getFlag())) {`);
+	assert_string_includes(result.code, `count = yield* ToEffect(getCount());`);
+	assert_not_match(result.code, /if \(yield\* getFlag\(\)\)/);
+});
+
+test("relocates yielded operands inside ToEffect when the same call appears earlier", () => {
+	const source = [
+		`const slug = "intro";`,
+		`const preview = get_post(slug);`,
+		`const post = yield* get_post(slug);`,
+	].join("\n");
+	const result = transform_script_effect(source, "Test.svelte");
+	const original_start = source.lastIndexOf("get_post(slug)");
+	const relocation = result.relocations?.find(
+		(candidate) => candidate.originalStart === original_start,
+	);
+
+	assert_truthy(relocation);
+	assert_equals(
+		result.code.slice(relocation.generatedStart, relocation.generatedEnd),
+		"get_post(slug)",
+	);
+	assert_equals(
+		result.code.lastIndexOf("ToEffect(get_post(slug))"),
+		relocation.generatedStart - "ToEffect(".length,
+	);
 });
 
 // ─── NOT lowered (function boundary) ─────────────────────────
@@ -345,6 +405,58 @@ test("handles multiple yield* expressions in one script", () => {
 	}
 });
 
+test("does not rescan generated code for repeated relocation text", () => {
+	const repetitions = 64;
+	const repeated_yield_text = "yield* track_event()";
+	const repeated_operand_text = "track_event()";
+	const repeated_wrapper_text = `ToEffect(${repeated_operand_text})`;
+	const source = Array.from({ length: repetitions }, () => `${repeated_yield_text};`).join("\n");
+	const original_index_of = String.prototype.indexOf;
+	let relocation_searches = 0;
+	let result: ScriptTransformResult | undefined;
+
+	/** Capture identical relocation searches performed during transform. */
+	String.prototype.indexOf = function (
+		this: string,
+		search_string: string,
+		position?: number,
+	): number {
+		if (search_string === repeated_wrapper_text) {
+			relocation_searches += 1;
+		}
+
+		return original_index_of.call(this, search_string, position);
+	};
+
+	try {
+		result = transform_script_effect(source, "Test.svelte");
+	} finally {
+		String.prototype.indexOf = original_index_of;
+	}
+
+	if (!result) {
+		throw new Error("expected transform result");
+	}
+
+	const repeated_relocations = (result.relocations ?? []).filter(
+		(relocation) =>
+			source.slice(relocation.originalStart, relocation.originalEnd) === repeated_operand_text,
+	);
+
+	assert_equals(repeated_relocations.length, repetitions);
+
+	if (relocation_searches > repetitions * 3) {
+		throw new Error(`Expected linear relocation searches, got ${relocation_searches}`);
+	}
+
+	for (const relocation of repeated_relocations) {
+		assert_equals(
+			result.code.slice(relocation.generatedStart, relocation.generatedEnd),
+			repeated_operand_text,
+		);
+	}
+});
+
 // ─── Import handling ─────────────────────────────────────────
 
 test("injects Effect import when not already present", () => {
@@ -373,7 +485,7 @@ test("supports Effect import aliases in yielded expressions", () => {
 
 	assert_string_includes(result.code, `import { Effect as E } from "effect";`);
 	assert_not_match(result.code, /import\s+\{\s*Effect\s*\}\s+from\s+"effect"/);
-	assert_string_includes(result.code, `yield* E.succeed(42)`);
+	assert_string_includes(result.code, `yield* ToEffect(E.succeed(42))`);
 	assert_string_includes(result.code, `get_dispatcher().promise`);
 });
 
@@ -441,7 +553,7 @@ test("injects dispatcher when generators import lacks get_dispatcher binding", (
 
 	assert_string_includes(
 		result.code,
-		`import { get_dispatcher } from "svelte-effect-runtime/internal/generators";`,
+		`import { get_dispatcher, ToEffect } from "svelte-effect-runtime/internal/generators";`,
 	);
 	assert_string_includes(result.code, `get_dispatcher();`);
 });
@@ -452,7 +564,7 @@ test("declaration awaits do not inject Effect or untrack imports", () => {
 
 	assert_string_includes(
 		result.code,
-		`import { get_dispatcher } from "svelte-effect-runtime/internal/generators";`,
+		`import { get_dispatcher, ToEffect } from "svelte-effect-runtime/internal/generators";`,
 	);
 	assert_not_match(result.code, /import \{ Effect \} from "effect"/);
 	assert_not_match(result.code, /import \{ untrack \} from "svelte"/);
@@ -555,8 +667,8 @@ test("extracts every yield* expression in a compound initializer", () => {
 	const source = `let result = $derived((yield* first()) + (yield* second()));`;
 	const result = transform_script_effect(source, "Test.svelte");
 
-	assert_string_includes(result.code, `yield* first()`);
-	assert_string_includes(result.code, `yield* second()`);
+	assert_string_includes(result.code, `yield* ToEffect(first())`);
+	assert_string_includes(result.code, `yield* ToEffect(second())`);
 	assert_string_includes(result.code, `deps: [first]`);
 	assert_string_includes(result.code, `deps: [second]`);
 	assert_not_match(result.code, /\$derived\(\(__SER___\w+\) \+ \(__SER___\w+\)\)/);

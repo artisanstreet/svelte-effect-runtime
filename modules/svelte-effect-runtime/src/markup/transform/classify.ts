@@ -1,6 +1,6 @@
 import type { AST } from "svelte/compiler";
 
-import { is_event_attribute_name, normalize_event_attribute_name } from "../event-attributes.ts";
+import { is_svelte_event_attribute, normalize_event_attribute_name } from "../event-attributes.ts";
 import type { MarkupCandidate, TagKind } from "./types.ts";
 
 interface ClassifiedCandidate {
@@ -113,6 +113,12 @@ function visit_ast_node(
 			walk_ast(node.body, candidates, matched, classified);
 			return;
 
+		case "SvelteElement":
+			classify_expression(node.tag as ExpressionLike, "plain", candidates, matched, classified);
+			visit_element_attributes(node, candidates, matched, classified);
+			walk_ast(node.fragment, candidates, matched, classified);
+			return;
+
 		case "RegularElement":
 		case "Component":
 		case "TitleElement":
@@ -121,7 +127,6 @@ function visit_ast_node(
 		case "SvelteBoundary":
 		case "SvelteComponent":
 		case "SvelteDocument":
-		case "SvelteElement":
 		case "SvelteFragment":
 		case "SvelteHead":
 		case "SvelteSelf":
@@ -174,7 +179,7 @@ function visit_element_attributes(
 	classified: ClassifiedCandidate[],
 ): void {
 	for (const attr of node.attributes) {
-		if (attr.type === "Attribute" && attr.name && is_event_attribute_name(attr.name)) {
+		if (is_svelte_event_attribute(attr)) {
 			const attribute_name_replacement = make_attribute_name_replacement(node, attr);
 
 			visit_attribute_value(
