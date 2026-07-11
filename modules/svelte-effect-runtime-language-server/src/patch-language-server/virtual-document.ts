@@ -6,7 +6,10 @@ import {
 	SequentialDocumentMapper,
 } from "./document-mappers.ts";
 import type { SvelteEffectSourceScan } from "../../../svelte-effect-runtime/src/compiler/source-scan.ts";
-import { scan_svelte_effect_source } from "../../../svelte-effect-runtime/src/compiler/source-scan.ts";
+import {
+	scan_svelte_effect_source,
+	shift_scan_after_at_insertions,
+} from "../../../svelte-effect-runtime/src/compiler/source-scan.ts";
 import { safe_markup_transform_result, safe_script_transform_result } from "./transform-results.ts";
 import { Document, extractScriptTags } from "./svelte-internals.ts";
 import type { Mapper, TransformSet } from "./types.ts";
@@ -28,7 +31,11 @@ export function prepare_virtual_document(originalDocument: any, transforms: Tran
 		: null;
 	const normalizedCode = normalizedDeclarations?.code ?? originalText;
 	const normalizedScan = normalizedDeclarations
-		? scan_svelte_effect_source(normalizedCode, filename)
+		? shift_scan_after_at_insertions(
+				originalScan,
+				normalizedCode,
+				originalScan.bare_const_tags.map((tag) => tag.insert_position),
+			)
 		: originalScan;
 	const globalTypescript = add_global_typescript_scripts(
 		normalizedCode,
@@ -199,8 +206,8 @@ function normalize_bare_const_declaration_tags(
 	return {
 		code: magic.toString(),
 		map: magic.generateMap({
-			hires: true,
-			includeContent: true,
+			hires: false,
+			includeContent: false,
 			source: source_uri,
 		}) as unknown as Record<string, unknown>,
 	};
