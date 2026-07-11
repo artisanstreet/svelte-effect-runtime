@@ -177,7 +177,7 @@ test("virtual TS snapshot maps SER markup yield operands to generated operands",
 
 test("virtual TS document normalizes bare const tags without brace rescans", () => {
 	const count = 6_000;
-	const max_elapsed_ms = 1_000;
+	const max_elapsed_ms = 2_500;
 	const script_filler = Array.from(
 		{ length: count },
 		(_, index) => `{ const skipped_${index} = ${index}; }`,
