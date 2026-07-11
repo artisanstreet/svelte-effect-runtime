@@ -267,7 +267,7 @@ test("rewrites yield inside snippet block bodies", () => {
 	const result = transform_markup_effect(source, "SnippetBody.svelte");
 
 	assert_string_includes(result.code, `Code.Markup.Promise`);
-	assert_string_includes(result.code, `return (yield* load());`);
+	assert_string_includes(result.code, `return (yield* ToEffect(load()));`);
 
 	compile(result.code, {
 		filename: "SnippetBody.svelte",
@@ -281,7 +281,7 @@ test("rewrites yield in dynamic svelte element tags", () => {
 	const result = transform_markup_effect(source, "DynamicElement.svelte");
 
 	assert_string_includes(result.code, `this={await Dispatcher.emit`);
-	assert_string_includes(result.code, `return (yield* tag());`);
+	assert_string_includes(result.code, `return (yield* ToEffect(tag()));`);
 
 	compile(result.code, {
 		filename: "DynamicElement.svelte",

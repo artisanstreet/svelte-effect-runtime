@@ -408,6 +408,8 @@ test("handles multiple yield* expressions in one script", () => {
 test("does not rescan generated code for repeated relocation text", () => {
 	const repetitions = 64;
 	const repeated_yield_text = "yield* track_event()";
+	const repeated_operand_text = "track_event()";
+	const repeated_wrapper_text = `ToEffect(${repeated_operand_text})`;
 	const source = Array.from({ length: repetitions }, () => `${repeated_yield_text};`).join("\n");
 	const original_index_of = String.prototype.indexOf;
 	let relocation_searches = 0;
@@ -419,7 +421,7 @@ test("does not rescan generated code for repeated relocation text", () => {
 		search_string: string,
 		position?: number,
 	): number {
-		if (search_string === repeated_yield_text) {
+		if (search_string === repeated_wrapper_text) {
 			relocation_searches += 1;
 		}
 
@@ -438,7 +440,7 @@ test("does not rescan generated code for repeated relocation text", () => {
 
 	const repeated_relocations = (result.relocations ?? []).filter(
 		(relocation) =>
-			source.slice(relocation.originalStart, relocation.originalEnd) === repeated_yield_text,
+			source.slice(relocation.originalStart, relocation.originalEnd) === repeated_operand_text,
 	);
 
 	assert_equals(repeated_relocations.length, repetitions);
@@ -450,7 +452,7 @@ test("does not rescan generated code for repeated relocation text", () => {
 	for (const relocation of repeated_relocations) {
 		assert_equals(
 			result.code.slice(relocation.generatedStart, relocation.generatedEnd),
-			repeated_yield_text,
+			repeated_operand_text,
 		);
 	}
 });
