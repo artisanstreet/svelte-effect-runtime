@@ -15,4 +15,4 @@ node ./node_modules/svelte-effect-runtime-language-server/.dist/server.cjs --std
 The package is primarily an editor-integration dependency. Application projects
 should install `svelte-effect-runtime` instead.
 
-Visit the [docs](https://ser.barekey.dev) for more information.
+Visit the [docs](https://barekey.dev/docs/ser) for more information.
