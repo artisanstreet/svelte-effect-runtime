@@ -232,6 +232,106 @@ export function scan_svelte_effect_source(
 	};
 }
 
+/**
+ * Reuses a source scan after bare-const normalization inserts `@` characters.
+ *
+ * @example
+ * ```ts
+ * const shifted = shift_scan_after_at_insertions(scan, normalized, [tag.insert_position]);
+ * ```
+ *
+ * @since 4.0.0
+ * @param scan - Scan produced from the pre-normalization source.
+ * @param normalized_source - Source after `@` insertions.
+ * @param insert_positions - Offsets where `@` was inserted.
+ * @returns A scan aligned to the normalized source without rescanning markup.
+ */
+export function shift_scan_after_at_insertions(
+	scan: SvelteEffectSourceScan,
+	normalized_source: string,
+	insert_positions: readonly number[],
+): SvelteEffectSourceScan {
+	const inserts = [...insert_positions].sort((left, right) => left - right);
+	const shift = (offset: number) =>
+		offset + inserts.filter((position) => position <= offset).length;
+
+	const shift_range = <T extends SourceRange>(range: T): T => ({
+		...range,
+		start: shift(range.start),
+		end: shift(range.end),
+	});
+
+	const shift_attribute = (attribute: SourceAttribute): SourceAttribute => ({
+		...shift_range(attribute),
+		name: attribute.name,
+		name_start: shift(attribute.name_start),
+		name_end: shift(attribute.name_end),
+		value: attribute.value,
+	});
+
+	const shift_script = (script: ScriptRegion): ScriptRegion => {
+		const shifted = {
+			...shift_range(script),
+			opening_tag_start: shift(script.opening_tag_start),
+			opening_tag_end: shift(script.opening_tag_end),
+			tag_name_end: shift(script.tag_name_end),
+			content_start: shift(script.content_start),
+			content_end: shift(script.content_end),
+			closing_tag_start: shift(script.closing_tag_start),
+			closing_tag_end: shift(script.closing_tag_end),
+			attributes_text: normalized_source.slice(
+				shift(script.opening_tag_end),
+				shift(script.content_start),
+			),
+			attributes: script.attributes.map(shift_attribute),
+			text: normalized_source.slice(shift(script.content_start), shift(script.content_end)),
+			is_module: script.is_module,
+			has_lang: script.has_lang,
+			lang: script.lang,
+			is_typescript: script.is_typescript,
+			has_effect: script.has_effect,
+			effect_attribute: script.effect_attribute
+				? shift_range(script.effect_attribute)
+				: undefined,
+		};
+
+		return shifted;
+	};
+
+	const shift_expression = (expression: MarkupBraceExpression): MarkupBraceExpression => {
+		const open = shift(expression.open);
+		const close = shift(expression.close);
+		const inner_start = shift(expression.inner_start);
+		const inner_end = shift(expression.inner_end);
+		const inner = normalized_source.slice(inner_start, inner_end);
+
+		return {
+			open,
+			close,
+			inner_start,
+			inner_end,
+			inner,
+			expression_text: inner.trim(),
+			attribute_name: expression.attribute_name,
+		};
+	};
+
+	const scripts = scan.scripts.map(shift_script);
+
+	return {
+		filename: scan.filename,
+		source: normalized_source,
+		scripts,
+		styles: scan.styles.map(shift_range),
+		comments: scan.comments.map(shift_range),
+		excluded_ranges: scan.excluded_ranges.map(shift_range),
+		markup_expressions: scan.markup_expressions.map(shift_expression),
+		bare_const_tags: [],
+		instance_script: scan.instance_script ? shift_script(scan.instance_script) : undefined,
+		effect_script: scan.effect_script ? shift_script(scan.effect_script) : undefined,
+	};
+}
+
 function collect_script_regions(source: string): ScriptRegion[] {
 	return collect_tag_regions(source, "script").map((region) => {
 		const lang = get_attribute(region.attributes, "lang")?.value?.toLowerCase();
