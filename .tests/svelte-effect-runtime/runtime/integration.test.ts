@@ -401,8 +401,18 @@ test("vite server import rewrite handles query-suffixed server modules", async (
 	].join("\n");
 	const ids = [
 		"C:/src/routes/auth.remote.ts?server",
+		"C:/src/routes/auth.remote.m.ts?server",
+		"C:/src/routes/auth.remote.c.ts?server",
+		"C:/src/routes/auth.remote.js?server",
+		"C:/src/routes/auth.remote.m.js?server",
+		"C:/src/routes/auth.remote.c.js?server",
 		"C:/src/routes/+page.server.ts?ts=123",
 		"C:/src/hooks.server.ts?hmr=1",
+		"C:/src/hooks.server.m.ts?hmr=1",
+		"C:/src/hooks.server.c.ts?hmr=1",
+		"C:/src/hooks.server.js?hmr=1",
+		"C:/src/hooks.server.m.js?hmr=1",
+		"C:/src/hooks.server.c.js?hmr=1",
 	];
 
 	for (const id of ids) {

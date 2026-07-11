@@ -101,7 +101,6 @@ non-live price example there.
 ## Verification
 
 - `vp test run`
-- `corepack pnpm run docs:build`
 - `vp check --no-lint @files`
 - `corepack pnpm --dir modules/svelte-effect-runtime run check`
 - `corepack pnpm --dir modules/svelte-effect-runtime-language-server run build`

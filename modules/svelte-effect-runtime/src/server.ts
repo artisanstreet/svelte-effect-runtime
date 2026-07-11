@@ -3,6 +3,7 @@ export {
 	Error,
 	Form,
 	get_server_runtime_or_throw,
+	Handler,
 	Live,
 	Prerender,
 	Query,
@@ -13,6 +14,7 @@ export {
 
 export type {
 	CommandFactory,
+	EffectHandler,
 	EffectLike,
 	EffectRemoteBatchHandler,
 	EffectRemoteCommand,

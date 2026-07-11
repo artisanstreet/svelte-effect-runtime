@@ -1,4 +1,5 @@
 export { Command, Form, Prerender, Query } from "./factories.ts";
+export { Handler } from "./handler.ts";
 export { Error, Redirect } from "./control-flow.ts";
 export { get_server_runtime_or_throw, RequestEvent, ServerRuntime } from "./runtime.ts";
 export { RuntimeAlreadyInitializedError } from "$/errors.ts";
@@ -19,6 +20,7 @@ export type {
 
 export type {
 	CommandFactory,
+	EffectHandler,
 	EffectLike,
 	EffectRemoteBatchHandler,
 	EffectRemoteCommand,
