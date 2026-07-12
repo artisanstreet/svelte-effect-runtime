@@ -183,6 +183,10 @@ The runtime module is the primary implementation target. Language server and VS
 Code extension changes should be made when runtime syntax or generated code
 needs editor support.
 
+The SER documentation site and its documentation content live in the
+`usebarekey/barekey` repository. Make documentation UI and content changes there,
+not in this repository.
+
 - **Source**: `modules/svelte-effect-runtime/src/`
 - **Tests**: `.tests/svelte-effect-runtime/runtime/`
 - **Build output**: `.dist/svelte-effect-runtime/`
