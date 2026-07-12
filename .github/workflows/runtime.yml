@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   detect_version_bump:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
 
     outputs:
       has_version_bump: ${{ steps.detect.outputs.has_version_bump }}
@@ -52,7 +52,7 @@ jobs:
   lint_and_test:
     needs: detect_version_bump
     if: needs.detect_version_bump.outputs.has_version_bump == 'true'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
 
     steps:
       - name: checkout
@@ -86,7 +86,7 @@ jobs:
       - detect_version_bump
       - lint_and_test
     if: needs.detect_version_bump.outputs.has_version_bump == 'true'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
 
     steps:
       - name: checkout
