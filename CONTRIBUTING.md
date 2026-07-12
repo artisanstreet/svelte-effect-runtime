@@ -33,8 +33,9 @@ standalone Vite+ binary from <https://vite.plus>.
 - `skills/svelte-effect-runtime` contains the Codex skill shipped with the repo.
 
 SER documentation content and documentation UI live in
-`usebarekey/barekey`, not in this repo. Runtime changes can mention docs that
-need updating, but the docs change itself should happen in Barekey.
+`usebarekey/barekey/modules/frontend/src/content`, not in this repo. If a PR
+changes SER behavior, public API shape, syntax, setup, or user-facing runtime
+semantics, update the Barekey docs in the same line of work.
 
 ## Common Commands
 
