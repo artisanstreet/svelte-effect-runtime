@@ -78,9 +78,8 @@ export function transform_svelte_effect(
 			content.slice(script.closing_tag_start);
 	}
 
-	const result = transform_markup_effect(combined, filename, {
-		target: options.target,
-	});
+	const markup_options = options.target === undefined ? {} : { target: options.target };
+	const result = transform_markup_effect(combined, filename, markup_options);
 
 	return { code: result.code };
 }

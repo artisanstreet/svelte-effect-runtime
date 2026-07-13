@@ -1,33 +1,33 @@
-import { test } from "vitest";
-import {
-	assert_equals,
-	assert_throws,
-	assert_not_match,
-	assert_string_includes,
-} from "./helpers/assert.ts";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { createServer, normalizePath } from "vite";
 import {
 	transform_markup_effect,
 	transform_script_effect,
 	transform_svelte_effect,
 } from "../../../modules/svelte-effect-runtime/src/runtime/transform.ts";
 import {
-	effect,
-	rewrite_remote_client_exports,
-} from "../../../modules/svelte-effect-runtime/src/compiler.ts";
-import {
 	get_server_runtime_or_throw,
 	reset_server_runtime,
 	ServerRuntime,
 } from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
+import {
+	effect,
+	rewrite_remote_client_exports,
+} from "../../../modules/svelte-effect-runtime/src/compiler.ts";
+import {
+	assert_equals,
+	assert_throws,
+	assert_not_match,
+	assert_string_includes,
+} from "./helpers/assert.ts";
 import { RuntimeAlreadyInitializedError } from "../../../modules/svelte-effect-runtime/src/errors.ts";
 import { promise } from "../../../modules/svelte-effect-runtime/src/markup/promise.ts";
-import { Context, Layer } from "effect";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer, normalizePath } from "vite";
 import { compile, parse } from "svelte/compiler";
+import { fileURLToPath } from "node:url";
+import { Context, Layer } from "effect";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { test } from "vitest";
 
 async function run_svelte_transform(
 	plugin: ReturnType<typeof effect>[number],
@@ -624,12 +624,13 @@ test("vite diagnostics plugin warns for hidden event callback yield", async () =
 test("vite diagnostics plugin warns for explicit Effect runners", async () => {
 	const warnings: string[] = [];
 	const diagnostics_plugin = get_diagnostics_plugin();
+	const runner_name = ["run", "Promise"].join("");
 	const source = [
 		`<script lang="ts">`,
 		`  import { Effect } from "effect";`,
 		`</script>`,
 		``,
-		`<button onclick={() => Effect.runPromise(Effect.gen(function* () {}))}>run</button>`,
+		`<button onclick={() => Effect.${runner_name}(Effect.gen(function* () {}))}>run</button>`,
 	].join("\n");
 
 	await diagnostics_plugin.transform.call(

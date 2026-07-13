@@ -15,6 +15,12 @@ type ViteImportMeta = ImportMeta & {
 /**
  * Subset of SvelteKit's `RequestEvent` that remote handlers typically access.
  *
+ * @example
+ * ```ts
+ * const event: RequestEvent = yield* RequestEvent;
+ * console.log(event.url.pathname);
+ * ```
+ *
  * @since 2.0.0
  */
 export interface RequestEvent extends Pick<

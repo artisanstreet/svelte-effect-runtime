@@ -1,8 +1,6 @@
-import { test } from "vitest";
-import { assert_false, assert_truthy, assert_equals } from "./helpers/assert.ts";
 import {
-	EFFECT_REMOTE_ERROR_MARKER,
-	REMOTE_ERROR_DECODER,
+	effect_remote_error_marker,
+	remote_error_decoder,
 	create_form_error,
 	is_form_error,
 	create_remote_validation_error,
@@ -14,13 +12,15 @@ import {
 	is_remote_http_error,
 	is_remote_transport_error,
 } from "../../../modules/svelte-effect-runtime/src/remote/shared.ts";
+import { assert_false, assert_truthy, assert_equals } from "./helpers/assert.ts";
+import { test } from "vitest";
 
-test("EFFECT_REMOTE_ERROR_MARKER is the expected string", () => {
-	assert_equals(EFFECT_REMOTE_ERROR_MARKER, "__svelte_effect_remote__");
+test("effect_remote_error_marker is the expected string", () => {
+	assert_equals(effect_remote_error_marker, "__svelte_effect_remote__");
 });
 
-test("REMOTE_ERROR_DECODER is a symbol", () => {
-	assert_equals(typeof REMOTE_ERROR_DECODER, "symbol");
+test("remote_error_decoder is a symbol", () => {
+	assert_equals(typeof remote_error_decoder, "symbol");
 });
 
 test("create_form_error produces a FormError with _tag", () => {

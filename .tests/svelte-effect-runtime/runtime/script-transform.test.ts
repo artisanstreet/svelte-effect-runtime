@@ -1,4 +1,3 @@
-import { test } from "vitest";
 import {
 	assert_match,
 	assert_equals,
@@ -7,8 +6,9 @@ import {
 	assert_not_match,
 	assert_string_includes,
 } from "./helpers/assert.ts";
-import { transform_script_effect } from "../../../modules/svelte-effect-runtime/src/script-transform/index.ts";
 import type { ScriptTransformResult } from "../../../modules/svelte-effect-runtime/src/script-transform/index.ts";
+import { transform_script_effect } from "../../../modules/svelte-effect-runtime/src/script-transform/index.ts";
+import { test } from "vitest";
 
 function assert_transform(
 	source: string,

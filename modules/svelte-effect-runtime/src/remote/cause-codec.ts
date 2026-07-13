@@ -84,6 +84,11 @@ export function classify_remote_cause(cause: Cause.Cause<unknown>): RemoteCauseR
  * Encodes an Effect Cause into a string that the client-side adapter can
  * decode back into a typed `RemoteFailure`.
  *
+ * @example
+ * ```ts
+ * const encoded = encode_remote_failure(Cause.fail({ _tag: "NotFound" }));
+ * ```
+ *
  * @since 2.0.0
  * @param cause - The Effect Cause from a failed execution.
  * @returns A devalue-encoded string representing the serialised failure.

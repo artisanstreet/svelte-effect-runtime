@@ -40,7 +40,7 @@ export interface SourceAttribute extends SourceRange {
 	/** Exclusive offset where the attribute name ends. */
 	name_end: number;
 	/** Parsed string value when the attribute has one. */
-	value?: string;
+	value?: string | undefined;
 }
 
 /**
@@ -80,13 +80,13 @@ export interface ScriptRegion extends SourceRange {
 	/** Whether the script has a `lang` attribute. */
 	has_lang: boolean;
 	/** Parsed `lang` value when present. */
-	lang?: string;
+	lang?: string | undefined;
 	/** Whether this script should be parsed as TypeScript. */
 	is_typescript: boolean;
 	/** Whether this script has SER's `effect` attribute. */
 	has_effect: boolean;
 	/** Range of the `effect` attribute, including leading whitespace. */
-	effect_attribute?: SourceRange;
+	effect_attribute?: SourceRange | undefined;
 }
 
 /**
@@ -114,7 +114,7 @@ export interface MarkupBraceExpression {
 	/** Trimmed expression body. */
 	expression_text: string;
 	/** Attribute name when the expression is an attribute value. */
-	attribute_name?: string;
+	attribute_name?: string | undefined;
 }
 
 /**
@@ -166,9 +166,9 @@ export interface SvelteEffectSourceScan {
 	/** Bare `{const ...}` tags outside excluded ranges. */
 	bare_const_tags: readonly BareConstDeclarationTag[];
 	/** First non-module script, if present. */
-	instance_script?: ScriptRegion;
+	instance_script?: ScriptRegion | undefined;
 	/** First non-module script with SER's `effect` attribute, if present. */
-	effect_script?: ScriptRegion;
+	effect_script?: ScriptRegion | undefined;
 }
 
 interface TagRegion extends SourceRange {

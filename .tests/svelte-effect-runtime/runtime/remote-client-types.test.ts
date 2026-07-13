@@ -1,9 +1,9 @@
-import { test } from "vitest";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { assert_equals } from "./helpers/assert.ts";
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { test } from "vitest";
 
 /**
  * Type-error fixtures intentionally keep TypeScript's directive comment syntax
@@ -259,13 +259,13 @@ form();
 form.submit();
 form.preflight(schema);
 form.preflight(Schema.Struct({ name: Schema.String }));
-// @ts-expect-error preflight expects a Standard Schema or Effect Schema
+/** @ts-expect-error preflight expects a Standard Schema or Effect Schema */
 form.preflight(123);
 
 form.enhance(({ submit }) =>
   Effect.gen(function* () {
     yield* submit().updates(posts);
-    // @ts-expect-error command adapters are not query update targets
+    /** @ts-expect-error command adapters are not query update targets */
     yield* submit().updates(command);
   })
 );
@@ -293,7 +293,7 @@ const get_post = create_remote_query_adapter(
 const post = get_post({ id: "one" });
 type Post = Assert<Equal<Effect.Success<typeof post>, { id: string }>>;
 
-// @ts-expect-error input shape is inferred from the native query
+/** @ts-expect-error input shape is inferred from the native query */
 get_post({ slug: "one" });
 `,
 	);
@@ -419,9 +419,9 @@ const SignIn = Form(
       const email: string = data.email;
 
       yield* invalid.email("Required");
-      // @ts-expect-error unknown form fields are rejected
+      /** @ts-expect-error unknown form fields are rejected */
       yield* invalid.missing("Missing");
-      // @ts-expect-error scalar form fields do not have nested invalid paths
+      /** @ts-expect-error scalar form fields do not have nested invalid paths */
       yield* invalid.email.deep("Deep");
 
       return { email };
@@ -445,7 +445,7 @@ SaveNumber("1");
 PreloadNumber("1");
 SignIn({ email: "hi@example.com" });
 
-// @ts-expect-error schema call input uses the encoded type
+/** @ts-expect-error schema call input uses the encoded type */
 ReadNumber(1);
 `,
 	);
@@ -463,7 +463,7 @@ import type {
 import type { RemoteFailure } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/shared.ts";
 import { promise } from "__RUNTIME__/modules/svelte-effect-runtime/src/markup/promise.ts";
 import { run } from "__RUNTIME__/modules/svelte-effect-runtime/src/markup/run.ts";
-import { Dispatcher, Code } from "__RUNTIME__/modules/svelte-effect-runtime/src/generators.ts";
+import { Dispatcher, Code, get_dispatcher } from "__RUNTIME__/modules/svelte-effect-runtime/src/generators.ts";
 
 type Equal<Left, Right> =
   (<Type>() => Type extends Left ? 1 : 2) extends
@@ -489,12 +489,12 @@ const GetPostSummary = Query.batch(Schema.String, (ids) =>
 const GetClock = Query.live("unchecked", (_key: string) =>
   Stream.make(1, 2, 3)
 );
-// @ts-expect-error live query handlers must return Effect Streams
+/** @ts-expect-error live query handlers must return Effect Streams */
 const GetNativeClock = Query.live(async function* () {
   yield "tick";
 });
 const live_source: Stream.Stream<number> = Stream.make(1);
-// @ts-expect-error input-bearing live query handlers must be functions
+/** @ts-expect-error input-bearing live query handlers must be functions */
 const BadSchemaLive = Query.live(Schema.String, Stream.make("bad"));
 
 const UpvotePost = Command(Schema.String, (id) =>
@@ -595,10 +595,10 @@ async function check_generated_markup_helpers() {
   const release_override = posts_query.withOverride((current) => current);
 
   release_override();
-  await Effect.runPromise(refresh_effect);
-  await Effect.runPromise(summary_query.refresh());
-  const sign_out_result = await Effect.runPromise(sign_out_effect);
-  const summary = await Effect.runPromise(summary_query);
+  await get_dispatcher().run(refresh_effect);
+  await get_dispatcher().run(summary_query.refresh());
+  const sign_out_result = await get_dispatcher().run(sign_out_effect);
+  const summary = await get_dispatcher().run(summary_query);
   const signed_out: boolean = sign_out_result.signedOut;
   const clock_stream: Stream.Stream<number, RemoteFailure<never>> = clock_query;
   const remote_clock_stream: RemoteLiveStream<number> = clock_query;
@@ -630,15 +630,15 @@ async function check_generated_markup_helpers() {
   const summary_index: number = summary.index;
   const summary_known: boolean = summary.known;
 
-  // @ts-expect-error live stream transport controls are exposed through Live helpers
+  /** @ts-expect-error live stream transport controls are exposed through Live helpers */
   clock_query.reconnect();
-  // @ts-expect-error live stream resources do not expose cache-style readiness
+  /** @ts-expect-error live stream resources do not expose cache-style readiness */
   clock_query.ready;
-  // @ts-expect-error live stream resources do not expose a mutable current value
+  /** @ts-expect-error live stream resources do not expose a mutable current value */
   clock_query.current;
-  // @ts-expect-error arbitrary streams do not carry live transport metadata
+  /** @ts-expect-error arbitrary streams do not carry live transport metadata */
   Live.status(live_source);
-  // @ts-expect-error arbitrary streams do not carry live transport metadata
+  /** @ts-expect-error arbitrary streams do not carry live transport metadata */
   Live.reconnect(live_source);
 
   const optional_title: string | undefined = OptionalPost.fields.title.value();

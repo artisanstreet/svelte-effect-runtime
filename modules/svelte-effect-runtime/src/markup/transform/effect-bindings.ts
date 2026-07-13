@@ -2,9 +2,9 @@ import type { HelperDeclaration } from "./types.ts";
 
 import ts from "typescript";
 
-const EFFECT_PACKAGE_MODULE = "effect";
-const EFFECT_DIRECT_MODULE = "effect/Effect";
-const GENERATED_EFFECT_NAME = "__SER___Effect";
+const effect_package_module = "effect";
+const effect_direct_module = "effect/Effect";
+const generated_effect_name = "__SER___Effect";
 
 /**
  * Describes local bindings that resolve to Effect APIs in markup expressions.
@@ -180,12 +180,12 @@ function collect_namespace_import_binding(
 ): void {
 	state.local_names.add(local_name);
 
-	if (module_name === EFFECT_DIRECT_MODULE) {
+	if (module_name === effect_direct_module) {
 		add_ordered_name(state.effect_module_names, local_name);
 		return;
 	}
 
-	if (module_name === EFFECT_PACKAGE_MODULE) {
+	if (module_name === effect_package_module) {
 		add_ordered_name(state.effect_package_names, local_name);
 	}
 }
@@ -200,12 +200,12 @@ function collect_named_import_binding(
 
 	state.local_names.add(local_name);
 
-	if (module_name === EFFECT_PACKAGE_MODULE && imported_name === "Effect") {
+	if (module_name === effect_package_module && imported_name === "Effect") {
 		add_ordered_name(state.effect_object_names, local_name);
 		return;
 	}
 
-	if (module_name === EFFECT_DIRECT_MODULE) {
+	if (module_name === effect_direct_module) {
 		state.direct_members.set(local_name, imported_name);
 	}
 }
@@ -250,12 +250,12 @@ function choose_effect_wrapper(state: EffectBindingState): {
 	const effect_object = state.effect_object_names[0];
 
 	if (effect_object) {
-		return {
-			expression: effect_object,
-			import_text: state.implicit_effect_import
-				? `import { Effect } from "effect";`
-				: undefined,
-		};
+		return state.implicit_effect_import
+			? {
+					expression: effect_object,
+					import_text: `import { Effect } from "effect";`,
+				}
+			: { expression: effect_object };
 	}
 
 	const effect_module = state.effect_module_names[0];
@@ -279,17 +279,17 @@ function choose_effect_wrapper(state: EffectBindingState): {
 }
 
 function make_generated_effect_name(local_names: ReadonlySet<string>): string {
-	if (!local_names.has(GENERATED_EFFECT_NAME)) {
-		return GENERATED_EFFECT_NAME;
+	if (!local_names.has(generated_effect_name)) {
+		return generated_effect_name;
 	}
 
 	let index = 1;
 
-	while (local_names.has(`${GENERATED_EFFECT_NAME}_${index}`)) {
+	while (local_names.has(`${generated_effect_name}_${index}`)) {
 		index += 1;
 	}
 
-	return `${GENERATED_EFFECT_NAME}_${index}`;
+	return `${generated_effect_name}_${index}`;
 }
 
 function add_ordered_name(names: string[], name: string): void {

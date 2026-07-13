@@ -14,7 +14,7 @@ import { Schema } from "effect";
  *
  * @example
  * ```ts
- * if (envelope[EFFECT_REMOTE_ERROR_MARKER] === true) {
+ * if (envelope[effect_remote_error_marker] === true) {
  *   console.log(envelope.encoded);
  * }
  * ```
@@ -22,7 +22,7 @@ import { Schema } from "effect";
  * @since 2.0.0
  * @internal
  */
-export const EFFECT_REMOTE_ERROR_MARKER = "__svelte_effect_remote__";
+export const effect_remote_error_marker = "__svelte_effect_remote__";
 
 /**
  * Well-known symbol used to attach a payload decoder to a remote function
@@ -30,13 +30,13 @@ export const EFFECT_REMOTE_ERROR_MARKER = "__svelte_effect_remote__";
  *
  * @example
  * ```ts
- * Reflect.get(remote_function, REMOTE_ERROR_DECODER);
+ * Reflect.get(remote_function, remote_error_decoder);
  * ```
  *
  * @since 2.0.0
  * @internal
  */
-export const REMOTE_ERROR_DECODER = Symbol.for("svelte-effect-runtime/remote-error-decoder");
+export const remote_error_decoder = Symbol.for("svelte-effect-runtime/remote-error-decoder");
 
 /**
  * A single field-level or form-level validation issue reported by a

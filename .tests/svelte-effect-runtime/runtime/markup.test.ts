@@ -1,13 +1,13 @@
-import { test } from "vitest";
-import { assert_equals, assert_throws, assert_string_includes } from "./helpers/assert.ts";
 import { transform_markup_effect } from "../../../modules/svelte-effect-runtime/src/markup/transform.ts";
 import { sanitize_markup } from "../../../modules/svelte-effect-runtime/src/markup/transform/scan.ts";
 import { reset_dispatcher } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
+import { assert_equals, assert_throws, assert_string_includes } from "./helpers/assert.ts";
 import { promise } from "../../../modules/svelte-effect-runtime/src/markup/promise.ts";
 import { value } from "../../../modules/svelte-effect-runtime/src/markup/value.ts";
 import { run } from "../../../modules/svelte-effect-runtime/src/markup/run.ts";
 import { compile } from "svelte/compiler";
 import { Effect } from "effect";
+import { test } from "vitest";
 
 type DocumentHost = typeof globalThis & { document?: unknown };
 

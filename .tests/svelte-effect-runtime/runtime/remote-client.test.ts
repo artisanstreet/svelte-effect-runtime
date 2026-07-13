@@ -4,16 +4,24 @@ import {
 	create_remote_live_query_adapter,
 	create_remote_query_adapter,
 } from "../../../modules/svelte-effect-runtime/src/remote/client.ts";
+import {
+	get_server_dispatcher,
+	reset_server_runtime,
+} from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
 import { create_serialized_remote_failure_envelope } from "../../../modules/svelte-effect-runtime/src/remote/shared.ts";
 import { normalize_native_error } from "../../../modules/svelte-effect-runtime/src/remote/client/failures.ts";
 import { to_form_data } from "../../../modules/svelte-effect-runtime/src/remote/client/form-data.ts";
 import { reset_dispatcher } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
-import { assert_equals, assert_throws, assert_rejects } from "./helpers/assert.ts";
 import { Live } from "../../../modules/svelte-effect-runtime/src/live.ts";
 import { isRedirect, redirect as svelte_redirect } from "@sveltejs/kit";
-import { Effect, Schema, Stream } from "effect";
+import { Cause, Effect, Exit, Fiber, Schema, Stream } from "effect";
+import { assert_equals, assert_throws } from "./helpers/assert.ts";
+import { afterAll, test } from "vitest";
 import { stringify } from "devalue";
-import { test } from "vitest";
+
+afterAll(() => {
+	reset_server_runtime();
+});
 
 test("remote query adapter preserves decoded domain failures", async () => {
 	const domain_error = { _tag: "DomainError", message: "nope" };
@@ -31,8 +39,10 @@ test("remote query adapter preserves decoded domain failures", async () => {
 
 	const query = create_remote_query_adapter(native, (value) => value, "");
 
-	const error = await assert_rejects(() => Effect.runPromise(query(undefined)));
+	const exit = await get_server_dispatcher().run(Effect.exit(query(undefined)));
+	const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
 
+	assert_equals(Exit.isFailure(exit), true);
 	assert_equals(error, domain_error);
 });
 
@@ -83,8 +93,10 @@ test("remote query adapter wraps network failures as transport errors", async ()
 
 	const query = create_remote_query_adapter(native, (value) => value, "");
 
-	const error = await assert_rejects(() => Effect.runPromise(query(undefined)));
+	const exit = await get_server_dispatcher().run(Effect.exit(query(undefined)));
+	const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
 
+	assert_equals(Exit.isFailure(exit), true);
 	assert_equals((error as { _tag?: string })._tag, "RemoteTransportError");
 });
 
@@ -102,7 +114,7 @@ test("remote query load stays lazy until its Effect runs", async () => {
 	const QueryProgram = query(undefined);
 
 	assert_equals(load_calls, 0);
-	assert_equals(await Effect.runPromise(QueryProgram), "loaded");
+	assert_equals(await get_server_dispatcher().run(QueryProgram), "loaded");
 	assert_equals(load_calls, 1);
 });
 
@@ -113,8 +125,10 @@ test("remote response decoding preserves tag-only FormError failures", async () 
 	};
 	const query = create_remote_query_adapter(native, (value) => value, "");
 
-	const error = await assert_rejects(() => Effect.runPromise(query(undefined)));
+	const exit = await get_server_dispatcher().run(Effect.exit(query(undefined)));
+	const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
 
+	assert_equals(Exit.isFailure(exit), true);
 	assert_equals(error, form_error);
 });
 
@@ -143,7 +157,7 @@ test("remote query adapter prefers callable query over hydratable load", async (
 		"",
 	);
 
-	const result = await Effect.runPromise(query(undefined));
+	const result = await get_server_dispatcher().run(query(undefined));
 
 	assert_equals(result, { source: "query" });
 	assert_equals(called_query, true);
@@ -171,7 +185,7 @@ test("remote query adapter awaits modern thenable resources before legacy run ha
 
 	const query = create_remote_query_adapter<undefined, string>(native, (value) => value, "");
 
-	const result = await Effect.runPromise(query(undefined));
+	const result = await get_server_dispatcher().run(query(undefined));
 
 	assert_equals(result, "ready");
 	assert_equals(run_called, false);
@@ -188,8 +202,10 @@ test("remote query adapter maps SvelteKit app errors to HTTP errors", async () =
 
 	const query = create_remote_query_adapter(native, (value) => value, "");
 
-	const error = await assert_rejects(() => Effect.runPromise(query(undefined)));
+	const exit = await get_server_dispatcher().run(Effect.exit(query(undefined)));
+	const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
 
+	assert_equals(Exit.isFailure(exit), true);
 	assert_equals((error as { _tag?: string })._tag, "RemoteHttpError");
 	assert_equals((error as { status?: number }).status, 400);
 	assert_equals((error as { body?: unknown }).body, body);
@@ -205,8 +221,10 @@ test("remote query adapter maps plain http failures to http errors", async () =>
 
 	const query = create_remote_query_adapter(native, (value) => value, "");
 
-	const error = await assert_rejects(() => Effect.runPromise(query(undefined)));
+	const exit = await get_server_dispatcher().run(Effect.exit(query(undefined)));
+	const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
 
+	assert_equals(Exit.isFailure(exit), true);
 	assert_equals((error as { _tag?: string })._tag, "RemoteHttpError");
 	assert_equals((error as { status?: number }).status, 404);
 });
@@ -220,7 +238,7 @@ test("remote query adapter exposes http failures on the Effect error channel", a
 	};
 
 	const query = create_remote_query_adapter(native, (value) => value, "");
-	const result = await Effect.runPromise(
+	const result = await get_server_dispatcher().run(
 		query(undefined).pipe(
 			Effect.catchTag("RemoteHttpError", (error) => Effect.succeed(error.status)),
 		),
@@ -234,8 +252,10 @@ test("remote query adapter preserves SvelteKit redirects as control flow", async
 
 	const query = create_remote_query_adapter<undefined, never>(native, (value) => value, "");
 
-	const error = await assert_rejects(() => Effect.runPromise(query(undefined)));
+	const exit = await get_server_dispatcher().run(Effect.exit(query(undefined)));
+	const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
 
+	assert_equals(Exit.isFailure(exit), true);
 	assert_equals(isRedirect(error), true);
 	assert_equals((error as { status?: number }).status, 303);
 	assert_equals((error as { location?: string }).location, "/oauth");
@@ -300,8 +320,8 @@ test("remote query adapter preserves resource state and methods", async () => {
 	query.set(7);
 	query.withOverride((current) => current + 1);
 
-	await Effect.runPromise(query.refresh());
-	const result = await Effect.runPromise(query);
+	await get_server_dispatcher().run(query.refresh());
+	const result = await get_server_dispatcher().run(query);
 
 	assert_equals(result, 1);
 	assert_equals(refresh_called, true);
@@ -337,10 +357,10 @@ test("remote live query adapter returns a stream with separate controls", async 
 		"",
 	)(undefined);
 	const derived_query = query.pipe(Stream.map((value) => value.toUpperCase()));
-	const status = await Effect.runPromise(
+	const status = await get_server_dispatcher().run(
 		Stream.runCollect(derived_query.pipe(Live.status, Stream.take(1))),
 	);
-	const values = await Effect.runPromise(Stream.runCollect(derived_query));
+	const values = await get_server_dispatcher().run(Stream.runCollect(derived_query));
 
 	assert_equals(Stream.isStream(query), true);
 	assert_equals(status, [{ _tag: "Open" }]);
@@ -350,7 +370,7 @@ test("remote live query adapter returns a stream with separate controls", async 
 	assert_equals("reconnect" in query, false);
 	assert_equals(reconnect_called, false);
 
-	await Effect.runPromise(derived_query.pipe(Live.reconnect));
+	await get_server_dispatcher().run(derived_query.pipe(Live.reconnect));
 
 	assert_equals(reconnect_called, true);
 });
@@ -367,7 +387,7 @@ test("remote live status reports failed resources before closed resources", asyn
 		(value) => value,
 		"",
 	)(undefined);
-	const status = await Effect.runPromise(
+	const status = await get_server_dispatcher().run(
 		Stream.runCollect(query.pipe(Live.status, Stream.take(1))),
 	);
 
@@ -394,7 +414,7 @@ test("remote live status reads transport state when the stream runs", async () =
 
 	assert_equals(status_reads, 0);
 
-	const status = await Effect.runPromise(StatusProgram);
+	const status = await get_server_dispatcher().run(StatusProgram);
 
 	assert_equals(status, [{ _tag: "Open" }]);
 	assert_equals(status_reads, 1);
@@ -410,21 +430,28 @@ test("remote live reconnect reports missing native support as a transport failur
 		"",
 	)(undefined);
 
-	const error = await assert_rejects(() => Effect.runPromise(query.pipe(Live.reconnect)));
+	const exit = await get_server_dispatcher().run(Effect.exit(query.pipe(Live.reconnect)));
+	const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
 
+	assert_equals(Exit.isFailure(exit), true);
 	assert_equals((error as { _tag?: string })._tag, "RemoteTransportError");
 });
 
 test("remote command adapter resolves callable responses and tracks pending", async () => {
 	let release: (() => void) | undefined;
+	let signal_invoke_started = () => {};
 	let pending_while_running = 0;
 
 	const gate = new Promise<void>((resolve) => {
 		release = resolve;
 	});
+	const invoke_started = new Promise<void>((resolve) => {
+		signal_invoke_started = resolve;
+	});
 
 	const native = async (input: { title: string }) => {
 		pending_while_running = command.pending;
+		signal_invoke_started();
 
 		await gate;
 
@@ -432,18 +459,24 @@ test("remote command adapter resolves callable responses and tracks pending", as
 	};
 
 	const command = create_remote_command_adapter(native, (value) => value);
+	const CommandProgram = Effect.gen(function* () {
+		const fiber = yield* Effect.forkChild(command({ title: "publish" }));
 
-	const promise = Effect.runPromise(command({ title: "publish" }));
+		yield* Effect.promise(() => invoke_started);
 
-	await new Promise((resolve) => setTimeout(resolve, 0));
+		const pending = command.pending;
+		const native_pending = pending_while_running;
 
-	assert_equals(command.pending, 1);
-	assert_equals(pending_while_running, 1);
+		yield* Effect.sync(() => release?.());
 
-	release?.();
+		const result = yield* Fiber.join(fiber);
 
-	const result = await promise;
+		return { native_pending, pending, result };
+	});
+	const { native_pending, pending, result } = await get_server_dispatcher().run(CommandProgram);
 
+	assert_equals(pending, 1);
+	assert_equals(native_pending, 1);
 	assert_equals(result, { ok: "publish" });
 	assert_equals(command.pending, 0);
 });
@@ -461,7 +494,7 @@ test("remote command invocation and pending accounting stay lazy", async () => {
 
 	assert_equals(invoke_calls, 0);
 	assert_equals(command.pending, 0);
-	assert_equals(await Effect.runPromise(CommandProgram), "done");
+	assert_equals(await get_server_dispatcher().run(CommandProgram), "done");
 	assert_equals(invoke_calls, 1);
 	assert_equals(command.pending, 0);
 });
@@ -478,17 +511,20 @@ test("remote command interruption releases its pending acquisition", async () =>
 		return new Promise<never>(() => {});
 	};
 	const command = create_remote_command_adapter<void, never>(native, (value) => value);
-	const controller = new AbortController();
-	const running = Effect.runPromiseExit(command(undefined), { signal: controller.signal });
+	const CommandProgram = Effect.gen(function* () {
+		const fiber = yield* Effect.forkChild(command(undefined));
 
-	await invoke_started;
+		yield* Effect.promise(() => invoke_started);
 
-	assert_equals(command.pending, 1);
+		const pending = command.pending;
 
-	controller.abort();
+		yield* Fiber.interrupt(fiber);
 
-	await running;
+		return pending;
+	});
+	const pending = await get_server_dispatcher().run(CommandProgram);
 
+	assert_equals(pending, 1);
 	assert_equals(command.pending, 0);
 });
 
@@ -496,7 +532,7 @@ test("remote command adapter decodes empty successful responses", async () => {
 	const native = () => Promise.resolve(new Response(null, { status: 204 }));
 	const command = create_remote_command_adapter<void, void>(native, (value) => value);
 
-	const result = await Effect.runPromise(command(undefined));
+	const result = await get_server_dispatcher().run(command(undefined));
 
 	assert_equals(result, undefined);
 });
@@ -513,7 +549,7 @@ test("remote command adapter supports invoke objects and rejects invalid factori
 		(value) => value,
 	);
 
-	const result = await Effect.runPromise(command({ id: 7 }));
+	const result = await get_server_dispatcher().run(command({ id: 7 }));
 
 	assert_equals(result, { id: 7, source: "invoke" });
 	assert_throws(
@@ -604,7 +640,7 @@ test("remote form adapter preserves descriptors and wraps validate in an Effect"
 	assert_equals(form.method, "POST");
 	assert_equals(form.action, "?/remote=abc%2Fcreate");
 
-	await Effect.runPromise(form.validate());
+	await get_server_dispatcher().run(form.validate());
 
 	assert_equals(validate_called, true);
 });
@@ -633,7 +669,7 @@ test("remote form adapter maps all to includeUntouched for stable Kit validate",
 
 	const form = create_remote_form_adapter(native, (value) => value, "");
 
-	await Effect.runPromise(form.validate({ all: true, preflightOnly: true }));
+	await get_server_dispatcher().run(form.validate({ all: true, preflightOnly: true }));
 
 	assert_equals(received_options?.all, true);
 	assert_equals(received_options?.includeUntouched, true);
@@ -666,7 +702,7 @@ test("remote form adapter keeps all for next Kit validate", async () => {
 
 	const form = create_remote_form_adapter(native, (value) => value, "");
 
-	await Effect.runPromise(form.validate({ all: true, preflightOnly: true }));
+	await get_server_dispatcher().run(form.validate({ all: true, preflightOnly: true }));
 
 	assert_equals(received_options?.all, true);
 	assert_equals("includeUntouched" in (received_options ?? {}), false);
@@ -724,7 +760,7 @@ test("remote form adapter posts explicit input when native submit is form-bound"
 			"/_app/remote",
 		);
 
-		const result = await Effect.runPromise(form({ title: "hello" }));
+		const result = await get_server_dispatcher().run(form({ title: "hello" }));
 
 		assert_equals(result, { ok: true });
 		assert_equals(native_submit_called, false);
@@ -781,18 +817,23 @@ test("interrupting a remote form aborts its lazy fetch request", async () => {
 
 		assert_equals(fetch_calls, 0);
 
-		const controller = new AbortController();
-		const running = Effect.runPromiseExit(FormProgram, { signal: controller.signal });
+		const InterruptProgram = Effect.gen(function* () {
+			const fiber = yield* Effect.forkChild(FormProgram);
 
-		await fetch_started;
+			yield* Effect.promise(() => fetch_started);
 
-		assert_equals(fetch_calls, 1);
-		assert_equals(request_signal?.aborted, false);
+			const calls_before_interrupt = fetch_calls;
+			const aborted_before_interrupt = request_signal?.aborted;
 
-		controller.abort();
+			yield* Fiber.interrupt(fiber);
 
-		await running;
+			return { aborted_before_interrupt, calls_before_interrupt };
+		});
+		const { aborted_before_interrupt, calls_before_interrupt } =
+			await get_server_dispatcher().run(InterruptProgram);
 
+		assert_equals(calls_before_interrupt, 1);
+		assert_equals(aborted_before_interrupt, false);
 		assert_equals(request_signal?.aborted, true);
 	} finally {
 		globalThis.fetch = original_fetch;
@@ -822,7 +863,7 @@ test("remote form adapter decodes SvelteKit data result envelopes", async () => 
 			"/_app/remote",
 		);
 
-		const result = await Effect.runPromise(form({ title: "hello" }));
+		const result = await get_server_dispatcher().run(form({ title: "hello" }));
 
 		assert_equals(result, { ok: true });
 	} finally {
@@ -849,7 +890,7 @@ test("remote form adapter uses native submit when no remote endpoint is configur
 		"",
 	);
 
-	const result = await Effect.runPromise(form({ title: "draft" }));
+	const result = await get_server_dispatcher().run(form({ title: "draft" }));
 
 	assert_equals(result, "native draft");
 	assert_equals(submitted_title, "draft");
@@ -862,8 +903,10 @@ test("remote form adapter reports transport errors without submit or endpoint", 
 		"",
 	);
 
-	const error = await assert_rejects(() => Effect.runPromise(form({ title: "draft" })));
+	const exit = await get_server_dispatcher().run(Effect.exit(form({ title: "draft" })));
+	const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
 
+	assert_equals(Exit.isFailure(exit), true);
 	assert_equals((error as { _tag?: string })._tag, "RemoteTransportError");
 });
 
@@ -892,8 +935,10 @@ test("remote form adapter maps endpoint validation issues to the Effect error ch
 			"/_app/remote",
 		);
 
-		const error = await assert_rejects(() => Effect.runPromise(form({ title: "x" })));
+		const exit = await get_server_dispatcher().run(Effect.exit(form({ title: "x" })));
+		const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
 
+		assert_equals(Exit.isFailure(exit), true);
 		assert_equals((error as { _tag?: string })._tag, "RemoteValidationError");
 		assert_equals(
 			(error as { issues?: Array<{ message: string }> }).issues?.[0]?.message,
@@ -929,7 +974,7 @@ test("remote form adapter returns keyed forms from nested for calls", async () =
 	);
 
 	const child = form.for("profile");
-	const result = await Effect.runPromise(child({ title: "saved" }));
+	const result = await get_server_dispatcher().run(child({ title: "saved" }));
 
 	assert_equals(keys, ["profile"]);
 	assert_equals(child.action, "?/remote=abc%2Fprofile");
@@ -965,7 +1010,7 @@ test("remote form adapter preflight calls native preflight and keeps callable", 
 	);
 
 	const preflighted = form.preflight(schema);
-	const result = await Effect.runPromise(preflighted({ title: "ok" }));
+	const result = await get_server_dispatcher().run(preflighted({ title: "ok" }));
 
 	assert_equals(preflighted, form);
 	assert_equals(schemas, [schema]);
@@ -1034,8 +1079,10 @@ test("remote form adapter runs preflight before direct endpoint submit", async (
 
 		form.preflight(schema);
 
-		const error = await assert_rejects(() => Effect.runPromise(form({ title: "" })));
+		const exit = await get_server_dispatcher().run(Effect.exit(form({ title: "" })));
+		const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
 
+		assert_equals(Exit.isFailure(exit), true);
 		assert_equals((error as { _tag?: string })._tag, "RemoteValidationError");
 		assert_equals(
 			(error as { issues?: Array<{ message: string }> }).issues?.[0]?.message,
@@ -1154,7 +1201,7 @@ test("remote form adapter resolves enhance submit to form result", async () => {
 		submit_effect = (event as { submit: () => unknown }).submit();
 	});
 
-	const result = await Effect.runPromise(
+	const result = await get_server_dispatcher().run(
 		submit_effect as Effect.Effect<{ id: string } | undefined, unknown, unknown>,
 	);
 
@@ -1252,7 +1299,7 @@ test("remote form adapter preserves enhance submit updates as an Effect", async 
 	assert_equals(Effect.isEffect(submit_effect), true);
 	assert_equals(submit_started, false);
 
-	const result = await Effect.runPromise(
+	const result = await get_server_dispatcher().run(
 		submit_effect as Effect.Effect<{ id: string } | undefined, unknown, unknown>,
 	);
 

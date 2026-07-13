@@ -23,7 +23,7 @@ import ts from "typescript";
 interface ClassifiedCandidate {
 	candidate: MarkupCandidate;
 	kind: TagKind;
-	attribute_name_replacement?: AttributeNameReplacement;
+	attribute_name_replacement: AttributeNameReplacement | undefined;
 }
 
 interface AttributeNameReplacement {
@@ -42,10 +42,24 @@ type ExpressionRelocation = {
 /**
  * Emits source edits for classified markup Effect expressions.
  *
+ * @example
+ * ```ts
+ * const replacements = emit_replacements(
+ *   classified,
+ *   effect_context,
+ *   helper_bindings,
+ *   name_allocator,
+ *   "client",
+ * );
+ * ```
+ *
  * @since 2.0.0
  * @param classified - Candidates paired with their Svelte markup context.
  * @param effect_context - Effect import bindings available to markup
  *   expression rewrites.
+ * @param helper_bindings - Local names reserved for generated runtime helpers.
+ * @param name_allocator - Allocator that keeps generated names collision-free.
+ * @param target - Runtime target that determines server fallback behavior.
  * @returns Replacements ready to apply to the original component source.
  */
 export function emit_replacements(
@@ -185,7 +199,7 @@ function emit_replacement(
 		end: candidate.end,
 		text: replacement_text,
 		helpers,
-		relocation,
+		...(relocation ? { relocation } : {}),
 	};
 }
 

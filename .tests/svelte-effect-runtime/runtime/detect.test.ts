@@ -1,9 +1,10 @@
-import { test } from "vitest";
-import { assert_equals } from "./helpers/assert.ts";
 import {
 	contains_top_level_yield_star,
 	is_function_boundary,
 } from "../../../modules/svelte-effect-runtime/src/detect.ts";
+import { assert_equals } from "./helpers/assert.ts";
+import { test } from "vitest";
+
 import ts from "typescript";
 
 function parse_expression(text: string): ts.Node {

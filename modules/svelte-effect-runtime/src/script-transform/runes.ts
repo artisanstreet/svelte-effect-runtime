@@ -4,7 +4,7 @@ import { slice } from "./source.ts";
 
 import ts from "typescript";
 
-const ASYNC_EXPRESSION_RUNES = new Set([
+const async_expression_runes = new Set([
 	"$derived",
 	"$state",
 	"$state.raw",
@@ -12,11 +12,16 @@ const ASYNC_EXPRESSION_RUNES = new Set([
 	"$bindable",
 ]);
 
-const CALLBACK_RUNES = new Set(["$derived.by", "$effect", "$effect.pre", "$effect.root"]);
+const callback_runes = new Set(["$derived.by", "$effect", "$effect.pre", "$effect.root"]);
 
 /**
  * Validates that `yield*` only appears in rune positions the script-effect
  * transform can lower without changing the rune's normal Svelte contract.
+ *
+ * @example
+ * ```ts
+ * validate_rune_yield_usage(source_file, source, "Counter.svelte");
+ * ```
  *
  * @since 2.0.0
  * @param node - AST node to scan.
@@ -49,11 +54,11 @@ function validate_call_expression(
 		return;
 	}
 
-	if (!ASYNC_EXPRESSION_RUNES.has(rune_name) && contains_top_level_yield_star(call)) {
+	if (!async_expression_runes.has(rune_name) && contains_top_level_yield_star(call)) {
 		throw new AsyncEffectInSyncRuneError(rune_name, slice(content, call), filename);
 	}
 
-	if (!CALLBACK_RUNES.has(rune_name)) {
+	if (!callback_runes.has(rune_name)) {
 		return;
 	}
 

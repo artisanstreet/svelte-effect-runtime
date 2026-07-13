@@ -6,6 +6,12 @@ import { Effect } from "effect";
 /**
  * Creates a path-aware proxy for remote form validation failures.
  *
+ * @example
+ * ```ts
+ * const invalid = make_invalid_proxy();
+ * return yield* invalid.email("Enter a valid email address.");
+ * ```
+ *
  * @since 2.0.0
  * @param path - Current nested form path.
  * @returns Callable invalid proxy for this path.

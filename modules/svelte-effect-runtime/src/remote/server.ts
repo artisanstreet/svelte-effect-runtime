@@ -20,6 +20,11 @@ export { encode_remote_failure } from "$/remote/cause-codec.ts";
  * exit into the shape expected by SvelteKit, and returns the result or
  * throws a SvelteKit-compatible error.
  *
+ * @example
+ * ```ts
+ * const value = await run_remote_effect(program, runtime, invalid, error);
+ * ```
+ *
  * @since 2.0.0
  * @param effect - The Effect program to execute.
  * @param runtime - The server-side ManagedRuntime.
@@ -90,6 +95,7 @@ function handle_failure(
  * @since 2.0.0
  * @param issues - The list of form validation issues.
  * @param invalid - SvelteKit's `invalid` helper bound to the current request.
+ * @returns Never returns because `invalid` throws SvelteKit control flow.
  * @internal
  */
 export function throw_form_error(issues: readonly FormIssue[], invalid: SvelteInvalid): never {

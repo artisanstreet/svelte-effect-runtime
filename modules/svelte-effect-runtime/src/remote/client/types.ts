@@ -15,16 +15,21 @@ import type { Effect, Schema, Stream } from "effect";
  * @since 2.4.2
  * @internal
  */
-export declare const EFFECT_REMOTE_QUERY_UPDATE: unique symbol;
+export declare const effect_remote_query_update: unique symbol;
 
 /**
  * Type-only brand carried by SER query and live-query adapter functions.
+ *
+ * @example
+ * ```ts
+ * type BrandedQuery = EffectRemoteQueryUpdateBrand & (() => unknown);
+ * ```
  *
  * @since 2.4.2
  * @internal
  */
 export type EffectRemoteQueryUpdateBrand = {
-	readonly [EFFECT_REMOTE_QUERY_UPDATE]: true;
+	readonly [effect_remote_query_update]: true;
 };
 
 type EffectRemoteFormCallable<Input extends RemoteFormInput | void, Output, ErrorType> = [
@@ -120,6 +125,11 @@ type EffectRemoteQueryUpdateResource = Effect.Effect<unknown, unknown> & {
  * Represents a pending operation counter that remote command adapters
  * use to track in-flight requests.
  *
+ * @example
+ * ```ts
+ * const pending: Pending = { value: 0 };
+ * ```
+ *
  * @since 2.0.0
  * @internal
  */
@@ -131,12 +141,22 @@ export interface Pending {
 /**
  * Native callable method shape used when reflecting SvelteKit remote helpers.
  *
+ * @example
+ * ```ts
+ * const invoke: NativeMethod = (...args) => native_command(...args);
+ * ```
+ *
  * @since 2.0.0
  */
 export type NativeMethod = (...args: unknown[]) => unknown;
 
 /**
  * Property bag shape used for native SvelteKit form objects.
+ *
+ * @example
+ * ```ts
+ * const native_form: NativeFormRecord = { action: "/?/remote=hash/save" };
+ * ```
  *
  * @since 2.0.0
  */

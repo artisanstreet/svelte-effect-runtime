@@ -16,6 +16,12 @@ type EffectRemoteCommandAdapter<Input, Output, ErrorType = never> = ((
  * Creates a remote command adapter. The adapter preserves the native
  * pending getter and turns each invocation into an Effect.
  *
+ * @example
+ * ```ts
+ * const save = create_remote_command_adapter(native_save, (value) => value);
+ * const result = yield* save({ title: "Draft" });
+ * ```
+ *
  * @since 2.0.0
  * @param native_factory - SvelteKit's native command function or a legacy
  *   response factory used by tests.

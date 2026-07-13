@@ -5,7 +5,7 @@ import type { AST } from "svelte/compiler";
 interface ClassifiedCandidate {
 	candidate: MarkupCandidate;
 	kind: TagKind;
-	attribute_name_replacement?: AttributeNameReplacement;
+	attribute_name_replacement: AttributeNameReplacement | undefined;
 }
 
 interface AttributeNameReplacement {
@@ -16,6 +16,11 @@ interface AttributeNameReplacement {
 
 /**
  * Matches sanitized placeholders back to their Svelte AST context.
+ *
+ * @example
+ * ```ts
+ * const classified = classify_candidates(ast, scanned.candidates);
+ * ```
  *
  * @since 2.0.0
  * @param ast - Parsed Svelte AST for the sanitized component markup.

@@ -4,7 +4,7 @@ import { scan_svelte_effect_source } from "$/compiler/source-scan.ts";
 import { collect_yield_star_nodes } from "$/script-transform/ast.ts";
 import { contains_top_level_yield_star } from "$/detect.ts";
 import type { MarkupCandidate, TagKind } from "./types.ts";
-import { HELPERS } from "./constants.ts";
+import { default_helper_bindings } from "./constants.ts";
 
 import MagicString from "magic-string";
 import ts from "typescript";
@@ -364,7 +364,7 @@ function analyze_event_yield(inner: string): {
 	const event = strip_arrow_function(inner);
 	const analysis = analyze_event_body_yield_star(event.body);
 	const generated_run = new RegExp(
-		`${HELPERS.dispatcher}(?:_\\d+)?\\.emit\\(\\{\\s*type:\\s*${HELPERS.codes}(?:_\\d+)?\\.Markup\\.Run`,
+		`${default_helper_bindings.dispatcher}(?:_\\d+)?\\.emit\\(\\{\\s*type:\\s*${default_helper_bindings.codes}(?:_\\d+)?\\.Markup\\.Run`,
 	);
 
 	if (generated_run.test(event.body)) {

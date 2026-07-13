@@ -142,6 +142,7 @@ export interface EffectBlock {
  * ```ts
  * const expression: LoweredExpression = {
  *   temps: [],
+ *   type_helpers: [],
  *   rewritten_expr: "__SER___dispatcher.value(...)",
  *   effect_blocks: [],
  * };
@@ -151,7 +152,7 @@ export interface EffectBlock {
  */
 export interface LoweredExpression {
 	temps: TempBinding[];
-	type_helpers?: string[];
+	type_helpers: string[];
 	rewritten_expr: string;
 	effect_blocks: EffectBlock[];
 }

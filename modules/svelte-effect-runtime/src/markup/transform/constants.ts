@@ -1,4 +1,4 @@
-export const HELPERS = {
+export const default_helper_bindings = {
 	codes: "Code",
 	dispatcher: "Dispatcher",
 	yieldable: "ToEffect",

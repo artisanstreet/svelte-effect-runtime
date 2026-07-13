@@ -4,6 +4,12 @@ import type { Plugin } from "vite";
 /**
  * Options for the {@link effect} Vite plugin.
  *
+ * @example
+ * ```ts
+ * const options: EffectOptions = { debug: true };
+ * const plugins = effect(options);
+ * ```
+ *
  * @since 2.0.0
  */
 export interface EffectOptions {
@@ -149,7 +155,7 @@ function make_svelte_transform_plugin(component_filter: SvelteComponentModuleFil
 			config.logger.info(make_pre_transform_plugin_notice(conflicting_plugin_names));
 		},
 
-		async transform(code: string, id: string, options?: { ssr?: boolean }) {
+		async transform(code: string, id: string, options?: { ssr?: boolean | undefined }) {
 			if (!component_filter.is_module(id)) {
 				return undefined;
 			}

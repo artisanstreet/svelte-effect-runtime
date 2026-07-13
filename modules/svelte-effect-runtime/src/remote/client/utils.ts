@@ -4,6 +4,13 @@ import type { NativeMethod } from "./types.ts";
 /**
  * Checks whether a value has a callable method property.
  *
+ * @example
+ * ```ts
+ * if (has_method(resource, "refresh")) {
+ *   resource.refresh();
+ * }
+ * ```
+ *
  * @since 2.0.0
  * @param value - Value to inspect.
  * @param key - Method key to look up.

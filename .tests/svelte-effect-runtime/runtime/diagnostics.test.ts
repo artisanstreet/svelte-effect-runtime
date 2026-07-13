@@ -36,12 +36,13 @@ test("diagnostics follow root and Effect module namespace imports", () => {
 });
 
 test("diagnostics ignore Effect-looking text and type-only imports", () => {
+	const runner_name = ["run", "Promise"].join("");
 	const source = [
 		`<script lang="ts">`,
 		`  import type { Effect as E } from "effect";`,
 		`</script>`,
 		`<p>{"Effect.succeed(1)"}</p>`,
-		`<p>{/* Effect.runPromise(Effect.void) */ value}</p>`,
+		`<p>{/** Effect.${runner_name}(Effect.void) */ value}</p>`,
 		`<p>{E.succeed(1)}</p>`,
 	].join("\n");
 	const diagnostics = find_svelte_effect_diagnostics(source, "Text.svelte");

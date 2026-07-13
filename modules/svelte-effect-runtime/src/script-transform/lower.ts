@@ -15,6 +15,11 @@ import ts from "typescript";
 /**
  * Delegates a statement to the correct lowerer based on syntax kind.
  *
+ * @example
+ * ```ts
+ * const lowered = lower_statement(statement, source, context);
+ * ```
+ *
  * @since 2.0.0
  * @param stmt - Statement to lower.
  * @param content - Original source text.

@@ -7,7 +7,7 @@ import type {
 	Replacement,
 } from "./types.ts";
 import { collect_top_level_binding_names } from "$/script-transform/imports.ts";
-import { HELPERS } from "./constants.ts";
+import { default_helper_bindings } from "./constants.ts";
 
 import type MagicString from "magic-string";
 import ts from "typescript";
@@ -76,7 +76,7 @@ export function inject_helpers(
 	magic: MagicString,
 	content: string,
 	helpers: HelperDeclaration[] = [],
-	bindings: MarkupHelperBindings = HELPERS,
+	bindings: MarkupHelperBindings = default_helper_bindings,
 ): Insertion | undefined {
 	const import_helpers = unique_import_helpers(helpers);
 	const local_helpers = helpers.filter((helper) => !is_import_helper(helper));
@@ -148,9 +148,9 @@ export function make_markup_helper_bindings(content: string): {
 
 	return {
 		bindings: {
-			codes: name_allocator.reserve(HELPERS.codes),
-			dispatcher: name_allocator.reserve(HELPERS.dispatcher),
-			yieldable: name_allocator.reserve(HELPERS.yieldable),
+			codes: name_allocator.reserve(default_helper_bindings.codes),
+			dispatcher: name_allocator.reserve(default_helper_bindings.dispatcher),
+			yieldable: name_allocator.reserve(default_helper_bindings.yieldable),
 		},
 		name_allocator,
 	};
@@ -231,9 +231,12 @@ function make_import_helper(content: string, import_text: string): string | unde
 }
 
 function make_dispatcher_import(bindings: MarkupHelperBindings): string {
-	const dispatcher = make_import_specifier(HELPERS.dispatcher, bindings.dispatcher);
-	const codes = make_import_specifier(HELPERS.codes, bindings.codes);
-	const yieldable = make_import_specifier(HELPERS.yieldable, bindings.yieldable);
+	const dispatcher = make_import_specifier(
+		default_helper_bindings.dispatcher,
+		bindings.dispatcher,
+	);
+	const codes = make_import_specifier(default_helper_bindings.codes, bindings.codes);
+	const yieldable = make_import_specifier(default_helper_bindings.yieldable, bindings.yieldable);
 
 	return `import { ${dispatcher}, ${codes}, ${yieldable} } from "svelte-effect-runtime/internal/generators";`;
 }

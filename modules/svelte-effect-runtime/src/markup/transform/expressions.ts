@@ -3,6 +3,11 @@ import ts from "typescript";
 /**
  * Strips an event handler arrow function down to its executable body.
  *
+ * @example
+ * ```ts
+ * const handler = strip_arrow_function("(event) => yield* save(event)");
+ * ```
+ *
  * @since 2.0.0
  * @param expr - Event handler expression text from the original markup.
  * @returns Handler parameters, body text, and body offsets inside `expr`.
@@ -49,6 +54,11 @@ export function strip_arrow_function(expr: string): {
 
 /**
  * Returns whether an expression is a callback function.
+ *
+ * @example
+ * ```ts
+ * is_callback_function_expression("() => save()"); // true
+ * ```
  *
  * @since 2.0.0
  * @param expr - Expression text from a markup attribute or expression tag.
@@ -124,6 +134,11 @@ export function analyze_event_body_yield_star(body: string): {
 
 /**
  * Collects free identifiers that must be captured as reactive dependencies.
+ *
+ * @example
+ * ```ts
+ * collect_free_identifiers("yield* load(user_id)"); // ["load", "user_id"]
+ * ```
  *
  * @since 2.0.0
  * @param expr_text - Markup expression text to inspect.

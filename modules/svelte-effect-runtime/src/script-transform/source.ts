@@ -4,6 +4,11 @@ import type ts from "typescript";
 /**
  * Creates a source map from transformed script back to the original block.
  *
+ * @example
+ * ```ts
+ * const map = create_source_map(magic, "Counter.svelte");
+ * ```
+ *
  * @since 2.0.0
  * @param magic - MagicString instance holding the transformed source.
  * @param filename - Source filename used for the source map entry.
@@ -22,6 +27,11 @@ export function create_source_map(magic: MagicString, filename: string): Record<
 /**
  * Slices a substring matching a node's full source range.
  *
+ * @example
+ * ```ts
+ * const text = slice(source, statement);
+ * ```
+ *
  * @since 2.0.0
  * @param content - Original source text.
  * @param node - AST node whose full range should be extracted.
@@ -33,6 +43,11 @@ export function slice(content: string, node: ts.Node): string {
 
 /**
  * Slices a substring matching a node's source range without leading trivia.
+ *
+ * @example
+ * ```ts
+ * const expression = slice_start(source, initializer);
+ * ```
  *
  * @since 2.0.0
  * @param content - Original source text.

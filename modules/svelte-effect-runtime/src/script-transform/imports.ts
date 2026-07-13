@@ -13,6 +13,11 @@ interface RuntimeImportOptions {
 /**
  * Builds the import statements injected by the script transform.
  *
+ * @example
+ * ```ts
+ * const imports = make_imports(false, false, false);
+ * ```
+ *
  * @since 2.0.0
  * @param has_effect_import - Whether the user already imports `Effect`.
  * @param has_dispatcher_import - Whether the user already imports
@@ -101,6 +106,11 @@ function make_named_import(imported_name: string, local_name: string, type_only 
 /**
  * Checks whether a source file imports a local binding from a module.
  *
+ * @example
+ * ```ts
+ * const has_effect = has_local_import_binding(source_file, "effect", "Effect");
+ * ```
+ *
  * @since 2.0.0
  * @param source_file - Parsed TypeScript source file to inspect.
  * @param module_name - Module specifier to match.
@@ -148,20 +158,12 @@ export function has_local_import_binding(
 }
 
 /**
- * Checks whether a source file already has any top-level binding with a local
- * name.
- *
- * @since 2.4.2
- * @param source_file - Parsed TypeScript source file to inspect.
- * @param local_name - Local binding name to look for.
- * @returns Whether that local name is already declared in the file.
- */
-export function has_top_level_binding(source_file: ts.SourceFile, local_name: string): boolean {
-	return collect_top_level_binding_names(source_file).includes(local_name);
-}
-
-/**
  * Collects every local binding declared at module top level.
+ *
+ * @example
+ * ```ts
+ * const reserved_names = collect_top_level_binding_names(source_file);
+ * ```
  *
  * @since 2.4.2
  * @param source_file - Parsed TypeScript source file to inspect.

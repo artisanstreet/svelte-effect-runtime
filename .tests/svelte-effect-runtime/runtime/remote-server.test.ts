@@ -1,4 +1,17 @@
-import { test } from "vitest";
+import {
+	encode_remote_failure,
+	normalize_remote_helper_error,
+	run_remote_effect,
+	throw_form_error,
+} from "../../../modules/svelte-effect-runtime/src/remote/server.ts";
+import {
+	error as svelte_error,
+	invalid as svelte_invalid,
+	isHttpError,
+	isRedirect,
+	isValidationError,
+	redirect as svelte_redirect,
+} from "@sveltejs/kit";
 import {
 	assert_false,
 	assert_truthy,
@@ -8,33 +21,22 @@ import {
 	assert_string_includes,
 } from "./helpers/assert.ts";
 import {
-	error as svelte_error,
-	invalid as svelte_invalid,
-	isHttpError,
-	isRedirect,
-	isValidationError,
-	redirect as svelte_redirect,
-} from "@sveltejs/kit";
-import { Cause, Data, Effect, Stream } from "effect";
-import { parse } from "devalue";
+	Error as ServerError,
+	Redirect as ServerRedirect,
+} from "../../../modules/svelte-effect-runtime/src/server/index.ts";
 import {
 	Error as RootError,
 	Redirect as RootRedirect,
 } from "../../../modules/svelte-effect-runtime/src/mod.ts";
-import {
-	Error as ServerError,
-	Redirect as ServerRedirect,
-} from "../../../modules/svelte-effect-runtime/src/server/index.ts";
-import { run_live_handler_source } from "../../../modules/svelte-effect-runtime/src/server/effects.ts";
-import {
-	encode_remote_failure,
-	normalize_remote_helper_error,
-	run_remote_effect,
-	throw_form_error,
-} from "../../../modules/svelte-effect-runtime/src/remote/server.ts";
 import { classify_remote_cause } from "../../../modules/svelte-effect-runtime/src/remote/cause-codec.ts";
-import { create_form_error } from "../../../modules/svelte-effect-runtime/src/remote/shared.ts";
+import { run_live_handler_source } from "../../../modules/svelte-effect-runtime/src/server/effects.ts";
+import { get_server_dispatcher } from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
 import { InvalidLiveQueryReturnError } from "../../../modules/svelte-effect-runtime/src/errors.ts";
+import { create_form_error } from "../../../modules/svelte-effect-runtime/src/remote/shared.ts";
+import { Cause, Data, Effect, Exit, Stream } from "effect";
+import { parse } from "devalue";
+import { test } from "vitest";
+
 import * as sveltekit_server from "../../../modules/svelte-effect-runtime/src/internal/sveltekit-server.ts";
 
 test("normalize_remote_helper_error wraps request-event context errors", () => {
@@ -187,7 +189,7 @@ test("encode_remote_failure serialises a tagged error from a Cause", async () =>
 		return yield* Effect.fail({ _tag: "MyError", code: 42 });
 	});
 
-	const exit = await Effect.runPromise(Effect.exit(program));
+	const exit = await get_server_dispatcher().run(Effect.exit(program));
 	const failure = exit as { _tag: string; cause: unknown };
 
 	if (failure._tag !== "Failure") {
@@ -216,7 +218,7 @@ test("encode_remote_failure serialises Effect tagged error instances", async () 
 		);
 	});
 
-	const exit = await Effect.runPromise(Effect.exit(program));
+	const exit = await get_server_dispatcher().run(Effect.exit(program));
 	const failure = exit as { _tag: string; cause: unknown };
 
 	if (failure._tag !== "Failure") {
@@ -299,55 +301,65 @@ test("encode_remote_failure handles cause with no failures gracefully", () => {
 });
 
 test("Error resolves named status aliases", async () => {
-	const thrown = await assert_rejects(() =>
-		Effect.runPromise(ServerError("NotFound", "missing")),
-	);
+	const exit = await get_server_dispatcher().run(Effect.exit(ServerError("NotFound", "missing")));
+	const thrown = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
 
+	assert_equals(Exit.isFailure(exit), true);
 	assert_truthy(isHttpError(thrown, 404));
 	assert_equals(thrown.body, { message: "missing", status: 404 });
 });
 
 test("Error passes numeric statuses through", async () => {
-	const thrown = await assert_rejects(() =>
-		Effect.runPromise(ServerError(418, "short and stout")),
+	const exit = await get_server_dispatcher().run(
+		Effect.exit(ServerError(418, "short and stout")),
 	);
+	const thrown = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
 
+	assert_equals(Exit.isFailure(exit), true);
 	assert_truthy(isHttpError(thrown, 418));
 	assert_equals(thrown.body, { message: "short and stout", status: 418 });
 });
 
 test("Error accepts SvelteKit 3 properties overload", async () => {
-	const thrown = await assert_rejects(() =>
-		Effect.runPromise(ServerError(400, "bad request", {})),
+	const exit = await get_server_dispatcher().run(
+		Effect.exit(ServerError(400, "bad request", {})),
 	);
+	const thrown = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
 
+	assert_equals(Exit.isFailure(exit), true);
 	assert_truthy(isHttpError(thrown, 400));
 	assert_equals(thrown.body, { message: "bad request", status: 400 });
 });
 
 test("Redirect resolves named status aliases", async () => {
-	const thrown = await assert_rejects(() =>
-		Effect.runPromise(ServerRedirect("TemporaryRedirect", "/oauth")),
+	const exit = await get_server_dispatcher().run(
+		Effect.exit(ServerRedirect("TemporaryRedirect", "/oauth")),
 	);
+	const thrown = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
 
+	assert_equals(Exit.isFailure(exit), true);
 	assert_truthy(isRedirect(thrown));
 	assert_equals(thrown.status, 307);
 	assert_equals(thrown.location, "/oauth");
 });
 
 test("Redirect passes numeric statuses through", async () => {
-	const thrown = await assert_rejects(() => Effect.runPromise(ServerRedirect(303, "/done")));
+	const exit = await get_server_dispatcher().run(Effect.exit(ServerRedirect(303, "/done")));
+	const thrown = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
 
+	assert_equals(Exit.isFailure(exit), true);
 	assert_truthy(isRedirect(thrown));
 	assert_equals(thrown.status, 303);
 	assert_equals(thrown.location, "/done");
 });
 
 test("Redirect passes SvelteKit 3 external options through", async () => {
-	const thrown = await assert_rejects(() =>
-		Effect.runPromise(ServerRedirect(303, "https://example.com/oauth", { external: true })),
+	const exit = await get_server_dispatcher().run(
+		Effect.exit(ServerRedirect(303, "https://example.com/oauth", { external: true })),
 	);
+	const thrown = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
 
+	assert_equals(Exit.isFailure(exit), true);
 	assert_truthy(isRedirect(thrown));
 	assert_equals(thrown.status, 303);
 	assert_equals(thrown.location, "https://example.com/oauth");
@@ -383,7 +395,7 @@ test("control-flow helpers type-check in Effect generators", () => {
 test("run_remote_effect returns the success value", async () => {
 	class TestRuntime {
 		runPromise(effect: Effect.Effect<unknown, unknown, unknown>): Promise<unknown> {
-			return Effect.runPromise(effect);
+			return get_server_dispatcher().run(effect);
 		}
 	}
 
@@ -412,7 +424,7 @@ test("run_remote_effect returns the success value", async () => {
 test("run_remote_effect throws invalid on FormError failure", async () => {
 	class TestRuntime {
 		runPromise(effect: Effect.Effect<unknown, unknown, unknown>): Promise<unknown> {
-			return Effect.runPromise(effect);
+			return get_server_dispatcher().run(effect);
 		}
 	}
 
@@ -442,7 +454,7 @@ test("run_remote_effect throws invalid on FormError failure", async () => {
 test("run_remote_effect throws error on non-FormError failure", async () => {
 	class TestRuntime {
 		runPromise(effect: Effect.Effect<unknown, unknown, unknown>): Promise<unknown> {
-			return Effect.runPromise(effect);
+			return get_server_dispatcher().run(effect);
 		}
 	}
 
@@ -480,7 +492,7 @@ test("run_remote_effect throws error on non-FormError failure", async () => {
 test("run_remote_effect rethrows interrupt-only causes outside remote envelopes", async () => {
 	class TestRuntime {
 		runPromise(effect: Effect.Effect<unknown, unknown, unknown>): Promise<unknown> {
-			return Effect.runPromise(effect);
+			return get_server_dispatcher().run(effect);
 		}
 	}
 
@@ -510,7 +522,7 @@ test("run_remote_effect rethrows interrupt-only causes outside remote envelopes"
 test("run_remote_effect rethrows SvelteKit redirect defects", async () => {
 	class TestRuntime {
 		runPromise(effect: Effect.Effect<unknown, unknown, unknown>): Promise<unknown> {
-			return Effect.runPromise(effect);
+			return get_server_dispatcher().run(effect);
 		}
 	}
 
@@ -543,7 +555,7 @@ test("run_remote_effect rethrows SvelteKit redirect defects", async () => {
 test("run_remote_effect rethrows Redirect helper from generators", async () => {
 	class TestRuntime {
 		runPromise(effect: Effect.Effect<unknown, unknown, unknown>): Promise<unknown> {
-			return Effect.runPromise(effect);
+			return get_server_dispatcher().run(effect);
 		}
 	}
 
@@ -581,7 +593,7 @@ test("run_remote_effect rethrows Redirect helper from generators", async () => {
 test("run_remote_effect rethrows SvelteKit HTTP error defects", async () => {
 	class TestRuntime {
 		runPromise(effect: Effect.Effect<unknown, unknown, unknown>): Promise<unknown> {
-			return Effect.runPromise(effect);
+			return get_server_dispatcher().run(effect);
 		}
 	}
 
@@ -613,7 +625,7 @@ test("run_remote_effect rethrows SvelteKit HTTP error defects", async () => {
 test("run_remote_effect rethrows SvelteKit validation defects", async () => {
 	class TestRuntime {
 		runPromise(effect: Effect.Effect<unknown, unknown, unknown>): Promise<unknown> {
-			return Effect.runPromise(effect);
+			return get_server_dispatcher().run(effect);
 		}
 	}
 

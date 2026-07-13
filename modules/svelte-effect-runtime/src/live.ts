@@ -8,11 +8,11 @@ import { Effect, Stream } from "effect";
  *
  * @since 3.4.8
  */
-export const REMOTE_LIVE_STREAM: unique symbol = Symbol.for("ser.remote-live-stream") as never;
+const remote_live_stream: unique symbol = Symbol.for("ser.remote-live-stream") as never;
 
-const LIVE_METADATA: unique symbol = Symbol.for("ser.remote-live-metadata") as never;
+const live_metadata: unique symbol = Symbol.for("ser.remote-live-metadata") as never;
 
-const LIVE_OPERATOR: unique symbol = Symbol.for("ser.live-operator") as never;
+const live_operator: unique symbol = Symbol.for("ser.live-operator") as never;
 
 type RemoteLivePipe<A, E> = {
 	(): RemoteLiveStream<A, E>;
@@ -62,7 +62,7 @@ export type RemoteLiveStream<A, E = never> = Omit<
 	Stream.Stream<A, RemoteFailure<E>, never>,
 	"pipe"
 > & {
-	readonly [REMOTE_LIVE_STREAM]: true;
+	readonly [remote_live_stream]: true;
 	readonly pipe: RemoteLivePipe<A, E>;
 };
 
@@ -106,7 +106,7 @@ export type LiveStatus =
  */
 export interface LiveFactory {
 	readonly status: {
-		readonly [LIVE_OPERATOR]: true;
+		readonly [live_operator]: true;
 		/**
 		 * Creates a stream of transport status updates for a remote live stream.
 		 *
@@ -121,7 +121,7 @@ export interface LiveFactory {
 		<A, E>(stream: RemoteLiveStream<A, E>): Stream.Stream<LiveStatus, never, never>;
 	};
 	readonly reconnect: {
-		readonly [LIVE_OPERATOR]: true;
+		readonly [live_operator]: true;
 		/**
 		 * Reconnects the transport behind a remote live stream.
 		 *
@@ -154,7 +154,7 @@ type LiveMetadata<A = unknown, ErrorType = never> = {
 };
 
 type LiveMetadataCarrier = {
-	readonly [LIVE_METADATA]?: LiveMetadata<unknown, unknown>;
+	readonly [live_metadata]?: LiveMetadata<unknown, unknown>;
 };
 
 type PipeableStream<A, E, R> = Stream.Stream<A, E, R> & {
@@ -209,7 +209,7 @@ const LiveStatusStream = Object.assign(
 			}),
 		);
 	},
-	{ [LIVE_OPERATOR]: true as const },
+	{ [live_operator]: true as const },
 ) satisfies LiveFactory["status"];
 
 const LiveReconnect = Object.assign(
@@ -232,7 +232,7 @@ const LiveReconnect = Object.assign(
 			});
 		});
 	},
-	{ [LIVE_OPERATOR]: true as const },
+	{ [live_operator]: true as const },
 ) satisfies LiveFactory["reconnect"];
 
 /**
@@ -275,16 +275,16 @@ function attach_live_metadata<A, E, R>(
 ): Stream.Stream<A, E, R> {
 	const carrier = stream as Stream.Stream<A, E, R> & LiveMetadataCarrier;
 
-	if (carrier[LIVE_METADATA]) {
+	if (carrier[live_metadata]) {
 		return stream;
 	}
 
-	Object.defineProperty(carrier, LIVE_METADATA, {
+	Object.defineProperty(carrier, live_metadata, {
 		configurable: true,
 		value: metadata,
 	});
 
-	Object.defineProperty(carrier, REMOTE_LIVE_STREAM, {
+	Object.defineProperty(carrier, remote_live_stream, {
 		configurable: true,
 		value: true,
 	});
@@ -321,7 +321,7 @@ function get_live_metadata(
 function get_live_metadata(
 	stream: Stream.Stream<unknown, unknown, unknown>,
 ): LiveMetadata<unknown, unknown> | undefined {
-	return (stream as LiveMetadataCarrier)[LIVE_METADATA];
+	return (stream as LiveMetadataCarrier)[live_metadata];
 }
 
 function read_live_status(resource: NativeLiveResource<unknown>): LiveStatus {
