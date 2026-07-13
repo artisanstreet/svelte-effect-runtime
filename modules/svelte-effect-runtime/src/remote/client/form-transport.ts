@@ -8,8 +8,8 @@ import {
 	create_remote_transport_error,
 	create_remote_validation_error,
 } from "$/remote/shared.ts";
-import { decode_remote_error, is_decoded_remote_failure } from "./failures.ts";
-import { MakeEffectFromPromise, MakeEffectFromSync } from "./effect.ts";
+import { decode_remote_error, is_decoded_remote_failure } from "$/remote/failures.ts";
+import { MakeEffectFromPromise, MakeEffectFromSync } from "$/remote/effect.ts";
 import type { FormIssue } from "$/remote/shared.ts";
 import type { StandardSchema } from "$/internal/schema.ts";
 import { DecodeResponseFailure } from "./responses.ts";

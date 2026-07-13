@@ -451,6 +451,80 @@ ReadNumber(1);
 	);
 });
 
+test("Prerender inputs and resources expose Effect-native public types", async () => {
+	await assert_type_checks(
+		"server-prerender-types.ts",
+		`
+import { Effect, Schema } from "effect";
+import { Prerender } from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
+import type {
+  EffectRemotePrerender,
+  EffectRemotePrerenderFunction,
+  PrerenderInputs,
+  PrerenderOptions,
+} from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
+
+const PreloadNumber = Prerender(
+  Schema.NumberFromString,
+  (value) => Effect.succeed(value),
+  {
+    inputs: () => Effect.succeed(["1", "2"]),
+  },
+);
+
+const PreloadPost = Prerender(
+  "unchecked",
+  (post: { readonly slug: string }) => Effect.succeed(post.slug),
+  {
+    inputs: function* () {
+      return yield* Effect.succeed([{ slug: "intro" }]);
+    },
+  },
+);
+
+const PreloadBuild = Prerender(
+  () => Effect.succeed("ready"),
+  {
+    inputs: () => Effect.succeed([undefined]),
+    dynamic: true,
+  },
+);
+
+const number_resource: EffectRemotePrerender<number> = PreloadNumber("1");
+const number_prerender: EffectRemotePrerenderFunction<string, number> = PreloadNumber;
+const current: number | undefined = number_resource.current;
+const error: unknown = number_resource.error;
+const loading: boolean = number_resource.loading;
+const ready: boolean = number_resource.ready;
+
+/** @ts-expect-error Prerender input generation must be Effect-native. */
+const plain_inputs: PrerenderInputs<string> = () => ["intro"];
+
+const wrong_encoded_inputs: PrerenderOptions<string> = {
+  /** @ts-expect-error Effect Schema Prerender inputs use the encoded string type. */
+  inputs: () => Effect.succeed([1]),
+};
+
+/** @ts-expect-error Prerender resources cannot be refreshed like queries. */
+number_resource.refresh();
+/** @ts-expect-error Prerender resources cannot be assigned like queries. */
+number_resource.set(2);
+/** @ts-expect-error Prerender resources cannot be overridden like queries. */
+number_resource.withOverride((value) => value + 1);
+
+void PreloadPost;
+void PreloadBuild;
+void number_prerender;
+void current;
+void error;
+void loading;
+void ready;
+void plain_inputs;
+void wrong_encoded_inputs;
+`,
+	);
+});
+
 test("server remote helpers stay Effect-yieldable in markup helpers", async () => {
 	await assert_type_checks(
 		"server-remote-markup.ts",

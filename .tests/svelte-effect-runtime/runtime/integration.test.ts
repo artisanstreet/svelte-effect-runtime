@@ -1261,6 +1261,7 @@ test("vite remote client wrapper preserves native SvelteKit remote module", asyn
 		`export const get_clock = __remote.query_live('abc/get_clock');`,
 		`export const save_post = __remote.command('abc/save_post');`,
 		`export const create_post = __remote.form('abc/create_post');`,
+		`export const get_build_info = __remote.prerender('abc/get_build_info');`,
 	].join("\n");
 
 	const result = await rewrite_remote_client_exports(source);
@@ -1289,6 +1290,10 @@ test("vite remote client wrapper preserves native SvelteKit remote module", asyn
 	assert_string_includes(
 		result,
 		`export const create_post = create_remote_form_adapter(__remote.form('abc/create_post'), __SER___decode_payload, __SER___remote_base);`,
+	);
+	assert_string_includes(
+		result,
+		`export const get_build_info = create_remote_prerender_adapter(__remote.prerender('abc/get_build_info'), __SER___decode_payload);`,
 	);
 
 	if (result.indexOf(`const __SER___remote_base`) > result.indexOf(`export const create_post`)) {

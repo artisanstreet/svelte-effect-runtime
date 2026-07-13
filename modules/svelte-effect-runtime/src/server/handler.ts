@@ -1,3 +1,4 @@
+import { RunInsideRemoteEffectHandler } from "./remote-handler-context.ts";
 import { getRequestEvent as get_native_request_event } from "$app/server";
 import { get_server_runtime_or_throw, RequestEvent } from "./runtime.ts";
 import type { EffectHandler } from "./types.ts";
@@ -46,7 +47,12 @@ export function Handler<NativeHandler extends (...arguments_: never[]) => unknow
 		const event = get_native_request_event();
 		const runtime = get_server_runtime_or_throw();
 		const HandlerEffect = Effect.suspend(() => ToEffect(handler(...arguments_)));
-		const EffectWithRequestEvent = Effect.provideService(HandlerEffect, RequestEvent, event);
+		const HandlerOwnedEffect = RunInsideRemoteEffectHandler(event, HandlerEffect);
+		const EffectWithRequestEvent = Effect.provideService(
+			HandlerOwnedEffect,
+			RequestEvent,
+			event,
+		);
 
 		return await runtime.runPromise(EffectWithRequestEvent);
 	};

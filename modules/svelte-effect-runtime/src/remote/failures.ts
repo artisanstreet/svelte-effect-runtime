@@ -5,7 +5,7 @@ import {
 } from "$/remote/shared.ts";
 import type { RemoteFailure } from "$/remote/shared.ts";
 import { RemoteErrorDecodeError } from "$/errors.ts";
-import { Option, Schema } from "effect";
+import { Option, Result, Schema } from "effect";
 import { parse } from "devalue";
 
 type JsonStringDecode =
@@ -112,16 +112,16 @@ function decode_serialized_remote_failure<ErrorType>(
 	encoded: string,
 	decode: ((encoded: string) => unknown) | undefined,
 ): SerializedRemoteFailureDecode<ErrorType> {
-	try {
-		const decoded = decode ? decode(encoded) : parse(encoded);
+	const decoded = Result.try(() => (decode ? decode(encoded) : parse(encoded)));
 
-		return {
-			_tag: "SerializedRemoteFailureDecoded",
-			value: decoded as RemoteFailure<ErrorType>,
-		};
-	} catch {
+	if (Result.isFailure(decoded)) {
 		return { _tag: "SerializedRemoteFailureInvalid" };
 	}
+
+	return {
+		_tag: "SerializedRemoteFailureDecoded",
+		value: decoded.success as RemoteFailure<ErrorType>,
+	};
 }
 
 export function is_decoded_remote_failure(value: unknown): value is RemoteFailure<never> {

@@ -171,6 +171,28 @@ export function make_remote_live_stream<A, ErrorType = never>(
 	return attach_live_metadata(stream, metadata) as RemoteLiveStream<A, ErrorType>;
 }
 
+export function make_failed_remote_live_stream<A, ErrorType = never>(
+	error: unknown,
+	on_error: (error: unknown) => RemoteFailure<ErrorType>,
+): RemoteLiveStream<A, ErrorType> {
+	const failure = on_error(error);
+	const resource: NativeLiveResource<A> & AsyncIterable<A> = {
+		connected: false,
+		done: true,
+		error: failure,
+		[Symbol.asyncIterator]: () => ({
+			next: () => Promise.reject(failure),
+		}),
+	};
+	const metadata: LiveMetadata<A, ErrorType> = {
+		resource,
+		on_error,
+	};
+	const stream = Stream.fail(failure);
+
+	return attach_live_metadata(stream, metadata) as unknown as RemoteLiveStream<A, ErrorType>;
+}
+
 const LiveStatusStream = Object.assign(
 	function status<A, E>(stream: RemoteLiveStream<A, E>): Stream.Stream<LiveStatus, never, never> {
 		return Stream.unwrap(

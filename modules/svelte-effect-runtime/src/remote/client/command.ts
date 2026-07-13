@@ -3,7 +3,7 @@ import { InvalidCommandFactoryError } from "$/errors.ts";
 import type { RemoteFailure } from "$/remote/shared.ts";
 import type { NativeMethod, Pending } from "./types.ts";
 import { DecodeResponseOrValue } from "./responses.ts";
-import { MakeEffectFromPromise } from "./effect.ts";
+import { MakeEffectFromPromise } from "$/remote/effect.ts";
 import { Effect } from "effect";
 
 type EffectRemoteCommandAdapter<Input, Output, ErrorType = never> = ((

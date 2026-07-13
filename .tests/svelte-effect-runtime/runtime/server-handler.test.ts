@@ -1,10 +1,17 @@
 import {
 	Error as HandlerError,
 	Handler,
+	Prerender,
 	Redirect,
 	RequestEvent,
 	ServerRuntime,
 } from "../../../modules/svelte-effect-runtime/src/server.ts";
+import {
+	reset_test_prerender,
+	reset_test_request_event,
+	set_test_prerender,
+	set_test_request_event,
+} from "./fixtures/app-server.ts";
 import { is_running_remote_effect_handler } from "../../../modules/svelte-effect-runtime/src/server/remote-handler-context.ts";
 import {
 	run_live_handler,
@@ -13,16 +20,16 @@ import {
 import { reset_server_runtime } from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
 import { make_remote_wrapper } from "../../../modules/svelte-effect-runtime/src/server/wrappers.ts";
 import { assert_equals, assert_false, assert_rejects, assert_truthy } from "./helpers/assert.ts";
-import { reset_test_request_event, set_test_request_event } from "./fixtures/app-server.ts";
+import { Context, Effect, Layer, Schema, Stream } from "effect";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { isHttpError, isRedirect } from "@sveltejs/kit";
-import { Context, Effect, Layer, Stream } from "effect";
 import { spawnSync } from "node:child_process";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, test } from "vitest";
 
 afterEach(() => {
+	reset_test_prerender();
 	reset_test_request_event();
 	reset_server_runtime();
 });
@@ -39,6 +46,23 @@ test("Handler runs Effect callbacks with every native argument", async () => {
 	const result = await handler("count", 42);
 
 	assert_equals(result, { text: "count:42" });
+});
+
+test("Handler keeps nested Prerender calls Effect-yieldable during remote requests", async () => {
+	set_test_prerender(() => (input: unknown) => Promise.resolve(input));
+	set_test_request_event({
+		...make_request_event("http://localhost/_app/remote/prerender"),
+		isRemoteRequest: true,
+	});
+
+	const ReadStatic = Prerender(Schema.String, (key) => Effect.succeed(key));
+	const LoadStatic = Effect.gen(function* () {
+		return yield* ReadStatic("nested");
+	}).pipe(Effect.orDie);
+	const handler = Handler<() => Promise<string>>(() => LoadStatic);
+	const result = await handler();
+
+	assert_equals(result, "nested");
 });
 
 test("Handler runs direct generator callbacks", async () => {

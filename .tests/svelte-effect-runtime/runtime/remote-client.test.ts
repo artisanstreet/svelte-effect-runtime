@@ -1,16 +1,18 @@
 import {
-	create_remote_command_adapter,
-	create_remote_form_adapter,
 	create_remote_live_query_adapter,
+	create_remote_prerender_adapter,
+	create_remote_command_adapter,
 	create_remote_query_adapter,
+	create_remote_form_adapter,
 } from "../../../modules/svelte-effect-runtime/src/remote/client.ts";
 import {
 	get_server_dispatcher,
 	reset_server_runtime,
 } from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
 import { create_serialized_remote_failure_envelope } from "../../../modules/svelte-effect-runtime/src/remote/shared.ts";
-import { normalize_native_error } from "../../../modules/svelte-effect-runtime/src/remote/client/failures.ts";
+import { normalize_native_error } from "../../../modules/svelte-effect-runtime/src/remote/failures.ts";
 import { to_form_data } from "../../../modules/svelte-effect-runtime/src/remote/client/form-data.ts";
+import { InvalidPrerenderFactoryError } from "../../../modules/svelte-effect-runtime/src/errors.ts";
 import { reset_dispatcher } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
 import { Live } from "../../../modules/svelte-effect-runtime/src/live.ts";
 import { isRedirect, redirect as svelte_redirect } from "@sveltejs/kit";
@@ -98,6 +100,35 @@ test("remote query adapter wraps network failures as transport errors", async ()
 
 	assert_equals(Exit.isFailure(exit), true);
 	assert_equals((error as { _tag?: string })._tag, "RemoteTransportError");
+});
+
+test("remote query adapter captures synchronous invocation failures", async () => {
+	const query = create_remote_query_adapter<undefined, string>(
+		() => {
+			throw new Error("serialization failed");
+		},
+		(value) => value,
+		"",
+	);
+	const QueryProgram = query(undefined);
+	const exit = await get_server_dispatcher().run(Effect.exit(QueryProgram));
+	const refresh_exit = await get_server_dispatcher().run(Effect.exit(QueryProgram.refresh()));
+	const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
+	const refresh_error = Exit.isFailure(refresh_exit)
+		? Cause.squash(refresh_exit.cause)
+		: undefined;
+	const set_error = assert_throws(() => QueryProgram.set("recovered"));
+	const override_error = assert_throws(() => QueryProgram.withOverride((current) => current));
+
+	assert_equals(Effect.isEffect(QueryProgram), true);
+	assert_equals(Exit.isFailure(exit), true);
+	assert_equals((error as { _tag?: string })._tag, "RemoteTransportError");
+	assert_equals((refresh_error as { _tag?: string })._tag, "RemoteTransportError");
+	assert_equals((set_error as { _tag?: string })._tag, "RemoteTransportError");
+	assert_equals((override_error as { _tag?: string })._tag, "RemoteTransportError");
+	assert_equals((QueryProgram.error as { _tag?: string })._tag, "RemoteTransportError");
+	assert_equals(QueryProgram.loading, false);
+	assert_equals(QueryProgram.ready, false);
 });
 
 test("remote query load stays lazy until its Effect runs", async () => {
@@ -327,6 +358,90 @@ test("remote query adapter preserves resource state and methods", async () => {
 	assert_equals(refresh_called, true);
 	assert_equals(set_value, 7);
 	assert_equals(override_called, true);
+});
+
+test("remote prerender adapter captures synchronous invocation failures", async () => {
+	const prerender = create_remote_prerender_adapter<undefined, never>(
+		() => {
+			throw new Error("serialization failed");
+		},
+		(value) => value,
+	);
+	const PrerenderProgram = prerender(undefined);
+
+	const exit = await get_server_dispatcher().run(Effect.exit(PrerenderProgram));
+	const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
+
+	assert_equals(Exit.isFailure(exit), true);
+	assert_equals((error as { _tag?: string })._tag, "RemoteTransportError");
+});
+
+test("remote prerender adapter reports invalid native factories", () => {
+	assert_throws(
+		() => create_remote_prerender_adapter({}, (value) => value),
+		InvalidPrerenderFactoryError,
+	);
+});
+
+test("remote prerender adapter exposes only immutable resource state", async () => {
+	const native = () => {
+		const resource = Promise.resolve("ready") as Promise<string> & {
+			readonly current: string;
+			readonly error: unknown;
+			readonly loading: boolean;
+			readonly ready: boolean;
+			readonly refresh: () => Promise<void>;
+			readonly set: (value: string) => void;
+			readonly withOverride: (update: (current: string) => string) => () => void;
+		};
+
+		Object.defineProperties(resource, {
+			current: { get: () => "ready" },
+			error: { get: () => undefined },
+			loading: { get: () => false },
+			ready: { get: () => true },
+			refresh: { value: () => Promise.resolve() },
+			set: { value: () => undefined },
+			withOverride: { value: () => () => undefined },
+		});
+
+		return resource;
+	};
+	const prerender = create_remote_prerender_adapter<undefined, string>(native, (value) => value);
+	const PrerenderProgram = prerender(undefined);
+
+	assert_equals(await get_server_dispatcher().run(PrerenderProgram), "ready");
+	assert_equals(PrerenderProgram.current, "ready");
+	assert_equals(PrerenderProgram.error, undefined);
+	assert_equals(PrerenderProgram.loading, false);
+	assert_equals(PrerenderProgram.ready, true);
+	assert_equals("refresh" in PrerenderProgram, false);
+	assert_equals("set" in PrerenderProgram, false);
+	assert_equals("withOverride" in PrerenderProgram, false);
+});
+
+test("remote live query adapter captures synchronous invocation failures", async () => {
+	const query = create_remote_live_query_adapter<undefined, never>(
+		() => {
+			throw new Error("serialization failed");
+		},
+		(value) => value,
+		"",
+	);
+	const live = query(undefined);
+	const exit = await get_server_dispatcher().run(Effect.exit(Stream.runCollect(live)));
+	const status = await get_server_dispatcher().run(
+		Stream.runCollect(live.pipe(Live.status, Stream.take(1))),
+	);
+	const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
+
+	assert_equals(Stream.isStream(live), true);
+	assert_equals((error as { _tag?: string })._tag, "RemoteTransportError");
+	assert_equals(status[0]?._tag, "Failed");
+
+	if (status[0]?._tag === "Failed") {
+		assert_equals((status[0].cause as { _tag?: string })._tag, "RemoteTransportError");
+	}
 });
 
 test("remote live query adapter returns a stream with separate controls", async () => {

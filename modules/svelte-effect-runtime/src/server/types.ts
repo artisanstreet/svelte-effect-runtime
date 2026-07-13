@@ -170,18 +170,30 @@ type IsUnknown<Value> = unknown extends Value ? ([Value] extends [unknown] ? tru
  *
  * @example
  * ```ts
- * const options: PrerenderOptions = {
- *   inputs: () => ["first-post", "second-post"],
+ * const options: PrerenderOptions<string> = {
+ *   inputs: () => Effect.succeed(["first-post", "second-post"]),
  *   dynamic: true,
  * };
  * ```
  *
  * @since 2.0.0
  */
-export type PrerenderOptions = {
-	readonly inputs?: unknown;
+export type PrerenderOptions<Input = unknown, E = unknown, R = unknown> = {
+	readonly inputs?: PrerenderInputs<Input, E, R>;
 	readonly dynamic?: boolean;
 };
+
+/**
+ * Effect-producing input generator for a prerendered remote function.
+ *
+ * @since 4.0.0
+ * @returns The caller inputs SvelteKit should prerender.
+ */
+export type PrerenderInputs<Input = unknown, E = unknown, R = unknown> = () => EffectLike<
+	readonly Input[],
+	E,
+	R
+>;
 
 /**
  * Minimal Standard Schema shape accepted by SvelteKit remote helpers.
@@ -454,34 +466,32 @@ export interface FormFactory {
 export interface PrerenderFactory {
 	<A, E = never, R = never>(
 		validate_or_handler: EffectLike<A, E, R> | RemoteHandler<void, A, E, R>,
-		maybe_options?: PrerenderOptions,
-	): EffectRemoteFunction<void, A, E>;
+		maybe_options?: PrerenderOptions<void>,
+	): EffectRemotePrerenderFunction<void, A, E>;
 	<Input, A, E = never, R = never>(
 		validate_or_handler: "unchecked",
 		maybe_handler: RemoteHandler<Input, A, E, R>,
-		maybe_options?: PrerenderOptions,
-	): EffectRemoteFunction<Input, A, E>;
+		maybe_options?: PrerenderOptions<Input>,
+	): EffectRemotePrerenderFunction<Input, A, E>;
 	<S extends Schema.Schema<unknown>, A, E = never, R = never>(
 		validate_or_handler: S,
 		maybe_handler: RemoteHandler<SchemaInput<S>, A, E, R>,
-		maybe_options?: PrerenderOptions,
-	): EffectRemoteFunction<SchemaEncodedInput<S>, A, E>;
+		maybe_options?: PrerenderOptions<SchemaEncodedInput<S>>,
+	): EffectRemotePrerenderFunction<SchemaEncodedInput<S>, A, E>;
 	<S extends StandardSchema, A, E = never, R = never>(
 		validate_or_handler: S,
 		maybe_handler: RemoteHandler<StandardSchemaOutput<S>, A, E, R>,
-		maybe_options?: PrerenderOptions,
-	): EffectRemoteFunction<StandardSchemaInput<S>, A, E>;
+		maybe_options?: PrerenderOptions<StandardSchemaInput<S>>,
+	): EffectRemotePrerenderFunction<StandardSchemaInput<S>, A, E>;
 }
 
 /**
- * Effect-returning remote function type exposed by query and prerender.
+ * Base Effect-returning function type used by remote commands.
  *
  * @example
  * ```ts
- * type Post = { id: string };
- * const posts: Post[] = [];
- * const getPosts: EffectRemoteFunction<void, Post[]> = () =>
- *   Effect.succeed(posts);
+ * const SavePost: EffectRemoteFunction<string, { saved: true }> = (id) =>
+ *   Effect.succeed({ saved: true });
  * ```
  *
  * @since 2.0.0
@@ -491,6 +501,30 @@ export type EffectRemoteFunction<Input, A, E = never> = [Input] extends [void]
 	: undefined extends Input
 		? (input?: Input) => Effect.Effect<A, RemoteFailure<E>, never>
 		: (input: Input) => Effect.Effect<A, RemoteFailure<E>, never>;
+
+/**
+ * Effect-returning prerender resource with SvelteKit's read-only state
+ * preserved.
+ *
+ * @since 4.0.0
+ */
+export type EffectRemotePrerender<A, E = never> = Effect.Effect<A, RemoteFailure<E>, never> & {
+	readonly current: A | undefined;
+	readonly error: unknown;
+	readonly loading: boolean;
+	readonly ready: boolean;
+};
+
+/**
+ * Effect-returning prerender function whose resource state remains readable.
+ *
+ * @since 4.0.0
+ */
+export type EffectRemotePrerenderFunction<Input, A, E = never> = [Input] extends [void]
+	? () => EffectRemotePrerender<A, E>
+	: undefined extends Input
+		? (input?: Input) => EffectRemotePrerender<A, E>
+		: (input: Input) => EffectRemotePrerender<A, E>;
 
 /**
  * Effect-returning query resource with SvelteKit cache update methods

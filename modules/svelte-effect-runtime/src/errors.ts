@@ -540,6 +540,21 @@ export class InvalidQueryFactoryError extends RuntimeError {
 }
 
 /**
+ * Thrown when a generated or native remote prerender export is not callable.
+ *
+ * @since 4.0.0
+ * @returns An Error describing an invalid prerender adapter input.
+ */
+export class InvalidPrerenderFactoryError extends RuntimeError {
+	constructor() {
+		super(
+			"Invalid prerender factory: expected a function from SvelteKit remote prerender generation.",
+		);
+		this.name = "InvalidPrerenderFactoryError";
+	}
+}
+
+/**
  * Thrown when a generated or native remote live query export is not callable.
  *
  * @example

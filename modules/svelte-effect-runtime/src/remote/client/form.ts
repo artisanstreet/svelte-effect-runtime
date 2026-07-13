@@ -1,7 +1,7 @@
 import { is_standard_schema, normalize_validator, type StandardSchema } from "$/internal/schema.ts";
 import type { EffectRemoteForm, NativeFormRecord, NativeMethod } from "./types.ts";
 import { get_remote_action_id, SubmitRemoteForm } from "./form-transport.ts";
-import { MakeEffectFromPromise, MakeEffectFromSync } from "./effect.ts";
+import { MakeEffectFromPromise, MakeEffectFromSync } from "$/remote/effect.ts";
 import { copy_property_descriptors, has_method } from "./utils.ts";
 import { wrap_enhance_callback } from "./form-enhance.ts";
 import { DecodeResponseOrValue } from "./responses.ts";

@@ -1,5 +1,5 @@
 import { DecodeResponseOrValue } from "./responses.ts";
-import { MakeEffectFromPromise } from "./effect.ts";
+import { MakeEffectFromPromise } from "$/remote/effect.ts";
 import { has_method } from "./utils.ts";
 import { Effect } from "effect";
 

@@ -1,5 +1,5 @@
-import { decode_remote_error, is_decoded_remote_failure } from "./failures.ts";
-import { MakeEffectFromPromise, MakeEffectFromSync } from "./effect.ts";
+import { decode_remote_error, is_decoded_remote_failure } from "$/remote/failures.ts";
+import { MakeEffectFromPromise, MakeEffectFromSync } from "$/remote/effect.ts";
 import { create_remote_http_error } from "$/remote/shared.ts";
 import type { RemoteFailure } from "$/remote/shared.ts";
 import { Effect } from "effect";

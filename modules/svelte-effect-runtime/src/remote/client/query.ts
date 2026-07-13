@@ -1,12 +1,22 @@
+import {
+	attach_failed_remote_query_resource,
+	attach_remote_resource_getters,
+	is_remote_resource,
+	type NativeRemoteResource,
+	type RemoteResourceEffect,
+} from "$/remote/resource.ts";
+import {
+	make_failed_remote_live_stream,
+	make_remote_live_stream,
+	type RemoteLiveStream,
+} from "$/live.ts";
 import { InvalidLiveQueryFactoryError, InvalidQueryFactoryError } from "$/errors.ts";
+import { FailWithRemoteError, MakeEffectFromPromise } from "$/remote/effect.ts";
 import type { EffectRemoteQueryUpdateBrand, NativeMethod } from "./types.ts";
-import { make_remote_live_stream, type RemoteLiveStream } from "$/live.ts";
 import { copy_property_descriptors, has_method } from "./utils.ts";
-import type { RemoteFailure } from "$/remote/shared.ts";
+import { normalize_native_error } from "$/remote/failures.ts";
 import { ResolveQueryResult } from "./query-result.ts";
-import { normalize_native_error } from "./failures.ts";
-import { MakeEffectFromPromise } from "./effect.ts";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 
 type RemoteInput<Input> = undefined extends Input ? Input | void : Input;
 
@@ -18,29 +28,13 @@ type NativeQueryFactory<Input> =
 			readonly load: (input: RemoteInput<Input>) => unknown;
 	  };
 
-type RemoteResourceEffect<Output, ErrorType = never> = Effect.Effect<
-	Output,
-	RemoteFailure<ErrorType>
-> & {
-	readonly current: Output | undefined;
-	readonly error: unknown;
-	readonly loading: boolean;
-	readonly ready: boolean;
-};
-
-type RemoteResourceLike<Output, ErrorType = never> = RemoteResourceEffect<Output, ErrorType>;
-
 type RemoteQueryEffect<Output, ErrorType = never> = RemoteResourceEffect<Output, ErrorType> & {
 	readonly refresh: () => Effect.Effect<void, unknown, never>;
 	readonly set: (value: Output) => void;
 	readonly withOverride: (update: (current: Output) => Output) => unknown;
 };
 
-type NativeRemoteResource<Output> = {
-	readonly current?: Output;
-	readonly error?: unknown;
-	readonly loading?: boolean;
-	readonly ready?: boolean;
+type NativeQueryResource<Output> = NativeRemoteResource<Output> & {
 	readonly refresh?: () => Promise<void>;
 	readonly set?: (value: Output) => void;
 	readonly withOverride?: (update: (current: Output) => Output) => unknown;
@@ -84,7 +78,19 @@ export function create_remote_query_adapter<Input, Output, ErrorType = never>(
 			}) as RemoteQueryEffect<Output, ErrorType>;
 		}
 
-		const resource = query(input);
+		const resource_attempt = Result.try(() => query(input));
+
+		if (Result.isFailure(resource_attempt)) {
+			const QueryEffect = FailWithRemoteError<ErrorType>(
+				resource_attempt.failure,
+			) as unknown as RemoteQueryEffect<Output, ErrorType>;
+
+			attach_failed_remote_query_resource(resource_attempt.failure, QueryEffect);
+
+			return QueryEffect;
+		}
+
+		const resource = resource_attempt.success;
 		const QueryEffect = ResolveQueryResult<Output, ErrorType>(
 			resource,
 			decode_payload,
@@ -116,7 +122,16 @@ export function create_remote_live_query_adapter<Input, Output, ErrorType = neve
 	}
 
 	const wrapped = ((input: Input) => {
-		const resource = query(input);
+		const resource_attempt = Result.try(() => query(input));
+
+		if (Result.isFailure(resource_attempt)) {
+			return make_failed_remote_live_stream<Output, ErrorType>(
+				resource_attempt.failure,
+				normalize_native_error,
+			);
+		}
+
+		const resource = resource_attempt.success;
 
 		return make_remote_live_stream<Output, ErrorType>(resource, normalize_native_error);
 	}) as EffectRemoteQueryUpdateBrand &
@@ -127,45 +142,18 @@ export function create_remote_live_query_adapter<Input, Output, ErrorType = neve
 	return wrapped;
 }
 
-function is_resource<Output>(resource: unknown): resource is NativeRemoteResource<Output> {
-	const resource_type = typeof resource;
-
-	return (resource_type === "object" && resource !== null) || resource_type === "function";
-}
-
-function attach_resource_getters<Output, ErrorType = never>(
-	resource: unknown,
-	effect: RemoteResourceLike<Output, ErrorType>,
-): void {
-	const methods = is_resource<Output>(resource) ? resource : undefined;
-	const keys = ["current", "error", "loading", "ready"] as const;
-
-	if (!methods) {
-		return;
-	}
-
-	for (const key of keys) {
-		if (!(key in methods)) {
-			continue;
-		}
-
-		Object.defineProperty(effect, key, {
-			configurable: true,
-			get: () => methods[key],
-		});
-	}
-}
-
 function attach_query_resource<Output, ErrorType = never>(
 	resource: unknown,
 	effect: RemoteQueryEffect<Output, ErrorType>,
 ): void {
-	const methods = is_resource<Output>(resource) ? resource : undefined;
+	const methods = is_remote_resource<Output>(resource)
+		? (resource as NativeQueryResource<Output>)
+		: undefined;
 	const refresh = methods?.refresh;
 	const set = methods?.set;
 	const with_override = methods?.withOverride;
 
-	attach_resource_getters(resource, effect);
+	attach_remote_resource_getters(resource, effect);
 
 	if (!methods) {
 		return;

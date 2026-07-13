@@ -69,7 +69,7 @@ export function rewrite_remote_client_exports(
 	const magic = new MagicString(code);
 	const imports = [
 		`import { app_dir, base } from "$app/paths/internal/client";`,
-		`import { create_remote_query_adapter, create_remote_live_query_adapter, create_remote_command_adapter, create_remote_form_adapter } from "svelte-effect-runtime/internal/remote-client";`,
+		`import { create_remote_query_adapter, create_remote_live_query_adapter, create_remote_prerender_adapter, create_remote_command_adapter, create_remote_form_adapter } from "svelte-effect-runtime/internal/remote-client";`,
 	].join("\n");
 	const helpers = [
 		`const __SER___remote_base = \`\${base}/\${app_dir}/remote\`;`,
@@ -106,6 +106,10 @@ function make_remote_export(
 
 	if (remote_type === "query_live") {
 		return `export const ${name} = create_remote_live_query_adapter(${native_call}, __SER___decode_payload);`;
+	}
+
+	if (remote_type === "prerender") {
+		return `export const ${name} = create_remote_prerender_adapter(${native_call}, __SER___decode_payload);`;
 	}
 
 	return `export const ${name} = create_remote_query_adapter(${native_call}, __SER___decode_payload);`;

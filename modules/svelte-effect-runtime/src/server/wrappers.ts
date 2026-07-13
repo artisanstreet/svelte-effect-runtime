@@ -1,5 +1,6 @@
 import type {
 	EffectLike,
+	PrerenderInputs,
 	RemoteFormHandler,
 	RemoteHandler,
 	RemoteLiveHandler,
@@ -8,12 +9,28 @@ import type {
 import { run_handler_effect, run_live_handler, ToEffect } from "./effects.ts";
 import { getRequestEvent as get_native_request_event } from "$app/server";
 import { normalize_remote_helper_error } from "$/remote/server.ts";
+import { get_server_runtime_or_throw } from "./runtime.ts";
 import { make_invalid_proxy } from "./invalid.ts";
 import type { RequestEvent } from "./runtime.ts";
 import { is_handler } from "./schema.ts";
 import { Effect } from "effect";
 
 export { is_running_remote_effect_handler } from "./remote-handler-context.ts";
+
+export function make_prerender_inputs_wrapper<Input>(
+	generate_inputs: PrerenderInputs<Input>,
+): () => Promise<Input[]> {
+	return () => {
+		const runtime = get_server_runtime_or_throw();
+		const CollectInputs = Effect.gen(function* () {
+			const inputs = yield* Effect.suspend(() => ToEffect(generate_inputs()));
+
+			return Array.from(inputs);
+		});
+
+		return runtime.runPromise(CollectInputs);
+	};
+}
 
 export function make_remote_wrapper(
 	handler: RemoteHandler<unknown, unknown, unknown, unknown> | EffectLike,

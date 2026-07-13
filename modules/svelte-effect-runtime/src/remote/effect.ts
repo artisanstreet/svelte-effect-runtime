@@ -8,16 +8,21 @@ export const MakeEffectFromPromise = <Output, ErrorType = never>(
 ) =>
 	Effect.tryPromise({
 		try: run,
-		catch: normalize_effect_error<ErrorType>,
+		catch: normalize_remote_effect_error<ErrorType>,
 	});
 
 export const MakeEffectFromSync = <Output, ErrorType = never>(run: () => Output) =>
 	Effect.try({
 		try: run,
-		catch: normalize_effect_error<ErrorType>,
+		catch: normalize_remote_effect_error<ErrorType>,
 	});
 
-function normalize_effect_error<ErrorType>(error: unknown): RemoteFailure<ErrorType> {
+export const FailWithRemoteError = <ErrorType = never>(error: unknown) =>
+	MakeEffectFromSync<never, ErrorType>(() => {
+		throw error;
+	});
+
+export function normalize_remote_effect_error<ErrorType>(error: unknown): RemoteFailure<ErrorType> {
 	if (isRedirect(error)) {
 		throw error;
 	}

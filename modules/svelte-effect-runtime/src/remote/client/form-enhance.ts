@@ -1,4 +1,4 @@
-import { MakeEffectFromPromise, MakeEffectFromSync } from "./effect.ts";
+import { MakeEffectFromPromise, MakeEffectFromSync } from "$/remote/effect.ts";
 import type { EffectRemoteFormSubmit, NativeMethod } from "./types.ts";
 import { get_dispatcher } from "$/dispatcher.ts";
 import { has_method } from "./utils.ts";

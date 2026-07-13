@@ -1,4 +1,10 @@
 import {
+	Error as ServerError,
+	Prerender as ServerPrerender,
+	Redirect as ServerRedirect,
+	ServerRuntime,
+} from "../../../modules/svelte-effect-runtime/src/server/index.ts";
+import {
 	encode_remote_failure,
 	normalize_remote_helper_error,
 	run_remote_effect,
@@ -21,26 +27,24 @@ import {
 	assert_string_includes,
 } from "./helpers/assert.ts";
 import {
-	Error as ServerError,
-	Prerender as ServerPrerender,
-	Redirect as ServerRedirect,
-} from "../../../modules/svelte-effect-runtime/src/server/index.ts";
-import {
 	reset_test_prerender,
 	reset_test_request_event,
 	set_test_prerender,
 	set_test_request_event,
 } from "./fixtures/app-server.ts";
 import {
+	get_server_dispatcher,
+	reset_server_runtime,
+} from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
+import {
 	Error as RootError,
 	Redirect as RootRedirect,
 } from "../../../modules/svelte-effect-runtime/src/mod.ts";
 import { classify_remote_cause } from "../../../modules/svelte-effect-runtime/src/remote/cause-codec.ts";
 import { run_live_handler_source } from "../../../modules/svelte-effect-runtime/src/server/effects.ts";
-import { get_server_dispatcher } from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
 import { InvalidLiveQueryReturnError } from "../../../modules/svelte-effect-runtime/src/errors.ts";
 import { create_form_error } from "../../../modules/svelte-effect-runtime/src/remote/shared.ts";
-import { Cause, Data, Effect, Exit, Schema, Stream } from "effect";
+import { Cause, Context, Data, Effect, Exit, Layer, Schema, Stream } from "effect";
 import { parse } from "devalue";
 import { test } from "vitest";
 
@@ -174,6 +178,139 @@ test("Prerender calls preserve SvelteKit resources during remote requests", asyn
 
 		assert_equals(result, native_resource);
 		assert_equals(await (result as unknown as Promise<unknown>), { key: "static" });
+	} finally {
+		reset_test_prerender();
+		reset_test_request_event();
+	}
+});
+
+test("Prerender SSR calls expose state after synchronous native failures", async () => {
+	set_test_prerender(() => () => {
+		throw new Error("serialization failed");
+	});
+	set_test_request_event({ ...make_request_event(), isRemoteRequest: false });
+
+	try {
+		const ReadStatic = ServerPrerender(Schema.String, (key) => Effect.succeed(key));
+		const PrerenderProgram = ReadStatic("static");
+		const exit = await get_server_dispatcher().run(Effect.exit(PrerenderProgram));
+		const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
+
+		assert_truthy(Exit.isFailure(exit));
+		assert_equals((error as { _tag?: string })._tag, "RemoteTransportError");
+		assert_equals((PrerenderProgram.error as { _tag?: string })._tag, "RemoteTransportError");
+		assert_equals(PrerenderProgram.current, undefined);
+		assert_false(PrerenderProgram.loading);
+		assert_false(PrerenderProgram.ready);
+	} finally {
+		reset_test_prerender();
+		reset_test_request_event();
+	}
+});
+
+test("Prerender inputs run lazily through the configured ServerRuntime", async () => {
+	type CapturedPrerenderOptions = {
+		readonly dynamic?: boolean;
+		readonly inputs?: () => unknown;
+	};
+
+	const InputCatalog = Context.Service<{ readonly values: readonly string[] }>("InputCatalog");
+	let captured_options: CapturedPrerenderOptions | undefined;
+
+	reset_server_runtime();
+	set_test_prerender((_validator, _handler, options) => {
+		captured_options = options as CapturedPrerenderOptions;
+
+		return () => Promise.resolve("unused");
+	});
+
+	try {
+		ServerPrerender(Schema.String, (key) => Effect.succeed(key), {
+			dynamic: true,
+			inputs: () =>
+				Effect.gen(function* () {
+					const catalog = yield* InputCatalog;
+
+					return catalog.values;
+				}),
+		});
+
+		assert_truthy(captured_options);
+		assert_truthy(captured_options.inputs);
+		assert_equals(captured_options.dynamic, true);
+
+		ServerRuntime.make(
+			Layer.succeed(InputCatalog, {
+				values: ["first", "second"],
+			}),
+		);
+
+		assert_equals(await captured_options.inputs(), ["first", "second"]);
+	} finally {
+		reset_server_runtime();
+		reset_test_prerender();
+	}
+});
+
+test("Prerender SSR calls expose tagged domain failures like client calls", async () => {
+	const domain_failure = {
+		_tag: "DomainError" as const,
+		message: "missing",
+	};
+
+	set_passthrough_prerender();
+	set_test_request_event({ ...make_request_event(), isRemoteRequest: false });
+
+	try {
+		const ReadStatic = ServerPrerender(Schema.String, () => Effect.fail(domain_failure));
+		const Program = ReadStatic("static").pipe(
+			Effect.catchTag("DomainError", (error) => Effect.succeed(error.message)),
+		);
+		const exit = await get_server_dispatcher().run(Effect.exit(Program));
+
+		assert_truthy(Exit.isSuccess(exit));
+		assert_equals(exit.value, "missing");
+	} finally {
+		reset_test_prerender();
+		reset_test_request_event();
+	}
+});
+
+test("Prerender SSR calls expose SvelteKit HTTP failures as RemoteHttpError", async () => {
+	set_passthrough_prerender();
+	set_test_request_event({ ...make_request_event(), isRemoteRequest: false });
+
+	try {
+		const ReadStatic = ServerPrerender(Schema.String, () => ServerError("NotFound", "missing"));
+		const Program = ReadStatic("static").pipe(
+			Effect.catchTag("RemoteHttpError", (error) => Effect.succeed(error.status)),
+		);
+		const exit = await get_server_dispatcher().run(Effect.exit(Program));
+
+		assert_truthy(Exit.isSuccess(exit));
+		assert_equals(exit.value, 404);
+	} finally {
+		reset_test_prerender();
+		reset_test_request_event();
+	}
+});
+
+test("Prerender SSR calls keep redirects on the defect channel", async () => {
+	set_passthrough_prerender();
+	set_test_request_event({ ...make_request_event(), isRemoteRequest: false });
+
+	try {
+		const ReadStatic = ServerPrerender(Schema.String, () => ServerRedirect(303, "/oauth"));
+		const exit = await get_server_dispatcher().run(Effect.exit(ReadStatic("static")));
+
+		assert_truthy(Exit.isFailure(exit));
+
+		const redirect_reason = exit.cause.reasons.find(Cause.isDieReason);
+
+		assert_truthy(redirect_reason);
+		assert_truthy(isRedirect(redirect_reason.defect));
+		assert_equals(redirect_reason.defect.status, 303);
+		assert_equals(redirect_reason.defect.location, "/oauth");
 	} finally {
 		reset_test_prerender();
 		reset_test_request_event();
@@ -814,6 +951,14 @@ function assert_live_failure_envelope(error: unknown, reason: string): void {
 	assert_equals(body.__svelte_effect_remote__, true);
 	assert_equals(parsed._tag, "LiveDomainError");
 	assert_equals(parsed.reason, reason);
+}
+
+function set_passthrough_prerender(): void {
+	set_test_prerender((_validator, wrapped_handler) => {
+		const handler = wrapped_handler as (input: unknown) => Promise<unknown>;
+
+		return (input: unknown) => handler(input);
+	});
 }
 
 function make_request_event() {
