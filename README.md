@@ -44,4 +44,4 @@ Write effectful code without any hassle. Seriously!
 | [`svelte-effect-runtime-language-server`](./modules/svelte-effect-runtime-language-server) | Standalone npm package for the SER language server used by editor tools.  |
 | [`svelte-effect-runtime-vsix`](./modules/svelte-effect-runtime-vsix)                       | VS Code extension that launches the SER language server for Svelte files. |
 
-Visit the **[docs](https://barekey.dev/docs/ser)** for guides and API reference.
+Visit the **[docs](https://docs.barekey.dev/ser/introduction)** for guides and API reference.

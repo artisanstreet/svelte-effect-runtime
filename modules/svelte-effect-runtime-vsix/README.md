@@ -8,4 +8,4 @@ extension at the installed server when that extension is installed, avoiding
 duplicate Svelte language servers. Without the official Svelte extension, it
 starts its own VS Code language client directly.
 
-Visit the [docs](https://barekey.dev/docs/ser) for more information.
+Visit the [docs](https://docs.barekey.dev/ser/tooling) for more information.
