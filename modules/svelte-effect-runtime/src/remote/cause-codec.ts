@@ -1,6 +1,6 @@
-import type { FormIssue } from "$/remote/shared.ts";
 import { isHttpError, isRedirect, isValidationError } from "@sveltejs/kit";
-import { Cause } from "effect";
+import { is_form_error, type FormIssue } from "$/remote/shared.ts";
+import { Cause, Schema } from "effect";
 import { stringify } from "devalue";
 
 /**
@@ -137,11 +137,11 @@ function find_form_error_issues(cause: Cause.Cause<unknown>): readonly FormIssue
 }
 
 function get_form_error_issues(value: unknown): readonly FormIssue[] | undefined {
-	if (!is_object_like(value) || (value as { readonly _tag?: unknown })._tag !== "FormError") {
-		return undefined;
+	if (is_form_error(value)) {
+		return value.issues;
 	}
 
-	return (value as { readonly issues?: readonly FormIssue[] }).issues ?? [];
+	return is_tagged_form_error(value) ? [] : undefined;
 }
 
 function is_sveltekit_control_flow(value: unknown): boolean {
@@ -244,3 +244,9 @@ function create_unknown_remote_failure(): { readonly message: string } {
 function stringify_unknown_remote_failure(): string {
 	return stringify(create_unknown_remote_failure());
 }
+
+const is_tagged_form_error = Schema.is(
+	Schema.Struct({
+		_tag: Schema.Literal("FormError"),
+	}),
+);

@@ -1,6 +1,6 @@
-import { Cause, Effect, Exit, Fiber } from "effect";
-import type { Fiber as FiberType } from "effect/Fiber";
 import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime";
+import type { Fiber as FiberType } from "effect/Fiber";
+import { Cause, Effect, Exit, Fiber } from "effect";
 
 /**
  * Callbacks fired when a watched dispatcher fiber completes.

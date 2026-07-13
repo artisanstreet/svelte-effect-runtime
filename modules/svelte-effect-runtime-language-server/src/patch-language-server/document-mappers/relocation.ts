@@ -1,6 +1,6 @@
-import { create_source_map_mapper } from "./source-map.ts";
-import { is_invalid_position, OffsetTable } from "./position.ts";
 import type { DocumentPosition, Mapper, Relocation } from "../types.ts";
+import { is_invalid_position, OffsetTable } from "./position.ts";
+import { create_source_map_mapper } from "./source-map.ts";
 
 /**
  * Result of creating a relocation mapper for a transform result.

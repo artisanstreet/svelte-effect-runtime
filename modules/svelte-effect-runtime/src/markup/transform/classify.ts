@@ -1,7 +1,6 @@
-import type { AST } from "svelte/compiler";
-
 import { is_svelte_event_attribute, normalize_event_attribute_name } from "../event-attributes.ts";
 import type { MarkupCandidate, TagKind } from "./types.ts";
+import type { AST } from "svelte/compiler";
 
 interface ClassifiedCandidate {
 	candidate: MarkupCandidate;
@@ -114,7 +113,13 @@ function visit_ast_node(
 			return;
 
 		case "SvelteElement":
-			classify_expression(node.tag as ExpressionLike, "plain", candidates, matched, classified);
+			classify_expression(
+				node.tag as ExpressionLike,
+				"plain",
+				candidates,
+				matched,
+				classified,
+			);
 			visit_element_attributes(node, candidates, matched, classified);
 			walk_ast(node.fragment, candidates, matched, classified);
 			return;

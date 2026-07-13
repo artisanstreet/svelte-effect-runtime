@@ -1,12 +1,26 @@
-import { DocumentSnapshot, import_runtime_module, patch_marker } from "./svelte-internals.ts";
-import { normalize_transform_result } from "./transform-results.ts";
 import {
 	patch_svelte_file_extensions,
 	patch_svelte_compiler_path,
 	patch_typescript_code_actions,
 	patch_typescript_snapshot_path,
 } from "./patches.ts";
+import { DocumentSnapshot, import_runtime_module, patch_marker } from "./svelte-internals.ts";
+import { normalize_transform_result } from "./transform-results.ts";
 
+/**
+ * Installs the SER compiler, snapshot, file-extension, and code-action patches
+ * into the Svelte language server process.
+ *
+ * @example
+ * ```ts
+ * await bootstrap_language_server();
+ * start_language_server();
+ * ```
+ *
+ * @since 2.0.0
+ * @returns A promise that resolves after every language-server patch has been
+ *   installed, or immediately when the process was already patched.
+ */
 export async function bootstrap_language_server() {
 	if (DocumentSnapshot.fromDocument[patch_marker]) {
 		return;

@@ -1,7 +1,6 @@
+import { decode_remote_error, is_decoded_remote_failure } from "./failures.ts";
 import { create_remote_http_error } from "$/remote/shared.ts";
 import type { RemoteFailure } from "$/remote/shared.ts";
-
-import { decode_remote_error, is_decoded_remote_failure } from "./failures.ts";
 
 /**
  * Decodes a failed fetch response into the runtime failure model.

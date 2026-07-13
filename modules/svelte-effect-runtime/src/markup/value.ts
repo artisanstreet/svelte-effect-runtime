@@ -4,10 +4,22 @@ import type { Effect } from "effect";
 /**
  * Runtime helper emitted by the markup transform for `{yield* expr}`
  * expressions in Svelte templates. Delegates to the dispatcher's
- * cached reactive value mechanism — returns the fallback synchronously,
+ * cached reactive value mechanism: it returns the fallback synchronously,
  * then the resolved value once the effect completes in the browser. During
  * SSR the client dispatcher is not touched, so browser-only layers cannot
  * turn server rendering into a 500.
+ *
+ * @example
+ * ```ts
+ * const user = value(
+ *   "load-user",
+ *   [user_id],
+ *   anonymous_user,
+ *   function* () {
+ *     return yield* get_user(user_id);
+ *   },
+ * );
+ * ```
  *
  * @since 2.0.0
  * @param id - Stable identifier generated from the expression's source

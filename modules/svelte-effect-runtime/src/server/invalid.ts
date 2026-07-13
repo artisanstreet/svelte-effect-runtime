@@ -1,8 +1,7 @@
 import { create_form_error } from "$/remote/shared.ts";
-import { Effect } from "effect";
 import type { FormIssue } from "$/remote/shared.ts";
-
 import type { FormInvalid } from "./types.ts";
+import { Effect } from "effect";
 
 /**
  * Creates a path-aware proxy for remote form validation failures.

@@ -1,6 +1,5 @@
-import { paths_equal } from "./paths.ts";
-
 import { isAbsolute, normalize, parse } from "node:path";
+import { paths_equal } from "./paths.ts";
 
 /**
  * Scoped configuration values for an executable language-server path.

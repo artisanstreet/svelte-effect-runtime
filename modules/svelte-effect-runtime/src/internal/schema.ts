@@ -43,7 +43,7 @@ export function is_standard_schema(value: unknown): value is StandardSchema {
 }
 
 /**
- * Checks whether a value looks like an Effect Schema.
+ * Checks whether a value is an Effect Schema.
  *
  * @example
  * ```ts
@@ -57,7 +57,7 @@ export function is_standard_schema(value: unknown): value is StandardSchema {
  * @returns Whether the value should be converted to Standard Schema.
  */
 export function is_effect_schema(value: unknown): value is Schema.Schema<unknown> {
-	return typeof value === "object" && value !== null && "ast" in value && "make" in value;
+	return Schema.isSchema(value);
 }
 
 /**

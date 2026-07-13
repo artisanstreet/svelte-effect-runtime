@@ -27,6 +27,7 @@ export function is_invalid_position(position: DocumentPosition): boolean {
  * ```
  *
  * @since 2.0.0
+ * @param text - Fixed document text whose line starts should be indexed.
  */
 export class OffsetTable {
 	private readonly line_starts: number[];

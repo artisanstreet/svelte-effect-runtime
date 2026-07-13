@@ -186,7 +186,8 @@ interface TagRegion extends SourceRange {
 
 /**
  * Scans a Svelte component once for shared lexical facts used by transforms,
- * diagnostics, and editor projections.
+ * diagnostics, and editor projections. The scanner accepts raw SER syntax
+ * before Svelte can parse it, so it deliberately stays tolerant and single-pass.
  *
  * @example
  * ```ts

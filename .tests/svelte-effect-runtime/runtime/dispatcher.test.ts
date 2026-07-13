@@ -23,8 +23,6 @@ function make_dispatcher(): Dispatcher {
 /** Small atomic effect that succeeds immediately. */
 const succeed_42 = Effect.succeed(42);
 
-// ─── fork ────────────────────────────────────────────────────
-
 test("fork returns a callable cleanup handle", () => {
 	const d = make_dispatcher();
 	const cleanup = d.fork(succeed_42);
@@ -88,14 +86,11 @@ test("non-interrupt failures surface as uncaught errors", async () => {
 		const _cleanup = d.fork(Effect.fail(new Error("expected failure")));
 		await sleep(50);
 
-		// Should have at least one queued error
 		if (errors.length === 0) throw new Error("expected error to be queued");
 	} finally {
 		(globalThis as Record<string, unknown>).queueMicrotask = original_queue;
 	}
 });
-
-// ─── value ───────────────────────────────────────────────────
 
 test("value returns the fallback synchronously before the effect resolves", () => {
 	const d = make_dispatcher();
@@ -347,17 +342,14 @@ test("value starts a new fiber when deps change", async () => {
 		factory,
 	};
 
-	// Start with deps=["a"]
 	assert_equals(d.value(opts1), 0);
 	await sleep(50);
 	assert_equals(d.value(opts1), 1);
 
-	// Switch to deps=["b"] — should start new fiber
 	assert_equals(d.value(opts2), 0);
 	await sleep(50);
 	assert_equals(d.value(opts2), 2);
 
-	// Old key should still return old cached value
 	assert_equals(d.value(opts1), 1);
 });
 
@@ -423,8 +415,6 @@ test("value does not fork when disposed", () => {
 	assert_equals(result, "nope");
 	if (ran) throw new Error("factory should not have run after dispose");
 });
-
-// ─── promise ─────────────────────────────────────────────────
 
 test("value stores failures and throws them during reads", async () => {
 	const d = make_dispatcher();
@@ -615,8 +605,6 @@ test("promise interrupts stale work when deps change", async () => {
 	d.dispose();
 });
 
-// ─── run ─────────────────────────────────────────────────────
-
 test("run returns a Promise that resolves with the effect's value", async () => {
 	const d = make_dispatcher();
 	const result = await d.run(succeed_42);
@@ -749,8 +737,6 @@ test("run rejects without executing after dispose", async () => {
 	if (ran) throw new Error("run should not execute after dispose");
 });
 
-// ─── dispose ─────────────────────────────────────────────────
-
 test("dispose does not throw when no fibers are active", () => {
 	const d = make_dispatcher();
 	d.dispose();
@@ -843,8 +829,6 @@ test("promise rejects after dispose", async () => {
 	);
 });
 
-// ─── get_dispatcher / reset_dispatcher ───────────────────────
-
 test("get_dispatcher returns the same instance across calls", () => {
 	reset_dispatcher();
 	const d1 = get_dispatcher();
@@ -895,8 +879,6 @@ test("ClientRuntime.make throws after lazy client runtime creation", () => {
 		reset_dispatcher();
 	}
 });
-
-// ─── Helpers ─────────────────────────────────────────────────
 
 function sleep(ms: number): Promise<void> {
 	return new Promise((r) => setTimeout(r, ms));

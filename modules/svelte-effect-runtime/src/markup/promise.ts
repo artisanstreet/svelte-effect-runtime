@@ -1,13 +1,7 @@
 import { get_dispatcher } from "$/generated/dispatcher.ts";
 import type { Effect } from "effect";
 
-/**
- * Options for markup promise behavior during server rendering.
- *
- * @since 2.4.0
- */
 interface MarkupPromiseOptions {
-	/** Keep the SSR promise pending so Svelte renders an await block fallback. */
 	ssr?: "pending";
 }
 
@@ -16,6 +10,17 @@ interface MarkupPromiseOptions {
  * `{#await yield* expr}` blocks. Delegates to the dispatcher's
  * promise mechanism. During SSR it can return a fallback promise without
  * starting the dispatcher.
+ *
+ * @example
+ * ```ts
+ * const user = await promise(
+ *   "load-user",
+ *   [user_id],
+ *   function* () {
+ *     return yield* get_user(user_id);
+ *   },
+ * );
+ * ```
  *
  * @since 2.0.0
  * @param id - Stable identifier generated from the expression's source

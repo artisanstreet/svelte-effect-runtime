@@ -1,4 +1,3 @@
-import { CONFIG_ROOT, CONFIG_SERVER_PATH, LANGUAGE_SERVER_PACKAGE_NAME } from "./constants.ts";
 import {
 	LANGUAGE_SERVER_PACKAGE_VERSION,
 	make_language_server_install_manifest,
@@ -7,8 +6,8 @@ import {
 	resolve_configured_server_path,
 	type ScopedServerPathConfiguration,
 } from "./server-path-policy.ts";
+import { CONFIG_ROOT, CONFIG_SERVER_PATH, LANGUAGE_SERVER_PACKAGE_NAME } from "./constants.ts";
 import { run_package_manager_install } from "./package-manager-install.ts";
-
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 

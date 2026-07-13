@@ -1,7 +1,3 @@
-import { Dispatcher as InternalDispatcher } from "$/dispatcher.ts";
-import { ServerOnlyImportError } from "$/errors.ts";
-import type { ErrorEffectFactory, RedirectEffectFactory } from "$/server/control-flow.ts";
-import type { RequestEvent as RequestEventShape } from "$/server/runtime.ts";
 import type {
 	CommandFactory,
 	FormFactory,
@@ -9,7 +5,11 @@ import type {
 	QueryFactory,
 	ServerRuntimeFactory,
 } from "$/server/types.ts";
+import type { ErrorEffectFactory, RedirectEffectFactory } from "$/server/control-flow.ts";
+import type { RequestEvent as RequestEventShape } from "$/server/runtime.ts";
+import { Dispatcher as InternalDispatcher } from "$/dispatcher.ts";
 import type { Context, Layer, ManagedRuntime } from "effect";
+import { ServerOnlyImportError } from "$/errors.ts";
 
 /**
  * Public API surface for `svelte-effect-runtime`.
@@ -199,7 +199,6 @@ export const RequestEvent: Context.Reference<RequestEventShape> = make_server_on
 export const get_server_runtime_or_throw: () => ManagedRuntime.ManagedRuntime<unknown, never> =
 	make_server_only_function("get_server_runtime_or_throw") as never;
 
-/** Re-export error types users need for typed catch handlers. */
 export type {
 	FormError,
 	FormIssue,
@@ -248,10 +247,8 @@ export {
 	is_remote_validation_error,
 } from "$/remote/shared.ts";
 
-/** Re-export app setup helpers so users can import them from root. */
 export { effect, type EffectOptions } from "$/compiler.ts";
 
-/** Re-export server helper types from the root entrypoint. */
 export type {
 	ErrorBody,
 	ErrorEffectFactory,
@@ -264,10 +261,8 @@ export type {
 	RedirectStatusName,
 } from "$/server/control-flow.ts";
 
-/** Re-export server helper types from the root entrypoint. */
 export type { LiveFactory, LiveStatus, RemoteLiveStream } from "$/live.ts";
 
-/** Re-export server helper types from the root entrypoint. */
 export type {
 	CommandFactory,
 	EffectLike,

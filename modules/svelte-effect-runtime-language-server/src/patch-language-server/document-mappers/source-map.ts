@@ -1,6 +1,5 @@
-import { TraceMap } from "@jridgewell/trace-mapping";
-
 import { SourceMapDocumentMapper } from "../svelte-internals.ts";
+import { TraceMap } from "@jridgewell/trace-mapping";
 import type { Mapper } from "../types.ts";
 
 /**

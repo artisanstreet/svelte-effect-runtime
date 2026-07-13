@@ -41,8 +41,6 @@ function assert_rejects_rune_yield(source: string, rune_name?: string): void {
 	}
 }
 
-// ─── Pass-through (identity) tests ───────────────────────────
-
 test("passes through a regular script body unchanged (no yield*)", () => {
 	const source = [
 		`import { foo } from "./bar";`,
@@ -105,8 +103,6 @@ test("passes through types, interfaces, enums, classes untouched", () => {
 	assert_string_includes(result.code, `enum Kind { A, B }`);
 	assert_string_includes(result.code, `class Helper { greet() { return "hi"; } }`);
 });
-
-// ─── $state(yield* expr) lowering ────────────────────────────
 
 test("preserves $state(yield* expr) as writable state", () => {
 	const source = `let user = $state(yield* getUser(id));`;
@@ -206,8 +202,6 @@ test("tracks reactive identifiers read by yielded remote arguments", () => {
 	assert_not_match(result.code, /\$effect\(\(\) =>/);
 });
 
-// ─── Destructuring yield* lowering ───────────────────────────
-
 test("lowers destructuring yield* into a boundary-compatible await", () => {
 	const source = `const { title, body } = yield* getPost(id);`;
 	const result = transform_script_effect(source, "Test.svelte");
@@ -221,8 +215,6 @@ test("lowers destructuring yield* into a boundary-compatible await", () => {
 	assert_not_match(result.code, /\$state<.*undefined/);
 	assert_not_match(result.code, /\$effect\(\(\) =>/);
 });
-
-// ─── $derived(yield* expr) lowering ──────────────────────────
 
 test("preserves $derived(yield* expr) as an async derived", () => {
 	const source = `let msg = $derived(yield* format(user) + "!");`;
@@ -239,15 +231,11 @@ test("preserves $derived(yield* expr) as an async derived", () => {
 	assert_not_match(result.code, /\$effect\(\(\) =>/);
 });
 
-// ─── $inspect lowering ───────────────────────────────────────
-
 test("rejects $inspect(yield* expr) because inspect is dev-only", () => {
 	const source = `$inspect(yield* debugInfo());`;
 
 	assert_rejects_rune_yield(source, "$inspect");
 });
-
-// ─── Assignment expressions with yield* ──────────────────────
 
 test("moves count = yield* expr into the effect body", () => {
 	const source = [`let count = $state(0);`, `count = yield* getCount();`].join("\n");
@@ -319,8 +307,6 @@ test("runs ordinary call statements after yielded arguments resolve", () => {
 	assert_not_match(result.code, /^recordValue\(__SER___call\);/m);
 });
 
-// ─── Bare yield* statement (fire and forget) ─────────────────
-
 test("moves bare yield* statements into the effect body", () => {
 	const source = `yield* logView(userId);`;
 	const result = transform_script_effect(source, "Test.svelte");
@@ -366,8 +352,6 @@ test("relocates yielded operands inside ToEffect when the same call appears earl
 	);
 });
 
-// ─── NOT lowered (function boundary) ─────────────────────────
-
 test("rejects yield* inside a $effect arrow function", () => {
 	const source = `$effect(() => { yield* doThing(); });`;
 
@@ -384,8 +368,6 @@ test("does NOT lower yield* in Effect.gen inside a const declaration", () => {
 	);
 	assert_not_match(result.code, /__SER__/);
 });
-
-// ─── Multiple yield* in one file ─────────────────────────────
 
 test("handles multiple yield* expressions in one script", () => {
 	const source = [
@@ -440,7 +422,8 @@ test("does not rescan generated code for repeated relocation text", () => {
 
 	const repeated_relocations = (result.relocations ?? []).filter(
 		(relocation) =>
-			source.slice(relocation.originalStart, relocation.originalEnd) === repeated_operand_text,
+			source.slice(relocation.originalStart, relocation.originalEnd) ===
+			repeated_operand_text,
 	);
 
 	assert_equals(repeated_relocations.length, repetitions);
@@ -456,8 +439,6 @@ test("does not rescan generated code for repeated relocation text", () => {
 		);
 	}
 });
-
-// ─── Import handling ─────────────────────────────────────────
 
 test("injects Effect import when not already present", () => {
 	const source = `yield* f();`;
@@ -571,8 +552,6 @@ test("declaration awaits do not inject Effect or untrack imports", () => {
 	assert_not_match(result.code, /\$effect\(\(\) =>/);
 });
 
-// ─── Error cases ─────────────────────────────────────────────
-
 test("passes through top-level await without yield*", () => {
 	const source = `const x = await fetch("/api");`;
 	const result = transform_script_effect(source, "Test.svelte");
@@ -636,8 +615,6 @@ test("rejects yield* inside synchronous rune callbacks", () => {
 	}
 });
 
-// ─── Generated naming conventions ────────────────────────────
-
 test("generates __SER___ prefix for temp bindings", () => {
 	const source = `const user = yield* getUser(id);`;
 	const result = transform_script_effect(source, "Test.svelte");
@@ -650,8 +627,6 @@ test("uses __SER___program for the generated Effect.gen program", () => {
 
 	assert_match(result.code, /__SER___program/);
 });
-
-// ─── Edge cases ──────────────────────────────────────────────
 
 test("preserves surrounding expression syntax character-for-character", () => {
 	const source = `let result = $derived(yield* compute(a, b) * 2 + 1);`;

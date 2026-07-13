@@ -1,16 +1,11 @@
-import type { RemoteFormInput } from "@sveltejs/kit";
-
-import {
-	is_standard_schema,
-	normalize_validator,
-	type StandardSchema,
-} from "$/internal/schema.ts";
-import { decode_response_or_value } from "./responses.ts";
-import { MakeEffectFromPromise } from "./effect.ts";
+import { is_standard_schema, normalize_validator, type StandardSchema } from "$/internal/schema.ts";
+import type { EffectRemoteForm, NativeFormRecord, NativeMethod } from "./types.ts";
 import { get_remote_action_id, submit_remote_form } from "./form-transport.ts";
 import { copy_property_descriptors, has_method } from "./utils.ts";
+import { decode_response_or_value } from "./responses.ts";
 import { wrap_enhance_callback } from "./form-enhance.ts";
-import type { EffectRemoteForm, NativeFormRecord, NativeMethod } from "./types.ts";
+import type { RemoteFormInput } from "@sveltejs/kit";
+import { MakeEffectFromPromise } from "./effect.ts";
 
 type RemoteInput<Input> = undefined extends Input ? Input | void : Input;
 
@@ -161,8 +156,7 @@ function normalize_validate_options(
 	}
 
 	const source = Function.prototype.toString.call(validate);
-	const uses_stable_option =
-		source.includes("includeUntouched") && !/\ball\s*=/.test(source);
+	const uses_stable_option = source.includes("includeUntouched") && !/\ball\s*=/.test(source);
 
 	if (!uses_stable_option) {
 		return options;

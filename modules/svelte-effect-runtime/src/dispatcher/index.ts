@@ -1,13 +1,3 @@
-import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime";
-import { Cause, Effect, Exit, Fiber, Layer, ManagedRuntime } from "effect";
-import { createSubscriber } from "svelte/reactivity";
-import type { Fiber as FiberType } from "effect/Fiber";
-import { isRedirect } from "@sveltejs/kit";
-
-import { RuntimeAlreadyInitializedError, DispatcherDisposedError } from "$/errors.ts";
-import { interrupt_fiber, watch_fiber_exit } from "./fibers.ts";
-import { hash_deps } from "./deps.ts";
-import { Code } from "./types.ts";
 import type {
 	DispatcherEvent,
 	Dispose,
@@ -17,6 +7,15 @@ import type {
 	PromiseOptions,
 	ValueOptions,
 } from "./types.ts";
+import { RuntimeAlreadyInitializedError, DispatcherDisposedError } from "$/errors.ts";
+import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime";
+import { Cause, Effect, Exit, Fiber, Layer, ManagedRuntime } from "effect";
+import { interrupt_fiber, watch_fiber_exit } from "./fibers.ts";
+import type { Fiber as FiberType } from "effect/Fiber";
+import { createSubscriber } from "svelte/reactivity";
+import { isRedirect } from "@sveltejs/kit";
+import { hash_deps } from "./deps.ts";
+import { Code } from "./types.ts";
 
 export { Code } from "./types.ts";
 export type { Dispose, PromiseOptions, ValueOptions } from "./types.ts";
@@ -50,15 +49,10 @@ type ValueCell<A> =
  * @internal
  */
 export class Dispatcher {
-	/** The underlying Effect runtime that executes forked programs. */
 	#runtime: ManagedRuntimeType<unknown, unknown>;
-	/** Active fibers keyed by cache id or generated fork id. */
 	#fibers = new Map<string, FiberType<unknown, unknown>>();
-	/** Reactive value cells keyed by value cache id. */
 	#value_cells = new Map<string, ValueCell<unknown>>();
-	/** Notifies subscribed Svelte template effects when value cells change. */
 	#notify_value_cells = (): void => {};
-	/** Subscribes the current Svelte tracking scope to value cell changes. */
 	#subscribe_value_cells = createSubscriber((update) => {
 		this.#notify_value_cells = update;
 
@@ -70,15 +64,10 @@ export class Dispatcher {
 			this.#notify_value_cells = (): void => {};
 		};
 	});
-	/** Pending promises keyed by promise cache id. */
 	#promise_values = new Map<string, Promise<unknown>>();
-	/** Current cache key per value block id. */
 	#value_ids = new Map<string, string>();
-	/** Current cache key per promise block id. */
 	#promise_ids = new Map<string, string>();
-	/** Whether dispose has been called, blocking new work. */
 	#disposed = false;
-	/** Monotonically increasing counter for unnamed fiber keys. */
 	#next_fiber_id = 0;
 
 	/**

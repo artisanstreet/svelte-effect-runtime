@@ -1,5 +1,5 @@
-import { contains_top_level_yield_star } from "$/detect.ts";
 import type { EffectCallbackRewriteContext } from "./effect-bindings.ts";
+import { contains_top_level_yield_star } from "$/detect.ts";
 import type { HelperDeclaration } from "./types.ts";
 
 import MagicString from "magic-string";

@@ -37,8 +37,6 @@ async function with_browser_document<A>(run_test: () => A | Promise<A>): Promise
 	}
 }
 
-// ─── Identity / pass-through ─────────────────────────────────
-
 function assert_rejects_markup_rune_yield(source: string, rune_name: string): void {
 	const error = assert_throws(() => transform_markup_effect(source, "Test.svelte"));
 
@@ -109,7 +107,6 @@ test("passes through markup with yield* inside a generator (function boundary)",
 	const source = `<span>{Effect.gen(function* () { yield* foo(); })}</span>`;
 	const result = transform_markup_effect(source, "Test.svelte");
 
-	// The yield* is inside function* — NOT top-level — so it should pass through
 	assert_string_includes(result.code, `yield*`);
 	if (result.has_yield) throw new Error("has_yield should be false");
 });
@@ -121,8 +118,6 @@ test("fast-path returns identity for files with no yield* text", () => {
 	if (result.code !== source) throw new Error("expected identity output");
 	if (result.has_yield) throw new Error("has_yield should be false");
 });
-
-// ─── Plain expressions ───────────────────────────────────────
 
 test("rewrites {yield* expr} as async promise expression", () => {
 	const source = `<span>{yield* renderDate()}</span>`;
@@ -162,8 +157,6 @@ test("rewrites yielded markup expressions using Effect import aliases", () => {
 		experimental: { async: true },
 	});
 });
-
-// ─── Block expressions ───────────────────────────────────────
 
 test("rewrites {#if yield* expr} in condition", () => {
 	const source = `{#if yield* hasAccess()}<p>yes</p>{/if}`;
@@ -641,8 +634,6 @@ test("rewrites {#key yield* expr} in key expression", () => {
 	assert_string_includes(result.code, `getKey`);
 	if (!result.has_yield) throw new Error("has_yield should be true");
 });
-
-// ─── Event handlers ──────────────────────────────────────────
 
 test("rewrites onclick event effect expressions as run wrappers", () => {
 	const source = `<button onclick={yield* trackEvent()}>click</button>`;
@@ -1226,8 +1217,6 @@ test("rejects nested callback yield* even with an outer yield*", () => {
 	);
 });
 
-// ─── Multiple yield* in one file ─────────────────────────────
-
 test("handles multiple yield* expressions in markup", () => {
 	const source = [`<p>{yield* getA()}</p>`, `<p>{yield* getB()}</p>`].join("\n");
 
@@ -1239,8 +1228,6 @@ test("handles multiple yield* expressions in markup", () => {
 		throw new Error(`expected 2 promise calls, got ${promise_calls}`);
 	}
 });
-
-// ─── Script tag injection ────────────────────────────────────
 
 test("records source relocations for lowered markup hover spans", () => {
 	const source = [
@@ -1315,7 +1302,6 @@ test("injects helper imports into existing instance script tag", () => {
 
 	assert_string_includes(result.code, `from "svelte-effect-runtime/internal/generators"`);
 	assert_string_includes(result.code, `let x = 1;`);
-	// The original content must be preserved
 	assert_string_includes(result.code, `<p>`);
 });
 
@@ -1336,12 +1322,9 @@ test("skips module context script tags", () => {
 
 	const result = transform_markup_effect(source, "Test.svelte");
 
-	// Must inject into a new script, not the module one
 	const script_count = [...result.code.matchAll(/<script\b/g)].length;
 	if (script_count < 2) throw new Error("expected at least 2 script tags");
 });
-
-// ─── Idempotency ─────────────────────────────────────────────
 
 test("is idempotent across repeated transform passes", () => {
 	const source = `<p>{yield* getValue()}</p>`;
@@ -1361,8 +1344,6 @@ test("is idempotent for generated event handlers", () => {
 	assert_equals(second.code, first.code);
 	assert_equals(second.has_yield, false);
 });
-
-// ─── Edge cases ──────────────────────────────────────────────
 
 test("is idempotent for generated Effect.gen event handlers", () => {
 	const source = [
@@ -1389,9 +1370,7 @@ test("does not choke on empty yield* brace contents", () => {
 	const source = `<span>{yield* }</span>`;
 	const result = transform_markup_effect(source, "Test.svelte");
 
-	// Regex match on yield* passes, but TS parser fails — should not crash
 	if (result.has_yield) {
-		// If it detected yield*, the output should still be valid
 		assert_string_includes(result.code, `Code.Markup.Promise`);
 	}
 });

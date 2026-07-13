@@ -1,8 +1,8 @@
-import { FragmentMapper } from "../svelte-internals.ts";
+import type { DocumentPosition, FragmentTagInfo, Mapper, Relocation } from "../types.ts";
 import { create_relocation_mapper } from "./relocation.ts";
 import { create_source_map_mapper } from "./source-map.ts";
+import { FragmentMapper } from "../svelte-internals.ts";
 import { is_invalid_position } from "./position.ts";
-import type { DocumentPosition, FragmentTagInfo, Mapper, Relocation } from "../types.ts";
 
 /**
  * Creates a mapper for script content nested inside a full Svelte document.

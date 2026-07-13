@@ -26,8 +26,6 @@ function parse_statement(text: string): ts.Statement {
 	return sf.statements[0]!;
 }
 
-// ─── contains_top_level_yield_star ───────────────────────────
-
 test("contains_top_level_yield_star: true for bare yield* expression", () => {
 	const node = parse_expression("yield* foo()");
 	assert_equals(contains_top_level_yield_star(node), true);
@@ -83,8 +81,6 @@ test("contains_top_level_yield_star: false for yield* in method declaration", ()
 	);
 	assert_equals(contains_top_level_yield_star(sf.statements[0]), false);
 });
-
-// ─── is_function_boundary ────────────────────────────────────
 
 test("is_function_boundary: true for arrow function", () => {
 	const sf = ts.createSourceFile(

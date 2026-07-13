@@ -1,15 +1,3 @@
-import { contains_top_level_yield_star } from "$/detect.ts";
-import {
-	collect_top_level_binding_names,
-	has_local_import_binding,
-	make_imports,
-} from "./imports.ts";
-import { create_source_map, slice } from "./source.ts";
-import { AwaitInEffectWorkError, PreprocessError } from "$/errors.ts";
-import { make_runtime_block_with_bindings } from "./runtime-block.ts";
-import { collect_yield_star_nodes, contains_top_level_await } from "./ast.ts";
-import { lower_statement } from "./lower.ts";
-import { validate_rune_yield_usage } from "./runes.ts";
 import type {
 	BlockRef,
 	EffectBlock,
@@ -18,6 +6,18 @@ import type {
 	ScriptLoweringContext,
 	ScriptTransformResult,
 } from "./types.ts";
+import {
+	collect_top_level_binding_names,
+	has_local_import_binding,
+	make_imports,
+} from "./imports.ts";
+import { collect_yield_star_nodes, contains_top_level_await } from "./ast.ts";
+import { AwaitInEffectWorkError, PreprocessError } from "$/errors.ts";
+import { make_runtime_block_with_bindings } from "./runtime-block.ts";
+import { contains_top_level_yield_star } from "$/detect.ts";
+import { create_source_map, slice } from "./source.ts";
+import { validate_rune_yield_usage } from "./runes.ts";
+import { lower_statement } from "./lower.ts";
 
 import MagicString from "magic-string";
 import ts from "typescript";

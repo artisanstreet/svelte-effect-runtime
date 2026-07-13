@@ -1,13 +1,12 @@
 import { analyze_event_body_yield_star, strip_arrow_function } from "./expressions.ts";
-import { collect_yield_star_nodes } from "$/script-transform/ast.ts";
-import { scan_svelte_effect_source } from "$/compiler/source-scan.ts";
 import { validate_rune_yield_usage } from "$/script-transform/runes.ts";
+import { scan_svelte_effect_source } from "$/compiler/source-scan.ts";
+import { collect_yield_star_nodes } from "$/script-transform/ast.ts";
 import { contains_top_level_yield_star } from "$/detect.ts";
 import type { MarkupCandidate, TagKind } from "./types.ts";
 import { HELPERS } from "./constants.ts";
 
 import MagicString from "magic-string";
-
 import ts from "typescript";
 
 interface SanitizeResult {

@@ -5,8 +5,8 @@ import {
 	type ServerOptions,
 	TransportKind,
 } from "vscode-languageclient/node.js";
-import { assert_safe_language_server_path } from "./server-path-policy.ts";
 import { create_initialization_options } from "./initialization-options.ts";
+import { assert_safe_language_server_path } from "./server-path-policy.ts";
 import { CLIENT_ID, CLIENT_NAME } from "./constants.ts";
 
 import process from "node:process";

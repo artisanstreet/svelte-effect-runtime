@@ -1,11 +1,10 @@
-import { encode_remote_failure, run_remote_effect } from "$/remote/server.ts";
-import { InvalidLiveQueryReturnError } from "$/errors.ts";
-import { create_serialized_remote_failure_envelope } from "$/remote/shared.ts";
 import { error as svelte_error, invalid as svelte_invalid } from "@sveltejs/kit";
-import { Cause, Effect, Stream } from "effect";
-
+import { create_serialized_remote_failure_envelope } from "$/remote/shared.ts";
+import { encode_remote_failure, run_remote_effect } from "$/remote/server.ts";
 import { get_server_runtime_or_throw, RequestEvent } from "./runtime.ts";
 import type { RequestEvent as RequestEventShape } from "./runtime.ts";
+import { InvalidLiveQueryReturnError } from "$/errors.ts";
+import { Cause, Effect, Stream } from "effect";
 import type { EffectLike } from "./types.ts";
 
 type ResolvedLiveSource<A> = AsyncIterable<A>;
@@ -43,21 +42,6 @@ export function ToEffect<A, E, R>(value: EffectLike<A, E, R>): Effect.Effect<A, 
 
 	return value;
 }
-
-/**
- * Compatibility alias for {@link ToEffect}.
- *
- * @example
- * ```ts
- * const program = to_effect(Effect.succeed(1));
- * ```
- *
- * @since 2.0.0
- * @param value - Effect or generator return value.
- * @returns Normalized Effect.
- * @internal
- */
-export const to_effect = ToEffect;
 
 /**
  * Checks whether a value is an Effect Stream live source.

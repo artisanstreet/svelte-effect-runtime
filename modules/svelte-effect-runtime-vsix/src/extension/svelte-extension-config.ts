@@ -1,18 +1,18 @@
 import {
-	LEGACY_STATE_MANAGED_PATH,
-	LEGACY_STATE_PREVIOUS_PATH,
-	LEGACY_TARGET_KEY,
-} from "./constants.ts";
-import {
 	assert_safe_language_server_path,
 	can_configure_svelte_language_server_path,
 	get_workspace_configured_server_path,
 	normalize_configured_server_path,
 	type ScopedServerPathConfiguration,
 } from "./server-path-policy.ts";
+import {
+	LEGACY_STATE_MANAGED_PATH,
+	LEGACY_STATE_PREVIOUS_PATH,
+	LEGACY_TARGET_KEY,
+} from "./constants.ts";
+import { access } from "node:fs/promises";
 import { paths_equal } from "./paths.ts";
 
-import { access } from "node:fs/promises";
 import path from "node:path";
 
 import * as vscode from "vscode";

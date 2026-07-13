@@ -15,8 +15,6 @@ import {
 	is_remote_transport_error,
 } from "../../../modules/svelte-effect-runtime/src/remote/shared.ts";
 
-// ─── Markers ───────────────────────────────────────────────────
-
 test("EFFECT_REMOTE_ERROR_MARKER is the expected string", () => {
 	assert_equals(EFFECT_REMOTE_ERROR_MARKER, "__svelte_effect_remote__");
 });
@@ -24,8 +22,6 @@ test("EFFECT_REMOTE_ERROR_MARKER is the expected string", () => {
 test("REMOTE_ERROR_DECODER is a symbol", () => {
 	assert_equals(typeof REMOTE_ERROR_DECODER, "symbol");
 });
-
-// ─── FormError ─────────────────────────────────────────────────
 
 test("create_form_error produces a FormError with _tag", () => {
 	const err = create_form_error([{ message: "required", path: ["name"] }]);
@@ -57,8 +53,6 @@ test("is_form_error returns false for plain objects", () => {
 	assert_false(is_form_error("FormError"));
 	assert_false(is_form_error(undefined));
 });
-
-// ─── Remote error constructors ─────────────────────────────────
 
 test("create_remote_validation_error builds correct shape", () => {
 	const err = create_remote_validation_error([{ message: "bad", path: ["field"] }]);
@@ -104,8 +98,6 @@ test("create_remote_transport_error builds correct shape", () => {
 	assert_equals(err.body, "raw body");
 });
 
-// ─── Serialised failure envelopes ──────────────────────────────
-
 test("create_serialized_remote_failure_envelope wraps encoded string", () => {
 	const env = create_serialized_remote_failure_envelope('{"msg":"fail"}');
 
@@ -123,8 +115,6 @@ test("is_serialized_remote_failure_envelope rejects non-envelopes", () => {
 	assert_false(is_serialized_remote_failure_envelope({ __svelte_effect_remote__: false }));
 	assert_false(is_serialized_remote_failure_envelope(null));
 });
-
-// ─── Type guards ───────────────────────────────────────────────
 
 test("is_remote_validation_error detects validation errors", () => {
 	const err = create_remote_validation_error([]);

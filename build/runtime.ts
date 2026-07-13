@@ -1,5 +1,5 @@
-import { build } from "rolldown";
 import { join, repo_root, reset_dir } from "./node-utils.ts";
+import { build } from "rolldown";
 
 const package_dir = join(repo_root, "modules", "svelte-effect-runtime");
 const output_dir = join(repo_root, ".dist", "svelte-effect-runtime");

@@ -26,13 +26,14 @@ export type Yieldable<A = unknown, E = unknown, R = unknown> =
  *
  * @since 3.4.8
  */
-export type YieldSuccess<Value> = Value extends Stream.Stream<infer A, unknown, unknown>
-	? A
-	: Value extends Effect.Effect<infer A, unknown, unknown>
+export type YieldSuccess<Value> =
+	Value extends Stream.Stream<infer A, unknown, unknown>
 		? A
-		: Value extends Effect.gen.Return<infer A, unknown, unknown>
+		: Value extends Effect.Effect<infer A, unknown, unknown>
 			? A
-			: never;
+			: Value extends Effect.gen.Return<infer A, unknown, unknown>
+				? A
+				: never;
 
 /**
  * Normalizes generated `yield*` operands into Effects.
@@ -77,9 +78,7 @@ export function ToEffect<A, E, R>(
 	return value;
 }
 
-function is_generator_result<A, E, R>(
-	value: unknown,
-): value is Effect.gen.Return<A, E, R> {
+function is_generator_result<A, E, R>(value: unknown): value is Effect.gen.Return<A, E, R> {
 	return (
 		typeof value === "object" &&
 		value !== null &&

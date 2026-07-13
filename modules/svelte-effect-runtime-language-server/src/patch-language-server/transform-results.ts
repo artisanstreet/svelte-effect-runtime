@@ -1,5 +1,5 @@
-import type { RequiredTransformResult, TransformResult } from "./types.ts";
 import { scan_svelte_effect_source } from "../../../svelte-effect-runtime/src/compiler/source-scan.ts";
+import type { RequiredTransformResult, TransformResult } from "./types.ts";
 
 import MagicString from "magic-string";
 

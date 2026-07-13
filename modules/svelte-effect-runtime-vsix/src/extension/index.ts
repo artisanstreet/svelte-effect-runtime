@@ -1,14 +1,14 @@
 import {
+	configure_svelte_extension_language_server,
+	migrate_legacy_svelte_configuration,
+	restore_svelte_extension_configuration,
+} from "./svelte-extension-config.ts";
+import {
 	affects_language_server_configuration,
 	get_client_mode,
 	is_language_server_enabled,
 	set_language_server_enabled,
 } from "./settings.ts";
-import {
-	configure_svelte_extension_language_server,
-	migrate_legacy_svelte_configuration,
-	restore_svelte_extension_configuration,
-} from "./svelte-extension-config.ts";
 import { start_language_server, stop_language_server } from "./client.ts";
 import { CLIENT_NAME, SVELTE_EXTENSION_ID } from "./constants.ts";
 import { register_language_server_commands } from "./commands.ts";

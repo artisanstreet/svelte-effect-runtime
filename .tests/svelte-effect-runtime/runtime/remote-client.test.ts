@@ -868,7 +868,10 @@ test("remote form adapter runs preflight before direct endpoint submit", async (
 		const error = await assert_rejects(() => Effect.runPromise(form({ title: "" })));
 
 		assert_equals((error as { _tag?: string })._tag, "RemoteValidationError");
-		assert_equals((error as { issues?: Array<{ message: string }> }).issues?.[0]?.message, "missing");
+		assert_equals(
+			(error as { issues?: Array<{ message: string }> }).issues?.[0]?.message,
+			"missing",
+		);
 		assert_equals(fetch_called, false);
 	} finally {
 		globalThis.fetch = original_fetch;

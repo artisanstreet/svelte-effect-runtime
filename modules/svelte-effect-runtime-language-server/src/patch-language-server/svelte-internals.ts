@@ -22,9 +22,27 @@ export const { Document } = require(
 export const { FragmentMapper, SourceMapDocumentMapper } = require(
 	path.join(language_server_root, "lib", "documents", "DocumentMapper.js"),
 ) as { FragmentMapper: any; SourceMapDocumentMapper: any };
-export const { extractScriptTags } = require(
-	path.join(language_server_root, "lib", "documents", "utils.js"),
-) as { extractScriptTags: (code: string) => any };
+
+/**
+ * Extracts instance and module script tags with the offsets expected by the
+ * Svelte language server's document pipeline.
+ *
+ * @example
+ * ```ts
+ * const scripts = extract_script_tags(`<script lang="ts">const count = 1;</script>`);
+ * const instance_source = scripts?.script?.content;
+ * ```
+ *
+ * @since 2.0.0
+ * @param code - Complete Svelte document source to inspect for script tags.
+ * @returns The Svelte language server's extracted script-tag records.
+ */
+export const extract_script_tags = (
+	require(path.join(language_server_root, "lib", "documents", "utils.js")) as {
+		extractScriptTags: (code: string) => any;
+	}
+).extractScriptTags;
+
 export const { DocumentSnapshot } = require(
 	path.join(language_server_root, "plugins", "typescript", "DocumentSnapshot.js"),
 ) as { DocumentSnapshot: any };
@@ -71,13 +89,28 @@ function resolve_runtime_import_root(package_root: string) {
 	return package_root;
 }
 
+/**
+ * Imports a runtime module from source during workspace development or from the
+ * packaged runtime assets after publication.
+ *
+ * @example
+ * ```ts
+ * const runtime_module = await import_runtime_module("runtime/transform.js");
+ * runtime_module.transform_svelte_effect(source, filename);
+ * ```
+ *
+ * @since 2.0.0
+ * @param relative_path - Runtime-relative JavaScript module path requested by
+ *   the packaged language-server bootstrap.
+ * @returns A promise for the matching source or packaged runtime module.
+ */
 export function import_runtime_module(relative_path: string) {
 	const source_relative_path = relative_path.replace(/\.js$/, ".ts");
 	const is_source_root = existsSync(path.join(runtime_import_root, source_relative_path));
-	const resolvedPath = path.join(
+	const resolved_path = path.join(
 		runtime_import_root,
 		is_source_root ? source_relative_path : relative_path,
 	);
 
-	return import(pathToFileURL(resolvedPath).href);
+	return import(pathToFileURL(resolved_path).href);
 }

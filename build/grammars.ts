@@ -1,6 +1,6 @@
-import { build } from "rolldown";
-import { generate_tree_sitter_query_module } from "./grammar-query-codegen.ts";
 import { cp, join, readFile, repo_root, reset_dir, writeFile } from "./node-utils.ts";
+import { generate_tree_sitter_query_module } from "./grammar-query-codegen.ts";
+import { build } from "rolldown";
 
 const package_dir = join(repo_root, "modules", "svelte-effect-runtime-grammars");
 const output_dir = join(repo_root, ".dist", "svelte-effect-runtime-grammars");

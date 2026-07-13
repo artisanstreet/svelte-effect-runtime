@@ -1,11 +1,11 @@
 import { InvalidLiveQueryFactoryError, InvalidQueryFactoryError } from "$/errors.ts";
-import { copy_property_descriptors, has_method } from "./utils.ts";
-import { normalize_native_error } from "./failures.ts";
-import { resolve_query_result } from "./query-result.ts";
-import { MakeEffectFromPromise } from "./effect.ts";
 import type { EffectRemoteQueryUpdateBrand, NativeMethod } from "./types.ts";
-import type { RemoteFailure } from "$/remote/shared.ts";
 import { make_remote_live_stream, type RemoteLiveStream } from "$/live.ts";
+import { copy_property_descriptors, has_method } from "./utils.ts";
+import { resolve_query_result } from "./query-result.ts";
+import type { RemoteFailure } from "$/remote/shared.ts";
+import { normalize_native_error } from "./failures.ts";
+import { MakeEffectFromPromise } from "./effect.ts";
 import { Effect } from "effect";
 
 type RemoteInput<Input> = undefined extends Input ? Input | void : Input;

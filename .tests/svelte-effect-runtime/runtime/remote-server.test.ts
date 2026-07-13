@@ -37,8 +37,6 @@ import { create_form_error } from "../../../modules/svelte-effect-runtime/src/re
 import { InvalidLiveQueryReturnError } from "../../../modules/svelte-effect-runtime/src/errors.ts";
 import * as sveltekit_server from "../../../modules/svelte-effect-runtime/src/internal/sveltekit-server.ts";
 
-// ─── normalize_remote_helper_error ─────────────────────────────
-
 test("normalize_remote_helper_error wraps request-event context errors", () => {
 	const err = new Error(
 		"Can only read the current request event inside functions invoked during `handle`, such as server `load` functions, actions, endpoints, and other server hooks.",
@@ -95,8 +93,6 @@ test("SvelteKit server fallback exports throw clear boundary errors", () => {
 		assert_string_includes(error.message, "inside a SvelteKit server module");
 	}
 });
-
-// ─── throw_form_error ──────────────────────────────────────────
 
 test("throw_form_error calls invalid with issues", () => {
 	const captured_issues: unknown[] = [];
@@ -185,8 +181,6 @@ test("classify_remote_cause encodes tagged domain failures", () => {
 	assert_equals(parsed._tag, "DbError");
 	assert_equals(parsed.code, 42);
 });
-
-// ─── encode_remote_failure ─────────────────────────────────────
 
 test("encode_remote_failure serialises a tagged error from a Cause", async () => {
 	const program = Effect.gen(function* () {
@@ -303,8 +297,6 @@ test("encode_remote_failure handles cause with no failures gracefully", () => {
 
 	assert_equals(parsed.message, "[UNKNOWN_REMOTE_FAILURE]: Unknown error");
 });
-
-// ─── run_remote_effect ─────────────────────────────────────────
 
 test("Error resolves named status aliases", async () => {
 	const thrown = await assert_rejects(() =>

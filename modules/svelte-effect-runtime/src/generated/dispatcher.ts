@@ -1,5 +1,3 @@
-import { get_dispatcher as get_client_dispatcher } from "$/dispatcher.ts";
-import { get_server_dispatcher } from "$/server/runtime.ts";
 import type {
 	Dispatcher as RuntimeDispatcher,
 	DispatcherEvent,
@@ -7,6 +5,8 @@ import type {
 	MarkupRunEvent,
 	MarkupValueEvent,
 } from "$/dispatcher.ts";
+import { get_dispatcher as get_client_dispatcher } from "$/dispatcher.ts";
+import { get_server_dispatcher } from "$/server/runtime.ts";
 
 export { Code } from "$/dispatcher.ts";
 export type {

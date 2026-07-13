@@ -1,7 +1,6 @@
-import { Effect, Stream } from "effect";
-
 import { InvalidLiveQueryFactoryError } from "$/errors.ts";
 import type { RemoteFailure } from "$/remote/shared.ts";
+import { Effect, Stream } from "effect";
 
 /**
  * Runtime marker attached to remote live streams created by SER.

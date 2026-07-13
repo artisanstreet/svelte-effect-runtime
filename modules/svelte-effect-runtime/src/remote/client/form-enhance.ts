@@ -1,9 +1,8 @@
-import { get_dispatcher } from "$/dispatcher.ts";
-import { Effect } from "effect";
-
-import { MakeEffectFromPromise } from "./effect.ts";
-import { has_method } from "./utils.ts";
 import type { EffectRemoteFormSubmit, NativeMethod } from "./types.ts";
+import { MakeEffectFromPromise } from "./effect.ts";
+import { get_dispatcher } from "$/dispatcher.ts";
+import { has_method } from "./utils.ts";
+import { Effect } from "effect";
 
 /**
  * Wraps a remote form enhance callback so Effect return values are run.

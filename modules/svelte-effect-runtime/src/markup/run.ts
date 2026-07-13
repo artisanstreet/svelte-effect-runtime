@@ -4,8 +4,15 @@ import { Effect } from "effect";
 /**
  * Runtime helper emitted by the markup transform for inline event
  * handlers containing `yield*`. Wraps the user's generator in an
- * `Effect.gen` and delegates to the dispatcher's fire-and-forget
- * mechanism.
+ * `Effect.gen` and delegates execution to the dispatcher, returning its
+ * completion or failure to the caller.
+ *
+ * @example
+ * ```ts
+ * await run(function* () {
+ *   yield* save_changes;
+ * });
+ * ```
  *
  * @since 2.0.0
  * @param factory - Generator function that yields the effect to run.

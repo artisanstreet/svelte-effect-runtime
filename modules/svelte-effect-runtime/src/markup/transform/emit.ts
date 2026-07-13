@@ -1,12 +1,3 @@
-import { AsyncEffectInEventCallbackError, YieldStarInEventCallbackError } from "$/errors.ts";
-import type { EffectCallbackRewriteContext } from "./effect-bindings.ts";
-import { collect_yield_star_nodes } from "$/script-transform/ast.ts";
-import {
-	analyze_event_body_yield_star,
-	collect_free_identifiers,
-	is_callback_function_expression,
-} from "./expressions.ts";
-import { normalize_effect_callback_yields } from "./effect-callbacks.ts";
 import type {
 	HelperDeclaration,
 	MarkupCandidate,
@@ -17,6 +8,15 @@ import type {
 	Replacement,
 	TagKind,
 } from "./types.ts";
+import {
+	analyze_event_body_yield_star,
+	collect_free_identifiers,
+	is_callback_function_expression,
+} from "./expressions.ts";
+import { AsyncEffectInEventCallbackError, YieldStarInEventCallbackError } from "$/errors.ts";
+import type { EffectCallbackRewriteContext } from "./effect-bindings.ts";
+import { normalize_effect_callback_yields } from "./effect-callbacks.ts";
+import { collect_yield_star_nodes } from "$/script-transform/ast.ts";
 
 import ts from "typescript";
 

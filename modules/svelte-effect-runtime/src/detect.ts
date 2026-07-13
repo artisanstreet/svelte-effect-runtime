@@ -7,8 +7,12 @@ import ts from "typescript";
  *
  * @example
  * ```ts
- * const sf = ts.createSourceFile("test.ts", "yield* foo()", ...);
- * contains_top_level_yield_star(sf.statements[0]); // true
+ * const source_file = ts.createSourceFile(
+ *   "test.ts",
+ *   "yield* foo()",
+ *   ts.ScriptTarget.Latest,
+ * );
+ * const contains_yield = contains_top_level_yield_star(source_file.statements[0]);
  * ```
  *
  * @since 2.0.0
@@ -35,8 +39,13 @@ export function contains_top_level_yield_star(node: ts.Node): boolean {
  *
  * @example
  * ```ts
- * const stmt = parseStatement("function foo() {}");
- * is_function_boundary(stmt); // true
+ * const source_file = ts.createSourceFile(
+ *   "test.ts",
+ *   "function foo() {}",
+ *   ts.ScriptTarget.Latest,
+ * );
+ * const statement = source_file.statements[0];
+ * const is_boundary = is_function_boundary(statement);
  * ```
  *
  * @since 2.0.0
@@ -54,14 +63,6 @@ export function is_function_boundary(node: ts.Node): boolean {
 	);
 }
 
-/**
- * Returns `true` when the node is a binary expression shaped like
- * `yield * operand` — a yield* delegate expression in TypeScript's AST.
- *
- * @since 2.0.0
- * @param node - The node to check.
- * @returns Whether the node is a `yield*` expression.
- */
 function is_yield_star_expression(node: ts.Node): boolean {
 	return (
 		ts.isBinaryExpression(node) &&

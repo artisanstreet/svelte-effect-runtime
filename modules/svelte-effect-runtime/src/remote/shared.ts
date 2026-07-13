@@ -38,8 +38,6 @@ export const EFFECT_REMOTE_ERROR_MARKER = "__svelte_effect_remote__";
  */
 export const REMOTE_ERROR_DECODER = Symbol.for("svelte-effect-runtime/remote-error-decoder");
 
-/** Form validation helpers and types. */
-
 /**
  * A single field-level or form-level validation issue reported by a
  * {@link Form} handler.
@@ -119,16 +117,13 @@ export function is_form_error(value: unknown): value is FormError {
 	return is_form_error_value(value);
 }
 
-/** Remote error types shared by client and server helpers. */
-
 /**
  * Union of all wire-level error shapes that a remote function can
  * surface on its error channel.
  *
  * @example
  * ```ts
- * const result = yield* myQuery();
- * // error channel is RemoteFailure<DomainError>
+ * const result: Effect.Effect<User, RemoteFailure<DomainError>> = myQuery();
  * ```
  *
  * @since 2.0.0
@@ -268,8 +263,6 @@ const is_serialized_remote_failure_envelope_value = Schema.is(
 	SerializedRemoteFailureEnvelopeSchema,
 );
 
-/** Constructors for structured remote error values. */
-
 /**
  * Creates a {@link RemoteValidationError} from a list of form issues.
  *
@@ -358,8 +351,6 @@ export function create_serialized_remote_failure_envelope(
 ): SerializedRemoteFailureEnvelope {
 	return { __svelte_effect_remote__: true, encoded };
 }
-
-/** Type guards for structured remote error values. */
 
 /**
  * Checks whether a value is a {@link SerializedRemoteFailureEnvelope}.
