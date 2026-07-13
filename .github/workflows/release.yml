@@ -120,6 +120,9 @@ jobs:
       - name: install_dependencies
         run: corepack pnpm install --frozen-lockfile
 
+      - name: check
+        run: corepack pnpm run check
+
       - name: resolve_release_version
         id: release_meta
         shell: bash

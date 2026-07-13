@@ -1,3 +1,5 @@
+import type { SubscriptionContext } from "./types.ts";
+
 import * as vscode from "vscode";
 
 /**
@@ -31,7 +33,7 @@ export interface LanguageServerCommandHandlers {
  * @returns Nothing.
  */
 export function register_language_server_commands(
-	context: vscode.ExtensionContext,
+	context: SubscriptionContext,
 	handlers: LanguageServerCommandHandlers,
 ): void {
 	context.subscriptions.push(

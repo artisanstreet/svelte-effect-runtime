@@ -1,20 +1,103 @@
 import {
-	configure_svelte_extension_language_server,
-	migrate_legacy_svelte_configuration,
-	restore_svelte_extension_configuration,
+	ConfigureSvelteExtensionLanguageServer,
+	MigrateLegacySvelteConfiguration,
+	RestoreSvelteExtensionConfiguration,
 } from "./svelte-extension-config.ts";
 import {
+	PackageManagerCommand,
+	PackageManagerCommandLive,
+	PackageManagerInstallFiles,
+	PackageManagerInstallFilesLive,
+} from "./package-manager-install.ts";
+import {
 	affects_language_server_configuration,
-	get_client_mode,
-	is_language_server_enabled,
-	set_language_server_enabled,
+	GetClientMode,
+	GetLanguageServerEnabled,
+	SetLanguageServerEnabled,
 } from "./settings.ts";
-import { start_language_server, stop_language_server } from "./client.ts";
-import { CLIENT_NAME, SVELTE_EXTENSION_ID } from "./constants.ts";
+import {
+	Cause,
+	Context,
+	Effect,
+	FileSystem,
+	Layer,
+	ManagedRuntime,
+	Option,
+	Path,
+	Ref,
+} from "effect";
+import { client_name, config_root, config_server_path, svelte_extension_id } from "./constants.ts";
+import { LanguageClientControl, make_language_client_control_layer } from "./client.ts";
+import { make_server_path_resolver_layer, ServerPathResolver } from "./server-path.ts";
+import { normalize_configured_server_path } from "./server-path-policy.ts";
+import { MakeCoordinatorShutdownGate } from "./coordinator-lifecycle.ts";
 import { register_language_server_commands } from "./commands.ts";
-import { get_server_path } from "./server-path.ts";
+import { NodeFileSystem, NodePath } from "@effect/platform-node";
+import type { ClientMode } from "./types.ts";
 
 import * as vscode from "vscode";
+
+type LanguageServerSyncState = "direct" | "disabled" | "svelteExtension" | "unconfigured";
+type ExtensionInfrastructure =
+	| FileSystem.FileSystem
+	| PackageManagerCommand
+	| PackageManagerInstallFiles
+	| Path.Path;
+
+interface LanguageServerConfigurationSnapshot {
+	client_mode: ClientMode;
+	enabled: boolean;
+	global_path: string | undefined;
+	workspace_folder_language_path: string | undefined;
+	workspace_folder_path: string | undefined;
+	workspace_language_path: string | undefined;
+	workspace_path: string | undefined;
+}
+
+interface CompletedLanguageServerSync {
+	snapshot: LanguageServerConfigurationSnapshot;
+	state: LanguageServerSyncState;
+}
+
+/**
+ * Serializes and deduplicates every language-server state transition.
+ *
+ * @example
+ * ```ts
+ * const program = Effect.gen(function* () {
+ * 	const coordinator = yield* LanguageServerCoordinator;
+ * 	return yield* coordinator.sync;
+ * });
+ * ```
+ *
+ * @since 4.0.1
+ */
+export class LanguageServerCoordinator extends Context.Service<
+	LanguageServerCoordinator,
+	{
+		readonly restart: Effect.Effect<
+			void,
+			unknown,
+			LanguageClientControl | ServerPathResolver | ExtensionInfrastructure
+		>;
+		readonly shutdown: Effect.Effect<void, unknown, LanguageClientControl>;
+		readonly start: Effect.Effect<
+			void,
+			unknown,
+			LanguageClientControl | ServerPathResolver | ExtensionInfrastructure
+		>;
+		readonly stop: Effect.Effect<
+			void,
+			unknown,
+			LanguageClientControl | ServerPathResolver | ExtensionInfrastructure
+		>;
+		readonly sync: Effect.Effect<
+			LanguageServerSyncState,
+			unknown,
+			LanguageClientControl | ServerPathResolver | ExtensionInfrastructure
+		>;
+	}
+>()("svelte-effect-runtime-vsix/LanguageServerCoordinator") {}
 
 /**
  * Starts the VS Code extension and launches or delegates language-server
@@ -26,15 +109,17 @@ import * as vscode from "vscode";
  * ```
  *
  * @since 2.0.0
- * @param context - VS Code extension context used to resolve bundled files,
- *   register commands, and persist migration state.
- * @returns A promise that resolves once activation work has completed.
+ * @param context - VS Code extension context used to register adapters and own
+ *   the activation-scoped runtime.
+ * @returns A promise that resolves after initial reconciliation finishes.
  */
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-	const output_channel = vscode.window.createOutputChannel(CLIENT_NAME);
-	const sync = async () => {
-		return await sync_language_server_state(context, output_channel);
-	};
+	const output_channel = vscode.window.createOutputChannel(client_name);
+	const runtime = make_extension_runtime(context, output_channel);
+	const run_command = (program: Effect.Effect<void, unknown, ExtensionServices>) =>
+		runtime.runPromise(HandleLanguageServerCommand(output_channel, program));
+
+	extension_runtime = runtime;
 
 	context.subscriptions.push(
 		output_channel,
@@ -43,56 +128,58 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 				return;
 			}
 
-			void run_language_server_command(output_channel, sync);
+			void run_command(
+				Effect.gen(function* () {
+					const coordinator = yield* LanguageServerCoordinator;
+
+					yield* coordinator.sync;
+				}),
+			);
 		}),
 	);
 
 	register_language_server_commands(context, {
 		start: () =>
-			run_language_server_command(output_channel, async () => {
-				await set_language_server_enabled(true);
+			run_command(
+				Effect.gen(function* () {
+					const coordinator = yield* LanguageServerCoordinator;
 
-				const state = await sync();
-				await restart_delegated_svelte_language_server(output_channel, state);
-
-				void vscode.window.showInformationMessage(
-					"Svelte Effect Runtime language server enabled.",
-				);
-			}),
+					yield* coordinator.start;
+				}),
+			),
 		stop: () =>
-			run_language_server_command(output_channel, async () => {
-				await set_language_server_enabled(false);
+			run_command(
+				Effect.gen(function* () {
+					const coordinator = yield* LanguageServerCoordinator;
 
-				const state = await sync();
-				await restart_delegated_svelte_language_server(output_channel, state);
-
-				void vscode.window.showInformationMessage(
-					"Svelte Effect Runtime language server disabled.",
-				);
-			}),
+					yield* coordinator.stop;
+				}),
+			),
 		restart: () =>
-			run_language_server_command(output_channel, async () => {
-				await stop_language_server();
+			run_command(
+				Effect.gen(function* () {
+					const coordinator = yield* LanguageServerCoordinator;
 
-				const state = await sync();
-				await restart_delegated_svelte_language_server(output_channel, state);
-
-				void vscode.window.showInformationMessage(
-					"Svelte Effect Runtime language server restarted.",
-				);
-			}),
-		show_output: () =>
-			run_language_server_command(output_channel, () => {
-				output_channel.show(true);
-			}),
+					yield* coordinator.restart;
+				}),
+			),
+		show_output: () => {
+			void run_command(Effect.sync(() => output_channel.show(true)));
+		},
 	});
 
-	await migrate_legacy_svelte_configuration(context);
-	await run_language_server_command(output_channel, sync);
+	await run_command(
+		Effect.gen(function* () {
+			const coordinator = yield* LanguageServerCoordinator;
+
+			yield* MigrateLegacySvelteConfiguration(context);
+			yield* coordinator.sync;
+		}),
+	);
 }
 
 /**
- * Stops the active language client when VS Code unloads the extension.
+ * Stops scoped extension resources when VS Code unloads the extension.
  *
  * @example
  * ```ts
@@ -100,102 +187,325 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
  * ```
  *
  * @since 2.0.0
- * @returns A promise that resolves once the language client has stopped.
+ * @returns A promise that resolves once the managed runtime has been disposed.
  */
 export async function deactivate(): Promise<void> {
-	await stop_language_server();
-}
+	const runtime = extension_runtime;
 
-async function sync_language_server_state(
-	context: vscode.ExtensionContext,
-	output_channel: vscode.OutputChannel,
-): Promise<LanguageServerSyncState> {
-	const server_path = await get_server_path(context, output_channel);
+	extension_runtime = undefined;
 
-	if (!is_language_server_enabled()) {
-		await stop_language_server();
-		await restore_svelte_extension_configuration(context);
-
-		return "disabled";
+	if (!runtime) {
+		return;
 	}
 
-	const client_mode = get_client_mode();
-	const svelte_extension = vscode.extensions.getExtension(SVELTE_EXTENSION_ID);
-	const should_use_svelte_extension =
-		client_mode === "svelteExtension" ||
-		(client_mode === "auto" && svelte_extension !== undefined);
+	await runtime.runPromise(
+		Effect.gen(function* () {
+			const coordinator = yield* LanguageServerCoordinator;
 
-	if (should_use_svelte_extension) {
-		await stop_language_server();
+			yield* coordinator.shutdown;
+		}).pipe(Effect.ensuring(runtime.disposeEffect)),
+	);
+}
 
-		if (!svelte_extension) {
-			output_channel.appendLine(
+function make_extension_runtime(
+	context: vscode.ExtensionContext,
+	output_channel: vscode.OutputChannel,
+) {
+	const node_services = Layer.merge(NodeFileSystem.layer, NodePath.layer);
+	const install_files = PackageManagerInstallFilesLive.pipe(Layer.provide(node_services));
+	const application_layer = Layer.mergeAll(
+		node_services,
+		PackageManagerCommandLive,
+		install_files,
+		make_language_client_control_layer(output_channel),
+		make_server_path_resolver_layer(context, output_channel),
+		make_language_server_coordinator_layer(context, output_channel),
+	);
+
+	return ManagedRuntime.make(application_layer);
+}
+
+type ExtensionRuntime = ReturnType<typeof make_extension_runtime>;
+type ExtensionServices =
+	| ExtensionInfrastructure
+	| LanguageClientControl
+	| LanguageServerCoordinator
+	| ServerPathResolver;
+
+let extension_runtime: ExtensionRuntime | undefined;
+
+function make_language_server_coordinator_layer(
+	context: vscode.ExtensionContext,
+	output_channel: vscode.OutputChannel,
+): Layer.Layer<LanguageServerCoordinator> {
+	return Layer.effect(
+		LanguageServerCoordinator,
+		Effect.gen(function* () {
+			const completed_sync = yield* Ref.make(Option.none<CompletedLanguageServerSync>());
+			const shutdown_gate = yield* MakeCoordinatorShutdownGate();
+			const Synchronize = (force: boolean) =>
+				SynchronizeLanguageServerState(context, output_channel, completed_sync, force);
+			const CurrentState: Effect.Effect<LanguageServerSyncState> = Ref.get(
+				completed_sync,
+			).pipe(
+				Effect.map((current_sync) =>
+					Option.isSome(current_sync) ? current_sync.value.state : "unconfigured",
+				),
+			);
+			const Sync = shutdown_gate
+				.run(Synchronize(false))
+				.pipe(
+					Effect.flatMap((state) =>
+						Option.isSome(state) ? Effect.succeed(state.value) : CurrentState,
+					),
+				);
+			const Start = shutdown_gate
+				.run(
+					Effect.gen(function* () {
+						yield* SetLanguageServerEnabled(true);
+
+						const state = yield* Synchronize(false);
+
+						yield* RestartDelegatedSvelteLanguageServer(output_channel, state);
+						yield* ShowInformationMessage(
+							"Svelte Effect Runtime language server enabled.",
+						);
+					}),
+				)
+				.pipe(Effect.asVoid);
+			const Stop = shutdown_gate
+				.run(
+					Effect.gen(function* () {
+						yield* SetLanguageServerEnabled(false);
+
+						const state = yield* Synchronize(false);
+
+						yield* RestartDelegatedSvelteLanguageServer(output_channel, state);
+						yield* ShowInformationMessage(
+							"Svelte Effect Runtime language server disabled.",
+						);
+					}),
+				)
+				.pipe(Effect.asVoid);
+			const Restart = shutdown_gate
+				.run(
+					Effect.gen(function* () {
+						const client = yield* LanguageClientControl;
+
+						yield* client.stop;
+
+						const state = yield* Synchronize(true);
+
+						yield* RestartDelegatedSvelteLanguageServer(output_channel, state);
+						yield* ShowInformationMessage(
+							"Svelte Effect Runtime language server restarted.",
+						);
+					}),
+				)
+				.pipe(Effect.asVoid);
+			const Shutdown = Effect.gen(function* () {
+				const client = yield* LanguageClientControl;
+
+				yield* shutdown_gate.close;
+				yield* client.stop;
+			});
+
+			return {
+				restart: Restart,
+				shutdown: Shutdown,
+				start: Start,
+				stop: Stop,
+				sync: Sync,
+			};
+		}),
+	);
+}
+
+function SynchronizeLanguageServerState(
+	context: vscode.ExtensionContext,
+	output_channel: vscode.OutputChannel,
+	completed_sync: Ref.Ref<Option.Option<CompletedLanguageServerSync>>,
+	force: boolean,
+): Effect.Effect<
+	LanguageServerSyncState,
+	unknown,
+	LanguageClientControl | ServerPathResolver | ExtensionInfrastructure
+> {
+	return Effect.gen(function* () {
+		const snapshot = yield* ReadLanguageServerConfigurationSnapshot;
+		const previous_sync = yield* Ref.get(completed_sync);
+
+		if (
+			!force &&
+			Option.isSome(previous_sync) &&
+			configuration_snapshots_equal(previous_sync.value.snapshot, snapshot)
+		) {
+			return previous_sync.value.state;
+		}
+
+		const state = yield* ReconcileLanguageServerState(context, output_channel, snapshot);
+
+		yield* Ref.set(completed_sync, Option.some({ snapshot, state }));
+
+		return state;
+	});
+}
+
+function ReconcileLanguageServerState(
+	context: vscode.ExtensionContext,
+	output_channel: vscode.OutputChannel,
+	snapshot: LanguageServerConfigurationSnapshot,
+): Effect.Effect<
+	LanguageServerSyncState,
+	unknown,
+	LanguageClientControl | ServerPathResolver | ExtensionInfrastructure
+> {
+	return Effect.gen(function* () {
+		const client = yield* LanguageClientControl;
+
+		if (!snapshot.enabled) {
+			yield* client.stop;
+			yield* RestoreSvelteExtensionConfiguration(context);
+
+			return "disabled";
+		}
+
+		const svelte_extension = yield* Effect.sync(() =>
+			vscode.extensions.getExtension(svelte_extension_id),
+		);
+		const should_use_svelte_extension =
+			snapshot.client_mode === "svelteExtension" ||
+			(snapshot.client_mode === "auto" && svelte_extension !== undefined);
+
+		if (should_use_svelte_extension && !svelte_extension) {
+			yield* client.stop;
+			yield* AppendLine(
+				output_channel,
 				"Svelte extension client mode selected, but svelte.svelte-vscode is not installed.",
 			);
 
 			return "unconfigured";
 		}
 
-		const configured = await configure_svelte_extension_language_server(context, server_path, {
-			force: client_mode === "svelteExtension",
-		});
+		const resolver = yield* ServerPathResolver;
+		const server_path = yield* resolver.get;
 
-		if (!configured) {
-			output_channel.appendLine(
-				"Svelte extension has a custom language-server.ls-path. Leaving it unchanged to avoid clobbering user settings.",
-			);
+		if (should_use_svelte_extension) {
+			yield* client.stop;
 
-			return "unconfigured";
+			const configured = yield* ConfigureSvelteExtensionLanguageServer(context, server_path, {
+				force: snapshot.client_mode === "svelteExtension",
+			});
+
+			if (!configured) {
+				yield* AppendLine(
+					output_channel,
+					"Svelte extension has a custom language-server.ls-path. Leaving it unchanged to avoid clobbering user settings.",
+				);
+
+				return "unconfigured";
+			}
+
+			return "svelteExtension";
 		}
 
-		return "svelteExtension";
-	}
+		yield* RestoreSvelteExtensionConfiguration(context);
+		yield* client.start(server_path);
 
-	await restore_svelte_extension_configuration(context);
-	await start_language_server(output_channel, server_path);
-
-	return "direct";
+		return "direct";
+	});
 }
 
-type LanguageServerSyncState = "direct" | "disabled" | "svelteExtension" | "unconfigured";
-
-async function run_language_server_command(
-	output_channel: vscode.OutputChannel,
-	command: () => void | Promise<void>,
-): Promise<void> {
-	try {
-		await command();
-	} catch (error) {
-		const message = format_error(error);
-
-		output_channel.appendLine(message);
-		output_channel.show(true);
-
-		void vscode.window.showErrorMessage(`Svelte Effect Runtime command failed: ${message}`);
-	}
-}
-
-async function restart_delegated_svelte_language_server(
-	output_channel: vscode.OutputChannel,
-	state: LanguageServerSyncState,
-): Promise<void> {
-	if (state !== "svelteExtension" && state !== "disabled") {
-		return;
-	}
-
-	const commands = await vscode.commands.getCommands(true);
-
-	if (!commands.includes("svelte.restartLanguageServer")) {
-		output_channel.appendLine(
-			"Svelte extension restart command is unavailable. Restart the VS Code extension host to apply language-server path changes.",
+const ReadLanguageServerConfigurationSnapshot: Effect.Effect<LanguageServerConfigurationSnapshot> =
+	Effect.gen(function* () {
+		const client_mode = yield* GetClientMode;
+		const enabled = yield* GetLanguageServerEnabled;
+		const inspection = yield* Effect.sync(() =>
+			vscode.workspace.getConfiguration(config_root).inspect(config_server_path),
 		);
 
-		return;
-	}
+		return {
+			client_mode,
+			enabled,
+			global_path: normalize_configured_server_path(inspection?.globalValue),
+			workspace_folder_language_path: normalize_configured_server_path(
+				inspection?.workspaceFolderLanguageValue,
+			),
+			workspace_folder_path: normalize_configured_server_path(
+				inspection?.workspaceFolderValue,
+			),
+			workspace_language_path: normalize_configured_server_path(
+				inspection?.workspaceLanguageValue,
+			),
+			workspace_path: normalize_configured_server_path(inspection?.workspaceValue),
+		};
+	});
 
-	await vscode.commands.executeCommand("svelte.restartLanguageServer");
+function RestartDelegatedSvelteLanguageServer(
+	output_channel: vscode.OutputChannel,
+	state: LanguageServerSyncState,
+): Effect.Effect<void, unknown> {
+	return Effect.gen(function* () {
+		if (state !== "svelteExtension" && state !== "disabled") {
+			return;
+		}
+
+		const commands = yield* Effect.tryPromise(() => vscode.commands.getCommands(true));
+
+		if (!commands.includes("svelte.restartLanguageServer")) {
+			yield* AppendLine(
+				output_channel,
+				"Svelte extension restart command is unavailable. Restart the VS Code extension host to apply language-server path changes.",
+			);
+
+			return;
+		}
+
+		yield* Effect.tryPromise(() =>
+			vscode.commands.executeCommand("svelte.restartLanguageServer"),
+		);
+	});
 }
 
-function format_error(error: unknown): string {
-	return error instanceof Error ? (error.stack ?? error.message) : String(error);
+function HandleLanguageServerCommand<R>(
+	output_channel: vscode.OutputChannel,
+	program: Effect.Effect<void, unknown, R>,
+): Effect.Effect<void, never, R> {
+	return Effect.catchCause(program, (cause) =>
+		Effect.gen(function* () {
+			const message = Cause.pretty(cause);
+
+			yield* AppendLine(output_channel, message);
+			yield* Effect.sync(() => output_channel.show(true));
+			yield* Effect.tryPromise(() =>
+				vscode.window.showErrorMessage(`Svelte Effect Runtime command failed: ${message}`),
+			).pipe(Effect.ignore);
+		}),
+	);
+}
+
+function ShowInformationMessage(message: string): Effect.Effect<void> {
+	return Effect.tryPromise(() => vscode.window.showInformationMessage(message)).pipe(
+		Effect.asVoid,
+		Effect.ignore,
+	);
+}
+
+function AppendLine(output_channel: vscode.OutputChannel, message: string): Effect.Effect<void> {
+	return Effect.sync(() => output_channel.appendLine(message));
+}
+
+function configuration_snapshots_equal(
+	left: LanguageServerConfigurationSnapshot,
+	right: LanguageServerConfigurationSnapshot,
+): boolean {
+	return (
+		left.client_mode === right.client_mode &&
+		left.enabled === right.enabled &&
+		left.global_path === right.global_path &&
+		left.workspace_folder_language_path === right.workspace_folder_language_path &&
+		left.workspace_folder_path === right.workspace_folder_path &&
+		left.workspace_language_path === right.workspace_language_path &&
+		left.workspace_path === right.workspace_path
+	);
 }

@@ -18,6 +18,7 @@
 	"main": "./.dist/extension.cjs",
 	"scripts": {
 		"build": "corepack pnpm run clean && vp node ../../build/ext.ts",
+		"check": "vp exec tsc -p tsconfig.json --noEmit",
 		"clean": "vp node ../../build/clean.ts svelte-effect-runtime-vsix",
 		"package": "corepack pnpm run build && vp node ../../build/vsix.ts"
 	},

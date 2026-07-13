@@ -1,5 +1,6 @@
 import { isAbsolute, normalize, parse } from "node:path";
 import { paths_equal } from "./paths.ts";
+import { Option, Schema } from "effect";
 
 /**
  * Scoped configuration values for an executable language-server path.
@@ -180,11 +181,13 @@ export function can_configure_svelte_language_server_path(
  * @returns The trimmed string value, or undefined when no path is configured.
  */
 export function normalize_configured_server_path(value: unknown): string | undefined {
-	if (typeof value !== "string") {
+	const decoded_value = Schema.decodeUnknownOption(Schema.String)(value);
+
+	if (Option.isNone(decoded_value)) {
 		return undefined;
 	}
 
-	const configured_path = value.trim();
+	const configured_path = decoded_value.value.trim();
 
 	return configured_path.length === 0 ? undefined : configured_path;
 }

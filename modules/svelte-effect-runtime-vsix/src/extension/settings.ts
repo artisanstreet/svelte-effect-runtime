@@ -1,10 +1,11 @@
 import {
-	CONFIG_CLIENT_MODE,
-	CONFIG_ENABLED,
-	CONFIG_ROOT,
-	CONFIG_SERVER_PATH,
+	config_client_mode,
+	config_enabled,
+	config_root,
+	config_server_path,
 } from "./constants.ts";
-import type { ClientMode } from "./types.ts";
+import { ClientModeSchema, type ClientMode } from "./types.ts";
+import { Effect, Schema } from "effect";
 
 import * as vscode from "vscode";
 
@@ -24,58 +25,70 @@ export function affects_language_server_configuration(
 	event: vscode.ConfigurationChangeEvent,
 ): boolean {
 	return (
-		event.affectsConfiguration(`${CONFIG_ROOT}.${CONFIG_ENABLED}`) ||
-		event.affectsConfiguration(`${CONFIG_ROOT}.${CONFIG_CLIENT_MODE}`) ||
-		event.affectsConfiguration(`${CONFIG_ROOT}.${CONFIG_SERVER_PATH}`)
+		event.affectsConfiguration(`${config_root}.${config_enabled}`) ||
+		event.affectsConfiguration(`${config_root}.${config_client_mode}`) ||
+		event.affectsConfiguration(`${config_root}.${config_server_path}`)
 	);
 }
 
 /**
- * Reads whether the extension should run a language server.
+ * Reads and validates whether the extension should run a language server.
  *
  * @example
  * ```ts
- * if (!is_language_server_enabled()) await stop_language_server();
+ * const enabled = yield* GetLanguageServerEnabled;
  * ```
  *
- * @since 2.0.0
- * @returns Whether language-server support is enabled.
+ * @since 4.0.1
  */
-export function is_language_server_enabled(): boolean {
-	return vscode.workspace.getConfiguration(CONFIG_ROOT).get(CONFIG_ENABLED, true);
-}
+export const GetLanguageServerEnabled: Effect.Effect<boolean> = Effect.gen(function* () {
+	const raw_enabled = yield* Effect.sync(() =>
+		vscode.workspace.getConfiguration(config_root).get<unknown>(config_enabled, true),
+	);
+
+	return yield* Schema.decodeUnknownEffect(Schema.Boolean)(raw_enabled).pipe(
+		Effect.orElseSucceed(() => true),
+	);
+});
 
 /**
  * Persists the language-server enabled setting.
  *
  * @example
  * ```ts
- * await set_language_server_enabled(false);
+ * yield* SetLanguageServerEnabled(false);
  * ```
  *
- * @since 2.0.0
+ * @since 4.0.1
  * @param enabled - Desired enabled state to write globally.
- * @returns A promise that resolves once the setting has been updated.
+ * @returns An Effect that completes once VS Code has persisted the setting.
  */
-export async function set_language_server_enabled(enabled: boolean): Promise<void> {
-	await vscode.workspace
-		.getConfiguration(CONFIG_ROOT)
-		.update(CONFIG_ENABLED, enabled, vscode.ConfigurationTarget.Global);
+export function SetLanguageServerEnabled(enabled: boolean): Effect.Effect<void, unknown> {
+	return Effect.gen(function* () {
+		yield* Effect.tryPromise(() =>
+			vscode.workspace
+				.getConfiguration(config_root)
+				.update(config_enabled, enabled, vscode.ConfigurationTarget.Global),
+		);
+	});
 }
 
 /**
- * Reads the configured client strategy.
+ * Reads and validates the configured client strategy.
  *
  * @example
  * ```ts
- * const mode = get_client_mode();
+ * const mode = yield* GetClientMode;
  * ```
  *
- * @since 2.0.0
- * @returns The configured client mode, defaulting to `auto`.
+ * @since 4.0.1
  */
-export function get_client_mode(): ClientMode {
-	return vscode.workspace
-		.getConfiguration(CONFIG_ROOT)
-		.get<ClientMode>(CONFIG_CLIENT_MODE, "auto");
-}
+export const GetClientMode: Effect.Effect<ClientMode> = Effect.gen(function* () {
+	const raw_mode = yield* Effect.sync(() =>
+		vscode.workspace.getConfiguration(config_root).get<unknown>(config_client_mode, "auto"),
+	);
+
+	return yield* Schema.decodeUnknownEffect(ClientModeSchema)(raw_mode).pipe(
+		Effect.orElseSucceed((): ClientMode => "auto"),
+	);
+});

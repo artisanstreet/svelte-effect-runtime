@@ -1,10 +1,12 @@
-import { join, readdir, remove_path, repo_root } from "./node-utils.ts";
+import { Effect, FileSystem, Path, PlatformError, Schema } from "effect";
+import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import { RemovePath, RepoRoot } from "./node-utils.ts";
 
 type CleanTarget = {
-	paths: string[];
-	files?: Array<{
+	paths: ReadonlyArray<string>;
+	files?: ReadonlyArray<{
 		directory: string;
-		extensions: string[];
+		extensions: ReadonlyArray<string>;
 	}>;
 };
 
@@ -15,110 +17,166 @@ const target_names = [
 	"svelte-effect-runtime-vsix",
 	"docs",
 ] as const;
-const clean_targets: Record<string, CleanTarget> = {
-	"svelte-effect-runtime": {
-		paths: [
-			join(repo_root, ".dist", "svelte-effect-runtime"),
-			join(repo_root, "modules", "svelte-effect-runtime", ".dist"),
-			join(repo_root, "modules", "svelte-effect-runtime", ".tmp"),
-		],
-		files: [
-			{
-				directory: join(repo_root, "modules", "svelte-effect-runtime"),
-				extensions: [".tgz"],
-			},
-		],
-	},
-	"svelte-effect-runtime-grammars": {
-		paths: [
-			join(repo_root, ".dist", "svelte-effect-runtime-grammars"),
-			join(repo_root, "modules", "svelte-effect-runtime-grammars", ".dist"),
-		],
-		files: [
-			{
-				directory: join(repo_root, "modules", "svelte-effect-runtime-grammars"),
-				extensions: [".tgz"],
-			},
-		],
-	},
-	"svelte-effect-runtime-language-server": {
-		paths: [
-			join(repo_root, ".dist", "svelte-effect-runtime-language-server"),
-			join(repo_root, "modules", "svelte-effect-runtime-language-server", ".dist"),
-			join(repo_root, "modules", "svelte-effect-runtime-language-server", ".tmp"),
-			join(repo_root, "modules", "svelte-effect-runtime-language-server", "runtime"),
-		],
-		files: [
-			{
-				directory: join(repo_root, "modules", "svelte-effect-runtime-language-server"),
-				extensions: [".tgz"],
-			},
-		],
-	},
-	"svelte-effect-runtime-vsix": {
-		paths: [
-			join(repo_root, ".dist", "svelte-effect-runtime-vsix"),
-			join(repo_root, "modules", "svelte-effect-runtime-vsix", ".dist"),
-			join(repo_root, "modules", "svelte-effect-runtime-vsix", "runtime"),
-		],
-		files: [
-			{
-				directory: join(repo_root, "modules", "svelte-effect-runtime-vsix"),
-				extensions: [".vsix"],
-			},
-		],
-	},
-	docs: {
-		paths: [
-			join(repo_root, "modules", "docs", ".next"),
-			join(repo_root, "modules", "docs", ".source"),
-			join(repo_root, "modules", "docs", ".vercel"),
-			join(repo_root, "modules", "docs", "next-env.d.ts"),
-		],
-	},
-};
+const CleanTargetNameSchema = Schema.Literals(target_names);
+const CleanTargetNamesSchema = Schema.Array(CleanTargetNameSchema);
 
-const targets = process.argv.length > 2 ? process.argv.slice(2) : [...target_names];
+const Main = Effect.gen(function* () {
+	const file_system = yield* FileSystem.FileSystem;
+	const path = yield* Path.Path;
+	const repo_root = yield* RepoRoot;
+	const clean_targets = yield* MakeCleanTargets(repo_root);
+	const requested_targets = process.argv.length > 2 ? process.argv.slice(2) : target_names;
+	const targets = yield* Schema.decodeUnknownEffect(CleanTargetNamesSchema)(requested_targets);
+	const target_set = new Set(targets);
 
-for (const target of targets) {
-	if (!target_names.includes(target as (typeof target_names)[number])) {
-		throw new Error(`Unknown clean target: ${target}`);
-	}
+	for (const target of targets) {
+		const config = clean_targets[target];
 
-	const config = clean_targets[target];
-
-	for (const path of config.paths) {
-		await remove_path(path);
-	}
-
-	for (const file_config of config.files ?? []) {
-		await remove_matching_files(file_config.directory, file_config.extensions);
-	}
-}
-
-if (targets.length === target_names.length) {
-	await remove_path(join(repo_root, ".dist"));
-	await remove_path(join(repo_root, ".tmp"));
-}
-
-async function remove_matching_files(directory: string, extensions: string[]): Promise<void> {
-	let entries;
-
-	try {
-		entries = await readdir(directory, { withFileTypes: true });
-	} catch {
-		return;
-	}
-
-	for (const entry of entries) {
-		if (!entry.isFile()) {
-			continue;
+		for (const target_path of config.paths) {
+			yield* RemovePath(target_path);
 		}
 
-		if (!extensions.some((extension) => entry.name.endsWith(extension))) {
-			continue;
+		for (const file_config of config.files ?? []) {
+			yield* RemoveMatchingFiles(file_config.directory, file_config.extensions);
 		}
-
-		await remove_path(join(directory, entry.name));
 	}
+
+	if (target_names.every((target) => target_set.has(target))) {
+		yield* file_system.remove(path.join(repo_root, ".dist"), {
+			force: true,
+			recursive: true,
+		});
+		yield* file_system.remove(path.join(repo_root, ".tmp"), {
+			force: true,
+			recursive: true,
+		});
+	}
+});
+
+function MakeCleanTargets(repo_root: string) {
+	return Effect.gen(function* () {
+		const path = yield* Path.Path;
+		const clean_targets: Record<(typeof target_names)[number], CleanTarget> = {
+			"svelte-effect-runtime": {
+				paths: [
+					path.join(repo_root, ".dist", "svelte-effect-runtime"),
+					path.join(repo_root, "modules", "svelte-effect-runtime", ".dist"),
+					path.join(repo_root, "modules", "svelte-effect-runtime", ".tmp"),
+				],
+				files: [
+					{
+						directory: path.join(repo_root, "modules", "svelte-effect-runtime"),
+						extensions: [".tgz"],
+					},
+				],
+			},
+			"svelte-effect-runtime-grammars": {
+				paths: [
+					path.join(repo_root, ".dist", "svelte-effect-runtime-grammars"),
+					path.join(repo_root, "modules", "svelte-effect-runtime-grammars", ".dist"),
+				],
+				files: [
+					{
+						directory: path.join(
+							repo_root,
+							"modules",
+							"svelte-effect-runtime-grammars",
+						),
+						extensions: [".tgz"],
+					},
+				],
+			},
+			"svelte-effect-runtime-language-server": {
+				paths: [
+					path.join(repo_root, ".dist", "svelte-effect-runtime-language-server"),
+					path.join(
+						repo_root,
+						"modules",
+						"svelte-effect-runtime-language-server",
+						".dist",
+					),
+					path.join(
+						repo_root,
+						"modules",
+						"svelte-effect-runtime-language-server",
+						".tmp",
+					),
+					path.join(
+						repo_root,
+						"modules",
+						"svelte-effect-runtime-language-server",
+						"runtime",
+					),
+				],
+				files: [
+					{
+						directory: path.join(
+							repo_root,
+							"modules",
+							"svelte-effect-runtime-language-server",
+						),
+						extensions: [".tgz"],
+					},
+				],
+			},
+			"svelte-effect-runtime-vsix": {
+				paths: [
+					path.join(repo_root, ".dist", "svelte-effect-runtime-vsix"),
+					path.join(repo_root, "modules", "svelte-effect-runtime-vsix", ".dist"),
+					path.join(repo_root, "modules", "svelte-effect-runtime-vsix", "runtime"),
+				],
+				files: [
+					{
+						directory: path.join(repo_root, "modules", "svelte-effect-runtime-vsix"),
+						extensions: [".vsix"],
+					},
+				],
+			},
+			docs: {
+				paths: [
+					path.join(repo_root, "modules", "docs", ".next"),
+					path.join(repo_root, "modules", "docs", ".source"),
+					path.join(repo_root, "modules", "docs", ".vercel"),
+					path.join(repo_root, "modules", "docs", "next-env.d.ts"),
+				],
+			},
+		};
+
+		return clean_targets;
+	});
 }
+
+function RemoveMatchingFiles(directory: string, extensions: ReadonlyArray<string>) {
+	return Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+		const path = yield* Path.Path;
+		const entries = yield* file_system
+			.readDirectory(directory)
+			.pipe(
+				Effect.catch((error) =>
+					is_not_found_error(error) ? Effect.succeed([]) : Effect.fail(error),
+				),
+			);
+
+		for (const entry of entries) {
+			if (!extensions.some((extension) => entry.endsWith(extension))) {
+				continue;
+			}
+
+			const entry_path = path.join(directory, entry);
+			const info = yield* file_system.stat(entry_path);
+
+			if (info.type !== "File") {
+				continue;
+			}
+
+			yield* file_system.remove(entry_path, { force: true });
+		}
+	});
+}
+
+function is_not_found_error(error: PlatformError.PlatformError): boolean {
+	return error.reason._tag === "NotFound";
+}
+
+NodeRuntime.runMain(Main.pipe(Effect.provide(NodeServices.layer)));

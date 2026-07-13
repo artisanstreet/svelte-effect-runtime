@@ -1,105 +1,148 @@
-import {
-	copyFile,
-	cp,
-	command_name,
-	is_not_found_error,
-	join,
-	make_temp_dir,
-	mkdir,
-	readFile,
-	remove_path,
-	repo_root,
-	run_command,
-	writeFile,
-} from "./node-utils.ts";
+import { CommandName, MakeTempDirScoped, RepoRoot, RemovePath, RunCommand } from "./node-utils.ts";
+import { Effect, FileSystem, Path, PlatformError, Schema } from "effect";
+import { NodeRuntime, NodeServices } from "@effect/platform-node";
 
-const package_dir = join(repo_root, "modules", "svelte-effect-runtime-vsix");
-const output_dir = join(repo_root, ".dist", "svelte-effect-runtime-vsix");
-const extension_files = ["extension.cjs", "extension.cjs.map"] as const;
+const ExtensionManifestSchema = Schema.StructWithRest(
+	Schema.Struct({
+		name: Schema.Literals(["svelte-effect-runtime-vscode"] as const),
+		version: Schema.String.pipe(
+			Schema.check(
+				Schema.isPattern(
+					/^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/,
+				),
+			),
+		),
+		files: Schema.optional(Schema.Array(Schema.String)),
+	}),
+	[Schema.Record(Schema.String, Schema.Unknown)],
+);
 
-const staging_dir = await make_temp_dir("svelte-effect-runtime-vsix-");
-const staging_dist_dir = join(staging_dir, ".dist");
+const Main = Effect.scoped(
+	Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+		const path = yield* Path.Path;
+		const repo_root = yield* RepoRoot;
+		const package_dir = path.join(repo_root, "modules", "svelte-effect-runtime-vsix");
+		const output_dir = path.join(repo_root, ".dist", "svelte-effect-runtime-vsix");
+		const staging_dir = yield* MakeTempDirScoped("svelte-effect-runtime-vsix-");
+		const staging_dist_dir = path.join(staging_dir, ".dist");
 
-try {
-	await prepare_staging();
-	await copy_extension_output();
+		yield* file_system.makeDirectory(staging_dist_dir, { recursive: true });
+		yield* CopyExtensionOutput({
+			repo_root,
+			package_dir,
+			output_dir,
+			staging_dir,
+			staging_dist_dir,
+		});
 
-	const manifest = await write_manifest();
+		const manifest = yield* WriteManifest(package_dir, staging_dir);
 
-	await package_extension(manifest);
-} finally {
-	await remove_path(staging_dir);
-}
+		yield* PackageExtension(manifest, output_dir, staging_dir);
+	}),
+);
 
-async function prepare_staging(): Promise<void> {
-	await mkdir(staging_dist_dir, { recursive: true });
-}
+function CopyExtensionOutput(options: {
+	repo_root: string;
+	package_dir: string;
+	output_dir: string;
+	staging_dir: string;
+	staging_dist_dir: string;
+}) {
+	return Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+		const path = yield* Path.Path;
+		const { repo_root, package_dir, output_dir, staging_dir, staging_dist_dir } = options;
 
-async function copy_extension_output(): Promise<void> {
-	await cp(join(output_dir, "chunks"), join(staging_dist_dir, "chunks"), {
-		force: true,
-		recursive: true,
-	}).catch((error) => {
-		if (!is_not_found_error(error)) {
-			throw error;
-		}
-	});
+		yield* file_system
+			.copy(path.join(output_dir, "chunks"), path.join(staging_dist_dir, "chunks"), {
+				overwrite: true,
+			})
+			.pipe(Effect.catch((error) => IgnoreNotFound(error)));
 
-	for (const filename of extension_files) {
-		await copyFile(join(output_dir, filename), join(staging_dist_dir, filename)).catch(
-			(error) => {
-				if (!is_not_found_error(error)) {
-					throw error;
-				}
-			},
+		yield* file_system.copyFile(
+			path.join(output_dir, "extension.cjs"),
+			path.join(staging_dist_dir, "extension.cjs"),
 		);
-	}
+		yield* file_system
+			.copyFile(
+				path.join(output_dir, "extension.cjs.map"),
+				path.join(staging_dist_dir, "extension.cjs.map"),
+			)
+			.pipe(Effect.catch((error) => IgnoreNotFound(error)));
 
-	await copyFile(join(package_dir, "README.md"), join(staging_dir, "README.md"));
-	await copyFile(join(repo_root, "LICENSE"), join(staging_dir, "LICENSE"));
+		yield* file_system.copyFile(
+			path.join(package_dir, "README.md"),
+			path.join(staging_dir, "README.md"),
+		);
+		yield* file_system.copyFile(
+			path.join(repo_root, "LICENSE"),
+			path.join(staging_dir, "LICENSE"),
+		);
+	});
 }
 
-async function write_manifest(): Promise<Record<string, unknown>> {
-	const manifest = JSON.parse(await readFile(join(package_dir, "package.json"), "utf8"));
+function WriteManifest(package_dir: string, staging_dir: string) {
+	return Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+		const path = yield* Path.Path;
+		const manifest_text = yield* file_system.readFileString(
+			path.join(package_dir, "package.json"),
+		);
+		const manifest = yield* Schema.decodeUnknownEffect(
+			Schema.fromJsonString(ExtensionManifestSchema),
+		)(manifest_text);
 
-	await writeFile(
-		join(staging_dir, "package.json"),
-		`${JSON.stringify(prepare_manifest(manifest), null, 2)}\n`,
-	);
+		yield* file_system.writeFileString(
+			path.join(staging_dir, "package.json"),
+			`${JSON.stringify(prepare_manifest(manifest), null, 2)}\n`,
+		);
 
-	return manifest;
+		return manifest;
+	});
 }
 
-async function package_extension(manifest: Record<string, unknown>) {
-	const output_name = `${manifest.name}-${manifest.version}.vsix`;
+function PackageExtension(
+	manifest: typeof ExtensionManifestSchema.Type,
+	output_dir: string,
+	staging_dir: string,
+) {
+	return Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+		const path = yield* Path.Path;
+		const command = yield* CommandName("corepack");
+		const output_name = `${manifest.name}-${manifest.version}.vsix`;
 
-	await mkdir(output_dir, { recursive: true });
-	await remove_path(join(output_dir, output_name));
-	await run_command(
-		command_name("corepack"),
-		[
-			"pnpm",
-			"dlx",
-			"@vscode/vsce@3.7.1",
-			"package",
-			"--allow-missing-repository",
-			"--no-dependencies",
-			"--out",
-			join(output_dir, output_name),
-		],
-		staging_dir,
-		{ inherit: true },
-	);
+		yield* file_system.makeDirectory(output_dir, { recursive: true });
+		yield* RemovePath(path.join(output_dir, output_name));
+		yield* RunCommand(
+			command,
+			[
+				"pnpm",
+				"dlx",
+				"@vscode/vsce@3.7.1",
+				"package",
+				"--allow-missing-repository",
+				"--no-dependencies",
+				"--out",
+				path.join(output_dir, output_name),
+			],
+			staging_dir,
+			{ inherit: true },
+		);
+	});
 }
 
-function prepare_manifest(manifest: Record<string, unknown>) {
-	const files = Array.isArray(manifest.files)
-		? manifest.files.filter((value): value is string => typeof value === "string")
-		: [];
-
+function prepare_manifest(manifest: typeof ExtensionManifestSchema.Type) {
 	return {
 		...manifest,
 		packageManager: "pnpm@11.10.0",
-		files,
+		files: manifest.files ?? [],
 	};
 }
+
+function IgnoreNotFound(error: PlatformError.PlatformError) {
+	return error.reason._tag === "NotFound" ? Effect.void : Effect.fail(error);
+}
+
+NodeRuntime.runMain(Main.pipe(Effect.provide(NodeServices.layer)));

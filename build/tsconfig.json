@@ -1,0 +1,16 @@
+{
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"noEmit": true,
+		"ignoreDeprecations": "6.0",
+		"verbatimModuleSyntax": true,
+		"strict": true,
+		"exactOptionalPropertyTypes": true,
+		"skipLibCheck": true,
+		"allowImportingTsExtensions": true,
+		"types": ["node"]
+	},
+	"include": ["./*.ts"]
+}

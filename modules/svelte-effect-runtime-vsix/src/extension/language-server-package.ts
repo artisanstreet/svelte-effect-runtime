@@ -1,8 +1,8 @@
-import { LANGUAGE_SERVER_PACKAGE_NAME } from "./constants.ts";
+import { language_server_package_name } from "./constants.ts";
 
 import extension_manifest from "../../package.json" with { type: "json" };
 
-export const LANGUAGE_SERVER_PACKAGE_VERSION = extension_manifest.version;
+export const language_server_package_version = extension_manifest.version;
 
 /**
  * Creates the minimal package manifest used to install the paired
@@ -10,7 +10,8 @@ export const LANGUAGE_SERVER_PACKAGE_VERSION = extension_manifest.version;
  *
  * @example
  * ```ts
- * await writeFile("package.json", JSON.stringify(make_language_server_install_manifest()));
+ * const manifest = make_language_server_install_manifest();
+ * manifest.dependencies["svelte-effect-runtime-language-server"];
  * ```
  *
  * @since 3.4.3
@@ -20,12 +21,12 @@ export function make_language_server_install_manifest(): {
 	private: true;
 	dependencies: Record<string, string>;
 } {
-	const version = LANGUAGE_SERVER_PACKAGE_VERSION;
+	const version = language_server_package_version;
 
 	return {
 		private: true,
 		dependencies: {
-			[LANGUAGE_SERVER_PACKAGE_NAME]: version,
+			[language_server_package_name]: version,
 		},
 	};
 }

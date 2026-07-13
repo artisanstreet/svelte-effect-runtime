@@ -5,102 +5,132 @@ import {
 	type ServerOptions,
 	TransportKind,
 } from "vscode-languageclient/node.js";
+import { MakeSerializedClientControl, type SerializedClientHandle } from "./client-lifecycle.ts";
 import { create_initialization_options } from "./initialization-options.ts";
 import { assert_safe_language_server_path } from "./server-path-policy.ts";
-import { CLIENT_ID, CLIENT_NAME } from "./constants.ts";
+import { client_id, client_name } from "./constants.ts";
+import { Context, Effect, Layer } from "effect";
 
 import process from "node:process";
 
 import * as vscode from "vscode";
 
-let client: LanguageClient | undefined;
-
 /**
- * Starts the direct VS Code language client if one is not already active.
+ * Owns the direct VS Code language client's serialized lifecycle.
  *
  * @example
  * ```ts
- * await start_language_server(output_channel, server_path);
+ * const program = Effect.gen(function* () {
+ * 	const client = yield* LanguageClientControl;
+ * 	yield* client.start(server_path);
+ * });
  * ```
  *
- * @since 2.0.0
- * @param output_channel - Channel used for client/server diagnostics.
- * @param server_path - Absolute path to the bundled or configured server.
- * @returns A promise that resolves once the client has started.
+ * @since 4.0.1
  */
-export async function start_language_server(
+export class LanguageClientControl extends Context.Service<
+	LanguageClientControl,
+	{
+		readonly start: (server_path: string) => Effect.Effect<void, unknown>;
+		readonly stop: Effect.Effect<void, unknown>;
+	}
+>()("svelte-effect-runtime-vsix/LanguageClientControl") {}
+
+/**
+ * Creates a scoped direct-language-client service for one extension activation.
+ *
+ * @example
+ * ```ts
+ * const layer = make_language_client_control_layer(output_channel);
+ * ```
+ *
+ * @since 4.0.1
+ * @param output_channel - Channel that receives client and server diagnostics.
+ * @returns A scoped layer that stops and disposes its client during release.
+ */
+export function make_language_client_control_layer(
+	output_channel: vscode.OutputChannel,
+): Layer.Layer<LanguageClientControl> {
+	return Layer.effect(
+		LanguageClientControl,
+		MakeSerializedClientControl((server_path) =>
+			CreateLanguageClient(output_channel, server_path),
+		),
+	);
+}
+
+function CreateLanguageClient(
 	output_channel: vscode.OutputChannel,
 	server_path: string,
-): Promise<void> {
-	if (client) {
-		return;
-	}
+): Effect.Effect<SerializedClientHandle, unknown> {
+	return Effect.gen(function* () {
+		yield* Effect.try(() => assert_safe_language_server_path(server_path));
 
-	const server_options = create_server_options(server_path);
-	const client_options = create_client_options(output_channel);
-	const next_client = new LanguageClient(CLIENT_ID, CLIENT_NAME, server_options, client_options);
+		const file_watcher = yield* Effect.sync(() =>
+			vscode.workspace.createFileSystemWatcher("**/*.{svelte,sv,ts,js,mjs,cjs,json}"),
+		);
+		const AcquireClient = Effect.gen(function* () {
+			const client_options = create_client_options(output_channel, file_watcher);
+			const server_options = yield* CreateServerOptions(server_path);
+			const next_client = yield* Effect.try(
+				() => new LanguageClient(client_id, client_name, server_options, client_options),
+			);
 
-	client = next_client;
+			return {
+				start: Effect.tryPromise(() => next_client.start()).pipe(
+					Effect.tapError((error) =>
+						Effect.sync(() => output_channel.appendLine(format_error(error))),
+					),
+				),
+				stop: Effect.tryPromise(() => next_client.stop()),
+				dispose: Effect.sync(() => {
+					next_client.dispose();
+					file_watcher.dispose();
+				}),
+			} satisfies SerializedClientHandle;
+		}).pipe(Effect.onError(() => Effect.sync(() => file_watcher.dispose())));
 
-	try {
-		await next_client.start();
-	} catch (error) {
-		client = undefined;
-		output_channel.appendLine(format_error(error));
-
-		throw error;
-	}
+		return yield* AcquireClient;
+	});
 }
 
-/**
- * Stops and disposes the active direct language client.
- *
- * @example
- * ```ts
- * await stop_language_server();
- * ```
- *
- * @since 2.0.0
- * @returns A promise that resolves once the active client has stopped.
- */
-export async function stop_language_server(): Promise<void> {
-	const active_client = client;
+function CreateServerOptions(server_path: string): Effect.Effect<ServerOptions> {
+	return Effect.gen(function* () {
+		const workspace_folder = yield* Effect.sync(() => vscode.workspace.workspaceFolders?.[0]);
+		const environment = yield* Effect.sync(() => process.env);
+		const executable = create_server_executable(
+			server_path,
+			workspace_folder?.uri.fsPath,
+			environment,
+		);
 
-	if (!active_client) {
-		return;
-	}
-
-	client = undefined;
-	await active_client.stop();
-	active_client.dispose();
+		return {
+			run: executable,
+			debug: executable,
+		};
+	});
 }
 
-function create_server_options(server_path: string): ServerOptions {
-	const executable = create_server_executable(server_path);
-
-	return {
-		run: executable,
-		debug: executable,
-	};
-}
-
-function create_server_executable(server_path: string): Executable {
-	const workspace_folder = vscode.workspace.workspaceFolders?.[0];
-
-	assert_safe_language_server_path(server_path);
-
+function create_server_executable(
+	server_path: string,
+	workspace_path: string | undefined,
+	environment: NodeJS.ProcessEnv,
+): Executable {
 	return {
 		command: process.execPath,
 		args: [server_path, "--stdio"],
 		options: {
-			cwd: workspace_folder?.uri.fsPath,
-			env: process.env,
+			...(workspace_path === undefined ? {} : { cwd: workspace_path }),
+			env: environment,
 		},
 		transport: TransportKind.stdio,
 	};
 }
 
-function create_client_options(output_channel: vscode.OutputChannel): LanguageClientOptions {
+function create_client_options(
+	output_channel: vscode.OutputChannel,
+	file_watcher: vscode.FileSystemWatcher,
+): LanguageClientOptions {
 	return {
 		documentSelector: [
 			{ scheme: "file", language: "svelte" },
@@ -109,9 +139,7 @@ function create_client_options(output_channel: vscode.OutputChannel): LanguageCl
 		initializationOptions: create_initialization_options(),
 		outputChannel: output_channel,
 		synchronize: {
-			fileEvents: vscode.workspace.createFileSystemWatcher(
-				"**/*.{svelte,sv,ts,js,mjs,cjs,json}",
-			),
+			fileEvents: file_watcher,
 		},
 	};
 }
