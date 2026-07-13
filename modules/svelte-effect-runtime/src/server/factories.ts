@@ -668,10 +668,12 @@ export function Prerender(
 ): unknown {
 	try {
 		if (is_handler(maybe_handler_or_options)) {
-			return native_prerender(
-				normalize_validator(validate_or_handler) as never,
-				make_remote_wrapper(maybe_handler_or_options, "Prerender") as never,
-				maybe_options as never,
+			return to_effect_query(
+				native_prerender(
+					normalize_validator(validate_or_handler) as never,
+					make_remote_wrapper(maybe_handler_or_options, "Prerender") as never,
+					maybe_options as never,
+				) as NativeQueryLike,
 			);
 		}
 
@@ -679,10 +681,12 @@ export function Prerender(
 			throw new UncheckedPrerenderHandlerMissingError();
 		}
 
-		return native_prerender(
-			make_remote_wrapper(validate_or_handler as RemoteHandler, "Prerender") as never,
-			maybe_handler_or_options as never,
-		) as ReturnType<typeof native_prerender>;
+		return to_effect_query(
+			native_prerender(
+				make_remote_wrapper(validate_or_handler as RemoteHandler, "Prerender") as never,
+				maybe_handler_or_options as never,
+			) as NativeQueryLike,
+		);
 	} catch (error: unknown) {
 		throw normalize_remote_helper_error(error, "Prerender");
 	}

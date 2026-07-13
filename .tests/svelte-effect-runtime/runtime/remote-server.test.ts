@@ -22,8 +22,15 @@ import {
 } from "./helpers/assert.ts";
 import {
 	Error as ServerError,
+	Prerender as ServerPrerender,
 	Redirect as ServerRedirect,
 } from "../../../modules/svelte-effect-runtime/src/server/index.ts";
+import {
+	reset_test_prerender,
+	reset_test_request_event,
+	set_test_prerender,
+	set_test_request_event,
+} from "./fixtures/app-server.ts";
 import {
 	Error as RootError,
 	Redirect as RootRedirect,
@@ -33,7 +40,7 @@ import { run_live_handler_source } from "../../../modules/svelte-effect-runtime/
 import { get_server_dispatcher } from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
 import { InvalidLiveQueryReturnError } from "../../../modules/svelte-effect-runtime/src/errors.ts";
 import { create_form_error } from "../../../modules/svelte-effect-runtime/src/remote/shared.ts";
-import { Cause, Data, Effect, Exit, Stream } from "effect";
+import { Cause, Data, Effect, Exit, Schema, Stream } from "effect";
 import { parse } from "devalue";
 import { test } from "vitest";
 
@@ -93,6 +100,83 @@ test("SvelteKit server fallback exports throw clear boundary errors", () => {
 
 		assert_string_includes(error.message, name);
 		assert_string_includes(error.message, "inside a SvelteKit server module");
+	}
+});
+
+test("Prerender calls with an Effect Schema remain Effect-yieldable during SSR", async () => {
+	const descriptor = { id: "prerender" };
+
+	set_test_prerender((_validator, wrapped_handler) => {
+		const handler = wrapped_handler as (input: unknown) => Promise<unknown>;
+		const native = (input: unknown) => handler(input);
+
+		Object.defineProperty(native, "__", { value: descriptor });
+
+		return native;
+	});
+	set_test_request_event({ ...make_request_event(), isRemoteRequest: false });
+
+	try {
+		const ReadStatic = ServerPrerender(Schema.String, (key) => Effect.succeed({ key }), {
+			dynamic: true,
+		});
+		const Program = Effect.gen(function* () {
+			return yield* ReadStatic("static");
+		});
+		const result = await get_server_dispatcher().run(Program);
+
+		assert_equals(result, { key: "static" });
+		assert_equals(Object.getOwnPropertyDescriptor(ReadStatic, "__")?.value, descriptor);
+	} finally {
+		reset_test_prerender();
+		reset_test_request_event();
+	}
+});
+
+test("inputless Prerender calls remain Effect-yieldable during SSR", async () => {
+	set_test_prerender((wrapped_handler) => {
+		const handler = wrapped_handler as (input: undefined) => Promise<unknown>;
+
+		return () => handler(undefined);
+	});
+	set_test_request_event({ ...make_request_event(), isRemoteRequest: false });
+
+	try {
+		const ReadStatic = ServerPrerender(() => Effect.succeed("static"));
+		const Program = Effect.gen(function* () {
+			return yield* ReadStatic();
+		});
+
+		assert_equals(await get_server_dispatcher().run(Program), "static");
+	} finally {
+		reset_test_prerender();
+		reset_test_request_event();
+	}
+});
+
+test("Prerender calls preserve SvelteKit resources during remote requests", async () => {
+	let native_resource: Promise<unknown> | undefined;
+
+	set_test_prerender((_validator, wrapped_handler) => {
+		const handler = wrapped_handler as (input: unknown) => Promise<unknown>;
+
+		return (input: unknown) => {
+			native_resource = handler(input);
+
+			return native_resource;
+		};
+	});
+	set_test_request_event({ ...make_request_event(), isRemoteRequest: true });
+
+	try {
+		const ReadStatic = ServerPrerender(Schema.String, (key) => Effect.succeed({ key }));
+		const result = ReadStatic("static");
+
+		assert_equals(result, native_resource);
+		assert_equals(await (result as unknown as Promise<unknown>), { key: "static" });
+	} finally {
+		reset_test_prerender();
+		reset_test_request_event();
 	}
 });
 
