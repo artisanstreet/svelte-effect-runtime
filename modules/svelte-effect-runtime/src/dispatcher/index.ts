@@ -10,11 +10,11 @@ import type {
 import { RuntimeAlreadyInitializedError, DispatcherDisposedError } from "$/errors.ts";
 import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime";
 import { Cause, Effect, Exit, Fiber, Layer, ManagedRuntime } from "effect";
-import { interrupt_fiber, watch_fiber_exit } from "./fibers.ts";
+import { InterruptFiber, WatchFiberExit } from "./fibers.ts";
 import type { Fiber as FiberType } from "effect/Fiber";
 import { createSubscriber } from "svelte/reactivity";
+import { make_dependency_hasher } from "./deps.ts";
 import { isRedirect } from "@sveltejs/kit";
-import { hash_deps } from "./deps.ts";
 import { Code } from "./types.ts";
 
 export { Code } from "./types.ts";
@@ -67,6 +67,7 @@ export class Dispatcher {
 	#promise_values = new Map<string, Promise<unknown>>();
 	#value_ids = new Map<string, string>();
 	#promise_ids = new Map<string, string>();
+	#hash_deps = make_dependency_hasher();
 	#disposed = false;
 	#next_fiber_id = 0;
 
@@ -173,11 +174,12 @@ export class Dispatcher {
 
 		this.#next_fiber_id += 1;
 		this.#fibers.set(key, fiber);
-		watch_fiber_exit({
-			runtime: this.#runtime,
-			fiber,
-			on_complete: () => this.#fibers.delete(key),
-		});
+		this.#runtime.runFork(
+			WatchFiberExit({
+				fiber,
+				on_complete: () => this.#fibers.delete(key),
+			}),
+		);
 
 		let disposed = false;
 
@@ -187,7 +189,7 @@ export class Dispatcher {
 			}
 
 			disposed = true;
-			interrupt_fiber(this.#runtime, fiber);
+			this.#runtime.runFork(InterruptFiber(fiber));
 		};
 	}
 
@@ -295,10 +297,8 @@ export class Dispatcher {
 			return Promise.reject(new DispatcherDisposedError());
 		}
 
-		const ExitProgram = Effect.exit(effect) as Effect.Effect<unknown, unknown, unknown>;
-
-		return this.#runtime.runPromise(ExitProgram).then((exit: unknown) => {
-			const result = exit as Exit.Exit<A, E>;
+		const Program = Effect.gen(function* () {
+			const result = yield* Effect.exit(effect);
 
 			if (Exit.isSuccess(result)) {
 				return result.value;
@@ -314,12 +314,16 @@ export class Dispatcher {
 				return undefined as A;
 			}
 
-			queueMicrotask(() => {
-				throw error;
+			yield* Effect.sync(() => {
+				queueMicrotask(() => {
+					throw error;
+				});
 			});
 
-			throw error;
+			return yield* Effect.fail(error);
 		});
+
+		return this.#runtime.runPromise(Program as Effect.Effect<A, unknown, unknown>);
 	}
 
 	#emit_markup_value<A, F>(event: MarkupValueEvent<A, F>): A | F {
@@ -374,7 +378,7 @@ export class Dispatcher {
 		this.#disposed = true;
 
 		for (const fiber of this.#fibers.values()) {
-			interrupt_fiber(this.#runtime, fiber);
+			this.#runtime.runFork(InterruptFiber(fiber));
 		}
 
 		this.#fibers.clear();
@@ -391,11 +395,11 @@ export class Dispatcher {
 	}
 
 	#make_value_cache_key(id: string, deps: readonly unknown[]): string {
-		return `value:${id}::${hash_deps(deps)}`;
+		return `value:${id}::${this.#hash_deps(deps)}`;
 	}
 
 	#make_promise_cache_key(id: string, deps: readonly unknown[]): string {
-		return `promise:${id}::${hash_deps(deps)}`;
+		return `promise:${id}::${this.#hash_deps(deps)}`;
 	}
 
 	#is_server_render(): boolean {
@@ -409,7 +413,7 @@ export class Dispatcher {
 			return undefined;
 		}
 
-		interrupt_fiber(this.#runtime, old_fiber);
+		this.#runtime.runFork(InterruptFiber(old_fiber));
 		this.#fibers.delete(cache_key);
 
 		return old_fiber;
@@ -444,14 +448,15 @@ export class Dispatcher {
 			});
 		});
 
-		watch_fiber_exit({
-			runtime: this.#runtime,
-			fiber,
-			surface_failure: false,
-			on_complete: () => this.#complete_fiber(cache_key, fiber),
-			on_success: (value) => this.#publish_value_success(cache_key, fiber, value),
-			on_failure: (error) => this.#publish_value_failure(cache_key, fiber, error),
-		});
+		this.#runtime.runFork(
+			WatchFiberExit({
+				fiber,
+				surface_failure: false,
+				on_complete: () => this.#complete_fiber(cache_key, fiber),
+				on_success: (value) => this.#publish_value_success(cache_key, fiber, value),
+				on_failure: (error) => this.#publish_value_failure(cache_key, fiber, error),
+			}),
+		);
 	}
 
 	#start_promise_fiber<A>(cache_key: string, options: PromiseOptions<A>): Promise<A> {
@@ -461,31 +466,33 @@ export class Dispatcher {
 			return result;
 		});
 		const fiber = this.#runtime.runFork(Program as Effect.Effect<unknown, unknown, unknown>);
+		const ReleaseFiber = Effect.sync(() => {
+			if (!this.#is_current_fiber(cache_key, fiber)) {
+				return;
+			}
+
+			this.#fibers.delete(cache_key);
+			this.#promise_values.delete(cache_key);
+
+			if (this.#promise_ids.get(options.id) === cache_key) {
+				this.#promise_ids.delete(options.id);
+			}
+		});
+		const AwaitFiber = Effect.gen(function* () {
+			const exit = yield* Fiber.await(fiber);
+
+			yield* ReleaseFiber;
+
+			if (Exit.isSuccess(exit)) {
+				return exit.value as A;
+			}
+
+			return yield* Effect.fail(Cause.squash(exit.cause));
+		});
 
 		this.#fibers.set(cache_key, fiber);
 
-		return this.#runtime.runPromise(
-			Effect.flatMap(Fiber.await(fiber), (exit) =>
-				Effect.sync(() => {
-					const is_current = this.#is_current_fiber(cache_key, fiber);
-
-					if (is_current) {
-						this.#fibers.delete(cache_key);
-						this.#promise_values.delete(cache_key);
-
-						if (this.#promise_ids.get(options.id) === cache_key) {
-							this.#promise_ids.delete(options.id);
-						}
-					}
-
-					if (Exit.isSuccess(exit)) {
-						return exit.value as A;
-					}
-
-					throw Cause.squash(exit.cause);
-				}),
-			),
-		);
+		return this.#runtime.runPromise(AwaitFiber);
 	}
 
 	#clear_pending_value_cell(

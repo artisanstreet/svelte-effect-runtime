@@ -1,4 +1,3 @@
-import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime";
 import type { Fiber as FiberType } from "effect/Fiber";
 import { Cause, Effect, Exit, Fiber } from "effect";
 
@@ -23,72 +22,67 @@ export interface FiberWatchCallbacks<A> {
 }
 
 /**
- * Interrupts a dispatcher fiber through its managed runtime.
+ * Builds the program that interrupts a dispatcher-owned fiber.
  *
  * @example
  * ```ts
- * interrupt_fiber(runtime, fiber);
+ * const Interrupt = InterruptFiber(fiber);
  * ```
  *
- * @since 2.0.0
- * @param runtime - Managed runtime that owns the fiber.
+ * @since 4.0.1
  * @param fiber - Fiber to interrupt.
- * @returns Nothing.
+ * @returns An Effect that interrupts the fiber when the Dispatcher executes it.
  * @internal
  */
-export function interrupt_fiber(
-	runtime: ManagedRuntimeType<unknown, unknown>,
-	fiber: FiberType<unknown, unknown>,
-): void {
-	runtime.runFork(Fiber.interrupt(fiber) as Effect.Effect<unknown, unknown, unknown>);
+export function InterruptFiber(fiber: FiberType<unknown, unknown>): Effect.Effect<void> {
+	return Effect.gen(function* () {
+		yield* Fiber.interrupt(fiber);
+	});
 }
 
 /**
- * Watches a dispatcher fiber, runs completion callbacks, and surfaces
- * non-interrupt failures on the microtask queue.
+ * Builds the program that watches a dispatcher fiber, runs completion
+ * callbacks, and surfaces non-interrupt failures on the microtask queue.
  *
  * @example
  * ```ts
- * watch_fiber_exit({ runtime, fiber, on_complete: cleanup });
+ * const WatchExit = WatchFiberExit({ fiber, on_complete: cleanup });
  * ```
  *
- * @since 2.0.0
- * @param options - Runtime, fiber, and callbacks used for the watcher.
- * @returns Nothing.
+ * @since 4.0.1
+ * @param options - Fiber and callbacks used by the watcher program.
+ * @returns An Effect that waits for the fiber and applies its callbacks.
  * @internal
  */
-export function watch_fiber_exit<A>(
-	options: {
-		runtime: ManagedRuntimeType<unknown, unknown>;
-		fiber: FiberType<unknown, unknown>;
-	} & FiberWatchCallbacks<A>,
-): void {
-	const { runtime, fiber, on_complete, on_success, on_failure, surface_failure = true } = options;
+export function WatchFiberExit<A>(
+	options: { fiber: FiberType<unknown, unknown> } & FiberWatchCallbacks<A>,
+): Effect.Effect<void> {
+	const { fiber, on_complete, on_success, on_failure, surface_failure = true } = options;
 
-	runtime.runFork(
-		Effect.flatMap(Fiber.await(fiber), (exit) =>
-			Effect.sync(() => {
-				if (Exit.isSuccess(exit)) {
-					on_success?.(exit.value as A);
-					on_complete?.();
+	return Effect.gen(function* () {
+		const exit = yield* Fiber.await(fiber);
 
-					return;
-				}
-
-				if (!Cause.hasInterruptsOnly(exit.cause)) {
-					const error = Cause.squash(exit.cause);
-
-					on_failure?.(error);
-
-					if (surface_failure) {
-						queueMicrotask(() => {
-							throw error;
-						});
-					}
-				}
-
+		yield* Effect.sync(() => {
+			if (Exit.isSuccess(exit)) {
+				on_success?.(exit.value as A);
 				on_complete?.();
-			}),
-		),
-	);
+
+				return;
+			}
+
+			if (!Cause.hasInterruptsOnly(exit.cause)) {
+				const error = Cause.squash(exit.cause);
+
+				on_failure?.(error);
+
+				if (surface_failure) {
+					queueMicrotask(() => {
+						throw error;
+					});
+				}
+			}
+
+			on_complete?.();
+		});
+	});
 }

@@ -1,41 +1,52 @@
-import { test } from "vitest";
-import { assert_equals, assert_throws, assert_rejects } from "./helpers/assert.ts";
-import { redirect as svelte_redirect } from "@sveltejs/kit";
-import { Effect, Layer, ManagedRuntime } from "effect";
-import {
-	RuntimeAlreadyInitializedError,
-	ClientRuntime,
-} from "../../../modules/svelte-effect-runtime/src/mod.ts";
 import {
 	Code,
 	Dispatcher,
 	get_dispatcher,
 	reset_dispatcher,
 } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
+import {
+	RuntimeAlreadyInitializedError,
+	ClientRuntime,
+} from "../../../modules/svelte-effect-runtime/src/mod.ts";
+import { make_dependency_hasher } from "../../../modules/svelte-effect-runtime/src/dispatcher/deps.ts";
 import type { ValueOptions } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
+import { assert_equals, assert_throws, assert_rejects } from "./helpers/assert.ts";
+import { redirect as svelte_redirect } from "@sveltejs/kit";
+import { Effect, Layer, ManagedRuntime } from "effect";
+import { test } from "vitest";
 
 /** Construct a fresh dispatcher with a controlled empty-layer runtime. */
 function make_dispatcher(): Dispatcher {
 	const runtime = ManagedRuntime.make(Layer.empty);
+
 	return new Dispatcher(runtime);
 }
 
 /** Small atomic effect that succeeds immediately. */
-const succeed_42 = Effect.succeed(42);
+const Succeed42 = Effect.succeed(42);
 
 test("fork returns a callable cleanup handle", () => {
 	const d = make_dispatcher();
-	const cleanup = d.fork(succeed_42);
+	const cleanup = d.fork(Succeed42);
+
 	assert_equals(typeof cleanup, "function");
 });
 
 test("fork runs an effect to completion", async () => {
-	const exit = await Effect.runPromise(
-		Effect.gen(function* () {
-			return yield* Effect.succeed("ok");
+	const d = make_dispatcher();
+	let result: string | undefined;
+
+	d.fork(
+		Effect.sync(() => {
+			result = "ok";
 		}),
 	);
-	assert_equals(exit, "ok");
+
+	await wait_for(() => result === "ok");
+
+	assert_equals(result, "ok");
+
+	d.dispose();
 });
 
 test("cleanup interrupts a running fiber", async () => {
@@ -43,14 +54,15 @@ test("cleanup interrupts a running fiber", async () => {
 	let started = false;
 	let finished = false;
 
-	const program = Effect.gen(function* () {
+	const Program = Effect.gen(function* () {
 		started = true;
 		yield* Effect.sleep(60_000);
 		finished = true;
+
 		return 42;
 	});
 
-	const cleanup = d.fork(program);
+	const cleanup = d.fork(Program);
 
 	await wait_for(() => started);
 
@@ -63,14 +75,15 @@ test("cleanup interrupts a running fiber", async () => {
 
 test("calling cleanup twice does not throw", () => {
 	const d = make_dispatcher();
-	const cleanup = d.fork(succeed_42);
+	const cleanup = d.fork(Succeed42);
+
 	cleanup();
 	cleanup();
 });
 
 test("calling cleanup on a finished fiber does not throw", async () => {
 	const d = make_dispatcher();
-	const cleanup = d.fork(succeed_42);
+	const cleanup = d.fork(Succeed42);
 
 	await sleep(50);
 	cleanup();
@@ -315,6 +328,21 @@ test("value keeps primitive and object dependency shapes distinct", () => {
 	assert_equals(call_count, 7);
 
 	d.dispose();
+});
+
+test("dependency hashers isolate their identity registries", () => {
+	const first_hash_deps = make_dependency_hasher();
+	const second_hash_deps = make_dependency_hasher();
+	const first_object = {};
+	const second_object = {};
+	const first_symbol = Symbol("first");
+	const second_symbol = Symbol("second");
+	const first_key = first_hash_deps([first_object, first_symbol]);
+	const second_key = second_hash_deps([second_object, second_symbol]);
+
+	assert_equals(first_hash_deps([first_object, first_symbol]), first_key);
+	assert_equals(second_hash_deps([second_object, second_symbol]), second_key);
+	assert_equals(second_key, first_key);
 });
 
 test("value starts a new fiber when deps change", async () => {
@@ -607,24 +635,25 @@ test("promise interrupts stale work when deps change", async () => {
 
 test("run returns a Promise that resolves with the effect's value", async () => {
 	const d = make_dispatcher();
-	const result = await d.run(succeed_42);
+	const result = await d.run(Succeed42);
+
 	assert_equals(result, 42);
 });
 
 test("run returns a Promise that rejects on failure", async () => {
 	const d = make_dispatcher();
-
+	const expected_error = new Error("expected error");
 	const errors: unknown[] = [];
 	const original_queue = queueMicrotask;
 	(globalThis as Record<string, unknown>).queueMicrotask = (fn: () => void) => errors.push(fn);
 
 	try {
-		await assert_rejects(
-			() => d.run(Effect.fail(new Error("expected error"))),
-			"expected error",
-		);
+		const rejection = await assert_rejects(() => d.run(Effect.fail(expected_error)));
 
 		await sleep(50);
+
+		assert_equals(rejection, expected_error);
+		assert_equals(errors.length, 1);
 	} finally {
 		(globalThis as Record<string, unknown>).queueMicrotask = original_queue;
 	}
@@ -762,15 +791,14 @@ test("dispose interrupts all running fibers", async () => {
 
 test("dispose releases managed runtime layer finalizers", async () => {
 	let finalized = false;
-
-	const layer = Layer.effectDiscard(
+	const TestLayer = Layer.effectDiscard(
 		Effect.addFinalizer(() =>
 			Effect.sync(() => {
 				finalized = true;
 			}),
 		),
 	);
-	const d = Dispatcher.make(layer);
+	const d = Dispatcher.make(TestLayer);
 
 	await d.run(Effect.void);
 	d.dispose();
