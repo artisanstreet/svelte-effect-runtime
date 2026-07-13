@@ -49,6 +49,38 @@ test("diagnostics ignore Effect-looking text and type-only imports", () => {
 	assert_equals(diagnostics, []);
 });
 
+test("diagnostics ignore yielded Effect programs in Svelte tag expressions", () => {
+	const source = [
+		`{#if yield* Effect.succeed(true)}ready{/if}`,
+		`{@const value = yield* Effect.succeed(1)}`,
+		`{let direct = yield* Effect.succeed(2)}`,
+		`{const nested = $derived(yield* Effect.succeed(3))}`,
+		`{const { fallback = yield* Effect.succeed(4) } = data}`,
+		`{const plain = 1, second = yield* Effect.succeed(5)}`,
+		`{#each yield* Effect.succeed([1]) as item}<p>{item}</p>{/each}`,
+		`{#await yield* Effect.succeed(1) then result}<p>{result}</p>{/await}`,
+		`{@html yield* Effect.succeed("<p>ready</p>")}`,
+		`{@render yield* Effect.succeed(snippet())}`,
+		`{@render child(yield* Effect.succeed(snippet()))}`,
+		`<p>{format(yield* Effect.succeed("ready"))}</p>`,
+		`{#if\n yield* Effect.succeed(true)}multiline{/if}`,
+		`{@const\n multiline = yield* Effect.succeed(6)}`,
+		`{#each\n yield* Effect.succeed([1])\n as item}<p>{item}</p>{/each}`,
+		`{#await\n yield* Effect.succeed(1)\n then result}<p>{result}</p>{/await}`,
+	].join("\n");
+	const diagnostics = find_svelte_effect_diagnostics(source, "Tags.svelte");
+
+	assert_equals(diagnostics, []);
+});
+
+test("diagnostics retain unyielded Effect programs in mixed declarations", () => {
+	const source = `{const managed = yield* Effect.succeed(1), unmanaged = Effect.succeed(2)}`;
+	const diagnostics = find_svelte_effect_diagnostics(source, "Mixed.svelte");
+
+	assert_equals(diagnostics.length, 1);
+	assert_string_includes(diagnostics[0].message, "will produce an Effect value");
+});
+
 test("diagnostics scan many markup expressions near linearly", () => {
 	const small_source = make_many_markup_expressions(4_000);
 	const large_source = make_many_markup_expressions(32_000);
@@ -63,6 +95,28 @@ test("diagnostics scan many markup expressions near linearly", () => {
 		throw new Error(
 			[
 				`expected diagnostics scan to stay near-linear`,
+				`small elapsed: ${small_elapsed.toFixed(1)}ms`,
+				`large elapsed: ${large_elapsed.toFixed(1)}ms`,
+				`allowed large elapsed: ${allowed_large_elapsed.toFixed(1)}ms`,
+			].join("\n"),
+		);
+	}
+});
+
+test("diagnostics parse candidate expressions near linearly", () => {
+	const small_source = make_many_effect_expressions(500);
+	const large_source = make_many_effect_expressions(4_000);
+
+	find_svelte_effect_diagnostics(make_many_effect_expressions(10), "Warmup.svelte");
+
+	const small_elapsed = measure_candidate_diagnostics_elapsed_ms(small_source, 500);
+	const large_elapsed = measure_candidate_diagnostics_elapsed_ms(large_source, 4_000);
+	const allowed_large_elapsed = small_elapsed * 16 + 750;
+
+	if (large_elapsed > allowed_large_elapsed) {
+		throw new Error(
+			[
+				`expected candidate diagnostics parsing to stay near-linear`,
 				`small elapsed: ${small_elapsed.toFixed(1)}ms`,
 				`large elapsed: ${large_elapsed.toFixed(1)}ms`,
 				`allowed large elapsed: ${allowed_large_elapsed.toFixed(1)}ms`,
@@ -86,4 +140,24 @@ function make_many_markup_expressions(count: number): string {
 	const repeated_markup = Array.from({ length: count }, () => `<p>{value}</p>`).join("");
 
 	return `${repeated_markup}<p>{Effect.succeed(1)}</p>`;
+}
+
+function measure_candidate_diagnostics_elapsed_ms(source: string, expected_count: number): number {
+	const start = performance.now();
+
+	const diagnostics = find_svelte_effect_diagnostics(source, "Candidates.svelte");
+	const elapsed = performance.now() - start;
+
+	assert_equals(diagnostics.length, expected_count);
+
+	return elapsed;
+}
+
+function make_many_effect_expressions(count: number): string {
+	const script = `<script>import { Effect as E } from "effect";</script>`;
+	const markup = Array.from({ length: count }, (_, index) => `<p>{E.succeed(${index})}</p>`).join(
+		"",
+	);
+
+	return script + markup;
 }

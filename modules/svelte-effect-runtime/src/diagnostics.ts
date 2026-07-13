@@ -20,6 +20,18 @@ interface SourceLocation {
 interface ParsedMarkupExpression {
 	source_file: ts.SourceFile;
 	root_expression: ts.Expression | undefined;
+	is_direct_expression: boolean;
+}
+
+interface EffectBindings {
+	paths: ReadonlySet<string>;
+	root_names: readonly string[];
+}
+
+interface NormalizedMarkupExpression {
+	kind: "declaration" | "expression";
+	text: string;
+	is_direct_expression: boolean;
 }
 
 const effect_member_names = [
@@ -70,9 +82,9 @@ export function find_svelte_effect_diagnostics(
 	);
 }
 
-function find_effect_binding_paths(scripts: readonly ScriptRegion[]): string[][] {
-	const binding_paths = [["Effect"]];
+function find_effect_binding_paths(scripts: readonly ScriptRegion[]): EffectBindings {
 	const seen_paths = new Set(["Effect"]);
+	const root_names = new Set(["Effect"]);
 
 	for (const script of scripts) {
 		const source_file = ts.createSourceFile(
@@ -92,12 +104,12 @@ function find_effect_binding_paths(scripts: readonly ScriptRegion[]): string[][]
 				}
 
 				seen_paths.add(key);
-				binding_paths.push(binding_path);
+				root_names.add(binding_path[0]);
 			}
 		}
 	}
 
-	return binding_paths;
+	return { paths: seen_paths, root_names: [...root_names] };
 }
 
 function get_effect_import_binding_paths(statement: ts.Statement): string[][] {
@@ -140,7 +152,7 @@ function get_effect_import_binding_paths(statement: ts.Statement): string[][] {
 
 function make_expression_diagnostics(
 	filename: string,
-	effect_binding_paths: readonly string[][],
+	effect_binding_paths: EffectBindings,
 	expression: MarkupBraceExpression,
 	line_starts: number[],
 ): Diagnostic[] {
@@ -154,17 +166,20 @@ function make_expression_diagnostics(
 		return [];
 	}
 
-	if (starts_with_yield_star(parsed_expression)) {
+	const is_callback = is_callback_expression(parsed_expression);
+	const has_yield_star = contains_yield_star(parsed_expression);
+	const is_hidden_event_yield = is_event_attribute && is_callback && has_yield_star;
+
+	if (
+		!contains_unyielded_effect_reference(parsed_expression, effect_binding_paths) &&
+		!is_hidden_event_yield
+	) {
 		return [];
 	}
 
 	const loc = get_line_column(line_starts, expression.open);
 
-	if (
-		is_event_attribute &&
-		is_callback_expression(parsed_expression) &&
-		contains_yield_star(parsed_expression)
-	) {
+	if (is_hidden_event_yield) {
 		return [
 			make_diagnostic(
 				loc,
@@ -191,7 +206,7 @@ function make_expression_diagnostics(
 		];
 	}
 
-	if (is_event_attribute && is_callback_expression(parsed_expression)) {
+	if (is_event_attribute && is_callback) {
 		return [
 			make_diagnostic(
 				loc,
@@ -337,9 +352,9 @@ function make_sync_markup_effect_warning(filename: string, expression_text: stri
 
 function parse_markup_expression(
 	expression_text: string,
-	effect_binding_paths: readonly string[][],
+	effect_binding_paths: EffectBindings,
 ): ParsedMarkupExpression | undefined {
-	const has_binding_candidate = effect_binding_paths.some(([root_name]) =>
+	const has_binding_candidate = effect_binding_paths.root_names.some((root_name) =>
 		expression_text.includes(root_name),
 	);
 	const has_member_candidate = effect_member_names.some((member_name) =>
@@ -350,9 +365,31 @@ function parse_markup_expression(
 		return undefined;
 	}
 
+	const normalized = normalize_markup_expression(expression_text);
+
+	if (normalized.kind === "declaration") {
+		const source_file = ts.createSourceFile(
+			"diagnostics-declaration.ts",
+			`${normalized.text};`,
+			ts.ScriptTarget.Latest,
+			true,
+			ts.ScriptKind.TS,
+		);
+		const variable_statement = source_file.statements.find(ts.isVariableStatement);
+		const root_expression = unwrap_parentheses(
+			variable_statement?.declarationList.declarations[0]?.initializer,
+		);
+
+		return {
+			source_file,
+			root_expression,
+			is_direct_expression: false,
+		};
+	}
+
 	const source_file = ts.createSourceFile(
 		"diagnostics-expression.ts",
-		`function* __SER___diagnostic() { return (${expression_text}); }`,
+		`function* __SER___diagnostic() { return (${normalized.text}); }`,
 		ts.ScriptTarget.Latest,
 		true,
 		ts.ScriptKind.TS,
@@ -361,12 +398,85 @@ function parse_markup_expression(
 	const return_statement = wrapper?.body?.statements.find(ts.isReturnStatement);
 	const root_expression = unwrap_parentheses(return_statement?.expression);
 
-	return { source_file, root_expression };
+	return {
+		source_file,
+		root_expression,
+		is_direct_expression: normalized.is_direct_expression,
+	};
+}
+
+function normalize_markup_expression(expression_text: string): NormalizedMarkupExpression {
+	const trimmed = expression_text.trim();
+
+	if (/^@const\s+/.test(trimmed)) {
+		return {
+			kind: "declaration",
+			text: trimmed.slice(1),
+			is_direct_expression: false,
+		};
+	}
+
+	if (/^(?:const|let)\s+/.test(trimmed)) {
+		return {
+			kind: "declaration",
+			text: trimmed,
+			is_direct_expression: false,
+		};
+	}
+
+	const prefix = find_markup_expression_prefix(trimmed);
+	let text = prefix ? trimmed.slice(prefix.length) : trimmed;
+
+	if (prefix?.kind === "each") {
+		const boundaries = [...text.matchAll(/\s+as\s+/g)];
+		const boundary = boundaries.at(-1)?.index ?? -1;
+
+		text = boundary === -1 ? text : text.slice(0, boundary);
+	}
+
+	if (prefix?.kind === "await") {
+		const boundary = /\s+(?:then|catch)\s+/.exec(text)?.index ?? -1;
+
+		text = boundary === -1 ? text : text.slice(0, boundary);
+	}
+
+	return {
+		kind: "expression",
+		text: text.trim(),
+		is_direct_expression: prefix === undefined,
+	};
+}
+
+function find_markup_expression_prefix(
+	expression_text: string,
+): { kind: string; length: number } | undefined {
+	const prefixes: Array<{ kind: string; pattern: RegExp }> = [
+		{ kind: "else_if", pattern: /^:else\s+if\s+/ },
+		{ kind: "attach", pattern: /^@attach\s+/ },
+		{ kind: "render", pattern: /^@render\s+/ },
+		{ kind: "debug", pattern: /^@debug\s+/ },
+		{ kind: "html", pattern: /^@html\s+/ },
+		{ kind: "await", pattern: /^#await\s+/ },
+		{ kind: "each", pattern: /^#each\s+/ },
+		{ kind: "key", pattern: /^#key\s+/ },
+		{ kind: "if", pattern: /^#if\s+/ },
+		{ kind: "spread", pattern: /^\.\.\./ },
+	];
+
+	for (const prefix of prefixes) {
+		const match = prefix.pattern.exec(expression_text);
+
+		if (match) {
+			return { kind: prefix.kind, length: match[0].length };
+		}
+	}
+
+	return undefined;
 }
 
 function contains_effect_reference(
 	parsed_expression: ParsedMarkupExpression,
-	effect_binding_paths: readonly string[][],
+	effect_binding_paths: EffectBindings,
 ): boolean {
 	return some_node(parsed_expression.source_file, (node) =>
 		is_effect_member(node, effect_binding_paths, effect_member_name_set),
@@ -375,29 +485,36 @@ function contains_effect_reference(
 
 function contains_effect_runner(
 	parsed_expression: ParsedMarkupExpression,
-	effect_binding_paths: readonly string[][],
+	effect_binding_paths: EffectBindings,
 ): boolean {
 	return some_node(parsed_expression.source_file, (node) =>
 		is_effect_member(node, effect_binding_paths, effect_runner_names),
 	);
 }
 
+function contains_unyielded_effect_reference(
+	parsed_expression: ParsedMarkupExpression,
+	effect_binding_paths: EffectBindings,
+): boolean {
+	return some_node(
+		parsed_expression.source_file,
+		(node) =>
+			is_effect_member(node, effect_binding_paths, effect_member_name_set) &&
+			!has_yield_star_ancestor(node),
+	);
+}
+
 function is_bare_effect_gen(
 	parsed_expression: ParsedMarkupExpression,
-	effect_binding_paths: readonly string[][],
+	effect_binding_paths: EffectBindings,
 ): boolean {
 	const root_expression = parsed_expression.root_expression;
 
 	return (
+		parsed_expression.is_direct_expression &&
 		root_expression !== undefined &&
 		is_effect_member(root_expression, effect_binding_paths, effect_gen_name)
 	);
-}
-
-function starts_with_yield_star(parsed_expression: ParsedMarkupExpression): boolean {
-	const root_expression = parsed_expression.root_expression;
-
-	return root_expression !== undefined && is_yield_star_expression(root_expression);
 }
 
 function contains_yield_star(parsed_expression: ParsedMarkupExpression): boolean {
@@ -408,6 +525,7 @@ function is_callback_expression(parsed_expression: ParsedMarkupExpression): bool
 	const root_expression = parsed_expression.root_expression;
 
 	return (
+		parsed_expression.is_direct_expression &&
 		root_expression !== undefined &&
 		(ts.isArrowFunction(root_expression) || ts.isFunctionExpression(root_expression))
 	);
@@ -415,7 +533,7 @@ function is_callback_expression(parsed_expression: ParsedMarkupExpression): bool
 
 function is_effect_member(
 	node: ts.Node,
-	effect_binding_paths: readonly string[][],
+	effect_binding_paths: EffectBindings,
 	member_names: ReadonlySet<string>,
 ): boolean {
 	const access_path = get_static_access_path(node);
@@ -431,10 +549,7 @@ function is_effect_member(
 		return false;
 	}
 
-	return (
-		member_names.has(member_name) &&
-		effect_binding_paths.some((binding_path) => paths_equal(owner_path, binding_path))
-	);
+	return member_names.has(member_name) && effect_binding_paths.paths.has(owner_path.join("."));
 }
 
 function get_static_access_path(node: ts.Node): string[] | undefined {
@@ -462,10 +577,6 @@ function get_static_access_path(node: ts.Node): string[] | undefined {
 	return undefined;
 }
 
-function paths_equal(left: readonly string[], right: readonly string[]): boolean {
-	return left.length === right.length && left.every((part, index) => part === right[index]);
-}
-
 function some_node(node: ts.Node, predicate: (node: ts.Node) => boolean): boolean {
 	let matched = false;
 
@@ -488,6 +599,20 @@ function is_yield_star_expression(node: ts.Node): boolean {
 			ts.isIdentifier(node.left) &&
 			node.left.text === "yield")
 	);
+}
+
+function has_yield_star_ancestor(node: ts.Node): boolean {
+	let current = node.parent;
+
+	while (current) {
+		if (is_yield_star_expression(current)) {
+			return true;
+		}
+
+		current = current.parent;
+	}
+
+	return false;
 }
 
 function unwrap_parentheses(expression: ts.Expression | undefined): ts.Expression | undefined {
