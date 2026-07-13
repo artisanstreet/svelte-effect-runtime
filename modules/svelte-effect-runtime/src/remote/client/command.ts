@@ -51,25 +51,23 @@ export function create_remote_command_adapter<Input, Output, ErrorType = never>(
 	return adapter as EffectRemoteCommandAdapter<Input, Output, ErrorType>;
 }
 
-function AcquirePending(pending: Pending): Effect.Effect<void> {
-	return Effect.sync(() => {
+const AcquirePending = (pending: Pending) =>
+	Effect.sync(() => {
 		pending.value += 1;
 	});
-}
 
-function ReleasePending(pending: Pending): Effect.Effect<void> {
-	return Effect.sync(() => {
+const ReleasePending = (pending: Pending) =>
+	Effect.sync(() => {
 		pending.value -= 1;
 	});
-}
 
-function InvokeCommand<Input, Output, ErrorType>(
+const InvokeCommand = <Input, Output, ErrorType>(
 	native_factory: unknown,
 	invoke: NativeMethod | undefined,
 	input: undefined extends Input ? Input | void : Input,
 	decode_payload: (value: unknown) => unknown,
-): Effect.Effect<Output, RemoteFailure<ErrorType>> {
-	return Effect.gen(function* () {
+) =>
+	Effect.gen(function* () {
 		const result = yield* MakeEffectFromPromise<unknown, ErrorType>(() =>
 			Promise.resolve(
 				invoke
@@ -80,4 +78,3 @@ function InvokeCommand<Input, Output, ErrorType>(
 
 		return yield* DecodeResponseOrValue<Output, ErrorType>(result, decode_payload);
 	});
-}

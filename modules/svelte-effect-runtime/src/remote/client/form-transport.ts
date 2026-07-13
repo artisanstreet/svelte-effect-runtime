@@ -10,7 +10,7 @@ import {
 } from "$/remote/shared.ts";
 import { decode_remote_error, is_decoded_remote_failure } from "./failures.ts";
 import { MakeEffectFromPromise, MakeEffectFromSync } from "./effect.ts";
-import type { FormIssue, RemoteFailure } from "$/remote/shared.ts";
+import type { FormIssue } from "$/remote/shared.ts";
 import type { StandardSchema } from "$/internal/schema.ts";
 import { DecodeResponseFailure } from "./responses.ts";
 import type { NativeFormRecord } from "./types.ts";
@@ -69,14 +69,14 @@ const DecodeRemoteFormResponseEnvelope = Schema.decodeUnknownOption(
 );
 const DecodeRemoteFormPayload = Schema.decodeUnknownOption(RemoteFormDecodedPayloadSchema);
 
-export function SubmitRemoteForm<Output, ErrorType = never>(
+export const SubmitRemoteForm = <Output, ErrorType = never>(
 	form_obj: NativeFormRecord,
 	input: unknown,
 	decode_payload: (value: unknown) => unknown,
 	remote_base: string,
 	preflight_schema?: StandardSchema,
-): Effect.Effect<Output, RemoteFailure<ErrorType>> {
-	return Effect.gen(function* () {
+) =>
+	Effect.gen(function* () {
 		const action_id = yield* MakeEffectFromSync<string | undefined, ErrorType>(() =>
 			get_remote_action_id(form_obj),
 		);
@@ -108,7 +108,6 @@ export function SubmitRemoteForm<Output, ErrorType = never>(
 
 		return yield* DecodeFormResponse<Output, ErrorType>(envelope, decode_payload);
 	});
-}
 
 export function get_remote_action_id(form_obj: NativeFormRecord): string | undefined {
 	const action = form_obj.action;
@@ -148,11 +147,8 @@ function get_remote_request_headers(): HeadersInit {
 	};
 }
 
-function ValidatePreflightInput<ErrorType>(
-	schema: StandardSchema | undefined,
-	input: unknown,
-): Effect.Effect<void, RemoteFailure<ErrorType>> {
-	return Effect.gen(function* () {
+const ValidatePreflightInput = <ErrorType>(schema: StandardSchema | undefined, input: unknown) =>
+	Effect.gen(function* () {
 		if (!schema) {
 			return;
 		}
@@ -169,7 +165,6 @@ function ValidatePreflightInput<ErrorType>(
 
 		return yield* Effect.fail(create_remote_validation_error(issues, { issues }, 400));
 	});
-}
 
 function normalize_standard_issue(issue: unknown): FormIssue {
 	if (!is_record(issue)) {
@@ -204,11 +199,11 @@ function is_record(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;
 }
 
-function DecodeFormResponse<Output, ErrorType>(
+const DecodeFormResponse = <Output, ErrorType>(
 	envelope: unknown,
 	decode_payload: (value: unknown) => unknown,
-): Effect.Effect<Output, RemoteFailure<ErrorType>> {
-	return Effect.gen(function* () {
+) =>
+	Effect.gen(function* () {
 		const response = decode_remote_form_response_envelope(envelope);
 
 		if (!response) {
@@ -262,7 +257,6 @@ function DecodeFormResponse<Output, ErrorType>(
 
 		return decoded.result as Output;
 	});
-}
 
 function decode_remote_form_response_envelope(
 	envelope: unknown,

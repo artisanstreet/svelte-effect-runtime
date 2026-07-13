@@ -34,7 +34,7 @@ test("VS Code extension shutdown drains active work and rejects queued transitio
 
 		yield* Effect.promise(() => transition_entered);
 
-		const shutdown = yield* Effect.forkChild(shutdown_gate_result(gate.close, events));
+		const shutdown = yield* Effect.forkChild(ShutdownGateResult(gate.close, events));
 
 		yield* gate.await_close;
 
@@ -58,6 +58,5 @@ test("VS Code extension shutdown drains active work and rejects queued transitio
 	assert_equals(events, ["transition:start", "transition:end", "shutdown:end"]);
 });
 
-function shutdown_gate_result(close: Effect.Effect<void>, events: string[]): Effect.Effect<void> {
-	return close.pipe(Effect.tap(() => Effect.sync(() => events.push("shutdown:end"))));
-}
+const ShutdownGateResult = (close: Effect.Effect<void>, events: string[]) =>
+	close.pipe(Effect.tap(() => Effect.sync(() => events.push("shutdown:end"))));

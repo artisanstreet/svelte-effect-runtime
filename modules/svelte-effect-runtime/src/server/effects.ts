@@ -79,14 +79,10 @@ function run_live_source_effect<A>(
 	return run_remote_effect(EffectWithRequestEvent, runtime, svelte_invalid, svelte_remote_error);
 }
 
-function ToLiveSourceEffect<A>(
-	value: LiveHandlerResult<A>,
-	event: RequestEventShape,
-): Effect.Effect<ResolvedLiveSource<A>, unknown, unknown> {
-	return Stream.toAsyncIterableEffect(value as Stream.Stream<A, unknown, unknown>).pipe(
+const ToLiveSourceEffect = <A>(value: LiveHandlerResult<A>, event: RequestEventShape) =>
+	Stream.toAsyncIterableEffect(value as Stream.Stream<A, unknown, unknown>).pipe(
 		Effect.map((source) => wrap_live_source_errors(source, event)),
 	) as Effect.Effect<ResolvedLiveSource<A>, unknown, unknown>;
-}
 
 function wrap_live_source_errors<A>(
 	source: AsyncIterable<A>,

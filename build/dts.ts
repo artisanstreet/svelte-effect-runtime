@@ -51,10 +51,8 @@ const Main = Effect.gen(function* () {
 	yield* VisitRoot(context);
 });
 
-function VisitRoot(
-	context: TargetContext,
-): Effect.Effect<void, PlatformError.PlatformError, FileSystem.FileSystem | Path.Path> {
-	return Effect.gen(function* () {
+const VisitRoot = (context: TargetContext) =>
+	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 		const entries = yield* file_system.readDirectory(context.dist_root);
 
@@ -62,7 +60,6 @@ function VisitRoot(
 			yield* Visit(context, entry);
 		}
 	});
-}
 
 function Visit(
 	context: TargetContext,
@@ -97,8 +94,8 @@ function Visit(
 	});
 }
 
-function RewriteAliasSpecifiers(context: TargetContext, file_path: string, content: string) {
-	return Effect.gen(function* () {
+const RewriteAliasSpecifiers = (context: TargetContext, file_path: string, content: string) =>
+	Effect.gen(function* () {
 		const path = yield* Path.Path;
 
 		if (context.target.aliases.length === 0) {
@@ -130,7 +127,6 @@ function RewriteAliasSpecifiers(context: TargetContext, file_path: string, conte
 			},
 		);
 	});
-}
 
 function rewrite_relative_specifiers(content: string): string {
 	return content.replace(/((?:from|import)\s*["'])(\.{1,2}\/[^"']+)\.ts(["'])/g, "$1$2.js$3");

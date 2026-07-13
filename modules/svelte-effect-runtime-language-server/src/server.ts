@@ -14,6 +14,34 @@ import { Effect } from "effect";
 import process from "node:process";
 import path from "node:path";
 
+const PatchPullDiagnosticsConnection = (connection: Connection) =>
+	Effect.gen(function* () {
+		return yield* Effect.sync(() => {
+			const original_on_request = connection.onRequest.bind(connection);
+
+			connection.onRequest = ((type_or_method: unknown, handler: unknown) => {
+				const method =
+					typeof type_or_method === "string"
+						? type_or_method
+						: (type_or_method as { method?: string })?.method;
+
+				if (method !== DocumentDiagnosticRequest.method || typeof handler !== "function") {
+					return original_on_request(type_or_method as never, handler as never);
+				}
+
+				const wrapped_handler = async (...args: unknown[]) => {
+					const result = await (handler as (...args: unknown[]) => unknown)(...args);
+
+					return result ?? { kind: "full", items: [] };
+				};
+
+				return original_on_request(type_or_method as never, wrapped_handler as never);
+			}) as typeof connection.onRequest;
+
+			return connection;
+		});
+	});
+
 const MakeLanguageServerConnection = Effect.gen(function* () {
 	if (process.argv.includes("--stdio")) {
 		yield* Effect.sync(() => {
@@ -56,35 +84,6 @@ if (is_main_module()) {
 	NodeRuntime.runMain(
 		Main.pipe(Effect.provide(LanguageServerLive), Effect.provide(NodeServices.layer)),
 	);
-}
-
-function PatchPullDiagnosticsConnection(connection: Connection) {
-	return Effect.gen(function* () {
-		return yield* Effect.sync(() => {
-			const original_on_request = connection.onRequest.bind(connection);
-
-			connection.onRequest = ((type_or_method: unknown, handler: unknown) => {
-				const method =
-					typeof type_or_method === "string"
-						? type_or_method
-						: (type_or_method as { method?: string })?.method;
-
-				if (method !== DocumentDiagnosticRequest.method || typeof handler !== "function") {
-					return original_on_request(type_or_method as never, handler as never);
-				}
-
-				const wrapped_handler = async (...args: unknown[]) => {
-					const result = await (handler as (...args: unknown[]) => unknown)(...args);
-
-					return result ?? { kind: "full", items: [] };
-				};
-
-				return original_on_request(type_or_method as never, wrapped_handler as never);
-			}) as typeof connection.onRequest;
-
-			return connection;
-		});
-	});
 }
 
 function is_main_module(): boolean {

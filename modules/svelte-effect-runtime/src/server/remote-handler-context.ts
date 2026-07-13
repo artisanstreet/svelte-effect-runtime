@@ -15,27 +15,25 @@ export function is_running_remote_effect_handler(event?: object): boolean {
 }
 
 /** Marks one request as handler-owned for the lifetime of the supplied Effect. */
-export function RunInsideRemoteEffectHandler<A, E, R>(
+export const RunInsideRemoteEffectHandler = <A, E, R>(
 	event: object,
 	effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> {
-	return Effect.acquireUseRelease(
+) =>
+	Effect.acquireUseRelease(
 		AcquireRemoteHandlerOwnership(event),
 		() => effect,
 		() => ReleaseRemoteHandlerOwnership(event),
 	);
-}
 
-function AcquireRemoteHandlerOwnership(event: object): Effect.Effect<void> {
-	return Effect.sync(() => {
+const AcquireRemoteHandlerOwnership = (event: object) =>
+	Effect.sync(() => {
 		const active_count = active_remote_handler_counts.get(event) ?? 0;
 
 		active_remote_handler_counts.set(event, active_count + 1);
 	});
-}
 
-function ReleaseRemoteHandlerOwnership(event: object): Effect.Effect<void> {
-	return Effect.sync(() => {
+const ReleaseRemoteHandlerOwnership = (event: object) =>
+	Effect.sync(() => {
 		const remaining_count = (active_remote_handler_counts.get(event) ?? 1) - 1;
 
 		if (remaining_count === 0) {
@@ -46,7 +44,6 @@ function ReleaseRemoteHandlerOwnership(event: object): Effect.Effect<void> {
 
 		active_remote_handler_counts.set(event, remaining_count);
 	});
-}
 
 function get_current_request_event(): object | undefined {
 	try {

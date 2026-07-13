@@ -1,6 +1,5 @@
 import { MakeEffectFromPromise, MakeEffectFromSync } from "./effect.ts";
 import type { EffectRemoteFormSubmit, NativeMethod } from "./types.ts";
-import type { RemoteFailure } from "$/remote/shared.ts";
 import { get_dispatcher } from "$/dispatcher.ts";
 import { has_method } from "./utils.ts";
 import { Effect } from "effect";
@@ -79,11 +78,8 @@ function MakeSubmitEffect<Output, ErrorType>(
 	return SubmitEffect;
 }
 
-function ResolveSubmitResult<ErrorType>(
-	result: unknown,
-	updates_args: unknown[] | undefined,
-): Effect.Effect<unknown, RemoteFailure<ErrorType>> {
-	return Effect.gen(function* () {
+const ResolveSubmitResult = <ErrorType>(result: unknown, updates_args: unknown[] | undefined) =>
+	Effect.gen(function* () {
 		if (updates_args && has_method(result, "updates")) {
 			return yield* MakeEffectFromPromise<unknown, ErrorType>(() =>
 				Promise.resolve(result.updates(...updates_args)),
@@ -92,7 +88,6 @@ function ResolveSubmitResult<ErrorType>(
 
 		return yield* MakeEffectFromPromise<unknown, ErrorType>(() => Promise.resolve(result));
 	});
-}
 
 function read_submit_result<Output>(event: unknown): Output | undefined {
 	if (typeof event !== "object" || event === null || !("result" in event)) {

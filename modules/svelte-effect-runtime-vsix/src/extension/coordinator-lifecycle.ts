@@ -1,16 +1,8 @@
 import { Deferred, Effect, Option, Ref, Semaphore } from "effect";
 
-interface CoordinatorShutdownGate {
-	readonly await_close: Effect.Effect<void>;
-	readonly close: Effect.Effect<void>;
-	readonly run: <A, E, R>(
-		program: Effect.Effect<A, E, R>,
-	) => Effect.Effect<Option.Option<A>, E, R>;
-}
-
 /** Blocks new coordinator work once extension shutdown begins. */
-export function MakeCoordinatorShutdownGate(): Effect.Effect<CoordinatorShutdownGate> {
-	return Effect.gen(function* () {
+export const MakeCoordinatorShutdownGate = () =>
+	Effect.gen(function* () {
 		const closed = yield* Ref.make(false);
 		const close_started = yield* Deferred.make<void>();
 		const semaphore = yield* Semaphore.make(1);
@@ -40,4 +32,3 @@ export function MakeCoordinatorShutdownGate(): Effect.Effect<CoordinatorShutdown
 			run: Run,
 		};
 	});
-}

@@ -18,8 +18,8 @@ const virtual_svelte_file_extensions = [
 	{ source: ".sv", virtual: ".d.sv.ts" },
 ];
 
-export function PatchSvelteFileExtensions() {
-	return Effect.gen(function* () {
+export const PatchSvelteFileExtensions = () =>
+	Effect.gen(function* () {
 		const internals = yield* SvelteInternals;
 
 		yield* Effect.sync(() => {
@@ -40,10 +40,9 @@ export function PatchSvelteFileExtensions() {
 			svelte_utils[patch_marker] = true;
 		});
 	});
-}
 
-export function PatchSvelteCompilerPath(transform_svelte_effect: TransformSvelteEffect) {
-	return Effect.gen(function* () {
+export const PatchSvelteCompilerPath = (transform_svelte_effect: TransformSvelteEffect) =>
+	Effect.gen(function* () {
 		const internals = yield* SvelteInternals;
 
 		yield* Effect.sync(() => {
@@ -90,10 +89,9 @@ export function PatchSvelteCompilerPath(transform_svelte_effect: TransformSvelte
 			patch_svelte_document_compile_options(internals);
 		});
 	});
-}
 
-export function PatchTypeScriptSnapshotPath(transforms: TransformSet) {
-	return Effect.gen(function* () {
+export const PatchTypeScriptSnapshotPath = (transforms: TransformSet) =>
+	Effect.gen(function* () {
 		const internals = yield* SvelteInternals;
 
 		yield* Effect.sync(() => {
@@ -138,7 +136,6 @@ export function PatchTypeScriptSnapshotPath(transforms: TransformSet) {
 			document_snapshot.fromSvelteFilePath[patch_marker] = true;
 		});
 	});
-}
 
 function patch_static_factory(target_class: any, make_replacement: (original_create: any) => any) {
 	if (target_class.create[patch_marker]) {
@@ -375,8 +372,8 @@ function ensure_real_svelte_file_path(file_path: string) {
 	return is_virtual_svelte_file_path(file_path) ? to_real_svelte_file_path(file_path) : file_path;
 }
 
-export function PatchTypeScriptCodeActions() {
-	return Effect.gen(function* () {
+export const PatchTypeScriptCodeActions = () =>
+	Effect.gen(function* () {
 		const internals = yield* SvelteInternals;
 
 		yield* Effect.sync(() => {
@@ -420,7 +417,6 @@ export function PatchTypeScriptCodeActions() {
 			code_actions_provider.prototype.applyQuickfix[patch_marker] = true;
 		});
 	});
-}
 
 function merge_preprocessors(
 	existing: any,

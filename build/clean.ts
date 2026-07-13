@@ -53,8 +53,8 @@ const Main = Effect.gen(function* () {
 	}
 });
 
-function MakeCleanTargets(repo_root: string) {
-	return Effect.gen(function* () {
+const MakeCleanTargets = (repo_root: string) =>
+	Effect.gen(function* () {
 		const path = yield* Path.Path;
 		const clean_targets: Record<(typeof target_names)[number], CleanTarget> = {
 			"svelte-effect-runtime": {
@@ -144,10 +144,9 @@ function MakeCleanTargets(repo_root: string) {
 
 		return clean_targets;
 	});
-}
 
-function RemoveMatchingFiles(directory: string, extensions: ReadonlyArray<string>) {
-	return Effect.gen(function* () {
+const RemoveMatchingFiles = (directory: string, extensions: ReadonlyArray<string>) =>
+	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
 		const entries = yield* file_system
@@ -173,7 +172,6 @@ function RemoveMatchingFiles(directory: string, extensions: ReadonlyArray<string
 			yield* file_system.remove(entry_path, { force: true });
 		}
 	});
-}
 
 function is_not_found_error(error: PlatformError.PlatformError): boolean {
 	return error.reason._tag === "NotFound";

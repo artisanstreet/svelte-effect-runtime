@@ -1,4 +1,4 @@
-import { Effect, Option, Ref, Scope, Semaphore } from "effect";
+import { Effect, Option, Ref, Semaphore } from "effect";
 
 export interface SerializedClientHandle {
 	readonly start: Effect.Effect<void, unknown>;
@@ -17,10 +17,10 @@ interface ActiveSerializedClient {
 }
 
 /** Serializes client replacement so only one language client remains active. */
-export function MakeSerializedClientControl(
+export const MakeSerializedClientControl = (
 	CreateClient: (server_path: string) => Effect.Effect<SerializedClientHandle, unknown>,
-): Effect.Effect<SerializedClientControl, never, Scope.Scope> {
-	return Effect.gen(function* () {
+) =>
+	Effect.gen(function* () {
 		const client_ref = yield* Ref.make(Option.none<ActiveSerializedClient>());
 		const semaphore = yield* Semaphore.make(1);
 		const Stop = semaphore.withPermits(1)(StopActiveClient(client_ref));
@@ -34,14 +34,13 @@ export function MakeSerializedClientControl(
 			stop: Stop,
 		};
 	});
-}
 
-function StartClient(
+const StartClient = (
 	client_ref: Ref.Ref<Option.Option<ActiveSerializedClient>>,
 	CreateClient: (server_path: string) => Effect.Effect<SerializedClientHandle, unknown>,
 	server_path: string,
-): Effect.Effect<void, unknown> {
-	return Effect.gen(function* () {
+) =>
+	Effect.gen(function* () {
 		const active_client = yield* Ref.get(client_ref);
 
 		if (Option.isSome(active_client) && active_client.value.server_path === server_path) {
@@ -60,12 +59,9 @@ function StartClient(
 
 		yield* StartAndStore;
 	});
-}
 
-function StopActiveClient(
-	client_ref: Ref.Ref<Option.Option<ActiveSerializedClient>>,
-): Effect.Effect<void, unknown> {
-	return Effect.gen(function* () {
+const StopActiveClient = (client_ref: Ref.Ref<Option.Option<ActiveSerializedClient>>) =>
+	Effect.gen(function* () {
 		const active_client = yield* Ref.get(client_ref);
 
 		if (Option.isNone(active_client)) {
@@ -80,4 +76,3 @@ function StopActiveClient(
 
 		yield* StopClient;
 	});
-}

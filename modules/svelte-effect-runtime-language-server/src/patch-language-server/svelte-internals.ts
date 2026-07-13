@@ -213,23 +213,21 @@ const ResolvePackageRoot = Effect.gen(function* () {
 	}
 });
 
-function ResolveModule(module_path: string) {
-	return Effect.gen(function* () {
+const ResolveModule = (module_path: string) =>
+	Effect.gen(function* () {
 		return yield* Effect.try({
 			try: () => require.resolve(module_path),
 			catch: (cause) => make_dependency_error(module_path, cause),
 		});
 	});
-}
 
-function RequireModule<Module>(module_path: string) {
-	return Effect.gen(function* () {
+const RequireModule = <Module>(module_path: string) =>
+	Effect.gen(function* () {
 		return yield* Effect.try({
 			try: () => require(module_path) as Module,
 			catch: (cause) => make_dependency_error(module_path, cause),
 		});
 	});
-}
 
 function make_dependency_error(dependency: string, cause: unknown) {
 	return new LanguageServerDependencyError({

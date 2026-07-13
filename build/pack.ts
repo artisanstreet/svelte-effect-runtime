@@ -76,8 +76,8 @@ const Main = Effect.gen(function* () {
 	yield* Package.pipe(Effect.ensuring(RemovePath(staging_dir).pipe(Effect.orDie)));
 });
 
-function CopyPackageOutput(context: PackageContext) {
-	return Effect.gen(function* () {
+const CopyPackageOutput = (context: PackageContext) =>
+	Effect.gen(function* () {
 		const manifest = yield* ReadPackageManifest(context.package_manifest_path);
 		const side_files = yield* GetManifestSideFiles(manifest);
 
@@ -95,14 +95,13 @@ function CopyPackageOutput(context: PackageContext) {
 			},
 		);
 	});
-}
 
-function CopyDirectoryFiltered(
+const CopyDirectoryFiltered = (
 	source_dir: string,
 	target_dir: string,
 	include: (relative_path: string) => boolean,
-) {
-	return Effect.gen(function* () {
+) =>
+	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
 
@@ -135,10 +134,9 @@ function CopyDirectoryFiltered(
 			yield* file_system.copyFile(source_path, target_path);
 		}
 	});
-}
 
-function GetManifestSideFiles(manifest: Record<string, unknown>) {
-	return Effect.gen(function* () {
+const GetManifestSideFiles = (manifest: Record<string, unknown>) =>
+	Effect.gen(function* () {
 		const files = yield* Schema.decodeUnknownEffect(ManifestSideFilesSchema)(
 			manifest.files ?? [],
 		);
@@ -147,10 +145,9 @@ function GetManifestSideFiles(manifest: Record<string, unknown>) {
 			(file) => file !== ".dist" && file !== "README.md" && file !== "LICENSE",
 		);
 	});
-}
 
-function CopyPackageManifest(context: PackageContext, repo_root: string) {
-	return Effect.gen(function* () {
+const CopyPackageManifest = (context: PackageContext, repo_root: string) =>
+	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
 		const manifest = yield* ReadPackageManifest(context.package_manifest_path);
@@ -161,10 +158,9 @@ function CopyPackageManifest(context: PackageContext, repo_root: string) {
 			`${JSON.stringify(publish_manifest, null, 2)}\n`,
 		);
 	});
-}
 
-function PreparePublishManifest(manifest: Record<string, unknown>, repo_root: string) {
-	return Effect.gen(function* () {
+const PreparePublishManifest = (manifest: Record<string, unknown>, repo_root: string) =>
+	Effect.gen(function* () {
 		const publish_manifest = structuredClone(manifest);
 
 		for (const field of dependency_fields) {
@@ -187,10 +183,9 @@ function PreparePublishManifest(manifest: Record<string, unknown>, repo_root: st
 
 		return publish_manifest;
 	});
-}
 
-function ResolveWorkspaceVersion(name: string, specifier: string, repo_root: string) {
-	return Effect.gen(function* () {
+const ResolveWorkspaceVersion = (name: string, specifier: string, repo_root: string) =>
+	Effect.gen(function* () {
 		const path = yield* Path.Path;
 		const version = specifier.slice("workspace:".length);
 
@@ -208,10 +203,9 @@ function ResolveWorkspaceVersion(name: string, specifier: string, repo_root: str
 			? `${version}${workspace_manifest.version}`
 			: workspace_manifest.version;
 	});
-}
 
-function CopyStandardFiles(context: PackageContext, repo_root: string) {
-	return Effect.gen(function* () {
+const CopyStandardFiles = (context: PackageContext, repo_root: string) =>
+	Effect.gen(function* () {
 		const path = yield* Path.Path;
 
 		yield* CopyOptional(
@@ -223,10 +217,9 @@ function CopyStandardFiles(context: PackageContext, repo_root: string) {
 			path.join(context.staging_dir, "LICENSE"),
 		);
 	});
-}
 
-function CopyManifestFiles(context: PackageContext) {
-	return Effect.gen(function* () {
+const CopyManifestFiles = (context: PackageContext) =>
+	Effect.gen(function* () {
 		const manifest = yield* ReadPackageManifest(context.package_manifest_path);
 		const files = yield* GetManifestSideFiles(manifest);
 
@@ -234,10 +227,9 @@ function CopyManifestFiles(context: PackageContext) {
 			yield* CopyManifestFile(context, file);
 		}
 	});
-}
 
-function CopyManifestFile(context: PackageContext, file: string) {
-	return Effect.gen(function* () {
+const CopyManifestFile = (context: PackageContext, file: string) =>
+	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 		const package_path = yield* ResolveContainedPath(context.package_dir, file);
 		const output_path = yield* ResolveContainedPath(context.output_dir, file);
@@ -256,10 +248,9 @@ function CopyManifestFile(context: PackageContext, file: string) {
 			yield* file_system.copy(output_path, staging_path, { overwrite: true });
 		}
 	});
-}
 
-function ResolveContainedPath(root: string, relative_path: string) {
-	return Effect.gen(function* () {
+const ResolveContainedPath = (root: string, relative_path: string) =>
+	Effect.gen(function* () {
 		const path = yield* Path.Path;
 		const resolved_root = path.resolve(root);
 		const resolved_path = path.resolve(resolved_root, relative_path);
@@ -278,10 +269,9 @@ function ResolveContainedPath(root: string, relative_path: string) {
 
 		return resolved_path;
 	});
-}
 
-function CopyOptional(source: string, target: string) {
-	return Effect.gen(function* () {
+const CopyOptional = (source: string, target: string) =>
+	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 
 		yield* file_system
@@ -292,20 +282,16 @@ function CopyOptional(source: string, target: string) {
 				),
 			);
 	});
-}
 
-function ReadPackageManifest(path: string) {
-	return ReadJsonFile(path, PackageManifestSchema);
-}
+const ReadPackageManifest = (path: string) => ReadJsonFile(path, PackageManifestSchema);
 
-function ReadJsonFile<S extends Schema.Top>(path: string, schema: S) {
-	return Effect.gen(function* () {
+const ReadJsonFile = <S extends Schema.Top>(path: string, schema: S) =>
+	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 		const content = yield* file_system.readFileString(path);
 
 		return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(schema))(content);
 	});
-}
 
 function is_not_found_error(error: PlatformError.PlatformError): boolean {
 	return error.reason._tag === "NotFound";

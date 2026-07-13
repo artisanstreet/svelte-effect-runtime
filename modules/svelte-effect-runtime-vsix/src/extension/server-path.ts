@@ -18,7 +18,6 @@ import {
 	Result,
 	Schema,
 	Semaphore,
-	Scope,
 } from "effect";
 import {
 	resolve_configured_server_path,
@@ -80,10 +79,8 @@ export function make_server_path_resolver_layer(
 	);
 }
 
-export function GetConfiguredServerPath(
-	output_channel?: InstallOutput,
-): Effect.Effect<Option.Option<string>, never, FileSystem.FileSystem> {
-	return Effect.gen(function* () {
+export const GetConfiguredServerPath = (output_channel?: InstallOutput) =>
+	Effect.gen(function* () {
 		const configuration = yield* ReadScopedServerPathConfiguration;
 		const result = resolve_configured_server_path(configuration);
 
@@ -107,17 +104,9 @@ export function GetConfiguredServerPath(
 
 		return yield* ResolveExistingConfiguredServerPath(result.path, output_channel);
 	});
-}
 
-function ResolveServerPath(
-	context: GlobalStorageContext,
-	output_channel: InstallOutput,
-): Effect.Effect<
-	string,
-	unknown,
-	FileSystem.FileSystem | PackageManagerCommand | PackageManagerInstallFiles | Path.Path
-> {
-	return Effect.gen(function* () {
+const ResolveServerPath = (context: GlobalStorageContext, output_channel: InstallOutput) =>
+	Effect.gen(function* () {
 		const configured_path = yield* GetConfiguredServerPath(output_channel);
 
 		if (Option.isSome(configured_path)) {
@@ -126,7 +115,6 @@ function ResolveServerPath(
 
 		return yield* InstallLanguageServer(context, output_channel);
 	});
-}
 
 const ReadScopedServerPathConfiguration = Effect.sync((): ScopedServerPathConfiguration => {
 	const inspection = vscode.workspace.getConfiguration(config_root).inspect(config_server_path);
@@ -140,15 +128,8 @@ const ReadScopedServerPathConfiguration = Effect.sync((): ScopedServerPathConfig
 	};
 });
 
-function InstallLanguageServer(
-	context: GlobalStorageContext,
-	output_channel: InstallOutput,
-): Effect.Effect<
-	string,
-	unknown,
-	FileSystem.FileSystem | PackageManagerCommand | PackageManagerInstallFiles | Path.Path
-> {
-	return Effect.gen(function* () {
+const InstallLanguageServer = (context: GlobalStorageContext, output_channel: InstallOutput) =>
+	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 		const path_service = yield* Path.Path;
 		const cache_root = path_service.join(
@@ -174,22 +155,13 @@ function InstallLanguageServer(
 			InstallAndPublishLanguageServer(cache_root, target_version, output_channel),
 		);
 	});
-}
 
-function InstallAndPublishLanguageServer(
+const InstallAndPublishLanguageServer = (
 	cache_root: string,
 	target_version: string,
 	output_channel: InstallOutput,
-): Effect.Effect<
-	string,
-	unknown,
-	| FileSystem.FileSystem
-	| PackageManagerCommand
-	| PackageManagerInstallFiles
-	| Path.Path
-	| Scope.Scope
-> {
-	return Effect.gen(function* () {
+) =>
+	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 		const path_service = yield* Path.Path;
 		const encoded_version = encodeURIComponent(target_version);
@@ -263,13 +235,9 @@ function InstallAndPublishLanguageServer(
 			message: `Could not publish ${language_server_package_name}@${target_version} atomically.`,
 		});
 	});
-}
 
-function FindPublishedLanguageServer(
-	cache_root: string,
-	target_version: string,
-): Effect.Effect<Option.Option<string>, unknown, FileSystem.FileSystem | Path.Path> {
-	return Effect.gen(function* () {
+const FindPublishedLanguageServer = (cache_root: string, target_version: string) =>
+	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 		const path_service = yield* Path.Path;
 		const encoded_version = encodeURIComponent(target_version);
@@ -292,12 +260,9 @@ function FindPublishedLanguageServer(
 
 		return Option.none<string>();
 	});
-}
 
-function ReadInstalledPackageVersion(
-	install_root: string,
-): Effect.Effect<Option.Option<string>, never, FileSystem.FileSystem | Path.Path> {
-	return Effect.gen(function* () {
+const ReadInstalledPackageVersion = (install_root: string) =>
+	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 		const path_service = yield* Path.Path;
 		const package_json_path = path_service.join(
@@ -317,13 +282,12 @@ function ReadInstalledPackageVersion(
 
 		return Option.map(manifest, (package_manifest) => package_manifest.version);
 	});
-}
 
-function ResolveExistingConfiguredServerPath(
+const ResolveExistingConfiguredServerPath = (
 	configured_path: string,
 	output_channel?: InstallOutput,
-): Effect.Effect<Option.Option<string>, never, FileSystem.FileSystem> {
-	return Effect.gen(function* () {
+) =>
+	Effect.gen(function* () {
 		const path_is_file = yield* IsRegularFile(configured_path);
 
 		if (path_is_file) {
@@ -337,22 +301,17 @@ function ResolveExistingConfiguredServerPath(
 
 		return Option.none<string>();
 	});
-}
 
-function IsRegularFile(path: string): Effect.Effect<boolean, never, FileSystem.FileSystem> {
-	return Effect.gen(function* () {
+const IsRegularFile = (path: string) =>
+	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 		const info = yield* Effect.option(file_system.stat(path));
 
 		return Option.isSome(info) && info.value.type === "File";
 	});
-}
 
-function VerifyLanguageServerInstall(
-	install_root: string,
-	target_version: string,
-): Effect.Effect<string, ServerPathError, FileSystem.FileSystem | Path.Path> {
-	return Effect.gen(function* () {
+const VerifyLanguageServerInstall = (install_root: string, target_version: string) =>
+	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 		const path_service = yield* Path.Path;
 		const script_path = path_service.join(install_root, ...language_server_script_path);
@@ -394,11 +353,6 @@ function VerifyLanguageServerInstall(
 
 		return script_path;
 	});
-}
 
-function AppendLine(
-	output_channel: InstallOutput | undefined,
-	message: string,
-): Effect.Effect<void> {
-	return Effect.sync(() => output_channel?.appendLine(message));
-}
+const AppendLine = (output_channel: InstallOutput | undefined, message: string) =>
+	Effect.sync(() => output_channel?.appendLine(message));

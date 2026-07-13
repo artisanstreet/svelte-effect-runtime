@@ -170,14 +170,8 @@ export function make_package_manager_candidates(
 }
 
 /** Installs the language-server package while keeping process cleanup scoped. */
-export function RunPackageManagerInstall<R>(
-	options: PackageManagerInstallOptions<R>,
-): Effect.Effect<
-	string,
-	PackageManagerInstallError,
-	PackageManagerCommand | PackageManagerInstallFiles | R
-> {
-	return Effect.gen(function* () {
+export const RunPackageManagerInstall = <R>(options: PackageManagerInstallOptions<R>) =>
+	Effect.gen(function* () {
 		const command = yield* PackageManagerCommand;
 		const files = yield* PackageManagerInstallFiles;
 		const candidates = options.candidates ?? make_package_manager_candidates();
@@ -239,7 +233,6 @@ export function RunPackageManagerInstall<R>(
 			message: format_package_manager_install_failure(attempts),
 		});
 	});
-}
 
 function RunCommandInvocation(
 	invocation: CommandInvocation,
@@ -253,17 +246,8 @@ function RunCommandInvocation(
 	);
 }
 
-interface RunningCommand {
-	readonly AwaitClose: Effect.Effect<void>;
-	readonly child: ChildProcess;
-	readonly completion: Effect.Effect<PackageManagerCommandResult, PackageManagerCommandError>;
-}
-
-function SpawnCommandInvocation(
-	invocation: CommandInvocation,
-	cwd?: string,
-): Effect.Effect<RunningCommand, PackageManagerCommandError> {
-	return Effect.try({
+const SpawnCommandInvocation = (invocation: CommandInvocation, cwd?: string) =>
+	Effect.try({
 		try: () => {
 			const completion = Deferred.makeUnsafe<
 				PackageManagerCommandResult,
@@ -368,13 +352,9 @@ function SpawnCommandInvocation(
 				stdout: "",
 			}),
 	});
-}
 
-function TerminateProcessTree(
-	child: ChildProcess,
-	AwaitClose: Effect.Effect<void>,
-): Effect.Effect<void> {
-	return Effect.gen(function* () {
+const TerminateProcessTree = (child: ChildProcess, AwaitClose: Effect.Effect<void>) =>
+	Effect.gen(function* () {
 		if (child.exitCode === null && child.signalCode === null) {
 			if (process.platform === "win32") {
 				yield* TerminateWindowsProcessTree(child);
@@ -388,10 +368,9 @@ function TerminateProcessTree(
 			orElse: () => Effect.void,
 		});
 	});
-}
 
-function TerminateWindowsProcessTree(child: ChildProcess): Effect.Effect<void> {
-	return Effect.gen(function* () {
+const TerminateWindowsProcessTree = (child: ChildProcess) =>
+	Effect.gen(function* () {
 		const pid = child.pid;
 
 		if (pid === undefined) {
@@ -416,10 +395,9 @@ function TerminateWindowsProcessTree(child: ChildProcess): Effect.Effect<void> {
 			yield* Effect.sync(() => child.kill("SIGKILL"));
 		}
 	});
-}
 
-function TerminatePosixProcessTree(child: ChildProcess): Effect.Effect<void> {
-	return Effect.gen(function* () {
+const TerminatePosixProcessTree = (child: ChildProcess) =>
+	Effect.gen(function* () {
 		const pid = child.pid;
 
 		if (pid === undefined) {
@@ -434,7 +412,6 @@ function TerminatePosixProcessTree(child: ChildProcess): Effect.Effect<void> {
 			yield* Effect.sync(() => child.kill("SIGKILL"));
 		}
 	});
-}
 
 function make_candidate(
 	platform: NodeJS.Platform,

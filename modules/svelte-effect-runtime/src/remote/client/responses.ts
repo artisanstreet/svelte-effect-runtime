@@ -4,28 +4,25 @@ import { create_remote_http_error } from "$/remote/shared.ts";
 import type { RemoteFailure } from "$/remote/shared.ts";
 import { Effect } from "effect";
 
-export function DecodeResponseFailure<ErrorType = never>(
-	response: Response,
-): Effect.Effect<RemoteFailure<ErrorType>, never, never> {
-	return Effect.gen(function* () {
+export const DecodeResponseFailure = <ErrorType = never>(response: Response) =>
+	Effect.gen(function* () {
 		const body = yield* MakeEffectFromPromise<unknown, ErrorType>(() => response.json()).pipe(
 			Effect.orElseSucceed(() => undefined),
 		);
 		const decoded = decode_remote_error<ErrorType>(body);
 
 		if (is_decoded_remote_failure(decoded)) {
-			return decoded;
+			return decoded as RemoteFailure<ErrorType>;
 		}
 
 		return create_remote_http_error(response.status, body);
 	});
-}
 
-export function DecodeResponseOrValue<Output, ErrorType = never>(
+export const DecodeResponseOrValue = <Output, ErrorType = never>(
 	value: unknown,
 	decode_payload: (value: unknown) => unknown,
-): Effect.Effect<Output, RemoteFailure<ErrorType>> {
-	return Effect.gen(function* () {
+) =>
+	Effect.gen(function* () {
 		if (value instanceof Response) {
 			if (!value.ok) {
 				const failure = yield* DecodeResponseFailure<ErrorType>(value);
@@ -42,12 +39,9 @@ export function DecodeResponseOrValue<Output, ErrorType = never>(
 
 		return yield* MakeEffectFromSync<Output, ErrorType>(() => decode_payload(value) as Output);
 	});
-}
 
-function DecodeSuccessResponseBody<ErrorType>(
-	response: Response,
-): Effect.Effect<unknown, RemoteFailure<ErrorType>> {
-	return Effect.gen(function* () {
+const DecodeSuccessResponseBody = <ErrorType>(response: Response) =>
+	Effect.gen(function* () {
 		if (response.status === 204 || response.status === 205) {
 			return undefined;
 		}
@@ -60,4 +54,3 @@ function DecodeSuccessResponseBody<ErrorType>(
 
 		return yield* MakeEffectFromSync<unknown, ErrorType>(() => JSON.parse(text));
 	});
-}

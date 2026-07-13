@@ -42,14 +42,14 @@ const Main = Effect.scoped(
 	}),
 );
 
-function CopyExtensionOutput(options: {
+const CopyExtensionOutput = (options: {
 	repo_root: string;
 	package_dir: string;
 	output_dir: string;
 	staging_dir: string;
 	staging_dist_dir: string;
-}) {
-	return Effect.gen(function* () {
+}) =>
+	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
 		const { repo_root, package_dir, output_dir, staging_dir, staging_dist_dir } = options;
@@ -80,10 +80,9 @@ function CopyExtensionOutput(options: {
 			path.join(staging_dir, "LICENSE"),
 		);
 	});
-}
 
-function WriteManifest(package_dir: string, staging_dir: string) {
-	return Effect.gen(function* () {
+const WriteManifest = (package_dir: string, staging_dir: string) =>
+	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
 		const manifest_text = yield* file_system.readFileString(
@@ -100,14 +99,13 @@ function WriteManifest(package_dir: string, staging_dir: string) {
 
 		return manifest;
 	});
-}
 
-function PackageExtension(
+const PackageExtension = (
 	manifest: typeof ExtensionManifestSchema.Type,
 	output_dir: string,
 	staging_dir: string,
-) {
-	return Effect.gen(function* () {
+) =>
+	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
 		const command = yield* CommandName("corepack");
@@ -131,7 +129,6 @@ function PackageExtension(
 			{ inherit: true },
 		);
 	});
-}
 
 function prepare_manifest(manifest: typeof ExtensionManifestSchema.Type) {
 	return {
@@ -141,8 +138,7 @@ function prepare_manifest(manifest: typeof ExtensionManifestSchema.Type) {
 	};
 }
 
-function IgnoreNotFound(error: PlatformError.PlatformError) {
-	return error.reason._tag === "NotFound" ? Effect.void : Effect.fail(error);
-}
+const IgnoreNotFound = (error: PlatformError.PlatformError) =>
+	error.reason._tag === "NotFound" ? Effect.void : Effect.fail(error);
 
 NodeRuntime.runMain(Main.pipe(Effect.provide(NodeServices.layer)));

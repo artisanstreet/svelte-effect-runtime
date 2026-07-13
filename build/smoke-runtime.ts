@@ -8,8 +8,8 @@ const PackedTarballSchema = Schema.Struct({
 });
 const PackOutputSchema = Schema.Union([PackedTarballSchema, Schema.Array(PackedTarballSchema)]);
 
-function ResolvePackedTarball(repo_root: string, stdout: string, package_name: string) {
-	return Effect.gen(function* () {
+const ResolvePackedTarball = (repo_root: string, stdout: string, package_name: string) =>
+	Effect.gen(function* () {
 		const path = yield* Path.Path;
 		const parsed = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(PackOutputSchema))(
 			stdout,
@@ -29,7 +29,6 @@ function ResolvePackedTarball(repo_root: string, stdout: string, package_name: s
 
 		return path.join(repo_root, ".dist", package_name, filename);
 	});
-}
 
 const app_html = `<!doctype html>
 <html lang="en">
@@ -305,17 +304,15 @@ const Main = Effect.gen(function* () {
 	});
 });
 
-function WriteJson(smoke_dir: string, relative_path: string, value: unknown) {
-	return WriteText(smoke_dir, relative_path, `${JSON.stringify(value, null, 2)}\n`);
-}
+const WriteJson = (smoke_dir: string, relative_path: string, value: unknown) =>
+	WriteText(smoke_dir, relative_path, `${JSON.stringify(value, null, 2)}\n`);
 
-function WriteText(smoke_dir: string, relative_path: string, value: string) {
-	return Effect.gen(function* () {
+const WriteText = (smoke_dir: string, relative_path: string, value: string) =>
+	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
 
 		yield* file_system.writeFileString(path.join(smoke_dir, relative_path), value);
 	});
-}
 
 NodeRuntime.runMain(Main.pipe(Effect.provide(NodeServices.layer)));

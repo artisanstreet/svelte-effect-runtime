@@ -4,7 +4,6 @@ import { get_remote_action_id, SubmitRemoteForm } from "./form-transport.ts";
 import { MakeEffectFromPromise, MakeEffectFromSync } from "./effect.ts";
 import { copy_property_descriptors, has_method } from "./utils.ts";
 import { wrap_enhance_callback } from "./form-enhance.ts";
-import type { RemoteFailure } from "$/remote/shared.ts";
 import { DecodeResponseOrValue } from "./responses.ts";
 import type { RemoteFormInput } from "@sveltejs/kit";
 import { Effect } from "effect";
@@ -132,17 +131,16 @@ export function create_remote_form_adapter<
 	return callable;
 }
 
-function ValidateRemoteForm<ErrorType>(
+const ValidateRemoteForm = <ErrorType>(
 	form_obj: NativeFormRecord,
 	validate: NativeMethod,
 	options: Record<string, unknown> | undefined,
-): Effect.Effect<void, RemoteFailure<ErrorType>> {
-	return Effect.gen(function* () {
+) =>
+	Effect.gen(function* () {
 		yield* MakeEffectFromPromise<unknown, ErrorType>(() =>
 			Promise.resolve(validate.call(form_obj, normalize_validate_options(validate, options))),
 		);
 	});
-}
 
 function normalize_validate_options(
 	validate: NativeMethod,

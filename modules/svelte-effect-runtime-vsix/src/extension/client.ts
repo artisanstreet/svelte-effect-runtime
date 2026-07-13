@@ -2,7 +2,6 @@ import {
 	type Executable,
 	LanguageClient,
 	type LanguageClientOptions,
-	type ServerOptions,
 	TransportKind,
 } from "vscode-languageclient/node.js";
 import { MakeSerializedClientControl, type SerializedClientHandle } from "./client-lifecycle.ts";
@@ -34,11 +33,8 @@ export function make_language_client_control_layer(
 	);
 }
 
-function CreateLanguageClient(
-	output_channel: vscode.OutputChannel,
-	server_path: string,
-): Effect.Effect<SerializedClientHandle, unknown> {
-	return Effect.gen(function* () {
+const CreateLanguageClient = (output_channel: vscode.OutputChannel, server_path: string) =>
+	Effect.gen(function* () {
 		yield* Effect.try(() => assert_safe_language_server_path(server_path));
 
 		const file_watcher = yield* Effect.sync(() =>
@@ -67,10 +63,9 @@ function CreateLanguageClient(
 
 		return yield* AcquireClient;
 	});
-}
 
-function CreateServerOptions(server_path: string): Effect.Effect<ServerOptions> {
-	return Effect.gen(function* () {
+const CreateServerOptions = (server_path: string) =>
+	Effect.gen(function* () {
 		const workspace_folder = yield* Effect.sync(() => vscode.workspace.workspaceFolders?.[0]);
 		const environment = yield* Effect.sync(() => process.env);
 		const executable = create_server_executable(
@@ -84,7 +79,6 @@ function CreateServerOptions(server_path: string): Effect.Effect<ServerOptions> 
 			debug: executable,
 		};
 	});
-}
 
 function create_server_executable(
 	server_path: string,

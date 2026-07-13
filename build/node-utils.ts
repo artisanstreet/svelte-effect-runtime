@@ -17,46 +17,42 @@ export const RepoRoot = Effect.gen(function* () {
 	return path.resolve(path.dirname(module_path), "..");
 });
 
-export function ResetDir(target_path: string) {
-	return Effect.gen(function* () {
+export const ResetDir = (target_path: string) =>
+	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 
 		yield* file_system.remove(target_path, { force: true, recursive: true });
 		yield* file_system.makeDirectory(target_path, { recursive: true });
 	});
-}
 
-export function RemovePath(target_path: string) {
-	return Effect.gen(function* () {
+export const RemovePath = (target_path: string) =>
+	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 
 		yield* file_system.remove(target_path, { force: true, recursive: true });
 	});
-}
 
-export function CommandName(command: string) {
-	return Effect.gen(function* () {
+export const CommandName = (command: string) =>
+	Effect.gen(function* () {
 		const platform = yield* Effect.sync(() => process.platform);
 
 		return platform === "win32" ? `${command}.cmd` : command;
 	});
-}
 
-export function MakeTempDirScoped(prefix: string) {
-	return Effect.gen(function* () {
+export const MakeTempDirScoped = (prefix: string) =>
+	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 
 		return yield* file_system.makeTempDirectoryScoped({ prefix });
 	});
-}
 
-export function RunCommand(
+export const RunCommand = (
 	command: string,
 	args: ReadonlyArray<string>,
 	cwd: string,
 	options: RunCommandOptions = {},
-) {
-	return Effect.scoped(
+) =>
+	Effect.scoped(
 		Effect.gen(function* () {
 			const spawn_config = resolve_spawn_config(command, args);
 			const child = yield* ChildProcess.make(spawn_config.command, spawn_config.args, {
@@ -86,7 +82,6 @@ export function RunCommand(
 			return yield* Effect.fail(new Error(message));
 		}),
 	);
-}
 
 function resolve_spawn_config(
 	command: string,

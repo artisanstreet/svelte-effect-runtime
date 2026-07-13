@@ -283,17 +283,13 @@ function make_language_server_coordinator_layer(
 	);
 }
 
-function SynchronizeLanguageServerState(
+const SynchronizeLanguageServerState = (
 	context: vscode.ExtensionContext,
 	output_channel: vscode.OutputChannel,
 	completed_sync: Ref.Ref<Option.Option<CompletedLanguageServerSync>>,
 	force: boolean,
-): Effect.Effect<
-	LanguageServerSyncState,
-	unknown,
-	LanguageClientControl | ServerPathResolver | ExtensionInfrastructure
-> {
-	return Effect.gen(function* () {
+) =>
+	Effect.gen(function* () {
 		const snapshot = yield* ReadLanguageServerConfigurationSnapshot;
 		const previous_sync = yield* Ref.get(completed_sync);
 
@@ -311,18 +307,13 @@ function SynchronizeLanguageServerState(
 
 		return state;
 	});
-}
 
-function ReconcileLanguageServerState(
+const ReconcileLanguageServerState = (
 	context: vscode.ExtensionContext,
 	output_channel: vscode.OutputChannel,
 	snapshot: LanguageServerConfigurationSnapshot,
-): Effect.Effect<
-	LanguageServerSyncState,
-	unknown,
-	LanguageClientControl | ServerPathResolver | ExtensionInfrastructure
-> {
-	return Effect.gen(function* () {
+) =>
+	Effect.gen(function* () {
 		const client = yield* LanguageClientControl;
 
 		if (!snapshot.enabled) {
@@ -376,7 +367,6 @@ function ReconcileLanguageServerState(
 
 		return "direct";
 	});
-}
 
 const ReadLanguageServerConfigurationSnapshot: Effect.Effect<LanguageServerConfigurationSnapshot> =
 	Effect.gen(function* () {
@@ -403,11 +393,11 @@ const ReadLanguageServerConfigurationSnapshot: Effect.Effect<LanguageServerConfi
 		};
 	});
 
-function RestartDelegatedSvelteLanguageServer(
+const RestartDelegatedSvelteLanguageServer = (
 	output_channel: vscode.OutputChannel,
 	state: LanguageServerSyncState,
-): Effect.Effect<void, unknown> {
-	return Effect.gen(function* () {
+) =>
+	Effect.gen(function* () {
 		if (state !== "svelteExtension" && state !== "disabled") {
 			return;
 		}
@@ -427,13 +417,12 @@ function RestartDelegatedSvelteLanguageServer(
 			vscode.commands.executeCommand("svelte.restartLanguageServer"),
 		);
 	});
-}
 
-function HandleLanguageServerCommand<R>(
+const HandleLanguageServerCommand = <R>(
 	output_channel: vscode.OutputChannel,
 	program: Effect.Effect<void, unknown, R>,
-): Effect.Effect<void, never, R> {
-	return Effect.catchCause(program, (cause) =>
+) =>
+	Effect.catchCause(program, (cause) =>
 		Effect.gen(function* () {
 			const message = Cause.pretty(cause);
 
@@ -444,18 +433,15 @@ function HandleLanguageServerCommand<R>(
 			).pipe(Effect.ignore);
 		}),
 	);
-}
 
-function ShowInformationMessage(message: string): Effect.Effect<void> {
-	return Effect.tryPromise(() => vscode.window.showInformationMessage(message)).pipe(
+const ShowInformationMessage = (message: string) =>
+	Effect.tryPromise(() => vscode.window.showInformationMessage(message)).pipe(
 		Effect.asVoid,
 		Effect.ignore,
 	);
-}
 
-function AppendLine(output_channel: vscode.OutputChannel, message: string): Effect.Effect<void> {
-	return Effect.sync(() => output_channel.appendLine(message));
-}
+const AppendLine = (output_channel: vscode.OutputChannel, message: string) =>
+	Effect.sync(() => output_channel.appendLine(message));
 
 function configuration_snapshots_equal(
 	left: LanguageServerConfigurationSnapshot,

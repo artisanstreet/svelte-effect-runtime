@@ -193,11 +193,7 @@ function attach_query_resource<Output, ErrorType = never>(
 	}
 }
 
-function RefreshRemoteResource(
-	resource: unknown,
-	refresh: () => Promise<void>,
-): Effect.Effect<void, RemoteFailure<never>> {
-	return Effect.gen(function* () {
+const RefreshRemoteResource = (resource: unknown, refresh: () => Promise<void>) =>
+	Effect.gen(function* () {
 		yield* MakeEffectFromPromise(() => Promise.resolve(refresh.call(resource)));
 	});
-}

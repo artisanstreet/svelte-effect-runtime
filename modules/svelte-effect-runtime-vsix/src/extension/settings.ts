@@ -29,15 +29,14 @@ export const GetLanguageServerEnabled: Effect.Effect<boolean> = Effect.gen(funct
 	);
 });
 
-export function SetLanguageServerEnabled(enabled: boolean): Effect.Effect<void, unknown> {
-	return Effect.gen(function* () {
+export const SetLanguageServerEnabled = (enabled: boolean) =>
+	Effect.gen(function* () {
 		yield* Effect.tryPromise(() =>
 			vscode.workspace
 				.getConfiguration(config_root)
 				.update(config_enabled, enabled, vscode.ConfigurationTarget.Global),
 		);
 	});
-}
 
 export const GetClientMode: Effect.Effect<ClientMode> = Effect.gen(function* () {
 	const raw_mode = yield* Effect.sync(() =>
