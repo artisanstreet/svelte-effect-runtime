@@ -1,6 +1,6 @@
-import { test } from "vitest";
 import { find_svelte_effect_diagnostics } from "../../../modules/svelte-effect-runtime/src/diagnostics.ts";
 import { assert_equals, assert_string_includes } from "./helpers/assert.ts";
+import { test } from "vitest";
 
 test("diagnostics ignore Effect references inside script and style blocks", () => {
 	const source = [
@@ -17,6 +17,36 @@ test("diagnostics ignore Effect references inside script and style blocks", () =
 	assert_equals(diagnostics.length, 1);
 	assert_equals(diagnostics[0].line, 7);
 	assert_string_includes(diagnostics[0].message, "event attribute");
+});
+
+test("diagnostics follow root and Effect module namespace imports", () => {
+	const source = [
+		`<script lang="ts">`,
+		`  import * as Root from "effect";`,
+		`  import * as Direct from "effect/Effect";`,
+		`</script>`,
+		`<p>{Root.Effect.succeed(1)}</p>`,
+		`<p>{Direct["sync"](() => 2)}</p>`,
+	].join("\n");
+	const diagnostics = find_svelte_effect_diagnostics(source, "Namespaces.svelte");
+
+	assert_equals(diagnostics.length, 2);
+	assert_string_includes(diagnostics[0].message, "Root.Effect.succeed");
+	assert_string_includes(diagnostics[1].message, `Direct["sync"]`);
+});
+
+test("diagnostics ignore Effect-looking text and type-only imports", () => {
+	const source = [
+		`<script lang="ts">`,
+		`  import type { Effect as E } from "effect";`,
+		`</script>`,
+		`<p>{"Effect.succeed(1)"}</p>`,
+		`<p>{/* Effect.runPromise(Effect.void) */ value}</p>`,
+		`<p>{E.succeed(1)}</p>`,
+	].join("\n");
+	const diagnostics = find_svelte_effect_diagnostics(source, "Text.svelte");
+
+	assert_equals(diagnostics, []);
 });
 
 test("diagnostics scan many markup expressions near linearly", () => {
