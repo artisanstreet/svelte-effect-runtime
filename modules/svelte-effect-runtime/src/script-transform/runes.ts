@@ -14,21 +14,6 @@ const async_expression_runes = new Set([
 
 const callback_runes = new Set(["$derived.by", "$effect", "$effect.pre", "$effect.root"]);
 
-/**
- * Validates that `yield*` only appears in rune positions the script-effect
- * transform can lower without changing the rune's normal Svelte contract.
- *
- * @example
- * ```ts
- * validate_rune_yield_usage(source_file, source, "Counter.svelte");
- * ```
- *
- * @since 2.0.0
- * @param node - AST node to scan.
- * @param content - Original script source used for diagnostics.
- * @param filename - Source filename used for diagnostics.
- * @returns Nothing.
- */
 export function validate_rune_yield_usage(node: ts.Node, content: string, filename: string): void {
 	visit_rune_yield_usage(node, content, filename);
 }

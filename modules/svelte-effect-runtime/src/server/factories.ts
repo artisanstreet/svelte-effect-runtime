@@ -263,21 +263,6 @@ function attach_query_resource_methods<Output, ErrorType = never>(
 	}
 }
 
-/**
- * Factory for a read-only remote query function.
- *
- * @example
- * ```ts
- * export const getUser = Query(Schema.Struct({ id: Schema.String }), (input) =>
- *   Effect.succeed(input.id)
- * );
- * ```
- *
- * @since 2.0.0
- * @param validate_or_handler - A schema, `"unchecked"`, or no-arg handler.
- * @param maybe_handler - Handler used when a validator is supplied.
- * @returns A SvelteKit query function.
- */
 function QueryRoot<A, E = never, R = never>(
 	validate_or_handler: EffectLike<A, E, R> | RemoteHandler<void, A, E, R>,
 ): EffectRemoteQueryFunction<void, A, E>;
@@ -318,14 +303,6 @@ function QueryRoot(validate_or_handler: unknown, maybe_handler?: unknown): unkno
 	}
 }
 
-/**
- * Factory for a batched read-only remote query function.
- *
- * @since 2.0.0
- * @param validate_or_handler - A schema or `"unchecked"` sentinel.
- * @param maybe_handler - Handler receiving validated inputs as one batch.
- * @returns A SvelteKit batch query function.
- */
 function QueryBatch<Input, A, E = never, R = never>(
 	validate_or_handler: "unchecked",
 	maybe_handler: EffectRemoteBatchHandler<Input, A, E, R>,
@@ -355,14 +332,6 @@ function QueryBatch(validate_or_handler: unknown, maybe_handler?: unknown): unkn
 	}
 }
 
-/**
- * Factory for a live remote query function.
- *
- * @since 2.0.0
- * @param validate_or_handler - A schema, `"unchecked"`, or no-arg live handler.
- * @param maybe_handler - Handler used when a validator is supplied.
- * @returns A SvelteKit live query function.
- */
 function QueryLive<A, E = never, R = never>(
 	validate_or_handler: RemoteLiveSource<A, E, R> | RemoteLiveHandler<void, A, E, R>,
 ): EffectRemoteLiveQueryFunction<void, A, E>;

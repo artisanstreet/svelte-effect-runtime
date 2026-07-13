@@ -4,19 +4,6 @@ import { create_remote_http_error } from "$/remote/shared.ts";
 import type { RemoteFailure } from "$/remote/shared.ts";
 import { Effect } from "effect";
 
-/**
- * Decodes a failed fetch response into the runtime failure model.
- *
- * @example
- * ```ts
- * const failure = yield* DecodeResponseFailure(response);
- * ```
- *
- * @since 2.0.0
- * @param response - Failed fetch response returned by the remote endpoint.
- * @returns An infallible Effect that resolves the remote failure represented
- *   by the response.
- */
 export function DecodeResponseFailure<ErrorType = never>(
 	response: Response,
 ): Effect.Effect<RemoteFailure<ErrorType>, never, never> {
@@ -34,20 +21,6 @@ export function DecodeResponseFailure<ErrorType = never>(
 	});
 }
 
-/**
- * Decodes either a raw value or `Response` returned by a native remote helper.
- *
- * @example
- * ```ts
- * const output = yield* DecodeResponseOrValue(result, decode_payload);
- * ```
- *
- * @since 2.0.0
- * @param value - Native result value or fetch response.
- * @param decode_payload - Function used to decode successful payloads.
- * @returns An Effect that decodes the successful output or fails with a
- *   structured remote failure.
- */
 export function DecodeResponseOrValue<Output, ErrorType = never>(
 	value: unknown,
 	decode_payload: (value: unknown) => unknown,

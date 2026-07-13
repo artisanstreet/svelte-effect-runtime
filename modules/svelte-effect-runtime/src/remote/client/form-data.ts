@@ -1,15 +1,3 @@
-/**
- * Encodes remote form input into SvelteKit-compatible form data.
- *
- * @example
- * ```ts
- * const form_data = to_form_data({ name: "Ada", active: true });
- * ```
- *
- * @since 2.0.0
- * @param input - Input value supplied to the remote form.
- * @returns FormData payload for the remote endpoint.
- */
 export function to_form_data(input: unknown): FormData {
 	const form_data = new FormData();
 

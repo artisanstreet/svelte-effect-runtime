@@ -12,25 +12,7 @@ type EffectRemoteCommandAdapter<Input, Output, ErrorType = never> = ((
 	readonly pending: number;
 };
 
-/**
- * Creates a remote command adapter. The adapter preserves the native
- * pending getter and turns each invocation into an Effect.
- *
- * @example
- * ```ts
- * const save = create_remote_command_adapter(native_save, (value) => value);
- * const result = yield* save({ title: "Draft" });
- * ```
- *
- * @since 2.0.0
- * @param native_factory - SvelteKit's native command function or a legacy
- *   response factory used by tests.
- * @param decode_payload - Function to decode the response payload.
- * @param _base - Deprecated transport base retained for compatibility.
- * @param pending - Optional pending counter for legacy response factories.
- * @returns A function returning an Effect of the response.
- * @internal
- */
+/** Adapts a generated SvelteKit command to SER's Effect-based client ABI. */
 export function create_remote_command_adapter<Input, Output, ErrorType = never>(
 	native_factory: unknown,
 	decode_payload: (value: unknown) => unknown,

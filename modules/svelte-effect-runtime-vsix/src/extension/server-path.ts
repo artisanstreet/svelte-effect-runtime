@@ -52,19 +52,7 @@ class ServerPathError extends Data.TaggedError("ServerPathError")<{
 	readonly message: string;
 }> {}
 
-/**
- * Serializes resolution and installation of the language-server executable.
- *
- * @example
- * ```ts
- * const program = Effect.gen(function* () {
- * 	const resolver = yield* ServerPathResolver;
- * 	return yield* resolver.get;
- * });
- * ```
- *
- * @since 4.0.1
- */
+/** Resolves configured paths or publishes a validated immutable package cache entry. */
 export class ServerPathResolver extends Context.Service<
 	ServerPathResolver,
 	{
@@ -76,19 +64,6 @@ export class ServerPathResolver extends Context.Service<
 	}
 >()("svelte-effect-runtime-vsix/ServerPathResolver") {}
 
-/**
- * Creates the live server-path resolver for one extension activation.
- *
- * @example
- * ```ts
- * const layer = make_server_path_resolver_layer(context, output_channel);
- * ```
- *
- * @since 4.0.1
- * @param context - VS Code extension context that owns the global install cache.
- * @param output_channel - Output channel that receives path and install diagnostics.
- * @returns A layer containing a serialized server-path resolver.
- */
 export function make_server_path_resolver_layer(
 	context: GlobalStorageContext,
 	output_channel: InstallOutput,
@@ -105,19 +80,6 @@ export function make_server_path_resolver_layer(
 	);
 }
 
-/**
- * Reads and validates the optional user-configured language-server path.
- *
- * @example
- * ```ts
- * const configured = yield* GetConfiguredServerPath(output_channel);
- * ```
- *
- * @since 4.0.1
- * @param output_channel - Optional output channel used to report ignored unsafe
- *   or unusable configuration.
- * @returns An Effect containing a regular local file path when configured.
- */
 export function GetConfiguredServerPath(
 	output_channel?: InstallOutput,
 ): Effect.Effect<Option.Option<string>, never, FileSystem.FileSystem> {

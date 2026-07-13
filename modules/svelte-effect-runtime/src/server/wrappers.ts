@@ -15,19 +15,6 @@ import { Effect } from "effect";
 
 export { is_running_remote_effect_handler } from "./remote-handler-context.ts";
 
-/**
- * Builds the wrapper passed to native query, command, and prerender helpers.
- *
- * @example
- * ```ts
- * const wrapped = make_remote_wrapper(() => Effect.succeed(1), "Query");
- * ```
- *
- * @since 2.0.0
- * @param handler - Effect handler or already-built Effect-like value.
- * @param helper_name - Remote helper name for error normalization.
- * @returns Native SvelteKit handler wrapper.
- */
 export function make_remote_wrapper(
 	handler: RemoteHandler<unknown, unknown, unknown, unknown> | EffectLike,
 	helper_name: string,
@@ -51,19 +38,6 @@ export function make_remote_wrapper(
 	};
 }
 
-/**
- * Builds the wrapper passed to native live query helpers.
- *
- * @example
- * ```ts
- * const wrapped = make_remote_live_wrapper(() => Stream.make(1), "Query");
- * ```
- *
- * @since 2.0.0
- * @param handler - Effect-aware live source handler.
- * @param helper_name - Remote helper name for error normalization.
- * @returns Native SvelteKit live query wrapper.
- */
 export function make_remote_live_wrapper<Input, A>(
 	handler: RemoteLiveSource<A, unknown, unknown> | RemoteLiveHandler<Input, A, unknown, unknown>,
 	helper_name: string,
@@ -84,19 +58,6 @@ export function make_remote_live_wrapper<Input, A>(
 	};
 }
 
-/**
- * Builds the wrapper passed to native form helpers.
- *
- * @example
- * ```ts
- * const wrapped = make_remote_form_wrapper(({ data }) => Effect.succeed(data), "Form");
- * ```
- *
- * @since 2.0.0
- * @param handler - Effect-aware form handler.
- * @param helper_name - Remote helper name for error normalization.
- * @returns Native SvelteKit form handler wrapper.
- */
 export function make_remote_form_wrapper<Input, A>(
 	handler: RemoteFormHandler<Input, A, unknown, unknown>,
 	helper_name: string,

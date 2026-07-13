@@ -15,19 +15,6 @@ import process from "node:process";
 
 import * as vscode from "vscode";
 
-/**
- * Owns the direct VS Code language client's serialized lifecycle.
- *
- * @example
- * ```ts
- * const program = Effect.gen(function* () {
- * 	const client = yield* LanguageClientControl;
- * 	yield* client.start(server_path);
- * });
- * ```
- *
- * @since 4.0.1
- */
 export class LanguageClientControl extends Context.Service<
 	LanguageClientControl,
 	{
@@ -36,18 +23,6 @@ export class LanguageClientControl extends Context.Service<
 	}
 >()("svelte-effect-runtime-vsix/LanguageClientControl") {}
 
-/**
- * Creates a scoped direct-language-client service for one extension activation.
- *
- * @example
- * ```ts
- * const layer = make_language_client_control_layer(output_channel);
- * ```
- *
- * @since 4.0.1
- * @param output_channel - Channel that receives client and server diagnostics.
- * @returns A scoped layer that stops and disposes its client during release.
- */
 export function make_language_client_control_layer(
 	output_channel: vscode.OutputChannel,
 ): Layer.Layer<LanguageClientControl> {

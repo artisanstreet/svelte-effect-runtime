@@ -14,20 +14,6 @@ type LiveHandlerResult<A> = Stream.Stream<A, unknown, unknown>;
 
 type LiveHandler<A> = () => LiveHandlerResult<A>;
 
-/**
- * Checks whether a value is an Effect generator return object.
- *
- * @example
- * ```ts
- * if (is_generator_result(value)) {
- *   return Effect.gen(value);
- * }
- * ```
- *
- * @since 2.0.0
- * @param value - Value to inspect.
- * @returns Whether the value should be wrapped with `Effect.gen`.
- */
 export function is_generator_result<A>(
 	value: unknown,
 ): value is Effect.gen.Return<A, unknown, unknown> {
@@ -38,18 +24,6 @@ export function is_generator_result<A>(
 	);
 }
 
-/**
- * Normalizes an Effect-like handler return value into an Effect.
- *
- * @example
- * ```ts
- * const Program = ToEffect(function* () { return 1; });
- * ```
- *
- * @since 2.0.0
- * @param value - Effect or generator return value.
- * @returns Normalized Effect.
- */
 export function ToEffect<A, E, R>(value: EffectLike<A, E, R>): Effect.Effect<A, E, R> {
 	if (is_generator_result<A>(value)) {
 		return Effect.gen(() => value) as Effect.Effect<A, E, R>;
@@ -58,36 +32,10 @@ export function ToEffect<A, E, R>(value: EffectLike<A, E, R>): Effect.Effect<A, 
 	return value;
 }
 
-/**
- * Checks whether a value is an Effect Stream live source.
- *
- * @example
- * ```ts
- * if (!is_live_source(value)) throw new InvalidLiveQueryReturnError();
- * ```
- *
- * @since 2.0.0
- * @param value - Value to inspect.
- * @returns Whether the value is an Effect Stream.
- */
 export function is_live_source<A>(value: unknown): value is Stream.Stream<A, unknown, unknown> {
 	return Stream.isStream(value);
 }
 
-/**
- * Runs and normalizes a live query handler result with request services
- * available to Effect Streams.
- *
- * @example
- * ```ts
- * const source = await run_live_handler_source(Stream.make(1), event);
- * ```
- *
- * @since 2.0.0
- * @param value - Live query source or Effect that resolves to one.
- * @param event - SvelteKit request event for this remote call.
- * @returns Promise resolving with a source SvelteKit can stream.
- */
 export function run_live_handler_source<A>(
 	value: LiveHandlerResult<A>,
 	event: RequestEventShape,
@@ -99,21 +47,7 @@ export function run_live_handler_source<A>(
 	return run_live_source_effect(ToLiveSourceEffect(value, event), event);
 }
 
-/**
- * Constructs and runs a live remote handler inside the request-local SER
- * ownership scope.
- *
- * @example
- * ```ts
- * const source = await run_live_handler(() => Stream.make(1, 2), event);
- * ```
- *
- * @since 4.0.1
- * @param handler - User callback that constructs the live Effect Stream.
- * @param event - SvelteKit request event for this remote call.
- * @returns Promise resolving with a source SvelteKit can stream.
- * @internal
- */
+/** Runs a live handler inside the request-local ownership scope. */
 export function run_live_handler<A>(
 	handler: LiveHandler<A>,
 	event: RequestEventShape,
@@ -215,19 +149,6 @@ function throw_live_source_error(error: unknown): never {
 	svelte_error(500, envelope as never);
 }
 
-/**
- * Runs a remote handler Effect with the current request event provided.
- *
- * @example
- * ```ts
- * const result = await run_handler_effect(Effect.succeed(1), event);
- * ```
- *
- * @since 2.0.0
- * @param value - Handler return value.
- * @param event - SvelteKit request event for this remote call.
- * @returns Promise resolving with the handler output.
- */
 export function run_handler_effect<A>(
 	value: EffectLike<A, unknown, unknown>,
 	event: RequestEventShape,

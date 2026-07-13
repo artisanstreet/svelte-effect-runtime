@@ -8,21 +8,7 @@ interface CoordinatorShutdownGate {
 	) => Effect.Effect<Option.Option<A>, E, R>;
 }
 
-/**
- * Creates a serialized gate that drains an active coordinator transition and
- * rejects queued work once extension shutdown begins.
- *
- * @example
- * ```ts
- * const gate = yield* MakeCoordinatorShutdownGate();
- * const result = yield* gate.run(Effect.succeed("ready"));
- * yield* gate.close;
- * ```
- *
- * @since 4.0.1
- * @returns An effect that creates a shutdown gate for serialized coordinator
- *   transitions.
- */
+/** Blocks new coordinator work once extension shutdown begins. */
 export function MakeCoordinatorShutdownGate(): Effect.Effect<CoordinatorShutdownGate> {
 	return Effect.gen(function* () {
 		const closed = yield* Ref.make(false);

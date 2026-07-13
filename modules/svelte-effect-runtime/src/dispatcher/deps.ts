@@ -1,34 +1,6 @@
-/**
- * Encodes dependency arrays into stable cache keys within one dispatcher.
- *
- * @example
- * ```ts
- * const hash_deps = make_dependency_hasher();
- * const key = hash_deps([user_id, filters]);
- * ```
- *
- * @since 4.0.1
- * @param deps - Dependency array to encode for cache lookup.
- * @returns A structured string key whose object and symbol identities remain
- *   stable for the lifetime of the owning dispatcher.
- * @internal
- */
+/** Assigns stable identities to object dependencies while hashing value dependencies. */
 export type DependencyHasher = (deps: readonly unknown[]) => string;
 
-/**
- * Creates a dependency hasher with dispatcher-local identity state.
- *
- * @example
- * ```ts
- * const hash_deps = make_dependency_hasher();
- * const key = hash_deps([user_id, filters]);
- * ```
- *
- * @since 4.0.1
- * @returns A hasher whose object and symbol registries are isolated from every
- *   other dispatcher.
- * @internal
- */
 export function make_dependency_hasher(): DependencyHasher {
 	const object_dep_ids = new WeakMap<object, number>();
 	const symbol_dep_ids = new Map<symbol, number>();

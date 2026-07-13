@@ -6,17 +6,6 @@ const effect_package_module = "effect";
 const effect_direct_module = "effect/Effect";
 const generated_effect_name = "__SER___Effect";
 
-/**
- * Describes local bindings that resolve to Effect APIs in markup expressions.
- *
- * @example
- * ```ts
- * const context = collect_effect_callback_bindings(source);
- * context.effect_object_names.has("E");
- * ```
- *
- * @since 2.4.0
- */
 export interface EffectCallbackRewriteContext {
 	/** Local names imported as the Effect object, such as `Effect` or `E`. */
 	effect_object_names: ReadonlySet<string>;
@@ -41,20 +30,6 @@ interface EffectBindingState {
 	implicit_effect_import: boolean;
 }
 
-/**
- * Collects Effect import bindings that markup callback rewriting can trust.
- *
- * @example
- * ```ts
- * const bindings = collect_effect_callback_bindings(
- *   `<script>import { Effect as E } from "effect";</script>`,
- * );
- * ```
- *
- * @since 2.4.0
- * @param content - Full Svelte component source before markup lowering.
- * @returns Binding metadata used to identify Effect callback combinators.
- */
 export function collect_effect_callback_bindings(content: string): EffectCallbackRewriteContext {
 	const state = make_effect_binding_state();
 	const scripts = collect_script_blocks(content);

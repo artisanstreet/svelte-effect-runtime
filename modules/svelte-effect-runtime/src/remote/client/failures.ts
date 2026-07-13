@@ -47,20 +47,6 @@ const DecodeJsonString = Schema.decodeUnknownOption(Schema.UnknownFromJsonString
 const is_decoded_remote_failure_value = Schema.is(DecodedRemoteFailureSchema);
 const is_remote_error_message_envelope = Schema.is(RemoteErrorMessageEnvelopeSchema);
 
-/**
- * Decodes a raw wire value into a remote failure when it uses the runtime
- * failure envelope.
- *
- * @example
- * ```ts
- * const failure = decode_remote_error(body);
- * ```
- *
- * @since 2.0.0
- * @param raw - Raw value received from the network or SvelteKit error body.
- * @param decode - Optional devalue decoder for custom error payloads.
- * @returns The decoded failure/value, or a transport error when decoding fails.
- */
 export function decode_remote_error<ErrorType = never>(
 	raw: unknown,
 	decode?: (encoded: string) => unknown,
@@ -138,34 +124,10 @@ function decode_serialized_remote_failure<ErrorType>(
 	}
 }
 
-/**
- * Checks whether a decoded value is a tagged remote failure.
- *
- * @example
- * ```ts
- * if (is_decoded_remote_failure(value)) throw value;
- * ```
- *
- * @since 2.0.0
- * @param value - Value to inspect.
- * @returns Whether the value carries a `_tag` discriminator.
- */
 export function is_decoded_remote_failure(value: unknown): value is RemoteFailure<never> {
 	return is_decoded_remote_failure_value(value);
 }
 
-/**
- * Normalizes native thrown values into the runtime's remote failure model.
- *
- * @example
- * ```ts
- * const failure = normalize_native_error(error);
- * ```
- *
- * @since 2.0.0
- * @param error - Unknown value thrown by a native remote helper.
- * @returns A typed remote failure.
- */
 export function normalize_native_error<ErrorType = never>(
 	error: unknown,
 ): RemoteFailure<ErrorType> {

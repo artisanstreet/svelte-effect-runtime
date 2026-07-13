@@ -16,29 +16,6 @@ import type { Mapper, TransformSet } from "./types.ts";
 
 import MagicString from "magic-string";
 
-/**
- * Prepares a transformed virtual Svelte document while retaining mappings back
- * to the original source document.
- *
- * @example
- * ```ts
- * const prepared = prepare_virtual_document(document, transforms, internals);
- *
- * if (prepared) {
- * 	consume_snapshot(prepared.document, prepared.preprocessMapper);
- * }
- * ```
- *
- * @since 2.0.0
- * @param original_document - Source document supplied by the Svelte language
- *   server and used as the mapping destination.
- * @param transforms - SER markup and script transforms used to build the
- *   language server's virtual source.
- * @param internals - Private Svelte language-server modules loaded during
- *   bootstrap and captured by the synchronous snapshot callback.
- * @returns The transformed document and its mapper, or `null` when no virtual
- *   transformation was required.
- */
 export function prepare_virtual_document(
 	original_document: any,
 	transforms: TransformSet,

@@ -5,18 +5,6 @@ import { get_dispatcher } from "$/dispatcher.ts";
 import { has_method } from "./utils.ts";
 import { Effect } from "effect";
 
-/**
- * Wraps a remote form enhance callback so Effect return values are run.
- *
- * @example
- * ```ts
- * const enhanced = wrap_enhance_callback(({ submit }) => submit());
- * ```
- *
- * @since 2.0.0
- * @param callback - Native enhance callback to wrap.
- * @returns Wrapped callback or undefined.
- */
 export function wrap_enhance_callback<Output, ErrorType = never>(
 	callback: NativeMethod | undefined,
 ): NativeMethod | undefined {

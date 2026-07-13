@@ -3,11 +3,7 @@ import { InvalidLiveQueryFactoryError } from "$/errors.ts";
 import type { RemoteFailure } from "$/remote/shared.ts";
 import { Effect, Stream } from "effect";
 
-/**
- * Runtime marker attached to remote live streams created by SER.
- *
- * @since 3.4.8
- */
+/** Brands remote live streams without relying on class identity. */
 const remote_live_stream: unique symbol = Symbol.for("ser.remote-live-stream") as never;
 
 const live_metadata: unique symbol = Symbol.for("ser.remote-live-metadata") as never;
@@ -161,20 +157,6 @@ type PipeableStream<A, E, R> = Stream.Stream<A, E, R> & {
 	readonly pipe: (...args: readonly unknown[]) => unknown;
 };
 
-/**
- * Builds a remote live stream from SvelteKit's native live resource.
- *
- * @example
- * ```ts
- * const stream = make_remote_live_stream(resource, normalize_native_error);
- * ```
- *
- * @since 3.4.8
- * @param resource - Native SvelteKit live query resource.
- * @param on_error - Error mapper used for stream and reconnect failures.
- * @returns A remote live stream carrying hidden transport metadata.
- * @internal
- */
 export function make_remote_live_stream<A, ErrorType = never>(
 	resource: unknown,
 	on_error: (error: unknown) => RemoteFailure<ErrorType>,

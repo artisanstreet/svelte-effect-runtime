@@ -18,19 +18,6 @@ const virtual_svelte_file_extensions = [
 	{ source: ".sv", virtual: ".d.sv.ts" },
 ];
 
-/**
- * Extends the Svelte language server's path helpers and snapshot system with
- * support for every SER Svelte file extension.
- *
- * @example
- * ```ts
- * yield* PatchSvelteFileExtensions();
- * ```
- *
- * @since 3.4.8
- * @returns An Effect that patches the loaded language-server modules in place.
- *   Repeated execution leaves the existing patch installed.
- */
 export function PatchSvelteFileExtensions() {
 	return Effect.gen(function* () {
 		const internals = yield* SvelteInternals;
@@ -55,21 +42,6 @@ export function PatchSvelteFileExtensions() {
 	});
 }
 
-/**
- * Adds the SER transform and asynchronous compilation options to the Svelte
- * compiler path used by the language server.
- *
- * @example
- * ```ts
- * yield* PatchSvelteCompilerPath(transform_svelte_effect);
- * ```
- *
- * @since 2.0.0
- * @param transform_svelte_effect - Editor-targeted SER transform applied before
- *   the Svelte language server compiles a document.
- * @returns An Effect that patches the compiler factories in place. Repeated
- *   execution leaves the existing patch installed.
- */
 export function PatchSvelteCompilerPath(transform_svelte_effect: TransformSvelteEffect) {
 	return Effect.gen(function* () {
 		const internals = yield* SvelteInternals;
@@ -120,24 +92,6 @@ export function PatchSvelteCompilerPath(transform_svelte_effect: TransformSvelte
 	});
 }
 
-/**
- * Routes TypeScript snapshot creation through SER's virtual-document transforms
- * and maps the resulting snapshot back to the source document.
- *
- * @example
- * ```ts
- * yield* PatchTypeScriptSnapshotPath({
- * 	transformEffectMarkup: transform_markup,
- * 	transformEffectScript: transform_script,
- * });
- * ```
- *
- * @since 2.0.0
- * @param transforms - SER markup and script transforms used when snapshots are
- *   created from Svelte documents.
- * @returns An Effect that patches snapshot factories in place. Repeated
- *   execution leaves the existing patch installed.
- */
 export function PatchTypeScriptSnapshotPath(transforms: TransformSet) {
 	return Effect.gen(function* () {
 		const internals = yield* SvelteInternals;
@@ -421,19 +375,6 @@ function ensure_real_svelte_file_path(file_path: string) {
 	return is_virtual_svelte_file_path(file_path) ? to_real_svelte_file_path(file_path) : file_path;
 }
 
-/**
- * Prevents TypeScript quick fixes from running against unmappable virtual
- * ranges produced by SER transforms.
- *
- * @example
- * ```ts
- * yield* PatchTypeScriptCodeActions();
- * ```
- *
- * @since 2.0.0
- * @returns An Effect that patches the code-action provider in place. Repeated
- *   execution leaves the existing patch installed.
- */
 export function PatchTypeScriptCodeActions() {
 	return Effect.gen(function* () {
 		const internals = yield* SvelteInternals;

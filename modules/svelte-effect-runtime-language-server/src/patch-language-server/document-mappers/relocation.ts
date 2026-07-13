@@ -3,17 +3,6 @@ import type { SvelteInternalsService } from "../svelte-internals.ts";
 import { is_invalid_position, OffsetTable } from "./position.ts";
 import { create_source_map_mapper } from "./source-map.ts";
 
-/**
- * Result of creating a relocation mapper for a transform result.
- *
- * @example
- * ```ts
- * const result = create_relocation_mapper(source, generated, relocations);
- * if (result._tag === "RelocationMapperFound") return result.mapper;
- * ```
- *
- * @since 3.4.6
- */
 export type RelocationMapperResult =
 	| {
 			_tag: "RelocationMapperFound";
@@ -32,24 +21,7 @@ type RelocationSearchResult =
 			_tag: "RelocationMissing";
 	  };
 
-/**
- * Creates a mapper that first consults relocation ranges before falling back
- * to the transform source map.
- *
- * @example
- * ```ts
- * const mapper = create_relocated_source_mapper(source, code, map, ranges, uri, internals);
- * ```
- *
- * @since 2.0.0
- * @param original_code - Source code before the transform.
- * @param transformed_code - Source code after the transform.
- * @param raw_map - Source map returned by the runtime transform.
- * @param relocations - Offset ranges that were moved during the transform.
- * @param source_uri - URI of the original Svelte document.
- * @param internals - Private mapper constructors loaded during bootstrap.
- * @returns Mapper that translates positions through relocations and maps.
- */
+/** Maps relocated ranges before falling back to the transform source map. */
 export function create_relocated_source_mapper(
 	original_code: string,
 	transformed_code: string,
@@ -102,21 +74,6 @@ export function create_relocated_source_mapper(
 	};
 }
 
-/**
- * Creates a direct position mapper for relocation ranges.
- *
- * @example
- * ```ts
- * const mapper = create_relocation_mapper(source, generated, relocations);
- * ```
- *
- * @since 2.0.0
- * @param original_content - Original text for offset conversion.
- * @param transformed_content - Transformed text for offset conversion.
- * @param relocations - Offset ranges linking original and generated text.
- * @returns Tagged result containing a relocation mapper, or a missing variant
- *   when no ranges exist.
- */
 export function create_relocation_mapper(
 	original_content: string,
 	transformed_content: string,

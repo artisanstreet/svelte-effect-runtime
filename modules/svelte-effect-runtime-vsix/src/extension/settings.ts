@@ -9,18 +9,6 @@ import { Effect, Schema } from "effect";
 
 import * as vscode from "vscode";
 
-/**
- * Checks whether a configuration change affects language-server state.
- *
- * @example
- * ```ts
- * if (affects_language_server_configuration(event)) sync();
- * ```
- *
- * @since 2.0.0
- * @param event - VS Code configuration-change event.
- * @returns Whether the extension should resync language-server state.
- */
 export function affects_language_server_configuration(
 	event: vscode.ConfigurationChangeEvent,
 ): boolean {
@@ -31,16 +19,6 @@ export function affects_language_server_configuration(
 	);
 }
 
-/**
- * Reads and validates whether the extension should run a language server.
- *
- * @example
- * ```ts
- * const enabled = yield* GetLanguageServerEnabled;
- * ```
- *
- * @since 4.0.1
- */
 export const GetLanguageServerEnabled: Effect.Effect<boolean> = Effect.gen(function* () {
 	const raw_enabled = yield* Effect.sync(() =>
 		vscode.workspace.getConfiguration(config_root).get<unknown>(config_enabled, true),
@@ -51,18 +29,6 @@ export const GetLanguageServerEnabled: Effect.Effect<boolean> = Effect.gen(funct
 	);
 });
 
-/**
- * Persists the language-server enabled setting.
- *
- * @example
- * ```ts
- * yield* SetLanguageServerEnabled(false);
- * ```
- *
- * @since 4.0.1
- * @param enabled - Desired enabled state to write globally.
- * @returns An Effect that completes once VS Code has persisted the setting.
- */
 export function SetLanguageServerEnabled(enabled: boolean): Effect.Effect<void, unknown> {
 	return Effect.gen(function* () {
 		yield* Effect.tryPromise(() =>
@@ -73,16 +39,6 @@ export function SetLanguageServerEnabled(enabled: boolean): Effect.Effect<void, 
 	});
 }
 
-/**
- * Reads and validates the configured client strategy.
- *
- * @example
- * ```ts
- * const mode = yield* GetClientMode;
- * ```
- *
- * @since 4.0.1
- */
 export const GetClientMode: Effect.Effect<ClientMode> = Effect.gen(function* () {
 	const raw_mode = yield* Effect.sync(() =>
 		vscode.workspace.getConfiguration(config_root).get<unknown>(config_client_mode, "auto"),

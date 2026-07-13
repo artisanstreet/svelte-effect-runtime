@@ -1,20 +1,6 @@
 import process from "node:process";
 import path from "node:path";
 
-/**
- * Compares two filesystem paths using the host platform's case semantics.
- *
- * @example
- * ```ts
- * if (paths_equal(current_path, managed_path)) restore();
- * ```
- *
- * @since 2.0.0
- * @param left - First path to compare.
- * @param right - Second path to compare.
- * @param platform - Platform whose filesystem case semantics should be used.
- * @returns Whether both paths point at the same normalized location.
- */
 export function paths_equal(
 	left: string | undefined,
 	right: string | undefined,

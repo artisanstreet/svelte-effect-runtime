@@ -1,45 +1,15 @@
 import { Effect, FileSystem, Path, Stream } from "effect";
 import { ChildProcess } from "effect/unstable/process";
 
-/**
- * Captured output from a completed child process.
- *
- * @example
- * ```ts
- * const output: CommandOutput = { stdout: "built\n", stderr: "" };
- * ```
- *
- * @since 4.0.0
- */
 export type CommandOutput = {
 	stdout: string;
 	stderr: string;
 };
 
-/**
- * Controls how a child process exposes its output.
- *
- * @example
- * ```ts
- * const options: RunCommandOptions = { inherit: true };
- * ```
- *
- * @since 4.0.0
- */
 export type RunCommandOptions = {
 	inherit?: boolean;
 };
 
-/**
- * Resolves the repository root from the build utility module URL.
- *
- * @example
- * ```ts
- * const repo_root = yield* RepoRoot;
- * ```
- *
- * @since 4.0.0
- */
 export const RepoRoot = Effect.gen(function* () {
 	const path = yield* Path.Path;
 	const module_path = yield* path.fromFileUrl(new URL(import.meta.url));
@@ -47,18 +17,6 @@ export const RepoRoot = Effect.gen(function* () {
 	return path.resolve(path.dirname(module_path), "..");
 });
 
-/**
- * Removes a directory and recreates it empty.
- *
- * @example
- * ```ts
- * yield* ResetDir(".dist/example");
- * ```
- *
- * @since 4.0.0
- * @param target_path - Directory path to replace with a newly created directory.
- * @returns An Effect that completes after the empty directory is ready.
- */
 export function ResetDir(target_path: string) {
 	return Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
@@ -68,18 +26,6 @@ export function ResetDir(target_path: string) {
 	});
 }
 
-/**
- * Removes a file or directory recursively when it exists.
- *
- * @example
- * ```ts
- * yield* RemovePath(".tmp/staging");
- * ```
- *
- * @since 4.0.0
- * @param target_path - File or directory path to remove.
- * @returns An Effect that completes after the path no longer exists.
- */
 export function RemovePath(target_path: string) {
 	return Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
@@ -88,18 +34,6 @@ export function RemovePath(target_path: string) {
 	});
 }
 
-/**
- * Resolves an executable name for the current operating system.
- *
- * @example
- * ```ts
- * const corepack = yield* CommandName("corepack");
- * ```
- *
- * @since 4.0.0
- * @param command - Portable executable name without a Windows command suffix.
- * @returns An Effect containing the executable name accepted by the current host.
- */
 export function CommandName(command: string) {
 	return Effect.gen(function* () {
 		const platform = yield* Effect.sync(() => process.platform);
@@ -108,18 +42,6 @@ export function CommandName(command: string) {
 	});
 }
 
-/**
- * Creates a temporary directory whose lifetime is tied to the current scope.
- *
- * @example
- * ```ts
- * const staging_dir = yield* MakeTempDirScoped("ser-vsix-");
- * ```
- *
- * @since 4.0.0
- * @param prefix - Prefix used for the generated temporary directory name.
- * @returns A scoped Effect containing the temporary directory path.
- */
 export function MakeTempDirScoped(prefix: string) {
 	return Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
@@ -128,25 +50,6 @@ export function MakeTempDirScoped(prefix: string) {
 	});
 }
 
-/**
- * Runs a child process, capturing output or inheriting the current terminal.
- *
- * @example
- * ```ts
- * const output = yield* RunCommand(
- *   "corepack",
- *   ["pnpm", "pack", "--json"],
- *   process.cwd(),
- * );
- * ```
- *
- * @since 4.0.0
- * @param command - Executable name or path to launch.
- * @param args - Ordered command-line arguments passed to the executable.
- * @param cwd - Working directory used by the child process.
- * @param options - Output handling options for the child process.
- * @returns A cancellable Effect containing captured stdout and stderr.
- */
 export function RunCommand(
 	command: string,
 	args: ReadonlyArray<string>,

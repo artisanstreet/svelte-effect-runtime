@@ -4,36 +4,6 @@ import { create_relocation_mapper } from "./relocation.ts";
 import { create_source_map_mapper } from "./source-map.ts";
 import { is_invalid_position } from "./position.ts";
 
-/**
- * Creates a mapper for script content nested inside a full Svelte document.
- *
- * @example
- * ```ts
- * const mapper = create_script_content_mapper(
- * 	source,
- * 	code,
- * 	original,
- * 	next,
- * 	map,
- * 	[],
- * 	full,
- * 	uri,
- * 	internals,
- * );
- * ```
- *
- * @since 2.0.0
- * @param original_code - Full original Svelte document text.
- * @param transformed_code - Full transformed Svelte document text.
- * @param original_tag_info - Script tag metadata before transformation.
- * @param transformed_tag_info - Script tag metadata after transformation.
- * @param raw_map - Source map for the transformed script content.
- * @param relocations - Relocation ranges within the script content.
- * @param full_document_mapper - Fallback mapper for positions outside script.
- * @param source_uri - URI of the original Svelte document.
- * @param internals - Private mapper constructors loaded during bootstrap.
- * @returns Mapper that translates script positions through nested fragment maps.
- */
 export function create_script_content_mapper(
 	original_code: string,
 	transformed_code: string,

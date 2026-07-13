@@ -20,115 +20,36 @@ const install_artifacts = [
 ];
 const max_command_output_bytes = 10 * 1024 * 1024;
 
-/**
- * Command line invocation for a package manager probe or install step.
- *
- * @example
- * ```ts
- * const invocation: CommandInvocation = {
- * 	command: "pnpm",
- * 	args: ["install", "--prod"],
- * };
- * ```
- *
- * @since 3.4.9
- */
 export interface CommandInvocation {
-	/** Executable or shell command to run. */
 	command: string;
-	/** Arguments passed to the executable. */
 	args: string[];
 	/** Environment overrides applied on top of the extension host environment. */
 	env?: NodeJS.ProcessEnv;
 }
 
-/**
- * Result captured from a package-manager command.
- *
- * @example
- * ```ts
- * const result: PackageManagerCommandResult = { stdout: "11.10.0", stderr: "" };
- * ```
- *
- * @since 3.4.9
- */
 export interface PackageManagerCommandResult {
-	/** Standard output captured from the command. */
 	stdout: string;
-	/** Standard error captured from the command. */
 	stderr: string;
 }
 
-/**
- * Effectful command runner used by the package-manager installer.
- *
- * @example
- * ```ts
- * const runner: PackageManagerCommandRunner = () =>
- * 	Effect.succeed({ stdout: "1.0.0", stderr: "" });
- * ```
- *
- * @since 4.0.1
- */
 export type PackageManagerCommandRunner = (
 	invocation: CommandInvocation,
 	cwd?: string,
 ) => Effect.Effect<PackageManagerCommandResult, unknown>;
 
-/**
- * Candidate package manager that can install the language-server dependency.
- *
- * @example
- * ```ts
- * const [candidate] = make_package_manager_candidates("linux");
- * const install = candidate.install("1.0.0");
- * ```
- *
- * @since 3.4.9
- */
 export interface PackageManagerCandidate {
-	/** Human-readable package-manager name shown in logs and errors. */
 	name: string;
-	/** Command used to check whether the package manager exists. */
 	probe: CommandInvocation;
 	/** Creates the install command from the probe output. */
 	install: (version_output: string) => CommandInvocation;
 }
 
-/**
- * Sink for package-manager installer progress.
- *
- * @example
- * ```ts
- * const reporter: PackageManagerInstallReporter = {
- * 	append_line: (message) => Effect.sync(() => console.log(message)),
- * };
- * ```
- *
- * @since 4.0.1
- */
 export interface PackageManagerInstallReporter {
-	/** Records one installer progress line. */
 	append_line(message: string): Effect.Effect<void>;
 }
 
-/**
- * Options for the package-manager fallback installer.
- *
- * @example
- * ```ts
- * const program = RunPackageManagerInstall({
- * 	install_root,
- * 	verify_install: Effect.void,
- * });
- * ```
- *
- * @since 4.0.1
- */
 export interface PackageManagerInstallOptions<R = never> {
-	/** Directory containing the generated package.json to install. */
 	install_root: string;
-	/** Optional progress reporter. */
 	reporter?: PackageManagerInstallReporter;
 	/** Candidate package managers to try, primarily used by tests. */
 	candidates?: PackageManagerCandidate[];
@@ -152,20 +73,6 @@ class PackageManagerInstallError extends Data.TaggedError("PackageManagerInstall
 	readonly message: string;
 }> {}
 
-/**
- * Executes package-manager commands while preserving the extension host's
- * Windows, output-limit, environment, and cancellation behavior.
- *
- * @example
- * ```ts
- * const program = Effect.gen(function* () {
- * 	const command = yield* PackageManagerCommand;
- * 	return yield* command.run({ command: "pnpm", args: ["--version"] });
- * });
- * ```
- *
- * @since 4.0.1
- */
 export class PackageManagerCommand extends Context.Service<
 	PackageManagerCommand,
 	{
@@ -173,19 +80,6 @@ export class PackageManagerCommand extends Context.Service<
 	}
 >()("svelte-effect-runtime-vsix/PackageManagerCommand") {}
 
-/**
- * Removes package-manager artifacts before each fallback attempt.
- *
- * @example
- * ```ts
- * const program = Effect.gen(function* () {
- * 	const files = yield* PackageManagerInstallFiles;
- * 	yield* files.clean("/tmp/ser-language-server");
- * });
- * ```
- *
- * @since 4.0.1
- */
 export class PackageManagerInstallFiles extends Context.Service<
 	PackageManagerInstallFiles,
 	{
@@ -193,33 +87,10 @@ export class PackageManagerInstallFiles extends Context.Service<
 	}
 >()("svelte-effect-runtime-vsix/PackageManagerInstallFiles") {}
 
-/**
- * Live command runner backed by a hidden, lifecycle-managed Node child process.
- *
- * @example
- * ```ts
- * const program = Effect.gen(function* () {
- * 	const command = yield* PackageManagerCommand;
- * 	return yield* command.run({ command: "pnpm", args: ["--version"] });
- * }).pipe(Effect.provide(PackageManagerCommandLive));
- * ```
- *
- * @since 4.0.1
- */
 export const PackageManagerCommandLive = Layer.succeed(PackageManagerCommand, {
 	run: RunCommandInvocation,
 });
 
-/**
- * Live package-manager cleanup backed by Effect's filesystem and path services.
- *
- * @example
- * ```ts
- * const layer = PackageManagerInstallFilesLive;
- * ```
- *
- * @since 4.0.1
- */
 export const PackageManagerInstallFilesLive = Layer.effect(
 	PackageManagerInstallFiles,
 	Effect.gen(function* () {
@@ -243,19 +114,6 @@ export const PackageManagerInstallFilesLive = Layer.effect(
 	}),
 );
 
-/**
- * Creates the supported package-manager candidates in fallback order.
- *
- * @example
- * ```ts
- * const candidates = make_package_manager_candidates(process.platform);
- * ```
- *
- * @since 3.4.9
- * @param platform - Node platform string used to choose Windows command
- *   wrapping for package-manager shims.
- * @returns Package-manager candidates from preferred modern tools through npm.
- */
 export function make_package_manager_candidates(
 	platform: NodeJS.Platform = process.platform,
 ): PackageManagerCandidate[] {
@@ -311,24 +169,7 @@ export function make_package_manager_candidates(
 	];
 }
 
-/**
- * Installs dependencies using the first available package manager that passes
- * the supplied install verifier.
- *
- * @example
- * ```ts
- * const program = RunPackageManagerInstall({
- * 	install_root,
- * 	verify_install: VerifyLanguageServerInstall(install_root, version),
- * });
- * ```
- *
- * @since 4.0.1
- * @param options - Install root, progress reporter, candidates, and final
- *   verification Effect for the language-server files.
- * @returns An Effect that yields the name of the package manager that completed
- *   a verified install.
- */
+/** Installs the language-server package while keeping process cleanup scoped. */
 export function RunPackageManagerInstall<R>(
 	options: PackageManagerInstallOptions<R>,
 ): Effect.Effect<

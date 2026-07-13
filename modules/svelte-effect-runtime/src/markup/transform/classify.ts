@@ -14,20 +14,6 @@ interface AttributeNameReplacement {
 	text: string;
 }
 
-/**
- * Matches sanitized placeholders back to their Svelte AST context.
- *
- * @example
- * ```ts
- * const classified = classify_candidates(ast, scanned.candidates);
- * ```
- *
- * @since 2.0.0
- * @param ast - Parsed Svelte AST for the sanitized component markup.
- * @param candidates - Placeholder candidates produced by the scanner.
- * @returns Candidates paired with the markup context that determines how they
- *   should be emitted.
- */
 export function classify_candidates(
 	ast: AST.Root,
 	candidates: MarkupCandidate[],

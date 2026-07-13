@@ -15,28 +15,7 @@ interface RemoteFormAdapterState {
 	shared_preflight_schema?: StandardSchema;
 }
 
-/**
- * Creates a remote form adapter. The callable preserves SvelteKit's native
- * form descriptors while wrapping `validate`, `enhance`, and programmatic
- * submission in Effect-returning APIs.
- *
- * @example
- * ```ts
- * const createPost = create_remote_form_adapter(nativeForm, (value) => value);
- * yield* createPost.validate({ includeUntouched: true });
- * ```
- *
- * @since 2.0.0
- * @param native_factory - SvelteKit's native form object.
- * @param decode_payload - Function to decode the response payload.
- * @param remote_base - Base URL for SvelteKit's remote endpoint.
- * @param adapter_state - Shared mutable state used to mirror root form
- *   preflight schemas across keyed form instances.
- * @param keyed - Whether this adapter wraps a keyed form instance returned by
- *   SvelteKit's native `for(...)` helper.
- * @returns A callable form function whose properties mirror the native form.
- * @internal
- */
+/** Adapts a generated SvelteKit form to SER's Effect-based client ABI. */
 export function create_remote_form_adapter<
 	Input extends RemoteFormInput | void,
 	Output,

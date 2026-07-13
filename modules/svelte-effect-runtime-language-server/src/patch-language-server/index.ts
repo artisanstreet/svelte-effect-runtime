@@ -12,35 +12,9 @@ import {
 import { normalize_transform_result } from "./transform-results.ts";
 import { Effect, Layer } from "effect";
 
-/**
- * Live private-module dependencies required by the language-server bootstrap.
- *
- * @example
- * ```ts
- * const program = Bootstrap.pipe(
- * 	Effect.provide(LanguageServerLive),
- * 	Effect.provide(NodeServices.layer),
- * );
- * ```
- *
- * @since 4.0.1
- */
 export const LanguageServerLive = Layer.merge(SvelteInternalsLive, RuntimeTransformsLive);
 
-/**
- * Installs the SER compiler, snapshot, file-extension, and code-action patches
- * into the Svelte language server process.
- *
- * @example
- * ```ts
- * yield* Bootstrap;
- * start_language_server();
- * ```
- *
- * @since 1.0.0
- * @returns An Effect that installs every language-server patch, or completes
- *   immediately when the process is already patched.
- */
+/** Installs each SER language-server patch at most once per process. */
 export const Bootstrap = Effect.gen(function* () {
 	const runtime_transforms = yield* RuntimeTransforms;
 

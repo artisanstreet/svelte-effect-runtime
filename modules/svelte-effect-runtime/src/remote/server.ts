@@ -15,24 +15,7 @@ const request_store_context_error = "Could not get the request store.";
 
 export { encode_remote_failure } from "$/remote/cause-codec.ts";
 
-/**
- * Runs a user-supplied Effect program through a ManagedRuntime, maps its
- * exit into the shape expected by SvelteKit, and returns the result or
- * throws a SvelteKit-compatible error.
- *
- * @example
- * ```ts
- * const value = await run_remote_effect(program, runtime, invalid, error);
- * ```
- *
- * @since 2.0.0
- * @param effect - The Effect program to execute.
- * @param runtime - The server-side ManagedRuntime.
- * @param invalid - SvelteKit's `invalid` helper (bound per-request).
- * @param error - SvelteKit's `error` helper.
- * @returns A Promise that resolves with the effect's success value.
- * @internal
- */
+/** Maps a remote Effect exit into the control flow expected by SvelteKit. */
 export async function run_remote_effect<A>(
 	effect: Effect.Effect<A, unknown, unknown>,
 	runtime: {
@@ -80,47 +63,11 @@ function handle_failure(
 	}
 }
 
-/**
- * Throws a SvelteKit `invalid` response from a {@link FormError}, calling
- * through to the request-scoped `invalid` helper.
- *
- * @example
- * ```ts
- * throw_form_error(
- *   [{ message: "Name is required", path: ["name"] }],
- *   invalid,
- * );
- * ```
- *
- * @since 2.0.0
- * @param issues - The list of form validation issues.
- * @param invalid - SvelteKit's `invalid` helper bound to the current request.
- * @returns Never returns because `invalid` throws SvelteKit control flow.
- * @internal
- */
 export function throw_form_error(issues: readonly FormIssue[], invalid: SvelteInvalid): never {
 	invalid(...issues);
 }
 
-/**
- * Remaps SvelteKit's unbranded request-context errors into clear, actionable
- * messages.
- *
- * @example
- * ```ts
- * try {
- *   return native_query(handler);
- * } catch (err) {
- *   throw normalize_remote_helper_error(err, "Query");
- * }
- * ```
- *
- * @since 2.0.0
- * @param err - The error thrown by SvelteKit's native functions.
- * @param helper_name - Name of the helper that triggered the error.
- * @returns A more descriptive error.
- * @internal
- */
+/** Rebrands SvelteKit context failures with the remote helper that triggered them. */
 export function normalize_remote_helper_error(err: unknown, helper_name: string): Error {
 	if (is_sveltekit_remote_context_error(err)) {
 		return new RemoteHelperContextError(helper_name);

@@ -1,13 +1,3 @@
-/**
- * Half-open source range in a Svelte component.
- *
- * @example
- * ```ts
- * const range: SourceRange = { start: 0, end: 10 };
- * ```
- *
- * @since 4.0.0
- */
 export interface SourceRange {
 	/** Inclusive start offset. */
 	start: number;
@@ -15,23 +5,6 @@ export interface SourceRange {
 	end: number;
 }
 
-/**
- * Attribute found in a Svelte opening tag.
- *
- * @example
- * ```ts
- * const attribute: SourceAttribute = {
- *   name: "lang",
- *   start: 8,
- *   end: 17,
- *   name_start: 9,
- *   name_end: 13,
- *   value: "ts",
- * };
- * ```
- *
- * @since 4.0.0
- */
 export interface SourceAttribute extends SourceRange {
 	/** Attribute name exactly as written in source. */
 	name: string;
@@ -43,17 +16,6 @@ export interface SourceAttribute extends SourceRange {
 	value?: string | undefined;
 }
 
-/**
- * Complete `<script>` region discovered by the shared source scanner.
- *
- * @example
- * ```ts
- * const script = scan_svelte_effect_source(source).effect_script;
- * script?.text;
- * ```
- *
- * @since 4.0.0
- */
 export interface ScriptRegion extends SourceRange {
 	/** Offset where the opening `<script` tag starts. */
 	opening_tag_start: number;
@@ -89,17 +51,6 @@ export interface ScriptRegion extends SourceRange {
 	effect_attribute?: SourceRange | undefined;
 }
 
-/**
- * Markup brace expression outside scripts, styles, and HTML comments.
- *
- * @example
- * ```ts
- * const [expression] = scan_svelte_effect_source(`<p>{name}</p>`).markup_expressions;
- * expression.expression_text;
- * ```
- *
- * @since 4.0.0
- */
 export interface MarkupBraceExpression {
 	/** Offset of the opening `{`. */
 	open: number;
@@ -117,17 +68,6 @@ export interface MarkupBraceExpression {
 	attribute_name?: string | undefined;
 }
 
-/**
- * Bare declaration tag that the editor projection should normalize.
- *
- * @example
- * ```ts
- * const tags = scan_svelte_effect_source(`{const value = 1}`).bare_const_tags;
- * tags[0]?.insert_position;
- * ```
- *
- * @since 4.0.0
- */
 export interface BareConstDeclarationTag {
 	/** Offset of the opening `{`. */
 	open: number;
@@ -137,17 +77,6 @@ export interface BareConstDeclarationTag {
 	expression: MarkupBraceExpression;
 }
 
-/**
- * Shared lexical facts for a Svelte source document.
- *
- * @example
- * ```ts
- * const scan = scan_svelte_effect_source(source, "App.svelte");
- * scan.effect_script?.text;
- * ```
- *
- * @since 4.0.0
- */
 export interface SvelteEffectSourceScan {
 	/** Source filename used for diagnostics and debugging. */
 	filename: string;
@@ -184,22 +113,6 @@ interface TagRegion extends SourceRange {
 	text: string;
 }
 
-/**
- * Scans a Svelte component once for shared lexical facts used by transforms,
- * diagnostics, and editor projections. The scanner accepts raw SER syntax
- * before Svelte can parse it, so it deliberately stays tolerant and single-pass.
- *
- * @example
- * ```ts
- * const scan = scan_svelte_effect_source(`<script effect>yield* run()</script>`);
- * scan.effect_script?.has_effect;
- * ```
- *
- * @since 4.0.0
- * @param source - Full Svelte component source to scan.
- * @param filename - Optional filename associated with the source.
- * @returns Shared source facts for SER consumers.
- */
 export function scan_svelte_effect_source(
 	source: string,
 	filename = "unknown.svelte",
@@ -233,20 +146,7 @@ export function scan_svelte_effect_source(
 	};
 }
 
-/**
- * Reuses a source scan after bare-const normalization inserts `@` characters.
- *
- * @example
- * ```ts
- * const shifted = shift_scan_after_at_insertions(scan, normalized, [tag.insert_position]);
- * ```
- *
- * @since 4.0.0
- * @param scan - Scan produced from the pre-normalization source.
- * @param normalized_source - Source after `@` insertions.
- * @param insert_positions - Offsets where `@` was inserted.
- * @returns A scan aligned to the normalized source without rescanning markup.
- */
+/** Reuses scan offsets after bare-const normalization inserts characters. */
 export function shift_scan_after_at_insertions(
 	scan: SvelteEffectSourceScan,
 	normalized_source: string,

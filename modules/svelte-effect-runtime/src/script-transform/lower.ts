@@ -12,20 +12,6 @@ import { slice, slice_start } from "./source.ts";
 
 import ts from "typescript";
 
-/**
- * Delegates a statement to the correct lowerer based on syntax kind.
- *
- * @example
- * ```ts
- * const lowered = lower_statement(statement, source, context);
- * ```
- *
- * @since 2.0.0
- * @param stmt - Statement to lower.
- * @param content - Original source text.
- * @param context - Lowering services for this transform pass.
- * @returns Lowered statement descriptor.
- */
 export function lower_statement(
 	stmt: ts.Statement,
 	content: string,

@@ -42,25 +42,7 @@ const remote_client_export_types = new Set<RemoteClientExportType>([
 	"prerender",
 ]);
 
-/**
- * Rewrites SvelteKit's generated client remote module into Effect-aware
- * wrappers while preserving the native remote factory calls.
- *
- * @example
- * ```ts
- * const rewritten = rewrite_remote_client_exports(
- *   `export const get_post = __remote.query("hash/get_post")`,
- * );
- * ```
- *
- * @since 2.0.0
- * @param code - Generated SvelteKit remote client module source to inspect and
- *   rewrite.
- * @param options - Optional rewrite options forwarded from the SER Vite plugin.
- * @returns The rewritten module source, or the original source when no remote
- *   exports are found.
- * @internal
- */
+/** Rewrites SvelteKit's generated remote client exports to SER adapters. */
 export function rewrite_remote_client_exports(
 	code: string,
 	options?: RemoteClientRewriteOptions,

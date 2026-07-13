@@ -59,19 +59,6 @@ interface CompletedLanguageServerSync {
 	state: LanguageServerSyncState;
 }
 
-/**
- * Serializes and deduplicates every language-server state transition.
- *
- * @example
- * ```ts
- * const program = Effect.gen(function* () {
- * 	const coordinator = yield* LanguageServerCoordinator;
- * 	return yield* coordinator.sync;
- * });
- * ```
- *
- * @since 4.0.1
- */
 export class LanguageServerCoordinator extends Context.Service<
 	LanguageServerCoordinator,
 	{
@@ -99,20 +86,6 @@ export class LanguageServerCoordinator extends Context.Service<
 	}
 >()("svelte-effect-runtime-vsix/LanguageServerCoordinator") {}
 
-/**
- * Starts the VS Code extension and launches or delegates language-server
- * support according to user settings.
- *
- * @example
- * ```ts
- * await activate(context);
- * ```
- *
- * @since 2.0.0
- * @param context - VS Code extension context used to register adapters and own
- *   the activation-scoped runtime.
- * @returns A promise that resolves after initial reconciliation finishes.
- */
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
 	const output_channel = vscode.window.createOutputChannel(client_name);
 	const runtime = make_extension_runtime(context, output_channel);
@@ -178,17 +151,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	);
 }
 
-/**
- * Stops scoped extension resources when VS Code unloads the extension.
- *
- * @example
- * ```ts
- * await deactivate();
- * ```
- *
- * @since 2.0.0
- * @returns A promise that resolves once the managed runtime has been disposed.
- */
 export async function deactivate(): Promise<void> {
 	const runtime = extension_runtime;
 

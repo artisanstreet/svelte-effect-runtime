@@ -1,43 +1,13 @@
 import { Effect, Option, Ref, Scope, Semaphore } from "effect";
 
-/**
- * One direct language-client resource owned by the serialized lifecycle.
- *
- * @example
- * ```ts
- * const handle: SerializedClientHandle = {
- * 	start: Effect.void,
- * 	stop: Effect.void,
- * 	dispose: Effect.void,
- * };
- * ```
- *
- * @since 4.0.1
- */
 export interface SerializedClientHandle {
-	/** Starts the underlying client resource. */
 	readonly start: Effect.Effect<void, unknown>;
-	/** Stops the underlying client resource gracefully. */
 	readonly stop: Effect.Effect<void, unknown>;
-	/** Releases the client even when graceful shutdown fails. */
 	readonly dispose: Effect.Effect<void>;
 }
 
-/**
- * Serialized start and stop operations for one lazily-created client.
- *
- * @example
- * ```ts
- * const control = yield* MakeSerializedClientControl(CreateClient);
- * yield* control.start(server_path);
- * ```
- *
- * @since 4.0.1
- */
 export interface SerializedClientControl {
-	/** Starts or replaces the client for the requested server path. */
 	readonly start: (server_path: string) => Effect.Effect<void, unknown>;
-	/** Stops and disposes the active client, if present. */
 	readonly stop: Effect.Effect<void, unknown>;
 }
 
@@ -46,20 +16,7 @@ interface ActiveSerializedClient {
 	readonly server_path: string;
 }
 
-/**
- * Builds an activation-scoped, semaphore-serialized client lifecycle.
- *
- * @example
- * ```ts
- * const control = yield* MakeSerializedClientControl(CreateClient);
- * yield* control.start(server_path);
- * ```
- *
- * @since 4.0.1
- * @param CreateClient - Effectful factory for a client bound to one server path.
- * @returns An Effect yielding serialized start and stop operations. The active
- *   client is stopped automatically when the surrounding scope closes.
- */
+/** Serializes client replacement so only one language client remains active. */
 export function MakeSerializedClientControl(
 	CreateClient: (server_path: string) => Effect.Effect<SerializedClientHandle, unknown>,
 ): Effect.Effect<SerializedClientControl, never, Scope.Scope> {

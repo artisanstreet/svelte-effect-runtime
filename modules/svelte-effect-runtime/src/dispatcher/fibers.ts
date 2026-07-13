@@ -1,19 +1,6 @@
 import type { Fiber as FiberType } from "effect/Fiber";
 import { Cause, Effect, Exit, Fiber } from "effect";
 
-/**
- * Callbacks fired when a watched dispatcher fiber completes.
- *
- * @example
- * ```ts
- * const callbacks: FiberWatchCallbacks<number> = {
- *   on_success: (value) => cache.set(key, value),
- * };
- * ```
- *
- * @since 2.0.0
- * @internal
- */
 export interface FiberWatchCallbacks<A> {
 	on_complete?: () => void;
 	on_success?: (value: A) => void;
@@ -21,39 +8,13 @@ export interface FiberWatchCallbacks<A> {
 	surface_failure?: boolean;
 }
 
-/**
- * Builds the program that interrupts a dispatcher-owned fiber.
- *
- * @example
- * ```ts
- * const Interrupt = InterruptFiber(fiber);
- * ```
- *
- * @since 4.0.1
- * @param fiber - Fiber to interrupt.
- * @returns An Effect that interrupts the fiber when the Dispatcher executes it.
- * @internal
- */
 export function InterruptFiber(fiber: FiberType<unknown, unknown>): Effect.Effect<void> {
 	return Effect.gen(function* () {
 		yield* Fiber.interrupt(fiber);
 	});
 }
 
-/**
- * Builds the program that watches a dispatcher fiber, runs completion
- * callbacks, and surfaces non-interrupt failures on the microtask queue.
- *
- * @example
- * ```ts
- * const WatchExit = WatchFiberExit({ fiber, on_complete: cleanup });
- * ```
- *
- * @since 4.0.1
- * @param options - Fiber and callbacks used by the watcher program.
- * @returns An Effect that waits for the fiber and applies its callbacks.
- * @internal
- */
+/** Observes fiber completion and surfaces failures without taking ownership of the fiber. */
 export function WatchFiberExit<A>(
 	options: { fiber: FiberType<unknown, unknown> } & FiberWatchCallbacks<A>,
 ): Effect.Effect<void> {

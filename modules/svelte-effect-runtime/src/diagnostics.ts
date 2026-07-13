@@ -53,22 +53,6 @@ const effect_member_name_set = new Set<string>(effect_member_names);
 const effect_runner_names = new Set(["runFork", "runPromise", "runSync"]);
 const effect_gen_name = new Set(["gen"]);
 
-/**
- * Finds best-effort SER usage diagnostics in Svelte component markup.
- *
- * @example
- * ```ts
- * const diagnostics = find_svelte_effect_diagnostics(
- *   `<button onclick={Effect.gen}>save</button>`,
- *   "Button.svelte",
- * );
- * ```
- *
- * @since 2.0.0
- * @param code - Svelte component source to scan for suspicious Effect usage.
- * @param filename - Filename used in diagnostic messages.
- * @returns Warning diagnostics with a message and source location.
- */
 export function find_svelte_effect_diagnostics(
 	code: string,
 	filename: string,

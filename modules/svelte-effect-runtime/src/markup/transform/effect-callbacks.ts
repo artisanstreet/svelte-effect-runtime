@@ -46,26 +46,6 @@ interface EffectMember {
 
 type EffectWrapperMember = "gen" | "sync";
 
-/**
- * Rewrites effectful callback shorthand inside event handler expressions.
- *
- * @example
- * ```ts
- * normalize_effect_callback_yields(
- *   `yield* action.pipe(Effect.flatMap((value) => yield* next(value)))`,
- *   collect_effect_callback_bindings(source),
- * );
- * ```
- *
- * @since 2.0.0
- * @param expr_text - Markup expression text before it is wrapped in the
- *   generated Effect runner.
- * @param bindings - Local Effect import bindings collected from the Svelte
- *   component's script blocks.
- * @returns The expression with nested Effect callback `yield*` shorthand
- *   lowered into explicit Effect callbacks, plus any import needed by generated
- *   wrapper calls.
- */
 export function normalize_effect_callback_yields(
 	expr_text: string,
 	bindings: EffectCallbackRewriteContext,

@@ -20,19 +20,6 @@ export class RuntimeError extends Error {
 	}
 }
 
-/**
- * Formats a runtime-owned error message with a stable screaming-case code.
- *
- * @example
- * ```ts
- * throw new Error(make_error_message("DISPATCHER_DISPOSED", "Dispatcher has been disposed"));
- * ```
- *
- * @since 2.0.0
- * @param code - Stable screaming-case identifier for the error category.
- * @param message - Human-readable error message without the leading code.
- * @returns The complete error message prefixed with the stable code.
- */
 export function make_error_message(code: string, message: string): string {
 	return `[${code}]: ${message}`;
 }

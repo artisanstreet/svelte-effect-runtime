@@ -20,26 +20,6 @@ interface DeclarationYieldExpression {
 	expr_text: string;
 }
 
-/**
- * Replaces markup `yield*` expressions with placeholders before Svelte parses
- * the component.
- *
- * @example
- * ```ts
- * const sanitized = sanitize_markup(
- *   `<p>{yield* loadLabel()}</p>`,
- *   "Label.svelte",
- * );
- * ```
- *
- * @since 2.0.0
- * @param content - Raw Svelte component source to scan for effectful markup
- *   expressions.
- * @param filename - Source filename used when validation errors need to point
- *   back to the component being transformed.
- * @returns Sanitized source plus placeholder candidates that should be lowered
- *   after Svelte classifies their markup positions.
- */
 export function sanitize_markup(content: string, filename: string): SanitizeResult {
 	const candidates: MarkupCandidate[] = [];
 	const source_scan = scan_svelte_effect_source(content, filename);

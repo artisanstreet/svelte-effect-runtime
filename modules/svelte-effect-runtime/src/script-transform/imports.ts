@@ -10,23 +10,6 @@ interface RuntimeImportOptions {
 	needs_yieldable?: boolean;
 }
 
-/**
- * Builds the import statements injected by the script transform.
- *
- * @example
- * ```ts
- * const imports = make_imports(false, false, false);
- * ```
- *
- * @since 2.0.0
- * @param has_effect_import - Whether the user already imports `Effect`.
- * @param has_dispatcher_import - Whether the user already imports
- *   `get_dispatcher`.
- * @param has_untrack_import - Whether the user already imports `untrack`.
- * @param bindings - Local names reserved for generated runtime helpers.
- * @param options - Runtime helper imports required by this transformed script.
- * @returns Newline-separated import statements to inject.
- */
 export function make_imports(
 	has_effect_import: boolean,
 	has_dispatcher_import: boolean,
@@ -103,20 +86,6 @@ function make_named_import(imported_name: string, local_name: string, type_only 
 		: `${prefix}${imported_name} as ${local_name}`;
 }
 
-/**
- * Checks whether a source file imports a local binding from a module.
- *
- * @example
- * ```ts
- * const has_effect = has_local_import_binding(source_file, "effect", "Effect");
- * ```
- *
- * @since 2.0.0
- * @param source_file - Parsed TypeScript source file to inspect.
- * @param module_name - Module specifier to match.
- * @param local_name - Local binding name to look for.
- * @returns Whether that binding is already locally available.
- */
 export function has_local_import_binding(
 	source_file: ts.SourceFile,
 	module_name: string,
@@ -157,18 +126,6 @@ export function has_local_import_binding(
 	});
 }
 
-/**
- * Collects every local binding declared at module top level.
- *
- * @example
- * ```ts
- * const reserved_names = collect_top_level_binding_names(source_file);
- * ```
- *
- * @since 2.4.2
- * @param source_file - Parsed TypeScript source file to inspect.
- * @returns Top-level names declared by imports, declarations, and variables.
- */
 export function collect_top_level_binding_names(source_file: ts.SourceFile): string[] {
 	return source_file.statements.flatMap(collect_statement_binding_names);
 }

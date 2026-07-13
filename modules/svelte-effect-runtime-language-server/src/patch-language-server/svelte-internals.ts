@@ -6,19 +6,6 @@ import type { Mapper } from "./types.ts";
 type RuntimeTransformModule =
 	typeof import("../../../svelte-effect-runtime/src/runtime/transform.ts");
 
-/**
- * Reports a private language-server module or runtime transform that could not
- * be loaded during bootstrap.
- *
- * @example
- * ```ts
- * if (error._tag === "LanguageServerDependencyError") {
- * 	console.error(error.dependency, error.cause);
- * }
- * ```
- *
- * @since 4.0.1
- */
 export class LanguageServerDependencyError extends Data.TaggedError(
 	"LanguageServerDependencyError",
 )<{
@@ -29,20 +16,6 @@ export class LanguageServerDependencyError extends Data.TaggedError(
 
 const require = createRequire(import.meta.url);
 
-/**
- * Private Svelte and TypeScript language-server modules loaded by the
- * bootstrap layer.
- *
- * @example
- * ```ts
- * const program = Effect.gen(function* () {
- * 	const internals = yield* SvelteInternals;
- * 	return internals.typescript.version;
- * });
- * ```
- *
- * @since 4.0.1
- */
 export interface SvelteInternalsService {
 	readonly typescript: typeof import("typescript");
 	readonly document: {
@@ -69,39 +42,10 @@ export interface SvelteInternalsService {
 	readonly fallback_transpiled_svelte_document: any;
 }
 
-/**
- * Loaded private modules used to extend the Svelte and TypeScript language
- * server pipelines.
- *
- * @example
- * ```ts
- * const program = Effect.gen(function* () {
- * 	const internals = yield* SvelteInternals;
- * 	return internals.typescript.version;
- * });
- * ```
- *
- * @since 4.0.1
- */
 export class SvelteInternals extends Context.Service<SvelteInternals, SvelteInternalsService>()(
 	"svelte-effect-runtime-language-server/SvelteInternals",
 ) {}
 
-/**
- * Loads the Svelte language server's private modules into a typed service.
- *
- * @example
- * ```ts
- * const program = Effect.gen(function* () {
- * 	return yield* SvelteInternals;
- * }).pipe(
- * 	Effect.provide(SvelteInternalsLive),
- * 	Effect.provide(NodeServices.layer),
- * );
- * ```
- *
- * @since 4.0.1
- */
 export const SvelteInternalsLive = Layer.effect(
 	SvelteInternals,
 	Effect.gen(function* () {
@@ -171,19 +115,6 @@ export const SvelteInternalsLive = Layer.effect(
 	}),
 );
 
-/**
- * Runtime transforms loaded from workspace source or packaged JavaScript.
- *
- * @example
- * ```ts
- * const program = Effect.gen(function* () {
- * 	const transforms = yield* RuntimeTransforms;
- * 	return transforms.transform_script_effect(source, filename);
- * });
- * ```
- *
- * @since 4.0.1
- */
 export class RuntimeTransforms extends Context.Service<
 	RuntimeTransforms,
 	Pick<
@@ -192,22 +123,6 @@ export class RuntimeTransforms extends Context.Service<
 	>
 >()("svelte-effect-runtime-language-server/RuntimeTransforms") {}
 
-/**
- * Loads SER transforms from source in the workspace and packaged assets after
- * publication.
- *
- * @example
- * ```ts
- * const program = Effect.gen(function* () {
- * 	return yield* RuntimeTransforms;
- * }).pipe(
- * 	Effect.provide(RuntimeTransformsLive),
- * 	Effect.provide(NodeServices.layer),
- * );
- * ```
- *
- * @since 4.0.1
- */
 export const RuntimeTransformsLive = Layer.effect(
 	RuntimeTransforms,
 	Effect.gen(function* () {

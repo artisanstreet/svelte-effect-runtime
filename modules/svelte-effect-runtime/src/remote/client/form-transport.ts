@@ -69,28 +69,6 @@ const DecodeRemoteFormResponseEnvelope = Schema.decodeUnknownOption(
 );
 const DecodeRemoteFormPayload = Schema.decodeUnknownOption(RemoteFormDecodedPayloadSchema);
 
-/**
- * Submits a native remote form through the SvelteKit remote endpoint.
- *
- * @example
- * ```ts
- * const result = yield* SubmitRemoteForm(
- *   native_form,
- *   { title: "Draft" },
- *   (value) => value,
- *   "/_app/remote",
- * );
- * ```
- *
- * @since 2.0.0
- * @param form_obj - Native form object being adapted.
- * @param input - Form input value.
- * @param decode_payload - Function to decode successful payloads.
- * @param remote_base - Base URL for the remote endpoint.
- * @param preflight_schema - Optional schema used to mirror SvelteKit's
- *   client-side preflight before posting direct programmatic input.
- * @returns An Effect that decodes the submitted form output.
- */
 export function SubmitRemoteForm<Output, ErrorType = never>(
 	form_obj: NativeFormRecord,
 	input: unknown,
@@ -132,18 +110,6 @@ export function SubmitRemoteForm<Output, ErrorType = never>(
 	});
 }
 
-/**
- * Extracts SvelteKit's remote action id from a native form action URL.
- *
- * @example
- * ```ts
- * const action_id = get_remote_action_id({ action: "/?/remote=hash/save" });
- * ```
- *
- * @since 2.0.0
- * @param form_obj - Native form object being adapted.
- * @returns Remote action id when present.
- */
 export function get_remote_action_id(form_obj: NativeFormRecord): string | undefined {
 	const action = form_obj.action;
 

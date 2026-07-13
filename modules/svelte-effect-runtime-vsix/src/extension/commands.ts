@@ -2,16 +2,6 @@ import type { SubscriptionContext } from "./types.ts";
 
 import * as vscode from "vscode";
 
-/**
- * Command callbacks registered by the VS Code extension entrypoint.
- *
- * @example
- * ```ts
- * const handlers: LanguageServerCommandHandlers = { start, stop, restart, show_output };
- * ```
- *
- * @since 2.0.0
- */
 export interface LanguageServerCommandHandlers {
 	start: () => Promise<void>;
 	stop: () => Promise<void>;
@@ -19,19 +9,6 @@ export interface LanguageServerCommandHandlers {
 	show_output: () => void;
 }
 
-/**
- * Registers all extension commands that control language-server state.
- *
- * @example
- * ```ts
- * register_language_server_commands(context, handlers);
- * ```
- *
- * @since 2.0.0
- * @param context - VS Code extension context that owns subscriptions.
- * @param handlers - Command callbacks supplied by the entrypoint.
- * @returns Nothing.
- */
 export function register_language_server_commands(
 	context: SubscriptionContext,
 	handlers: LanguageServerCommandHandlers,

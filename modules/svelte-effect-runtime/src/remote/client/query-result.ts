@@ -4,20 +4,6 @@ import { MakeEffectFromPromise } from "./effect.ts";
 import { has_method } from "./utils.ts";
 import { Effect } from "effect";
 
-/**
- * Resolves native query results, including SvelteKit run handles.
- *
- * @example
- * ```ts
- * const output = yield* ResolveQueryResult(result, decode_payload);
- * ```
- *
- * @since 2.0.0
- * @param value - Native query result or query run handle.
- * @param decode_payload - Function used to decode successful payloads.
- * @returns An Effect that resolves and decodes the query output or fails with
- *   a structured remote failure.
- */
 export function ResolveQueryResult<Output, ErrorType = never>(
 	value: unknown,
 	decode_payload: (value: unknown) => unknown,

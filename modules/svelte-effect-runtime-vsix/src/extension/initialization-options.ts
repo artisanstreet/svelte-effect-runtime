@@ -1,14 +1,3 @@
-/**
- * Builds initialization options shared by direct and delegated language clients.
- *
- * @example
- * ```ts
- * const options = create_initialization_options();
- * ```
- *
- * @since 2.0.0
- * @returns Language-server initialization options.
- */
 export function create_initialization_options(): Record<string, unknown> {
 	const language_config = {
 		inlayHints: {

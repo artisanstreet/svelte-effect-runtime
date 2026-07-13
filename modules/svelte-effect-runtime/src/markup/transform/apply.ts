@@ -12,20 +12,6 @@ import { default_helper_bindings } from "./constants.ts";
 import type MagicString from "magic-string";
 import ts from "typescript";
 
-/**
- * Generates the high-resolution source map for transformed markup.
- *
- * @example
- * ```ts
- * const magic = new MagicString(source);
- * const map = create_source_map(magic, "Component.svelte");
- * ```
- *
- * @since 2.0.0
- * @param magic - Mutable source buffer containing the completed markup edits.
- * @param filename - Source filename recorded in the generated map.
- * @returns A serializable high-resolution source map for the transformed file.
- */
 export function create_source_map(magic: MagicString, filename: string): Record<string, unknown> {
 	const map = magic.generateMap({
 		hires: true,
@@ -36,18 +22,6 @@ export function create_source_map(magic: MagicString, filename: string): Record<
 	return map as unknown as Record<string, unknown>;
 }
 
-/**
- * Replaces script contents with spaces while preserving source offsets.
- *
- * @example
- * ```ts
- * const markup_only = blank_script_blocks(`<script>const id = 1;</script><p>{id}</p>`);
- * ```
- *
- * @since 2.0.0
- * @param content - Complete Svelte component source containing script blocks.
- * @returns Source with every script character blanked and line breaks preserved.
- */
 export function blank_script_blocks(content: string): string {
 	return content.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, (match) => {
 		const lines = match.split("\n");
@@ -56,22 +30,6 @@ export function blank_script_blocks(content: string): string {
 	});
 }
 
-/**
- * Inserts the runtime helpers required by transformed markup.
- *
- * @example
- * ```ts
- * const magic = new MagicString(source);
- * const insertion = inject_helpers(magic, source, helpers, bindings);
- * ```
- *
- * @since 2.0.0
- * @param magic - Mutable source buffer that receives the helper block.
- * @param content - Original component source used to locate the instance script.
- * @param helpers - Additional import or local helper declarations to insert.
- * @param bindings - Collision-free local names for SER's generated helpers.
- * @returns Relocation metadata for the inserted block, or `undefined` when no helpers are needed.
- */
 export function inject_helpers(
 	magic: MagicString,
 	content: string,
@@ -123,19 +81,6 @@ export function inject_helpers(
 	}
 }
 
-/**
- * Allocates collision-free local names for markup runtime helpers.
- *
- * @example
- * ```ts
- * const { bindings, name_allocator } = make_markup_helper_bindings(source);
- * const local_name = name_allocator.reserve("result");
- * ```
- *
- * @since 2.0.0
- * @param content - Complete component source whose script bindings must be reserved.
- * @returns Helper bindings and the allocator that owns the same reserved-name set.
- */
 export function make_markup_helper_bindings(content: string): {
 	bindings: MarkupHelperBindings;
 	name_allocator: { reserve(name: string): string };
@@ -156,19 +101,6 @@ export function make_markup_helper_bindings(content: string): {
 	};
 }
 
-/**
- * Converts transformed replacements and helper insertions into source relocations.
- *
- * @example
- * ```ts
- * const relocations = create_relocations(replacements, helper_insertion);
- * ```
- *
- * @since 2.0.0
- * @param replacements - Markup replacements with optional ranges inside generated text.
- * @param helper_insertion - Optional generated helper block and its nested relocations.
- * @returns Relocations adjusted for every edit that precedes their generated range.
- */
 export function create_relocations(
 	replacements: Replacement[],
 	helper_insertion: Insertion | undefined,

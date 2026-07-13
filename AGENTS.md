@@ -195,44 +195,59 @@ Run tests: `corepack pnpm run test`
 
 ## JSDoc
 
-Every exported function, class, and type must have a JSDoc block with:
+Reserve full SDK-style JSDoc for public-facing exports that users import from a
+published package entrypoint. An `export` used only between source modules, by
+build tooling, by tests, or by an application bundle is not a public API.
+
+Do not add `@example`, `@since`, `@param`, or `@returns` ceremony to internal
+exports. Comment internal code only when it explains surprising behavior or a
+constraint the code cannot make obvious, and keep that comment to a short
+`/** */` sentence.
+
+Public API JSDoc should have:
 
 - A one-line **brief description** of what it does.
-- An `@example` block showing realistic usage.
 - `@since` annotation with the version it was introduced.
 - `@param` for every parameter — not just the type, but a sentence explaining what the parameter represents and how it's used.
 - `@returns` with the same level of detail.
+- An `@example` only when realistic usage adds information beyond the signature
+  and description.
 
 ```typescript
 /**
- * Runs an effect block as a forked fiber and wires its result into a reactive
- * `$state` binding. The fiber is automatically cancelled when the component
- * unmounts.
+ * Factory for Effect-backed read-only remote queries.
  *
  * @example
  * ```ts
- * const user = dispatcher.value({
- *   id: "load-user",
- *   deps: [userId],
- *   fallback: placeholder,
- *   block: () => getUser(userId),
- * });
+ * export const GetUser = Query(
+ *   Schema.Struct({ id: Schema.String }),
+ *   ({ id }) => Effect.succeed({ id }),
+ * );
  * ```
  *
  * @since 2.0.0
- * @param id - Stable identifier for this value block, used for cache lookups
- *   and HMR survival.
- * @param deps - Array of reactive dependencies. When any dep changes, the
- *   previous fiber is cancelled and a new one starts.
- * @param fallback - Value returned synchronously while the effect is running
- *   or when running on the server (SSR).
- * @param block - The effect to execute. Called once per unique `(id, deps)`
- *   combination; the result is cached and subscribed.
- * @returns The current value — the fallback initially, then the resolved
- *   effect value once the fiber completes.
  */
-function value<A>(options: ValueOptions<A>): A;
+export const Query: QueryFactory;
 ```
+
+## Effect declarations
+
+Effect-producing declarations use `PascalCase` and prefer inferred `const`
+bindings. Let `Effect.gen` carry its own error and requirement types instead of
+restating `Effect.Effect<...>` on every internal helper.
+
+```typescript
+export const MakeSerializedClientControl = (CreateClient: CreateClient) =>
+  Effect.gen(function* () {
+    const client = yield* CreateClient;
+
+    return { client };
+  });
+```
+
+Use a function declaration or explicit return annotation only when it provides a
+real contract, such as a published API, overload, recursion, or a boundary that
+must deliberately hide a more specific inferred type.
 
 ## CI / Publishing
 

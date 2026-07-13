@@ -46,24 +46,7 @@ type NativeRemoteResource<Output> = {
 	readonly withOverride?: (update: (current: Output) => Output) => unknown;
 };
 
-/**
- * Creates a remote query adapter. The returned function takes input and
- * returns an `Effect` that executes SvelteKit's native query function.
- *
- * @example
- * ```ts
- * const getUser = create_remote_query_adapter(nativeQuery, (value) => value);
- * const user = yield* getUser({ id: 1 });
- * ```
- *
- * @since 2.0.0
- * @param native_factory - SvelteKit's native query function or a legacy
- *   response factory used by tests.
- * @param decode_payload - Function to decode the response payload.
- * @param _base - Deprecated transport base retained for compatibility.
- * @returns A function returning an Effect of the response.
- * @internal
- */
+/** Adapts a generated SvelteKit query to SER's Effect-based client ABI. */
 export function create_remote_query_adapter<Input, Output, ErrorType = never>(
 	native_factory: NativeQueryFactory<Input>,
 	decode_payload: DecodePayload<Output>,
@@ -118,25 +101,7 @@ export function create_remote_query_adapter<Input, Output, ErrorType = never>(
 	return wrapped;
 }
 
-/**
- * Creates a remote live query adapter. The returned function takes input and
- * returns an Effect Stream whose transport state is exposed through `Live`.
- *
- * @example
- * ```ts
- * const getTime = create_remote_live_query_adapter(nativeLive, (value) => value);
- * const time = getTime();
- * const first = yield* Stream.runHead(time);
- * ```
- *
- * @since 2.0.0
- * @param native_factory - SvelteKit's native live query function.
- * @param _decode_payload - Deprecated payload decoder retained for parity with
- *   other remote adapters.
- * @param _base - Deprecated transport base retained for compatibility.
- * @returns A function returning a remote live stream.
- * @internal
- */
+/** Adapts a generated SvelteKit live query to SER's Effect-based client ABI. */
 export function create_remote_live_query_adapter<Input, Output, ErrorType = never>(
 	native_factory: unknown,
 	_decode_payload: (value: unknown) => unknown,

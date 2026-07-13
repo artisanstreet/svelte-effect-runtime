@@ -18,18 +18,6 @@ import path from "node:path";
 
 import * as vscode from "vscode";
 
-/**
- * Records legacy managed Svelte-extension configuration from older releases.
- *
- * @example
- * ```ts
- * yield* MigrateLegacySvelteConfiguration(context);
- * ```
- *
- * @since 4.0.1
- * @param context - VS Code extension context used for global state.
- * @returns An Effect that completes once migration state has been updated.
- */
 export function MigrateLegacySvelteConfiguration(
 	context: LegacyMigrationContext,
 ): Effect.Effect<void, unknown> {
@@ -44,24 +32,6 @@ export function MigrateLegacySvelteConfiguration(
 	});
 }
 
-/**
- * Points the official Svelte extension at this extension's language server.
- *
- * @example
- * ```ts
- * const configured = yield* ConfigureSvelteExtensionLanguageServer(
- * 	context,
- * 	server_path,
- * 	{ force: false },
- * );
- * ```
- *
- * @since 4.0.1
- * @param context - VS Code extension context used for global state.
- * @param server_path - Absolute path to the SER language-server script.
- * @param options - Configuration behavior for user-owned settings.
- * @returns An Effect yielding whether the Svelte extension was configured.
- */
 export function ConfigureSvelteExtensionLanguageServer(
 	context: GlobalStateContext,
 	server_path: string,
@@ -132,18 +102,6 @@ export function ConfigureSvelteExtensionLanguageServer(
 	});
 }
 
-/**
- * Restores the user's previous official Svelte extension language-server path.
- *
- * @example
- * ```ts
- * yield* RestoreSvelteExtensionConfiguration(context);
- * ```
- *
- * @since 4.0.1
- * @param context - VS Code extension context used for global state.
- * @returns An Effect that completes after managed settings are restored.
- */
 export function RestoreSvelteExtensionConfiguration(
 	context: GlobalStateContext,
 ): Effect.Effect<void, unknown> {

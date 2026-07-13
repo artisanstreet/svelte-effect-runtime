@@ -8,26 +8,9 @@ import type {
 import type { RemoteFailure } from "$/remote/shared.ts";
 import type { Effect, Schema, Stream } from "effect";
 
-/**
- * Type-only marker attached to SER query and live-query adapter functions so
- * form updates can distinguish them from command adapters.
- *
- * @since 2.4.2
- * @internal
- */
+/** Runtime brand used to distinguish query-update callbacks. */
 export declare const effect_remote_query_update: unique symbol;
 
-/**
- * Type-only brand carried by SER query and live-query adapter functions.
- *
- * @example
- * ```ts
- * type BrandedQuery = EffectRemoteQueryUpdateBrand & (() => unknown);
- * ```
- *
- * @since 2.4.2
- * @internal
- */
 export type EffectRemoteQueryUpdateBrand = {
 	readonly [effect_remote_query_update]: true;
 };
@@ -48,31 +31,11 @@ type NativeRemoteFormValidateOptions<Input extends RemoteFormInput | void, Outpu
 	Parameters<RemoteForm<Input, Output>["validate"]>[0]
 >;
 
-/**
- * Schema values accepted by SER's remote form preflight adapter.
- *
- * @example
- * ```ts
- * form.preflight(Schema.Struct({ email: Schema.String }));
- * ```
- *
- * @since 3.4.6
- */
 export type EffectRemoteFormPreflightSchema<
 	Input extends RemoteFormInput | void,
 	Output = unknown,
 > = NativeRemoteFormPreflightSchema<Input, Output> | Schema.Schema<unknown>;
 
-/**
- * Options accepted by SER's remote form validation adapter.
- *
- * @example
- * ```ts
- * yield* form.validate({ all: true, preflightOnly: true });
- * ```
- *
- * @since 3.4.6
- */
 export type EffectRemoteFormValidateOptions<
 	Input extends RemoteFormInput | void,
 	Output = unknown,
@@ -121,62 +84,14 @@ type EffectRemoteQueryUpdateResource = Effect.Effect<unknown, unknown> & {
 	readonly withOverride: (update: (current: never) => unknown) => unknown;
 };
 
-/**
- * Represents a pending operation counter that remote command adapters
- * use to track in-flight requests.
- *
- * @example
- * ```ts
- * const pending: Pending = { value: 0 };
- * ```
- *
- * @since 2.0.0
- * @internal
- */
 export interface Pending {
-	/** Current count of in-flight requests. */
 	value: number;
 }
 
-/**
- * Native callable method shape used when reflecting SvelteKit remote helpers.
- *
- * @example
- * ```ts
- * const invoke: NativeMethod = (...args) => native_command(...args);
- * ```
- *
- * @since 2.0.0
- */
 export type NativeMethod = (...args: unknown[]) => unknown;
 
-/**
- * Property bag shape used for native SvelteKit form objects.
- *
- * @example
- * ```ts
- * const native_form: NativeFormRecord = { action: "/?/remote=hash/save" };
- * ```
- *
- * @since 2.0.0
- */
 export type NativeFormRecord = Record<PropertyKey, unknown>;
 
-/**
- * Represents the native form submit handle passed into an Effect-aware
- * enhanced remote form callback.
- *
- * @example
- * ```ts
- * form.enhance(({ submit }) =>
- *   Effect.gen(function* () {
- *     yield* submit().updates();
- *   })
- * );
- * ```
- *
- * @since 2.0.0
- */
 export type EffectRemoteFormSubmit<Output = unknown, ErrorType = never> = Effect.Effect<
 	Output | undefined,
 	RemoteFailure<ErrorType>
@@ -186,22 +101,6 @@ export type EffectRemoteFormSubmit<Output = unknown, ErrorType = never> = Effect
 	) => Effect.Effect<Output | undefined, RemoteFailure<ErrorType>>;
 };
 
-/**
- * Represents the callback payload passed to an Effect-aware remote form
- * enhancement callback.
- *
- * @example
- * ```ts
- * form.enhance(({ data, submit }) =>
- *   Effect.gen(function* () {
- *     console.log(data);
- *     yield* submit();
- *   })
- * );
- * ```
- *
- * @since 2.0.0
- */
 export type EffectRemoteFormEnhanceOptions<
 	Input extends RemoteFormInput | void,
 	Output,
@@ -215,19 +114,6 @@ export type EffectRemoteFormEnhanceOptions<
 	submit: () => EffectRemoteFormSubmit<Output, ErrorType>;
 };
 
-/**
- * Represents a SvelteKit remote form whose submission, validation, and
- * enhancement hooks expose Effect-returning APIs.
- *
- * @example
- * ```ts
- * const form = create_remote_form_adapter(nativeForm, (value) => value);
- *
- * yield* form.preflight(schema).validate();
- * ```
- *
- * @since 2.0.0
- */
 export type EffectRemoteForm<
 	Input extends RemoteFormInput | void,
 	Output,

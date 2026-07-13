@@ -1,17 +1,5 @@
 import ts from "typescript";
 
-/**
- * Checks whether a node is a `yield*` binary expression.
- *
- * @example
- * ```ts
- * is_yield_star_expression(expression);
- * ```
- *
- * @since 2.0.0
- * @param node - TypeScript AST node to check.
- * @returns Whether the node represents `yield * operand`.
- */
 export function is_yield_star_expression(node: ts.Node): boolean {
 	return (
 		ts.isBinaryExpression(node) &&
@@ -21,13 +9,6 @@ export function is_yield_star_expression(node: ts.Node): boolean {
 	);
 }
 
-/**
- * Checks whether a node owns its own yield semantics.
- *
- * @since 2.0.0
- * @param node - TypeScript AST node to check.
- * @returns Whether traversal should stop at this function boundary.
- */
 function is_function_boundary_node(node: ts.Node): boolean {
 	return (
 		ts.isArrowFunction(node) ||
@@ -39,18 +20,6 @@ function is_function_boundary_node(node: ts.Node): boolean {
 	);
 }
 
-/**
- * Returns `true` if the node tree contains a top-level `await`.
- *
- * @example
- * ```ts
- * contains_top_level_await(statement);
- * ```
- *
- * @since 2.0.0
- * @param node - Root node to search.
- * @returns Whether a top-level await expression was found.
- */
 export function contains_top_level_await(node: ts.Node): boolean {
 	if (ts.isAwaitExpression(node)) {
 		return true;
@@ -61,19 +30,6 @@ export function contains_top_level_await(node: ts.Node): boolean {
 		.some((child) => !is_function_boundary_node(child) && contains_top_level_await(child));
 }
 
-/**
- * Collects top-level `yield*` nodes under an expression.
- *
- * @example
- * ```ts
- * collect_yield_star_nodes(expression, (node) => yields.push(node));
- * ```
- *
- * @since 2.0.0
- * @param node - Root node to search.
- * @param on_found - Callback invoked for each matching yield node.
- * @returns Nothing.
- */
 export function collect_yield_star_nodes(node: ts.Node, on_found: (node: ts.Node) => void): void {
 	if (is_function_boundary_node(node)) {
 		return;
@@ -89,19 +45,6 @@ export function collect_yield_star_nodes(node: ts.Node, on_found: (node: ts.Node
 	});
 }
 
-/**
- * Finds the first top-level `yield*` expression below a node.
- *
- * @example
- * ```ts
- * find_yield_star_node(statement, (node) => first ??= node);
- * ```
- *
- * @since 2.0.0
- * @param node - Root node to search.
- * @param on_found - Callback invoked with the first matching node.
- * @returns Nothing.
- */
 export function find_yield_star_node(node: ts.Node, on_found: (node: ts.Node) => void): void {
 	if (is_function_boundary_node(node)) {
 		return;

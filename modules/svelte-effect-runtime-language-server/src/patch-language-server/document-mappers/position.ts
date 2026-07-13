@@ -1,34 +1,10 @@
 import type { DocumentPosition } from "../types.ts";
 
-/**
- * Checks whether a language-server position represents an unmappable location.
- *
- * @example
- * ```ts
- * if (is_invalid_position(position)) return position;
- * ```
- *
- * @since 2.0.0
- * @param position - Position returned by a document mapper.
- * @returns Whether the position is outside the mapped document.
- */
 export function is_invalid_position(position: DocumentPosition): boolean {
 	return position.line < 0 || position.character < 0;
 }
 
-/**
- * Converts between offsets and line/character positions for a fixed text
- * snapshot.
- *
- * @example
- * ```ts
- * const table = new OffsetTable(source);
- * const offset = table.offsetAt({ line: 0, character: 5 });
- * ```
- *
- * @since 2.0.0
- * @param text - Fixed document text whose line starts should be indexed.
- */
+/** Converts between offsets and positions for one immutable text snapshot. */
 export class OffsetTable {
 	private readonly line_starts: number[];
 
