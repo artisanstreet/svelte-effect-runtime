@@ -19,6 +19,14 @@ test("diagnostics ignore Effect references inside script and style blocks", () =
 	assert_string_includes(diagnostics[0].message, "event attribute");
 });
 
+test("diagnostics recognize single-expression style directives as attributes", () => {
+	const source = `<div style:color={Effect.succeed("red")}></div>`;
+	const diagnostics = find_svelte_effect_diagnostics(source, "StyleDirective.svelte");
+
+	assert_equals(diagnostics.length, 1);
+	assert_string_includes(diagnostics[0].message, "Svelte attributes need");
+});
+
 test("diagnostics follow root and Effect module namespace imports", () => {
 	const source = [
 		`<script lang="ts">`,

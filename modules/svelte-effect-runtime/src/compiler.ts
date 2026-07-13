@@ -1,3 +1,5 @@
+import { scan_svelte_effect_source, type SvelteEffectSourceScan } from "./compiler/source-scan.ts";
+import { collect_markup_identifier_names } from "./compiler/markup-identifiers.ts";
 import { find_svelte_effect_diagnostics } from "./diagnostics.ts";
 import type { Plugin } from "vite";
 
@@ -78,7 +80,7 @@ function make_diagnostics_plugin(component_filter: SvelteComponentModuleFilter):
 		name: "svelte-effect-runtime:diagnostics",
 
 		transform(code: string, id: string) {
-			if (!component_filter.is_module(id)) {
+			if (!component_filter.is_module(id) || !may_have_effect_diagnostics(code)) {
 				return undefined;
 			}
 
@@ -119,11 +121,17 @@ function make_reserved_helper_guard_plugin(component_filter: SvelteComponentModu
 		name: "svelte-effect-runtime:reserved-helper-guard",
 
 		transform(code: string, id: string) {
-			if (!component_filter.is_module(id) || !has_ser_syntax(code)) {
+			if (!component_filter.is_module(id) || !may_have_ser_syntax(code)) {
 				return undefined;
 			}
 
-			const reserved_names = find_reserved_helper_names(code);
+			const source_scan = scan_svelte_effect_source(code, id);
+
+			if (!has_ser_syntax(source_scan)) {
+				return undefined;
+			}
+
+			const reserved_names = find_reserved_helper_names(source_scan);
 
 			if (reserved_names.length === 0) {
 				return undefined;
@@ -156,7 +164,7 @@ function make_svelte_transform_plugin(component_filter: SvelteComponentModuleFil
 		},
 
 		async transform(code: string, id: string, options?: { ssr?: boolean | undefined }) {
-			if (!component_filter.is_module(id)) {
+			if (!component_filter.is_module(id) || !may_have_ser_syntax(code)) {
 				return undefined;
 			}
 
@@ -473,22 +481,25 @@ function is_svelte_component_module(id: string, extensions: readonly string[]): 
 	return [...params.keys()].every((key) => allowed_params.includes(key));
 }
 
-function has_ser_syntax(code: string): boolean {
-	return /\byield\s*\*/.test(code) || /<script\b[^>]*\beffect(?:[\s=>]|$)/.test(code);
+function has_ser_syntax(source_scan: SvelteEffectSourceScan): boolean {
+	return (
+		source_scan.effect_script !== undefined ||
+		source_scan.markup_expressions.some((expression) => /\byield\s*\*/.test(expression.inner))
+	);
 }
 
-function find_reserved_helper_names(code: string): string[] {
-	const script_segments = [...code.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi)].map(
-		(match) => match[1] ?? "",
-	);
-	const markup_segments = [...code.matchAll(/\{[^{}]*(?:Dispatcher|Code)[^{}]*\}/g)].map(
-		(match) => match[0],
-	);
-	const search_segments = [...script_segments, ...markup_segments];
+function may_have_effect_diagnostics(code: string): boolean {
+	return code.includes("Effect") || /["']effect(?:\/Effect)?["']/.test(code);
+}
 
-	return ["Dispatcher", "Code"].filter((name) =>
-		search_segments.some((segment) => new RegExp(`\\b${name}\\b`).test(segment)),
-	);
+function may_have_ser_syntax(code: string): boolean {
+	return /\byield\s*\*/.test(code) || /<script\b[^>]*\beffect(?:[\s=>]|$)/i.test(code);
+}
+
+function find_reserved_helper_names(source_scan: SvelteEffectSourceScan): string[] {
+	const markup_identifier_names = collect_markup_identifier_names(source_scan);
+
+	return ["Dispatcher", "Code"].filter((name) => markup_identifier_names.has(name));
 }
 
 function make_reserved_helper_warning(names: string[]): string {

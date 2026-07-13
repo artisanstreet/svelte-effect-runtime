@@ -6,7 +6,9 @@ import type {
 	PendingRelocation,
 	Replacement,
 } from "./types.ts";
+import type { SvelteEffectSourceScan } from "$/compiler/source-scan.ts";
 import { collect_top_level_binding_names } from "$/script-transform/imports.ts";
+import { collect_markup_identifier_names } from "$/compiler/markup-identifiers.ts";
 import { default_helper_bindings } from "./constants.ts";
 
 import type MagicString from "magic-string";
@@ -22,17 +24,9 @@ export function create_source_map(magic: MagicString, filename: string): Record<
 	return map as unknown as Record<string, unknown>;
 }
 
-export function blank_script_blocks(content: string): string {
-	return content.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, (match) => {
-		const lines = match.split("\n");
-
-		return lines.map((line) => " ".repeat(line.length)).join("\n");
-	});
-}
-
 export function inject_helpers(
 	magic: MagicString,
-	content: string,
+	source_scan: SvelteEffectSourceScan,
 	helpers: HelperDeclaration[] = [],
 	bindings: MarkupHelperBindings = default_helper_bindings,
 ): Insertion | undefined {
@@ -42,11 +36,7 @@ export function inject_helpers(
 	const helper_segments: Array<{
 		text: string;
 		relocation?: PendingRelocation;
-	}> = [
-		make_import_helper(content, make_dispatcher_import(bindings)),
-		...import_helpers,
-		...local_helpers,
-	]
+	}> = [make_dispatcher_import(bindings), ...import_helpers, ...local_helpers]
 		.filter((helper): helper is string | HelperDeclaration => helper !== undefined)
 		.map((helper) => (typeof helper === "string" ? { text: helper } : helper));
 
@@ -56,15 +46,15 @@ export function inject_helpers(
 
 	const helper_block = helper_segments.map((segment) => segment.text).join("\n");
 
-	const script_tag = find_instance_script_tag(content);
+	const instance_script = source_scan.instance_script;
 
-	if (script_tag) {
+	if (instance_script) {
 		const text = `\n${helper_block}\n`;
 
-		magic.appendLeft(script_tag.end, text);
+		magic.appendLeft(instance_script.content_end, text);
 
 		return {
-			start: script_tag.end,
+			start: instance_script.content_end,
 			text,
 			relocations: make_insertion_relocations(helper_segments, "\n"),
 		};
@@ -81,15 +71,18 @@ export function inject_helpers(
 	}
 }
 
-export function make_markup_helper_bindings(content: string): {
+export function make_markup_helper_bindings(source_scan: SvelteEffectSourceScan): {
 	bindings: MarkupHelperBindings;
 	name_allocator: { reserve(name: string): string };
 } {
-	const script_tag = find_instance_script_tag(content);
-	const binding_names = script_tag
-		? collect_script_binding_names(content.slice(script_tag.start, script_tag.end))
-		: [];
-	const name_allocator = make_name_allocator(binding_names);
+	const script_binding_names = source_scan.scripts.flatMap((script) =>
+		collect_script_binding_names(script.text),
+	);
+	const markup_identifier_names = collect_markup_identifier_names(source_scan);
+	const name_allocator = make_name_allocator([
+		...script_binding_names,
+		...markup_identifier_names,
+	]);
 
 	return {
 		bindings: {
@@ -105,31 +98,47 @@ export function create_relocations(
 	replacements: Replacement[],
 	helper_insertion: Insertion | undefined,
 ): MarkupRelocation[] {
-	const edits = [
-		helper_insertion && {
-			start: helper_insertion.start,
-			removedLength: 0,
-			insertedLength: helper_insertion.text.length,
-		},
-		...replacements.map((replacement) => ({
-			start: replacement.start,
-			removedLength: replacement.end - replacement.start,
-			insertedLength: replacement.text.length,
-		})),
-	].filter(Boolean) as Array<{
-		start: number;
-		removedLength: number;
-		insertedLength: number;
-	}>;
+	const ordered_replacements = [...replacements].sort((left, right) => left.start - right.start);
+	const replacement_deltas = new Map<Replacement, number>();
+	let accumulated_delta = 0;
+	let replacement_delta_before_helper = 0;
+	let cursor = 0;
+
+	while (cursor < ordered_replacements.length) {
+		const start = ordered_replacements[cursor]?.start;
+		let group_end = cursor;
+		let group_delta = 0;
+
+		while (ordered_replacements[group_end]?.start === start) {
+			const replacement = ordered_replacements[group_end];
+
+			if (replacement) {
+				replacement_deltas.set(replacement, accumulated_delta);
+				group_delta += replacement.text.length - (replacement.end - replacement.start);
+			}
+
+			group_end += 1;
+		}
+
+		if (helper_insertion && start !== undefined && start < helper_insertion.start) {
+			replacement_delta_before_helper += group_delta;
+		}
+
+		accumulated_delta += group_delta;
+		cursor = group_end;
+	}
 
 	const replacement_relocations = replacements.flatMap((replacement) => {
 		if (!replacement.relocation) {
 			return [];
 		}
 
-		const delta_before = edits
-			.filter((edit) => edit.start < replacement.start)
-			.reduce((total, edit) => total + edit.insertedLength - edit.removedLength, 0);
+		const replacement_delta_before = replacement_deltas.get(replacement) ?? 0;
+		const helper_insertion_delta =
+			helper_insertion && helper_insertion.start <= replacement.start
+				? helper_insertion.text.length
+				: 0;
+		const delta_before = replacement_delta_before + helper_insertion_delta;
 		const generated_start = replacement.start + delta_before;
 
 		return [
@@ -143,23 +152,16 @@ export function create_relocations(
 		];
 	});
 
+	const helper_generated_start = (helper_insertion?.start ?? 0) + replacement_delta_before_helper;
 	const helper_relocations =
 		helper_insertion?.relocations?.map((relocation) => ({
 			originalStart: relocation.originalStart,
 			originalEnd: relocation.originalEnd,
-			generatedStart: helper_insertion.start + relocation.generatedStartInReplacement,
-			generatedEnd: helper_insertion.start + relocation.generatedEndInReplacement,
+			generatedStart: helper_generated_start + relocation.generatedStartInReplacement,
+			generatedEnd: helper_generated_start + relocation.generatedEndInReplacement,
 		})) ?? [];
 
 	return [...replacement_relocations, ...helper_relocations];
-}
-
-function make_import_helper(content: string, import_text: string): string | undefined {
-	if (content.includes(import_text)) {
-		return undefined;
-	}
-
-	return import_text;
 }
 
 function make_dispatcher_import(bindings: MarkupHelperBindings): string {
@@ -206,27 +208,6 @@ function make_insertion_relocations(
 	}
 
 	return relocations;
-}
-
-function find_instance_script_tag(content: string): { start: number; end: number } | undefined {
-	const pattern = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi;
-
-	for (const match of content.matchAll(pattern)) {
-		if (match.index === undefined) continue;
-
-		const attrs = match[1] ?? "";
-		if (/\bcontext\s*=\s*["']module["']/.test(attrs) || /\bmodule\b/.test(attrs)) {
-			continue;
-		}
-
-		const open_end = match[0].indexOf(">") + 1;
-		return {
-			start: match.index + open_end,
-			end: match.index + match[0].length - "</script>".length,
-		};
-	}
-
-	return undefined;
 }
 
 function unique_import_helpers(helpers: HelperDeclaration[]): HelperDeclaration[] {

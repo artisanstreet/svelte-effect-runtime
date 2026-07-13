@@ -1,6 +1,6 @@
 import { analyze_event_body_yield_star, strip_arrow_function } from "./expressions.ts";
 import { validate_rune_yield_usage } from "$/script-transform/runes.ts";
-import { scan_svelte_effect_source } from "$/compiler/source-scan.ts";
+import type { SvelteEffectSourceScan } from "$/compiler/source-scan.ts";
 import { collect_yield_star_nodes } from "$/script-transform/ast.ts";
 import { contains_top_level_yield_star } from "$/detect.ts";
 import type { MarkupCandidate, TagKind } from "./types.ts";
@@ -10,7 +10,7 @@ import MagicString from "magic-string";
 import ts from "typescript";
 
 interface SanitizeResult {
-	code: string;
+	parse_code: string;
 	candidates: MarkupCandidate[];
 }
 
@@ -20,9 +20,10 @@ interface DeclarationYieldExpression {
 	expr_text: string;
 }
 
-export function sanitize_markup(content: string, filename: string): SanitizeResult {
+export function sanitize_markup(source_scan: SvelteEffectSourceScan): SanitizeResult {
+	const content = source_scan.source;
+	const filename = source_scan.filename;
 	const candidates: MarkupCandidate[] = [];
-	const source_scan = scan_svelte_effect_source(content, filename);
 	const magic = new MagicString(content);
 	let helper_index = 0;
 
@@ -165,7 +166,21 @@ export function sanitize_markup(content: string, filename: string): SanitizeResu
 		magic.overwrite(expr_start, expr_end, key === "render" ? `${placeholder}()` : placeholder);
 	}
 
-	return { code: magic.toString(), candidates };
+	if (candidates.length === 0) {
+		return { parse_code: content, candidates };
+	}
+
+	for (const region of [...source_scan.scripts, ...source_scan.styles]) {
+		const region_source = content.slice(region.start, region.end);
+
+		magic.overwrite(region.start, region.end, blank_source_region(region_source));
+	}
+
+	return { parse_code: magic.toString(), candidates };
+}
+
+function blank_source_region(source: string): string {
+	return source.replace(/[^\r\n]/g, " ");
 }
 
 function collect_expression_yield_expressions(

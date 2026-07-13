@@ -829,18 +829,19 @@ test("vite plugin warns when SER files use reserved generated helper names", asy
 		`  const Dispatcher = "local dispatcher";`,
 		`  function loadValue() {}`,
 		`</script>`,
-		`{#each [1] as Code}`,
-		`  <p>{Code}: {yield* loadValue()}</p>`,
-		`{/each}`,
+		`<Component let:Dispatcher>`,
+		`  {#each [1] as Code}`,
+		`    <p>{Code}: {yield* loadValue()}</p>`,
+		`  {/each}`,
+		`</Component>`,
 	].join("\n");
 
 	const warnings = await collect_transform_warnings(plugin, source, "C:/src/routes/Test.svelte");
 
 	assert_equals(warnings.length, 1);
-	assert_string_includes(
-		warnings[0],
-		"`Dispatcher` and `Code` are reserved for generated markup helpers",
-	);
+	assert_string_includes(warnings[0], "`Dispatcher`");
+	assert_string_includes(warnings[0], "`Code`");
+	assert_string_includes(warnings[0], "are reserved for generated markup helpers");
 });
 
 test("vite plugin reserved helper guard ignores ordinary Svelte files", async () => {
@@ -860,6 +861,50 @@ test("vite plugin reserved helper guard ignores ordinary Svelte files", async ()
 		`<p>{Code}</p>`,
 	].join("\n");
 
+	const warnings = await collect_transform_warnings(plugin, source, "C:/src/routes/Test.svelte");
+
+	assert_equals(warnings, []);
+});
+
+test("vite plugin reserved helper guard ignores structural lookalikes", async () => {
+	const plugin = effect().find(
+		(candidate) => candidate.name === "svelte-effect-runtime:reserved-helper-guard",
+	);
+
+	if (!plugin) {
+		throw new Error("reserved helper guard plugin should exist");
+	}
+
+	const source = [
+		`<!-- <script>const Dispatcher = Code;</script> -->`,
+		`<p>{yield* loadValue()}</p>`,
+	].join("\n");
+	const warnings = await collect_transform_warnings(plugin, source, "C:/src/routes/Test.svelte");
+
+	assert_equals(warnings, []);
+});
+
+test("vite plugin reserved helper guard ignores non-binding identifier lookalikes", async () => {
+	const plugin = effect().find(
+		(candidate) => candidate.name === "svelte-effect-runtime:reserved-helper-guard",
+	);
+
+	if (!plugin) {
+		throw new Error("reserved helper guard plugin should exist");
+	}
+
+	const source = [
+		`<script lang="ts">const response = { Code: 1 };</script>`,
+		`{#snippet child(value: Dispatcher)}`,
+		`  <p>{value}</p>`,
+		`{/snippet}`,
+		`{#each rows as { Dispatcher: row }}`,
+		`  <p>{response.Code}: {"Dispatcher"}: {row}</p>`,
+		`  <p>{null as Code}</p>`,
+		`  <p>{({ Code() { return 1 }, get Dispatcher() { return 1 } })}</p>`,
+		`  <p>{yield* loadValue()}</p>`,
+		`{/each}`,
+	].join("\n");
 	const warnings = await collect_transform_warnings(plugin, source, "C:/src/routes/Test.svelte");
 
 	assert_equals(warnings, []);

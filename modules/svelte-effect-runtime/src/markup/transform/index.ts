@@ -1,5 +1,4 @@
 import {
-	blank_script_blocks,
 	create_relocations,
 	create_source_map,
 	inject_helpers,
@@ -7,6 +6,7 @@ import {
 } from "./apply.ts";
 import type { MarkupTransformOptions, MarkupTransformResult } from "./types.ts";
 import { collect_effect_callback_bindings } from "./effect-bindings.ts";
+import { scan_svelte_effect_source } from "$/compiler/source-scan.ts";
 import { UnsupportedMarkupEffectPositionError } from "$/errors.ts";
 import { classify_candidates } from "./classify.ts";
 import { type AST, parse } from "svelte/compiler";
@@ -56,19 +56,20 @@ export function transform_markup_effect(
 		return { code: content, has_yield: false };
 	}
 
+	const source_scan = scan_svelte_effect_source(content, filename);
+
 	/** Find all brace expressions containing yield* and replace with placeholders. */
-	const work = sanitize_markup(content, filename);
-	const effect_context = collect_effect_callback_bindings(content);
-	const helper_context = make_markup_helper_bindings(content);
+	const work = sanitize_markup(source_scan);
 
 	if (work.candidates.length === 0) {
 		return { code: content, has_yield: false };
 	}
 
-	/** Parse the sanitized markup with Svelte's AST. Strip <script> blocks
-	 *  first so TypeScript syntax (import type, etc.) doesn't break the parser. */
-	const clean = blank_script_blocks(work.code);
-	const ast = parse(clean, { filename, modern: true }) as AST.Root;
+	const effect_context = collect_effect_callback_bindings(source_scan.scripts);
+	const helper_context = make_markup_helper_bindings(source_scan);
+
+	/** Parse the sanitized markup with Svelte's AST. */
+	const ast = parse(work.parse_code, { filename, modern: true }) as AST.Root;
 
 	/** Match placeholders to their AST context and build replacements. */
 	const classified = classify_candidates(ast, work.candidates);
@@ -96,7 +97,7 @@ export function transform_markup_effect(
 		magic.overwrite(r.start, r.end, r.text);
 	}
 
-	const helper_insertion = inject_helpers(magic, content, helpers, helper_context.bindings);
+	const helper_insertion = inject_helpers(magic, source_scan, helpers, helper_context.bindings);
 	const relocations = create_relocations(replacements, helper_insertion);
 
 	return {

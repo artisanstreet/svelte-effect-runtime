@@ -1,3 +1,4 @@
+import type { ScriptRegion } from "$/compiler/source-scan.ts";
 import type { HelperDeclaration } from "./types.ts";
 
 import ts from "typescript";
@@ -30,14 +31,15 @@ interface EffectBindingState {
 	implicit_effect_import: boolean;
 }
 
-export function collect_effect_callback_bindings(content: string): EffectCallbackRewriteContext {
+export function collect_effect_callback_bindings(
+	scripts: readonly ScriptRegion[],
+): EffectCallbackRewriteContext {
 	const state = make_effect_binding_state();
-	const scripts = collect_script_blocks(content);
 
 	for (const script of scripts) {
 		const source_file = ts.createSourceFile(
 			"component-script.ts",
-			script,
+			script.text,
 			ts.ScriptTarget.Latest,
 			true,
 			ts.ScriptKind.TS,
@@ -69,12 +71,6 @@ function make_effect_binding_state(): EffectBindingState {
 		local_names: new Set(),
 		implicit_effect_import: false,
 	};
-}
-
-function collect_script_blocks(content: string): string[] {
-	const pattern = /<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi;
-
-	return [...content.matchAll(pattern)].map((match) => match[1] ?? "");
 }
 
 function collect_source_file_bindings(source_file: ts.SourceFile, state: EffectBindingState): void {
