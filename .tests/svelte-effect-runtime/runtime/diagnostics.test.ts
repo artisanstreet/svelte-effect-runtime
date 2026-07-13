@@ -81,6 +81,30 @@ test("diagnostics retain unyielded Effect programs in mixed declarations", () =>
 	assert_string_includes(diagnostics[0].message, "will produce an Effect value");
 });
 
+test("diagnostics keep await context keywords inside nested expressions", () => {
+	const source = `{#await (() => " then " && Effect.succeed(1))() then value}{value}{/await}`;
+	const diagnostics = find_svelte_effect_diagnostics(source, "Await.svelte");
+
+	assert_equals(diagnostics.length, 1);
+	assert_string_includes(diagnostics[0].message, "Effect.succeed");
+});
+
+test("diagnostics distinguish callback yields from nested generator yields", () => {
+	const nested_generator = [
+		`<button onclick={() => Effect.gen(function* () {`,
+		`  yield* Effect.succeed(1);`,
+		`})}>nested</button>`,
+	].join("\n");
+	const hidden_yield = `<button onclick={() => yield* Effect.succeed(1)}>hidden</button>`;
+	const nested_diagnostics = find_svelte_effect_diagnostics(nested_generator, "Nested.svelte");
+	const hidden_diagnostics = find_svelte_effect_diagnostics(hidden_yield, "Hidden.svelte");
+
+	assert_equals(nested_diagnostics.length, 1);
+	assert_string_includes(nested_diagnostics[0].message, "returns an Effect");
+	assert_equals(hidden_diagnostics.length, 1);
+	assert_string_includes(hidden_diagnostics[0].message, "yield* hidden inside");
+});
+
 test("diagnostics scan many markup expressions near linearly", () => {
 	const small_source = make_many_markup_expressions(4_000);
 	const large_source = make_many_markup_expressions(32_000);

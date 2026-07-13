@@ -167,7 +167,9 @@ function make_expression_diagnostics(
 	}
 
 	const is_callback = is_callback_expression(parsed_expression);
-	const has_yield_star = contains_yield_star(parsed_expression);
+	const has_yield_star = is_callback
+		? contains_callback_yield_star(parsed_expression)
+		: contains_yield_star(parsed_expression);
 	const is_hidden_event_yield = is_event_attribute && is_callback && has_yield_star;
 
 	if (
@@ -435,9 +437,7 @@ function normalize_markup_expression(expression_text: string): NormalizedMarkupE
 	}
 
 	if (prefix?.kind === "await") {
-		const boundary = /\s+(?:then|catch)\s+/.exec(text)?.index ?? -1;
-
-		text = boundary === -1 ? text : text.slice(0, boundary);
+		text = slice_before_await_context(text);
 	}
 
 	return {
@@ -472,6 +472,28 @@ function find_markup_expression_prefix(
 	}
 
 	return undefined;
+}
+
+function slice_before_await_context(expression_text: string): string {
+	const wrapper_prefix = "function* __SER___await() { return (";
+	const source_file = ts.createSourceFile(
+		"diagnostics-await.ts",
+		`${wrapper_prefix}${expression_text}); }`,
+		ts.ScriptTarget.Latest,
+		true,
+		ts.ScriptKind.TS,
+	);
+	const wrapper = source_file.statements.find(ts.isFunctionDeclaration);
+	const return_statement = wrapper?.body?.statements.find(ts.isReturnStatement);
+	const root_expression = unwrap_parentheses(return_statement?.expression);
+	const boundary = root_expression ? root_expression.end - wrapper_prefix.length : -1;
+	const remainder = boundary === -1 ? "" : expression_text.slice(boundary).trimStart();
+
+	if (!/^(?:then|catch)(?:\s|$)/.test(remainder)) {
+		return expression_text;
+	}
+
+	return expression_text.slice(0, boundary);
 }
 
 function contains_effect_reference(
@@ -519,6 +541,33 @@ function is_bare_effect_gen(
 
 function contains_yield_star(parsed_expression: ParsedMarkupExpression): boolean {
 	return some_node(parsed_expression.source_file, is_yield_star_expression);
+}
+
+function contains_callback_yield_star(parsed_expression: ParsedMarkupExpression): boolean {
+	const callback = parsed_expression.root_expression;
+	let matched = false;
+
+	if (!callback || (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback))) {
+		return false;
+	}
+
+	function visit(node: ts.Node): void {
+		if (matched || (node !== callback && ts.isFunctionLike(node))) {
+			return;
+		}
+
+		if (is_yield_star_expression(node)) {
+			matched = true;
+
+			return;
+		}
+
+		ts.forEachChild(node, visit);
+	}
+
+	visit(callback.body);
+
+	return matched;
 }
 
 function is_callback_expression(parsed_expression: ParsedMarkupExpression): boolean {
