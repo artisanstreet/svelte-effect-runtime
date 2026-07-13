@@ -17,7 +17,7 @@ import { normalize_transform_result } from "./transform-results.ts";
  * start_language_server();
  * ```
  *
- * @since 2.0.0
+ * @since 1.0.0
  * @returns A promise that resolves after every language-server patch has been
  *   installed, or immediately when the process was already patched.
  */

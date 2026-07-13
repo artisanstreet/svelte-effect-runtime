@@ -33,7 +33,7 @@ export const { FragmentMapper, SourceMapDocumentMapper } = require(
  * const instance_source = scripts?.script?.content;
  * ```
  *
- * @since 2.0.0
+ * @since 4.0.1
  * @param code - Complete Svelte document source to inspect for script tags.
  * @returns The Svelte language server's extracted script-tag records.
  */
