@@ -1,11 +1,13 @@
 import { is_standard_schema, normalize_validator, type StandardSchema } from "$/internal/schema.ts";
 import type { EffectRemoteForm, NativeFormRecord, NativeMethod } from "./types.ts";
-import { get_remote_action_id, submit_remote_form } from "./form-transport.ts";
+import { get_remote_action_id, SubmitRemoteForm } from "./form-transport.ts";
+import { MakeEffectFromPromise, MakeEffectFromSync } from "./effect.ts";
 import { copy_property_descriptors, has_method } from "./utils.ts";
-import { decode_response_or_value } from "./responses.ts";
 import { wrap_enhance_callback } from "./form-enhance.ts";
+import type { RemoteFailure } from "$/remote/shared.ts";
+import { DecodeResponseOrValue } from "./responses.ts";
 import type { RemoteFormInput } from "@sveltejs/kit";
-import { MakeEffectFromPromise } from "./effect.ts";
+import { Effect } from "effect";
 
 type RemoteInput<Input> = undefined extends Input ? Input | void : Input;
 
@@ -49,18 +51,22 @@ export function create_remote_form_adapter<
 	const form_obj = native_factory as NativeFormRecord;
 	let local_preflight_schema: StandardSchema | undefined;
 
-	const submit_effect = (input?: RemoteInput<Input>) =>
-		MakeEffectFromPromise<Output, ErrorType>(async () => {
-			const can_use_remote_endpoint =
-				remote_base.length > 0 && get_remote_action_id(form_obj) !== undefined;
+	const SubmitForm = (input?: RemoteInput<Input>) =>
+		Effect.gen(function* () {
+			const action_id = yield* MakeEffectFromSync<string | undefined, ErrorType>(() =>
+				get_remote_action_id(form_obj),
+			);
+			const can_use_remote_endpoint = remote_base.length > 0 && action_id !== undefined;
 
 			if (has_method(form_obj, "submit") && !can_use_remote_endpoint) {
-				const result = await form_obj.submit(input);
+				const result = yield* MakeEffectFromPromise<unknown, ErrorType>(() =>
+					Promise.resolve(form_obj.submit(input)),
+				);
 
-				return await decode_response_or_value<Output>(result, decode_payload);
+				return yield* DecodeResponseOrValue<Output, ErrorType>(result, decode_payload);
 			}
 
-			return await submit_remote_form<Output>(
+			return yield* SubmitRemoteForm<Output, ErrorType>(
 				form_obj,
 				input,
 				decode_payload,
@@ -69,7 +75,7 @@ export function create_remote_form_adapter<
 			);
 		});
 
-	const callable = ((input?: RemoteInput<Input>) => submit_effect(input)) as EffectRemoteForm<
+	const callable = ((input?: RemoteInput<Input>) => SubmitForm(input)) as EffectRemoteForm<
 		Input,
 		Output,
 		ErrorType
@@ -84,17 +90,17 @@ export function create_remote_form_adapter<
 	Object.defineProperty(callable, "submit", {
 		configurable: true,
 		enumerable: false,
-		value: submit_effect,
+		value: SubmitForm,
 	});
 
 	if (has_method(form_obj, "validate")) {
+		const validate = form_obj.validate;
+
 		Object.defineProperty(callable, "validate", {
 			configurable: true,
 			enumerable: false,
 			value: (options?: Record<string, unknown>) =>
-				MakeEffectFromPromise<void, ErrorType>(async () => {
-					await form_obj.validate(normalize_validate_options(form_obj.validate, options));
-				}),
+				ValidateRemoteForm<ErrorType>(form_obj, validate, options),
 		});
 	}
 
@@ -145,6 +151,18 @@ export function create_remote_form_adapter<
 	}
 
 	return callable;
+}
+
+function ValidateRemoteForm<ErrorType>(
+	form_obj: NativeFormRecord,
+	validate: NativeMethod,
+	options: Record<string, unknown> | undefined,
+): Effect.Effect<void, RemoteFailure<ErrorType>> {
+	return Effect.gen(function* () {
+		yield* MakeEffectFromPromise<unknown, ErrorType>(() =>
+			Promise.resolve(validate.call(form_obj, normalize_validate_options(validate, options))),
+		);
+	});
 }
 
 function normalize_validate_options(

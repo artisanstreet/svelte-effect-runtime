@@ -9,12 +9,13 @@ import {
 	create_remote_validation_error,
 } from "$/remote/shared.ts";
 import { decode_remote_error, is_decoded_remote_failure } from "./failures.ts";
+import { MakeEffectFromPromise, MakeEffectFromSync } from "./effect.ts";
+import type { FormIssue, RemoteFailure } from "$/remote/shared.ts";
 import type { StandardSchema } from "$/internal/schema.ts";
-import { decode_response_failure } from "./responses.ts";
-import type { FormIssue } from "$/remote/shared.ts";
+import { DecodeResponseFailure } from "./responses.ts";
 import type { NativeFormRecord } from "./types.ts";
+import { Effect, Option, Schema } from "effect";
 import { to_form_data } from "./form-data.ts";
-import { Option, Schema } from "effect";
 import { parse } from "devalue";
 
 type RemoteFormResponseEnvelope =
@@ -78,36 +79,47 @@ const DecodeRemoteFormPayload = Schema.decodeUnknownOption(RemoteFormDecodedPayl
  * @param remote_base - Base URL for the remote endpoint.
  * @param preflight_schema - Optional schema used to mirror SvelteKit's
  *   client-side preflight before posting direct programmatic input.
- * @returns Decoded form output.
+ * @returns An Effect that decodes the submitted form output.
  */
-export async function submit_remote_form<Output>(
+export function SubmitRemoteForm<Output, ErrorType = never>(
 	form_obj: NativeFormRecord,
 	input: unknown,
 	decode_payload: (value: unknown) => unknown,
 	remote_base: string,
 	preflight_schema?: StandardSchema,
-): Promise<Output> {
-	const action_id = get_remote_action_id(form_obj);
+): Effect.Effect<Output, RemoteFailure<ErrorType>> {
+	return Effect.gen(function* () {
+		const action_id = yield* MakeEffectFromSync<string | undefined, ErrorType>(() =>
+			get_remote_action_id(form_obj),
+		);
 
-	if (!action_id || remote_base.length === 0) {
-		throw create_remote_transport_error(new RemoteFormEndpointMissingError());
-	}
+		if (!action_id || remote_base.length === 0) {
+			return yield* Effect.fail(
+				create_remote_transport_error(new RemoteFormEndpointMissingError()),
+			);
+		}
 
-	await validate_preflight_input(preflight_schema, input);
+		yield* ValidatePreflightInput<ErrorType>(preflight_schema, input);
 
-	const response = await fetch(to_remote_form_url(remote_base, action_id), {
-		method: "POST",
-		headers: get_remote_request_headers(),
-		body: to_form_data(input),
+		const response = yield* MakeEffectFromPromise<Response, ErrorType>((signal) =>
+			fetch(to_remote_form_url(remote_base, action_id), {
+				method: "POST",
+				headers: get_remote_request_headers(),
+				body: to_form_data(input),
+				signal,
+			}),
+		);
+
+		if (!response.ok) {
+			const failure = yield* DecodeResponseFailure<ErrorType>(response);
+
+			return yield* Effect.fail(failure);
+		}
+
+		const envelope = yield* MakeEffectFromPromise<unknown, ErrorType>(() => response.json());
+
+		return yield* DecodeFormResponse<Output, ErrorType>(envelope, decode_payload);
 	});
-
-	if (!response.ok) {
-		throw await decode_response_failure(response);
-	}
-
-	const envelope = await response.json();
-
-	return decode_form_response<Output>(envelope, decode_payload);
 }
 
 /**
@@ -155,23 +167,27 @@ function get_remote_request_headers(): HeadersInit {
 	};
 }
 
-async function validate_preflight_input(
+function ValidatePreflightInput<ErrorType>(
 	schema: StandardSchema | undefined,
 	input: unknown,
-): Promise<void> {
-	if (!schema) {
-		return;
-	}
+): Effect.Effect<void, RemoteFailure<ErrorType>> {
+	return Effect.gen(function* () {
+		if (!schema) {
+			return;
+		}
 
-	const validated = await schema["~standard"].validate(input);
+		const validated = yield* MakeEffectFromPromise<unknown, ErrorType>(() =>
+			Promise.resolve(schema["~standard"].validate(input)),
+		);
 
-	if (!is_record(validated) || !Array.isArray(validated.issues)) {
-		return;
-	}
+		if (!is_record(validated) || !Array.isArray(validated.issues)) {
+			return;
+		}
 
-	const issues = validated.issues.map(normalize_standard_issue);
+		const issues = validated.issues.map(normalize_standard_issue);
 
-	throw create_remote_validation_error(issues, { issues }, 400);
+		return yield* Effect.fail(create_remote_validation_error(issues, { issues }, 400));
+	});
 }
 
 function normalize_standard_issue(issue: unknown): FormIssue {
@@ -207,50 +223,64 @@ function is_record(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;
 }
 
-function decode_form_response<Output>(
+function DecodeFormResponse<Output, ErrorType>(
 	envelope: unknown,
 	decode_payload: (value: unknown) => unknown,
-): Output {
-	const response = decode_remote_form_response_envelope(envelope);
+): Effect.Effect<Output, RemoteFailure<ErrorType>> {
+	return Effect.gen(function* () {
+		const response = decode_remote_form_response_envelope(envelope);
 
-	if (!response) {
-		throw create_remote_transport_error(new InvalidRemoteFormResponseError(envelope), envelope);
-	}
-
-	if (response._tag === "RemoteFormErrorEnvelope") {
-		const decoded = decode_remote_error(response.error);
-
-		if (is_decoded_remote_failure(decoded)) {
-			throw decoded;
+		if (!response) {
+			return yield* Effect.fail(
+				create_remote_transport_error(
+					new InvalidRemoteFormResponseError(envelope),
+					envelope,
+				),
+			);
 		}
 
-		throw create_remote_http_error(response.status ?? 500, response.error);
-	}
+		if (response._tag === "RemoteFormErrorEnvelope") {
+			const decoded = decode_remote_error<ErrorType>(response.error);
 
-	const result_text = response.result ?? response.data;
+			if (is_decoded_remote_failure(decoded)) {
+				return yield* Effect.fail(decoded);
+			}
 
-	if (result_text === undefined) {
-		throw create_remote_transport_error(
-			new UnsupportedRemoteFormResponseError(envelope),
-			envelope,
-		);
-	}
+			return yield* Effect.fail(
+				create_remote_http_error(response.status ?? 500, response.error),
+			);
+		}
 
-	const parsed = parse(result_text);
-	const decoded = decode_remote_form_payload<Output>(decode_payload(parsed));
+		const result_text = response.result ?? response.data;
 
-	if (!decoded) {
-		throw create_remote_transport_error(
-			new UnsupportedRemoteFormResponseError(envelope),
-			envelope,
-		);
-	}
+		if (result_text === undefined) {
+			return yield* Effect.fail(
+				create_remote_transport_error(
+					new UnsupportedRemoteFormResponseError(envelope),
+					envelope,
+				),
+			);
+		}
 
-	if (decoded.issues && decoded.issues.length > 0) {
-		throw create_remote_validation_error(decoded.issues, decoded, 400);
-	}
+		const parsed = yield* MakeEffectFromSync<unknown, ErrorType>(() => parse(result_text));
+		const payload = yield* MakeEffectFromSync<unknown, ErrorType>(() => decode_payload(parsed));
+		const decoded = decode_remote_form_payload<Output>(payload);
 
-	return decoded.result as Output;
+		if (!decoded) {
+			return yield* Effect.fail(
+				create_remote_transport_error(
+					new UnsupportedRemoteFormResponseError(envelope),
+					envelope,
+				),
+			);
+		}
+
+		if (decoded.issues && decoded.issues.length > 0) {
+			return yield* Effect.fail(create_remote_validation_error(decoded.issues, decoded, 400));
+		}
+
+		return decoded.result as Output;
+	});
 }
 
 function decode_remote_form_response_envelope(

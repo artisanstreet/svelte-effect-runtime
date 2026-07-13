@@ -13,23 +13,47 @@ import { Effect } from "effect";
  *
  * @since 2.0.0
  * @param run - Promise-producing operation that invokes a native remote helper.
+ *   The supplied signal is aborted when the Effect is interrupted.
  * @returns Effect that maps thrown values into remote failures.
  */
 export function MakeEffectFromPromise<Output, ErrorType = never>(
-	run: () => Promise<Output>,
+	run: (signal: AbortSignal) => PromiseLike<Output>,
 ): Effect.Effect<Output, RemoteFailure<ErrorType>> {
 	return Effect.tryPromise({
 		try: run,
-		catch: (error: unknown) => {
-			if (isRedirect(error)) {
-				throw error;
-			}
+		catch: normalize_effect_error<ErrorType>,
+	});
+}
 
-			if (is_decoded_remote_failure(error)) {
-				return error;
-			}
+/**
+ * Wraps a synchronous remote operation in an Effect with failure mapping.
+ *
+ * @example
+ * ```ts
+ * const Program = MakeEffectFromSync(() => decode_payload(value));
+ * ```
+ *
+ * @since 4.0.1
+ * @param run - Synchronous operation that may throw a native remote failure.
+ * @returns Effect that maps thrown values into remote failures.
+ */
+export function MakeEffectFromSync<Output, ErrorType = never>(
+	run: () => Output,
+): Effect.Effect<Output, RemoteFailure<ErrorType>> {
+	return Effect.try({
+		try: run,
+		catch: normalize_effect_error<ErrorType>,
+	});
+}
 
-			return normalize_native_error<ErrorType>(error);
-		},
-	}) as Effect.Effect<Output, RemoteFailure<ErrorType>>;
+function normalize_effect_error<ErrorType>(error: unknown): RemoteFailure<ErrorType> {
+	if (isRedirect(error)) {
+		throw error;
+	}
+
+	if (is_decoded_remote_failure(error)) {
+		return error;
+	}
+
+	return normalize_native_error<ErrorType>(error);
 }

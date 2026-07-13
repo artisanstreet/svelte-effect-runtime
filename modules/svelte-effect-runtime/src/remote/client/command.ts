@@ -1,10 +1,10 @@
 import { copy_property_descriptors, has_method } from "./utils.ts";
-import { decode_response_or_value } from "./responses.ts";
 import { InvalidCommandFactoryError } from "$/errors.ts";
 import type { RemoteFailure } from "$/remote/shared.ts";
 import type { NativeMethod, Pending } from "./types.ts";
+import { DecodeResponseOrValue } from "./responses.ts";
 import { MakeEffectFromPromise } from "./effect.ts";
-import type { Effect } from "effect";
+import { Effect } from "effect";
 
 type EffectRemoteCommandAdapter<Input, Output, ErrorType = never> = ((
 	input: undefined extends Input ? Input | void : Input,
@@ -40,19 +40,17 @@ export function create_remote_command_adapter<Input, Output, ErrorType = never>(
 	const count = pending ?? { value: 0 };
 
 	const adapter = (input: undefined extends Input ? Input | void : Input) =>
-		MakeEffectFromPromise<Output, ErrorType>(async () => {
-			count.value += 1;
-
-			try {
-				const result = invoke
-					? await invoke(input)
-					: await (native_factory as NativeMethod)(input);
-
-				return await decode_response_or_value<Output, ErrorType>(result, decode_payload);
-			} finally {
-				count.value -= 1;
-			}
-		});
+		Effect.acquireUseRelease(
+			AcquirePending(count),
+			() =>
+				InvokeCommand<Input, Output, ErrorType>(
+					native_factory,
+					invoke,
+					input,
+					decode_payload,
+				),
+			() => ReleasePending(count),
+		);
 
 	copy_property_descriptors(native_factory, adapter);
 
@@ -63,4 +61,35 @@ export function create_remote_command_adapter<Input, Output, ErrorType = never>(
 	}
 
 	return adapter as EffectRemoteCommandAdapter<Input, Output, ErrorType>;
+}
+
+function AcquirePending(pending: Pending): Effect.Effect<void> {
+	return Effect.sync(() => {
+		pending.value += 1;
+	});
+}
+
+function ReleasePending(pending: Pending): Effect.Effect<void> {
+	return Effect.sync(() => {
+		pending.value -= 1;
+	});
+}
+
+function InvokeCommand<Input, Output, ErrorType>(
+	native_factory: unknown,
+	invoke: NativeMethod | undefined,
+	input: undefined extends Input ? Input | void : Input,
+	decode_payload: (value: unknown) => unknown,
+): Effect.Effect<Output, RemoteFailure<ErrorType>> {
+	return Effect.gen(function* () {
+		const result = yield* MakeEffectFromPromise<unknown, ErrorType>(() =>
+			Promise.resolve(
+				invoke
+					? invoke.call(native_factory, input)
+					: (native_factory as NativeMethod)(input),
+			),
+		);
+
+		return yield* DecodeResponseOrValue<Output, ErrorType>(result, decode_payload);
+	});
 }

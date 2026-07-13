@@ -1,19 +1,19 @@
-import { test } from "vitest";
-import { assert_equals, assert_throws, assert_rejects } from "./helpers/assert.ts";
-import { isRedirect, redirect as svelte_redirect } from "@sveltejs/kit";
-import { Effect, Schema, Stream } from "effect";
-import { stringify } from "devalue";
 import {
 	create_remote_command_adapter,
 	create_remote_form_adapter,
 	create_remote_live_query_adapter,
 	create_remote_query_adapter,
 } from "../../../modules/svelte-effect-runtime/src/remote/client.ts";
-import { to_form_data } from "../../../modules/svelte-effect-runtime/src/remote/client/form-data.ts";
-import { normalize_native_error } from "../../../modules/svelte-effect-runtime/src/remote/client/failures.ts";
 import { create_serialized_remote_failure_envelope } from "../../../modules/svelte-effect-runtime/src/remote/shared.ts";
+import { normalize_native_error } from "../../../modules/svelte-effect-runtime/src/remote/client/failures.ts";
+import { to_form_data } from "../../../modules/svelte-effect-runtime/src/remote/client/form-data.ts";
 import { reset_dispatcher } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
+import { assert_equals, assert_throws, assert_rejects } from "./helpers/assert.ts";
 import { Live } from "../../../modules/svelte-effect-runtime/src/live.ts";
+import { isRedirect, redirect as svelte_redirect } from "@sveltejs/kit";
+import { Effect, Schema, Stream } from "effect";
+import { stringify } from "devalue";
+import { test } from "vitest";
 
 test("remote query adapter preserves decoded domain failures", async () => {
 	const domain_error = { _tag: "DomainError", message: "nope" };
@@ -86,6 +86,36 @@ test("remote query adapter wraps network failures as transport errors", async ()
 	const error = await assert_rejects(() => Effect.runPromise(query(undefined)));
 
 	assert_equals((error as { _tag?: string })._tag, "RemoteTransportError");
+});
+
+test("remote query load stays lazy until its Effect runs", async () => {
+	let load_calls = 0;
+
+	const native = {
+		load: () => {
+			load_calls += 1;
+
+			return Promise.resolve("loaded");
+		},
+	};
+	const query = create_remote_query_adapter(native, (value) => value, "");
+	const QueryProgram = query(undefined);
+
+	assert_equals(load_calls, 0);
+	assert_equals(await Effect.runPromise(QueryProgram), "loaded");
+	assert_equals(load_calls, 1);
+});
+
+test("remote response decoding preserves tag-only FormError failures", async () => {
+	const form_error = { _tag: "FormError" };
+	const native = {
+		load: () => Promise.resolve(new Response(JSON.stringify(form_error), { status: 400 })),
+	};
+	const query = create_remote_query_adapter(native, (value) => value, "");
+
+	const error = await assert_rejects(() => Effect.runPromise(query(undefined)));
+
+	assert_equals(error, form_error);
 });
 
 test("remote query adapter prefers callable query over hydratable load", async () => {
@@ -318,6 +348,7 @@ test("remote live query adapter returns a stream with separate controls", async 
 	assert_equals("current" in query, false);
 	assert_equals("ready" in query, false);
 	assert_equals("reconnect" in query, false);
+	assert_equals(reconnect_called, false);
 
 	await Effect.runPromise(derived_query.pipe(Live.reconnect));
 
@@ -341,6 +372,47 @@ test("remote live status reports failed resources before closed resources", asyn
 	);
 
 	assert_equals(status[0]?._tag, "Failed");
+});
+
+test("remote live status reads transport state when the stream runs", async () => {
+	let status_reads = 0;
+
+	const native = () => ({
+		get connected() {
+			status_reads += 1;
+
+			return true;
+		},
+		[Symbol.asyncIterator]: async function* () {},
+	});
+	const query = create_remote_live_query_adapter<undefined, string>(
+		native,
+		(value) => value,
+		"",
+	)(undefined);
+	const StatusProgram = Stream.runCollect(query.pipe(Live.status, Stream.take(1)));
+
+	assert_equals(status_reads, 0);
+
+	const status = await Effect.runPromise(StatusProgram);
+
+	assert_equals(status, [{ _tag: "Open" }]);
+	assert_equals(status_reads, 1);
+});
+
+test("remote live reconnect reports missing native support as a transport failure", async () => {
+	const native = () => ({
+		[Symbol.asyncIterator]: async function* () {},
+	});
+	const query = create_remote_live_query_adapter<undefined, string>(
+		native,
+		(value) => value,
+		"",
+	)(undefined);
+
+	const error = await assert_rejects(() => Effect.runPromise(query.pipe(Live.reconnect)));
+
+	assert_equals((error as { _tag?: string })._tag, "RemoteTransportError");
 });
 
 test("remote command adapter resolves callable responses and tracks pending", async () => {
@@ -373,6 +445,50 @@ test("remote command adapter resolves callable responses and tracks pending", as
 	const result = await promise;
 
 	assert_equals(result, { ok: "publish" });
+	assert_equals(command.pending, 0);
+});
+
+test("remote command invocation and pending accounting stay lazy", async () => {
+	let invoke_calls = 0;
+
+	const native = () => {
+		invoke_calls += 1;
+
+		return Promise.resolve("done");
+	};
+	const command = create_remote_command_adapter<void, string>(native, (value) => value);
+	const CommandProgram = command(undefined);
+
+	assert_equals(invoke_calls, 0);
+	assert_equals(command.pending, 0);
+	assert_equals(await Effect.runPromise(CommandProgram), "done");
+	assert_equals(invoke_calls, 1);
+	assert_equals(command.pending, 0);
+});
+
+test("remote command interruption releases its pending acquisition", async () => {
+	let signal_invoke_started = () => {};
+
+	const invoke_started = new Promise<void>((resolve) => {
+		signal_invoke_started = resolve;
+	});
+	const native = () => {
+		signal_invoke_started();
+
+		return new Promise<never>(() => {});
+	};
+	const command = create_remote_command_adapter<void, never>(native, (value) => value);
+	const controller = new AbortController();
+	const running = Effect.runPromiseExit(command(undefined), { signal: controller.signal });
+
+	await invoke_started;
+
+	assert_equals(command.pending, 1);
+
+	controller.abort();
+
+	await running;
+
 	assert_equals(command.pending, 0);
 });
 
@@ -627,6 +743,59 @@ test("remote form adapter posts explicit input when native submit is form-bound"
 		} else {
 			Reflect.deleteProperty(globalThis, "location");
 		}
+	}
+});
+
+test("interrupting a remote form aborts its lazy fetch request", async () => {
+	const original_fetch = globalThis.fetch;
+	let fetch_calls = 0;
+	let request_signal: AbortSignal | undefined;
+	let signal_fetch_started = () => {};
+
+	const fetch_started = new Promise<void>((resolve) => {
+		signal_fetch_started = resolve;
+	});
+
+	globalThis.fetch = ((_url: string | URL | Request, init?: RequestInit) => {
+		fetch_calls += 1;
+		request_signal = init?.signal ?? undefined;
+		signal_fetch_started();
+
+		return new Promise<Response>((_resolve, reject) => {
+			request_signal?.addEventListener("abort", () => reject(new Error("aborted")), {
+				once: true,
+			});
+		});
+	}) as typeof fetch;
+
+	try {
+		const form = create_remote_form_adapter<{ title: string }, string>(
+			{
+				method: "POST",
+				action: "?/remote=abc%2Fcreate",
+			},
+			(value) => value,
+			"/_app/remote",
+		);
+		const FormProgram = form({ title: "draft" });
+
+		assert_equals(fetch_calls, 0);
+
+		const controller = new AbortController();
+		const running = Effect.runPromiseExit(FormProgram, { signal: controller.signal });
+
+		await fetch_started;
+
+		assert_equals(fetch_calls, 1);
+		assert_equals(request_signal?.aborted, false);
+
+		controller.abort();
+
+		await running;
+
+		assert_equals(request_signal?.aborted, true);
+	} finally {
+		globalThis.fetch = original_fetch;
 	}
 });
 

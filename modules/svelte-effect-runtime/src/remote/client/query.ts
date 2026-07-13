@@ -2,8 +2,8 @@ import { InvalidLiveQueryFactoryError, InvalidQueryFactoryError } from "$/errors
 import type { EffectRemoteQueryUpdateBrand, NativeMethod } from "./types.ts";
 import { make_remote_live_stream, type RemoteLiveStream } from "$/live.ts";
 import { copy_property_descriptors, has_method } from "./utils.ts";
-import { resolve_query_result } from "./query-result.ts";
 import type { RemoteFailure } from "$/remote/shared.ts";
+import { ResolveQueryResult } from "./query-result.ts";
 import { normalize_native_error } from "./failures.ts";
 import { MakeEffectFromPromise } from "./effect.ts";
 import { Effect } from "effect";
@@ -92,16 +92,19 @@ export function create_remote_query_adapter<Input, Output, ErrorType = never>(
 
 	const wrapped = ((input: RemoteInput<Input>) => {
 		if (!query) {
-			return MakeEffectFromPromise<Output, ErrorType>(async () => {
-				const result = await load?.(input);
+			return Effect.gen(function* () {
+				const result = yield* MakeEffectFromPromise<unknown, ErrorType>(() =>
+					Promise.resolve(load?.call(native_factory, input)),
+				);
 
-				return await resolve_query_result<Output>(result, decode_payload);
+				return yield* ResolveQueryResult<Output, ErrorType>(result, decode_payload);
 			}) as RemoteQueryEffect<Output, ErrorType>;
 		}
 
 		const resource = query(input);
-		const QueryEffect = MakeEffectFromPromise<Output, ErrorType>(
-			async () => await resolve_query_result<Output>(resource, decode_payload),
+		const QueryEffect = ResolveQueryResult<Output, ErrorType>(
+			resource,
+			decode_payload,
 		) as RemoteQueryEffect<Output, ErrorType>;
 
 		attach_query_resource(resource, QueryEffect);
@@ -206,7 +209,7 @@ function attach_query_resource<Output, ErrorType = never>(
 	if (typeof refresh === "function") {
 		Object.defineProperty(effect, "refresh", {
 			configurable: true,
-			value: () => MakeEffectFromPromise(() => Promise.resolve(refresh.call(resource))),
+			value: () => RefreshRemoteResource(resource, refresh),
 		});
 	}
 
@@ -223,4 +226,13 @@ function attach_query_resource<Output, ErrorType = never>(
 			value: (update: (current: Output) => Output) => with_override.call(resource, update),
 		});
 	}
+}
+
+function RefreshRemoteResource(
+	resource: unknown,
+	refresh: () => Promise<void>,
+): Effect.Effect<void, RemoteFailure<never>> {
+	return Effect.gen(function* () {
+		yield* MakeEffectFromPromise(() => Promise.resolve(refresh.call(resource)));
+	});
 }

@@ -1,3 +1,4 @@
+import { create_remote_transport_error } from "$/remote/shared.ts";
 import { InvalidLiveQueryFactoryError } from "$/errors.ts";
 import type { RemoteFailure } from "$/remote/shared.ts";
 import { Effect, Stream } from "effect";
@@ -188,44 +189,48 @@ export function make_remote_live_stream<A, ErrorType = never>(
 	return attach_live_metadata(stream, metadata) as RemoteLiveStream<A, ErrorType>;
 }
 
-const live_status = Object.assign(
+const LiveStatusStream = Object.assign(
 	function status<A, E>(stream: RemoteLiveStream<A, E>): Stream.Stream<LiveStatus, never, never> {
-		const metadata = get_live_metadata(stream);
+		return Stream.unwrap(
+			Effect.sync(() => {
+				const metadata = get_live_metadata(stream);
 
-		if (!metadata) {
-			return Stream.succeed({ _tag: "Idle" } as const);
-		}
+				if (!metadata) {
+					return Stream.succeed({ _tag: "Idle" } as const);
+				}
 
-		return Stream.succeed(read_live_status(metadata.resource)).pipe(
-			Stream.concat(
-				Stream.tick("250 millis").pipe(
-					Stream.map(() => read_live_status(metadata.resource)),
-				),
-			),
+				return Stream.succeed(read_live_status(metadata.resource)).pipe(
+					Stream.concat(
+						Stream.tick("250 millis").pipe(
+							Stream.map(() => read_live_status(metadata.resource)),
+						),
+					),
+				);
+			}),
 		);
 	},
 	{ [LIVE_OPERATOR]: true as const },
 ) satisfies LiveFactory["status"];
 
-const live_reconnect = Object.assign(
+const LiveReconnect = Object.assign(
 	function reconnect<A, E>(
 		stream: RemoteLiveStream<A, E>,
 	): Effect.Effect<void, RemoteFailure<E>, never> {
-		const metadata = get_live_metadata(stream);
-		const reconnect = metadata?.resource.reconnect;
+		return Effect.gen(function* () {
+			const metadata = get_live_metadata(stream);
+			const reconnect = metadata?.resource.reconnect;
 
-		if (!metadata || typeof reconnect !== "function") {
-			return Effect.fail(new InvalidLiveQueryFactoryError()) as unknown as Effect.Effect<
-				void,
-				RemoteFailure<E>,
-				never
-			>;
-		}
+			if (!metadata || typeof reconnect !== "function") {
+				return yield* Effect.fail(
+					create_remote_transport_error(new InvalidLiveQueryFactoryError()),
+				);
+			}
 
-		return Effect.tryPromise({
-			try: () => Promise.resolve(reconnect.call(metadata.resource)),
-			catch: metadata.on_error,
-		}) as Effect.Effect<void, RemoteFailure<E>, never>;
+			yield* Effect.tryPromise({
+				try: () => Promise.resolve(reconnect.call(metadata.resource)),
+				catch: metadata.on_error,
+			});
+		});
 	},
 	{ [LIVE_OPERATOR]: true as const },
 ) satisfies LiveFactory["reconnect"];
@@ -236,8 +241,8 @@ const live_reconnect = Object.assign(
  * @since 3.4.8
  */
 export const Live: LiveFactory = {
-	status: live_status,
-	reconnect: live_reconnect,
+	status: LiveStatusStream,
+	reconnect: LiveReconnect,
 };
 
 function as_native_live_resource<A>(resource: unknown): NativeLiveResource<A> & AsyncIterable<A> {
