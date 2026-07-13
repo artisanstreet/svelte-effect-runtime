@@ -11,7 +11,7 @@ import {
 } from "../../../svelte-effect-runtime/src/compiler/source-scan.ts";
 import type { SvelteEffectSourceScan } from "../../../svelte-effect-runtime/src/compiler/source-scan.ts";
 import { safe_markup_transform_result, safe_script_transform_result } from "./transform-results.ts";
-import { Document, extract_script_tags } from "./svelte-internals.ts";
+import type { SvelteInternalsService } from "./svelte-internals.ts";
 import type { Mapper, TransformSet } from "./types.ts";
 
 import MagicString from "magic-string";
@@ -22,7 +22,7 @@ import MagicString from "magic-string";
  *
  * @example
  * ```ts
- * const prepared = prepare_virtual_document(document, transforms);
+ * const prepared = prepare_virtual_document(document, transforms, internals);
  *
  * if (prepared) {
  * 	consume_snapshot(prepared.document, prepared.preprocessMapper);
@@ -34,10 +34,16 @@ import MagicString from "magic-string";
  *   server and used as the mapping destination.
  * @param transforms - SER markup and script transforms used to build the
  *   language server's virtual source.
+ * @param internals - Private Svelte language-server modules loaded during
+ *   bootstrap and captured by the synchronous snapshot callback.
  * @returns The transformed document and its mapper, or `null` when no virtual
  *   transformation was required.
  */
-export function prepare_virtual_document(original_document: any, transforms: TransformSet) {
+export function prepare_virtual_document(
+	original_document: any,
+	transforms: TransformSet,
+	internals: SvelteInternalsService,
+) {
 	const original_text = original_document.getText();
 	const filename = original_document.getFilePath() ?? "Component.svelte";
 	const source_uri = original_document.uri;
@@ -48,7 +54,11 @@ export function prepare_virtual_document(original_document: any, transforms: Tra
 		original_scan,
 	);
 	const normalization_mapper = normalized_declarations
-		? create_source_map_mapper(normalized_declarations.map, source_uri)
+		? create_source_map_mapper(
+				normalized_declarations.map,
+				source_uri,
+				internals.source_map_document_mapper,
+			)
 		: null;
 	const normalized_code = normalized_declarations?.code ?? original_text;
 	const normalized_scan = normalized_declarations
@@ -64,7 +74,11 @@ export function prepare_virtual_document(original_document: any, transforms: Tra
 		normalized_scan,
 	);
 	const global_typescript_mapper = global_typescript
-		? create_source_map_mapper(global_typescript.map, source_uri)
+		? create_source_map_mapper(
+				global_typescript.map,
+				source_uri,
+				internals.source_map_document_mapper,
+			)
 		: null;
 	const base_code = global_typescript?.code ?? normalized_code;
 
@@ -81,7 +95,7 @@ export function prepare_virtual_document(original_document: any, transforms: Tra
 	let current_code = markup_result.code;
 	const markup_code = current_code;
 	let script_mapper: Mapper | null = null;
-	const scripts = extract_script_tags(current_code);
+	const scripts = internals.extract_script_tags(current_code);
 
 	if (scripts?.script && has_own(scripts.script.attributes, "effect")) {
 		const pre_script_transform_code = current_code;
@@ -116,8 +130,9 @@ export function prepare_virtual_document(original_document: any, transforms: Tra
 					source: source_uri,
 				}) as unknown as Record<string, unknown>,
 				source_uri,
+				internals.source_map_document_mapper,
 			);
-			const transformed_scripts = extract_script_tags(current_code);
+			const transformed_scripts = internals.extract_script_tags(current_code);
 			const transformed_script_tag = transformed_scripts?.script;
 
 			if (changed_script_content && transformed_script_tag) {
@@ -130,6 +145,7 @@ export function prepare_virtual_document(original_document: any, transforms: Tra
 					transformed_script.relocations ?? [],
 					full_document_mapper,
 					source_uri,
+					internals,
 				);
 			} else {
 				script_mapper = full_document_mapper;
@@ -146,13 +162,14 @@ export function prepare_virtual_document(original_document: any, transforms: Tra
 					markup_result.map,
 					markup_result.relocations ?? [],
 					source_uri,
+					internals,
 				);
 
 	if (!script_mapper && !markup_mapper && !global_typescript_mapper && !normalization_mapper) {
 		return null;
 	}
 
-	const virtual_document = Document.createForTest(source_uri, current_code);
+	const virtual_document = internals.document.createForTest(source_uri, current_code);
 	virtual_document.version = original_document.version;
 	virtual_document.openedByClient = original_document.openedByClient;
 	virtual_document.config = original_document.config;

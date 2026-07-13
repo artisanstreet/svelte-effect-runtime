@@ -1,7 +1,7 @@
 import type { DocumentPosition, FragmentTagInfo, Mapper, Relocation } from "../types.ts";
+import type { SvelteInternalsService } from "../svelte-internals.ts";
 import { create_relocation_mapper } from "./relocation.ts";
 import { create_source_map_mapper } from "./source-map.ts";
-import { FragmentMapper } from "../svelte-internals.ts";
 import { is_invalid_position } from "./position.ts";
 
 /**
@@ -9,7 +9,17 @@ import { is_invalid_position } from "./position.ts";
  *
  * @example
  * ```ts
- * const mapper = create_script_content_mapper(source, code, original, next, map, [], full, uri);
+ * const mapper = create_script_content_mapper(
+ * 	source,
+ * 	code,
+ * 	original,
+ * 	next,
+ * 	map,
+ * 	[],
+ * 	full,
+ * 	uri,
+ * 	internals,
+ * );
  * ```
  *
  * @since 2.0.0
@@ -21,6 +31,7 @@ import { is_invalid_position } from "./position.ts";
  * @param relocations - Relocation ranges within the script content.
  * @param full_document_mapper - Fallback mapper for positions outside script.
  * @param source_uri - URI of the original Svelte document.
+ * @param internals - Private mapper constructors loaded during bootstrap.
  * @returns Mapper that translates script positions through nested fragment maps.
  */
 export function create_script_content_mapper(
@@ -32,18 +43,23 @@ export function create_script_content_mapper(
 	relocations: Array<Relocation>,
 	full_document_mapper: Mapper,
 	source_uri: string,
+	internals: SvelteInternalsService,
 ): Mapper {
-	const original_fragment_mapper = new FragmentMapper(
+	const original_fragment_mapper = new internals.fragment_mapper(
 		original_code,
 		original_tag_info,
 		source_uri,
 	) as Mapper;
-	const transformed_fragment_mapper = new FragmentMapper(
+	const transformed_fragment_mapper = new internals.fragment_mapper(
 		transformed_code,
 		transformed_tag_info,
 		source_uri,
 	) as Mapper;
-	const source_mapper = create_source_map_mapper(raw_map, source_uri);
+	const source_mapper = create_source_map_mapper(
+		raw_map,
+		source_uri,
+		internals.source_map_document_mapper,
+	);
 	const relocation_mapper = create_relocation_mapper(
 		original_tag_info.content,
 		transformed_tag_info.content,

@@ -1,4 +1,5 @@
 import type { DocumentPosition, Mapper, Relocation } from "../types.ts";
+import type { SvelteInternalsService } from "../svelte-internals.ts";
 import { is_invalid_position, OffsetTable } from "./position.ts";
 import { create_source_map_mapper } from "./source-map.ts";
 
@@ -37,7 +38,7 @@ type RelocationSearchResult =
  *
  * @example
  * ```ts
- * const mapper = create_relocated_source_mapper(source, code, map, ranges, uri);
+ * const mapper = create_relocated_source_mapper(source, code, map, ranges, uri, internals);
  * ```
  *
  * @since 2.0.0
@@ -46,6 +47,7 @@ type RelocationSearchResult =
  * @param raw_map - Source map returned by the runtime transform.
  * @param relocations - Offset ranges that were moved during the transform.
  * @param source_uri - URI of the original Svelte document.
+ * @param internals - Private mapper constructors loaded during bootstrap.
  * @returns Mapper that translates positions through relocations and maps.
  */
 export function create_relocated_source_mapper(
@@ -54,8 +56,13 @@ export function create_relocated_source_mapper(
 	raw_map: Record<string, unknown>,
 	relocations: Array<Relocation>,
 	source_uri: string,
+	internals: SvelteInternalsService,
 ): Mapper {
-	const source_mapper = create_source_map_mapper(raw_map, source_uri);
+	const source_mapper = create_source_map_mapper(
+		raw_map,
+		source_uri,
+		internals.source_map_document_mapper,
+	);
 	const relocation_mapper = create_relocation_mapper(
 		original_code,
 		transformed_code,
