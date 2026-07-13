@@ -36,11 +36,11 @@ import {
 	query as native_query,
 } from "$app/server";
 import {
-	is_running_remote_effect_handler,
 	make_remote_form_wrapper,
 	make_remote_live_wrapper,
 	make_remote_wrapper,
 } from "./wrappers.ts";
+import { is_running_remote_effect_handler } from "./remote-handler-context.ts";
 import { is_handler, is_unchecked, normalize_validator } from "./schema.ts";
 import { copy_property_descriptors } from "$/internal/descriptors.ts";
 import { normalize_remote_helper_error } from "$/remote/server.ts";
@@ -122,13 +122,13 @@ function to_effect_query<Input, Output, ErrorType = never>(
 }
 
 function is_current_remote_request(): boolean {
-	if (is_running_remote_effect_handler()) {
-		return false;
-	}
-
 	const detection = detect_current_remote_request();
 
 	if (detection._tag === "NoCurrentRemoteRequest") {
+		return false;
+	}
+
+	if (is_running_remote_effect_handler(detection.event)) {
 		return false;
 	}
 

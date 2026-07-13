@@ -1,4 +1,3 @@
-import { reset_test_request_event, set_test_request_event } from "./fixtures/app-server.ts";
 import {
 	Error as HandlerError,
 	Handler,
@@ -6,15 +5,22 @@ import {
 	RequestEvent,
 	ServerRuntime,
 } from "../../../modules/svelte-effect-runtime/src/server.ts";
+import { is_running_remote_effect_handler } from "../../../modules/svelte-effect-runtime/src/server/remote-handler-context.ts";
 import { reset_server_runtime } from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
-import { assert_equals, assert_rejects, assert_truthy } from "./helpers/assert.ts";
-import { isHttpError, isRedirect } from "@sveltejs/kit";
-import { afterEach, test } from "vitest";
-import { Context, Effect, Layer } from "effect";
+import { make_remote_wrapper } from "../../../modules/svelte-effect-runtime/src/server/wrappers.ts";
+import {
+	run_live_handler,
+	run_handler_effect,
+} from "../../../modules/svelte-effect-runtime/src/server/effects.ts";
+import { assert_equals, assert_false, assert_rejects, assert_truthy } from "./helpers/assert.ts";
+import { reset_test_request_event, set_test_request_event } from "./fixtures/app-server.ts";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-import { join, relative } from "node:path";
+import { isHttpError, isRedirect } from "@sveltejs/kit";
+import { Context, Effect, Layer, Stream } from "effect";
 import { spawnSync } from "node:child_process";
+import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+import { afterEach, test } from "vitest";
 
 afterEach(() => {
 	reset_test_request_event();
@@ -125,6 +131,102 @@ test("Handler rejects with ordinary Effect defects unchanged", async () => {
 	const thrown = await assert_rejects(() => handler());
 
 	assert_equals(thrown, defect);
+});
+
+test("Handler captures synchronous callback throws inside the server Effect", async () => {
+	type NativeHandler = () => Promise<string>;
+
+	const defect = new Error("synchronous handler failure");
+	const handler = Handler<NativeHandler>(() => {
+		throw defect;
+	});
+
+	set_test_request_event(make_request_event("http://localhost/synchronous-defect"));
+
+	const thrown = await assert_rejects(() => handler());
+
+	assert_equals(thrown, defect);
+});
+
+test("remote wrappers route synchronous callback throws through the SER failure channel", async () => {
+	const event = make_request_event("http://localhost/remote-defect");
+	const handler = make_remote_wrapper(() => {
+		throw new Error("synchronous remote failure");
+	}, "Query");
+
+	set_test_request_event(event);
+
+	const thrown = await assert_rejects(() => handler(undefined));
+
+	assert_truthy(isHttpError(thrown, 500));
+
+	const body = thrown.body as {
+		readonly __svelte_effect_remote__: boolean;
+	};
+
+	assert_truthy(body.__svelte_effect_remote__);
+	assert_false(is_running_remote_effect_handler(event));
+});
+
+test("remote handler ownership stays isolated across interleaved requests", async () => {
+	const first_event = make_request_event("http://localhost/first-remote");
+	const second_event = make_request_event("http://localhost/second-remote");
+	let release_first_request = () => {};
+	let signal_first_started = () => {};
+
+	const first_release = new Promise<void>((resolve) => {
+		release_first_request = resolve;
+	});
+	const first_started = new Promise<void>((resolve) => {
+		signal_first_started = resolve;
+	});
+	const FirstProgram = Effect.gen(function* () {
+		assert_truthy(is_running_remote_effect_handler(first_event));
+		assert_false(is_running_remote_effect_handler(second_event));
+
+		signal_first_started();
+		yield* Effect.promise(() => first_release);
+
+		assert_truthy(is_running_remote_effect_handler(first_event));
+
+		return "first";
+	});
+	const SecondProgram = Effect.gen(function* () {
+		assert_truthy(is_running_remote_effect_handler(first_event));
+		assert_truthy(is_running_remote_effect_handler(second_event));
+		yield* Effect.void;
+
+		return "second";
+	});
+
+	const first_result = run_handler_effect(FirstProgram, first_event);
+
+	await first_started;
+
+	assert_truthy(is_running_remote_effect_handler(first_event));
+	assert_false(is_running_remote_effect_handler(second_event));
+	assert_equals(await run_handler_effect(SecondProgram, second_event), "second");
+	assert_truthy(is_running_remote_effect_handler(first_event));
+	assert_false(is_running_remote_effect_handler(second_event));
+
+	release_first_request();
+
+	assert_equals(await first_result, "first");
+	assert_false(is_running_remote_effect_handler(first_event));
+	assert_false(is_running_remote_effect_handler(second_event));
+});
+
+test("remote handler ownership stays active while a live Stream is evaluated", async () => {
+	const event = make_request_event("http://localhost/live-remote");
+	const source = await run_live_handler(
+		() => Stream.fromEffect(Effect.sync(() => is_running_remote_effect_handler(event))),
+		event,
+	);
+	const iterator = source[Symbol.asyncIterator]();
+
+	assert_equals(await iterator.next(), { done: false, value: true });
+	assert_equals(await iterator.next(), { done: true, value: undefined });
+	assert_false(is_running_remote_effect_handler(event));
 });
 
 test("Handler preserves native argument and output types", async () => {

@@ -1,6 +1,7 @@
 import { error as svelte_error, invalid as svelte_invalid } from "@sveltejs/kit";
 import { create_serialized_remote_failure_envelope } from "$/remote/shared.ts";
 import { encode_remote_failure, run_remote_effect } from "$/remote/server.ts";
+import { RunInsideRemoteEffectHandler } from "./remote-handler-context.ts";
 import { get_server_runtime_or_throw, RequestEvent } from "./runtime.ts";
 import type { RequestEvent as RequestEventShape } from "./runtime.ts";
 import { InvalidLiveQueryReturnError } from "$/errors.ts";
@@ -11,8 +12,17 @@ type ResolvedLiveSource<A> = AsyncIterable<A>;
 
 type LiveHandlerResult<A> = Stream.Stream<A, unknown, unknown>;
 
+type LiveHandler<A> = () => LiveHandlerResult<A>;
+
 /**
  * Checks whether a value is an Effect generator return object.
+ *
+ * @example
+ * ```ts
+ * if (is_generator_result(value)) {
+ *   return Effect.gen(value);
+ * }
+ * ```
  *
  * @since 2.0.0
  * @param value - Value to inspect.
@@ -31,6 +41,11 @@ export function is_generator_result<A>(
 /**
  * Normalizes an Effect-like handler return value into an Effect.
  *
+ * @example
+ * ```ts
+ * const Program = ToEffect(function* () { return 1; });
+ * ```
+ *
  * @since 2.0.0
  * @param value - Effect or generator return value.
  * @returns Normalized Effect.
@@ -46,6 +61,11 @@ export function ToEffect<A, E, R>(value: EffectLike<A, E, R>): Effect.Effect<A, 
 /**
  * Checks whether a value is an Effect Stream live source.
  *
+ * @example
+ * ```ts
+ * if (!is_live_source(value)) throw new InvalidLiveQueryReturnError();
+ * ```
+ *
  * @since 2.0.0
  * @param value - Value to inspect.
  * @returns Whether the value is an Effect Stream.
@@ -57,6 +77,11 @@ export function is_live_source<A>(value: unknown): value is Stream.Stream<A, unk
 /**
  * Runs and normalizes a live query handler result with request services
  * available to Effect Streams.
+ *
+ * @example
+ * ```ts
+ * const source = await run_live_handler_source(Stream.make(1), event);
+ * ```
  *
  * @since 2.0.0
  * @param value - Live query source or Effect that resolves to one.
@@ -71,9 +96,48 @@ export function run_live_handler_source<A>(
 		throw new InvalidLiveQueryReturnError();
 	}
 
+	return run_live_source_effect(ToLiveSourceEffect(value, event), event);
+}
+
+/**
+ * Constructs and runs a live remote handler inside the request-local SER
+ * ownership scope.
+ *
+ * @example
+ * ```ts
+ * const source = await run_live_handler(() => Stream.make(1, 2), event);
+ * ```
+ *
+ * @since 4.0.1
+ * @param handler - User callback that constructs the live Effect Stream.
+ * @param event - SvelteKit request event for this remote call.
+ * @returns Promise resolving with a source SvelteKit can stream.
+ * @internal
+ */
+export function run_live_handler<A>(
+	handler: LiveHandler<A>,
+	event: RequestEventShape,
+): Promise<ResolvedLiveSource<A>> {
+	const LiveSourceEffect = Effect.suspend(() => {
+		const value = handler();
+
+		if (!is_live_source(value)) {
+			return Effect.die(new InvalidLiveQueryReturnError());
+		}
+
+		return ToLiveSourceEffect(value, event);
+	});
+
+	return run_live_source_effect(RunInsideRemoteEffectHandler(event, LiveSourceEffect), event);
+}
+
+function run_live_source_effect<A>(
+	effect: Effect.Effect<ResolvedLiveSource<A>, unknown, unknown>,
+	event: RequestEventShape,
+): Promise<ResolvedLiveSource<A>> {
 	const runtime = get_server_runtime_or_throw();
 	const EffectWithRequestEvent = Effect.provideService(
-		ToLiveSourceEffect(value),
+		effect,
 		RequestEvent,
 		event,
 	) as Effect.Effect<ResolvedLiveSource<A>, unknown, unknown>;
@@ -83,47 +147,65 @@ export function run_live_handler_source<A>(
 
 function ToLiveSourceEffect<A>(
 	value: LiveHandlerResult<A>,
+	event: RequestEventShape,
 ): Effect.Effect<ResolvedLiveSource<A>, unknown, unknown> {
 	return Stream.toAsyncIterableEffect(value as Stream.Stream<A, unknown, unknown>).pipe(
-		Effect.map(wrap_live_source_errors),
+		Effect.map((source) => wrap_live_source_errors(source, event)),
 	) as Effect.Effect<ResolvedLiveSource<A>, unknown, unknown>;
 }
 
-function wrap_live_source_errors<A>(source: AsyncIterable<A>): AsyncIterable<A> {
+function wrap_live_source_errors<A>(
+	source: AsyncIterable<A>,
+	event: RequestEventShape,
+): AsyncIterable<A> {
 	return {
 		[Symbol.asyncIterator]() {
 			const iterator = source[Symbol.asyncIterator]();
 
 			return {
-				async next() {
-					try {
-						return await iterator.next();
-					} catch (error: unknown) {
-						throw_live_source_error(error);
-					}
+				next() {
+					return RunLiveIteratorCall(event, () => iterator.next());
 				},
 
-				async return(value?: unknown) {
+				return(value?: unknown) {
 					if (iterator.return) {
-						return await iterator.return(value);
+						return RunLiveIteratorCall(
+							event,
+							() => iterator.return?.(value) as PromiseLike<IteratorResult<A>>,
+						);
 					}
 
-					return {
+					return Promise.resolve({
 						done: true,
 						value: undefined as A,
-					};
+					});
 				},
 
-				async throw(error?: unknown) {
+				throw(error?: unknown) {
 					if (iterator.throw) {
-						return await iterator.throw(error);
+						return RunLiveIteratorCall(
+							event,
+							() => iterator.throw?.(error) as PromiseLike<IteratorResult<A>>,
+						);
 					}
 
-					throw_live_source_error(error);
+					return RunLiveIteratorCall(event, () => Promise.reject(error));
 				},
 			};
 		},
 	};
+}
+
+function RunLiveIteratorCall<A>(event: RequestEventShape, run: () => PromiseLike<A>): Promise<A> {
+	const runtime = get_server_runtime_or_throw();
+	const IteratorEffect = Effect.tryPromise({
+		try: run,
+		catch: (error: unknown) => error,
+	}).pipe(Effect.catch((error) => Effect.sync(() => throw_live_source_error(error))));
+
+	return runtime.runPromise(
+		RunInsideRemoteEffectHandler(event, IteratorEffect) as Effect.Effect<A, unknown, unknown>,
+	);
 }
 
 function throw_live_source_error(error: unknown): never {
@@ -136,6 +218,11 @@ function throw_live_source_error(error: unknown): never {
 /**
  * Runs a remote handler Effect with the current request event provided.
  *
+ * @example
+ * ```ts
+ * const result = await run_handler_effect(Effect.succeed(1), event);
+ * ```
+ *
  * @since 2.0.0
  * @param value - Handler return value.
  * @param event - SvelteKit request event for this remote call.
@@ -147,7 +234,7 @@ export function run_handler_effect<A>(
 ): Promise<A> {
 	const runtime = get_server_runtime_or_throw();
 	const EffectWithRequestEvent = Effect.provideService(
-		ToEffect(value),
+		RunInsideRemoteEffectHandler(event, ToEffect(value)),
 		RequestEvent,
 		event,
 	) as Effect.Effect<A, unknown, unknown>;

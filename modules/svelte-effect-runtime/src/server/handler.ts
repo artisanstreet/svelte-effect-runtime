@@ -45,8 +45,8 @@ export function Handler<NativeHandler extends (...arguments_: never[]) => unknow
 	const native_handler = async (...arguments_: Parameters<NativeHandler>) => {
 		const event = get_native_request_event();
 		const runtime = get_server_runtime_or_throw();
-		const value = handler(...arguments_);
-		const EffectWithRequestEvent = Effect.provideService(ToEffect(value), RequestEvent, event);
+		const HandlerEffect = Effect.suspend(() => ToEffect(handler(...arguments_)));
+		const EffectWithRequestEvent = Effect.provideService(HandlerEffect, RequestEvent, event);
 
 		return await runtime.runPromise(EffectWithRequestEvent);
 	};
