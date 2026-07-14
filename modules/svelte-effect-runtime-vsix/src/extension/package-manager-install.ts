@@ -73,6 +73,14 @@ class PackageManagerInstallError extends Data.TaggedError("PackageManagerInstall
 	readonly message: string;
 }> {}
 
+const RunCommandInvocation = (invocation: CommandInvocation, cwd?: string) =>
+	Effect.acquireUseRelease(
+		SpawnCommandInvocation(invocation, cwd),
+		(running_command) => running_command.completion,
+		(running_command) =>
+			TerminateProcessTree(running_command.child, running_command.AwaitClose),
+	);
+
 export class PackageManagerCommand extends Context.Service<
 	PackageManagerCommand,
 	{
@@ -169,7 +177,6 @@ export function make_package_manager_candidates(
 	];
 }
 
-/** Installs the language-server package while keeping process cleanup scoped. */
 export const RunPackageManagerInstall = <R>(options: PackageManagerInstallOptions<R>) =>
 	Effect.gen(function* () {
 		const command = yield* PackageManagerCommand;
@@ -234,18 +241,6 @@ export const RunPackageManagerInstall = <R>(options: PackageManagerInstallOption
 		});
 	});
 
-function RunCommandInvocation(
-	invocation: CommandInvocation,
-	cwd?: string,
-): Effect.Effect<PackageManagerCommandResult, PackageManagerCommandError> {
-	return Effect.acquireUseRelease(
-		SpawnCommandInvocation(invocation, cwd),
-		(running_command) => running_command.completion,
-		(running_command) =>
-			TerminateProcessTree(running_command.child, running_command.AwaitClose),
-	);
-}
-
 const SpawnCommandInvocation = (invocation: CommandInvocation, cwd?: string) =>
 	Effect.try({
 		try: () => {
@@ -254,9 +249,8 @@ const SpawnCommandInvocation = (invocation: CommandInvocation, cwd?: string) =>
 				PackageManagerCommandError
 			>();
 			const process_closed = Deferred.makeUnsafe<void>();
-			const stdout_chunks: Buffer[] = [];
-			const stderr_chunks: Buffer[] = [];
-			let output_bytes = 0;
+			const stdout = { bytes: 0, chunks: [] as Buffer[] };
+			const stderr = { bytes: 0, chunks: [] as Buffer[] };
 			let output_exceeded = false;
 			const child = spawn(invocation.command, invocation.args, {
 				...(cwd === undefined ? {} : { cwd }),
@@ -276,46 +270,46 @@ const SpawnCommandInvocation = (invocation: CommandInvocation, cwd?: string) =>
 							cause: new Error(
 								`Command output exceeded ${max_command_output_bytes} bytes.`,
 							),
-							stderr: Buffer.concat(stderr_chunks).toString(),
-							stdout: Buffer.concat(stdout_chunks).toString(),
+							stderr: Buffer.concat(stderr.chunks).toString(),
+							stdout: Buffer.concat(stdout.chunks).toString(),
 						}),
 					),
 				);
-			const record_output = (chunks: Buffer[], chunk: Buffer) => {
+			const record_output = (stream: typeof stdout, chunk: Buffer) => {
 				if (output_exceeded) {
 					return;
 				}
 
-				output_bytes += chunk.byteLength;
+				stream.bytes += chunk.byteLength;
 
-				if (output_bytes > max_command_output_bytes) {
+				if (stream.bytes > max_command_output_bytes) {
 					output_exceeded = true;
 					complete_with_output_error();
 
 					return;
 				}
 
-				chunks.push(chunk);
+				stream.chunks.push(chunk);
 			};
 
-			child.stdout?.on("data", (chunk: Buffer) => record_output(stdout_chunks, chunk));
-			child.stderr?.on("data", (chunk: Buffer) => record_output(stderr_chunks, chunk));
+			child.stdout?.on("data", (chunk: Buffer) => record_output(stdout, chunk));
+			child.stderr?.on("data", (chunk: Buffer) => record_output(stderr, chunk));
 			child.once("error", (error) => {
 				Deferred.doneUnsafe(
 					completion,
 					Effect.fail(
 						new PackageManagerCommandError({
 							cause: error,
-							stderr: Buffer.concat(stderr_chunks).toString(),
-							stdout: Buffer.concat(stdout_chunks).toString(),
+							stderr: Buffer.concat(stderr.chunks).toString(),
+							stdout: Buffer.concat(stdout.chunks).toString(),
 						}),
 					),
 				);
 			});
 			child.once("close", (code, signal) => {
 				const result = {
-					stderr: Buffer.concat(stderr_chunks).toString(),
-					stdout: Buffer.concat(stdout_chunks).toString(),
+					stderr: Buffer.concat(stderr.chunks).toString(),
+					stdout: Buffer.concat(stdout.chunks).toString(),
 				};
 
 				Deferred.doneUnsafe(process_closed, Effect.void);

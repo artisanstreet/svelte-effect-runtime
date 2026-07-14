@@ -5,6 +5,7 @@ function fail(name: string): never {
 type RemoteFactory = (...args: unknown[]) => unknown;
 
 let current_request_event: unknown;
+let current_command_factory: RemoteFactory | undefined;
 let current_prerender_factory: RemoteFactory | undefined;
 
 export function query(): never {
@@ -21,8 +22,12 @@ export namespace query {
 	}
 }
 
-export function command(): never {
-	return fail("command");
+export function command(...args: unknown[]): unknown {
+	if (!current_command_factory) {
+		return fail("command");
+	}
+
+	return current_command_factory(...args);
 }
 
 export function form(): never {
@@ -51,6 +56,14 @@ export function set_test_request_event(event: unknown): void {
 
 export function reset_test_request_event(): void {
 	current_request_event = undefined;
+}
+
+export function set_test_command(factory: RemoteFactory): void {
+	current_command_factory = factory;
+}
+
+export function reset_test_command(): void {
+	current_command_factory = undefined;
 }
 
 export function set_test_prerender(factory: RemoteFactory): void {

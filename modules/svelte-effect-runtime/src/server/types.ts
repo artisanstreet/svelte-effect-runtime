@@ -1,5 +1,8 @@
 import type { RemoteFormInput, RemoteQuery, RemoteQueryOverride } from "@sveltejs/kit";
-import type { EffectRemoteForm as ClientEffectRemoteForm } from "$/remote/client.ts";
+import type {
+	EffectRemoteCommandCall as ClientEffectRemoteCommandCall,
+	EffectRemoteForm as ClientEffectRemoteForm,
+} from "$/remote/client.ts";
 import type { Effect, Layer, ManagedRuntime, Schema, Stream } from "effect";
 import type { create_form_error, RemoteFailure } from "$/remote/shared.ts";
 import type { RemoteLiveStream } from "$/live.ts";
@@ -597,19 +600,24 @@ export type EffectRemoteLiveQueryFunction<Input, A, E = never> = [Input] extends
 		: (input: Input) => EffectRemoteLiveQuery<A, E>;
 
 /**
- * Effect-returning command type with SvelteKit's pending counter preserved.
+ * Effect returned by a command invocation, including SvelteKit's per-call
+ * query update selection.
  *
- * @example
- * ```ts
- * const upvote: EffectRemoteCommand<string, number> = Object.assign(
- *   (id: string) => Effect.succeed(id.length),
- *   { pending: 0 },
- * );
- * ```
+ * @since 4.0.0
+ */
+export type EffectRemoteCommandCall<A, E = never> = ClientEffectRemoteCommandCall<A, E>;
+
+/**
+ * Effect-returning command type with SvelteKit's pending counter and per-call
+ * updates preserved.
  *
  * @since 2.0.0
  */
-export type EffectRemoteCommand<Input, A, E = never> = EffectRemoteFunction<Input, A, E> & {
+export type EffectRemoteCommand<Input, A, E = never> = ([Input] extends [void]
+	? () => EffectRemoteCommandCall<A, E>
+	: undefined extends Input
+		? (input?: Input) => EffectRemoteCommandCall<A, E>
+		: (input: Input) => EffectRemoteCommandCall<A, E>) & {
 	readonly pending: number;
 };
 

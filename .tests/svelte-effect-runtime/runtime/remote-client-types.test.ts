@@ -116,6 +116,37 @@ form.enhance(({ result, submit }) =>
 	);
 });
 
+test("keyed remote forms remain Effect-callable", async () => {
+	await assert_type_checks(
+		"keyed-form-callable.ts",
+		`
+import { Effect, Schema } from "effect";
+import { Form } from "__RUNTIME__/modules/svelte-effect-runtime/src/mod.ts";
+import { create_remote_form_adapter } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
+import type { RemoteFailure } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/shared.ts";
+
+const client_form = create_remote_form_adapter<{ title: string }, { id: string }>(
+  {},
+  (value) => value,
+);
+const ClientSubmit: Effect.Effect<{ id: string }, RemoteFailure<never>> =
+  client_form.for("profile")({ title: "draft" });
+
+const PublicForm = Form(
+  Schema.Struct({ title: Schema.String }),
+  ({ data }) => Effect.succeed({ id: data.title }),
+);
+const PublicSubmit: Effect.Effect<{ id: string }, RemoteFailure<never>> =
+  PublicForm.for("profile")({ title: "draft" });
+
+Effect.gen(function* () {
+  yield* ClientSubmit;
+  yield* PublicSubmit;
+});
+`,
+	);
+});
+
 test("remote client adapters keep structured remote failure types", async () => {
 	await assert_type_checks(
 		"remote-failure-types.ts",
@@ -222,6 +253,63 @@ void clock_stream;
 	);
 });
 
+test("remote command updates preserve client and public Effect types", async () => {
+	await assert_type_checks(
+		"remote-command-updates.ts",
+		`
+import { Effect, Schema, Stream } from "effect";
+import { Command, Query } from "__RUNTIME__/modules/svelte-effect-runtime/src/mod.ts";
+import {
+  create_remote_command_adapter,
+  create_remote_query_adapter,
+} from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
+import type { RemoteFailure } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/shared.ts";
+import type { RemoteQueryFunction } from "@sveltejs/kit";
+
+const client_posts = create_remote_query_adapter<void, string[]>(
+  () => Promise.resolve(["one"]),
+  (value) => value,
+);
+const client_command = create_remote_command_adapter<{ id: string }, string>(
+  (input: { id: string }) => Promise.resolve(input.id),
+  (value) => value,
+);
+const ClientUpdated: Effect.Effect<string, RemoteFailure<never>> =
+  client_command({ id: "one" }).updates(client_posts);
+
+const PublicPosts = Query(() => Effect.succeed(["one"]));
+const PublicPostsById = Query(
+  Schema.Struct({ id: Schema.String }),
+  ({ id }) => Effect.succeed([id]),
+);
+const PublicClockById = Query.live(
+  Schema.Struct({ id: Schema.String }),
+  ({ id }) => Stream.make(id),
+);
+const PublicCommand = Command(() => Effect.succeed("done"));
+declare const NativePosts: RemoteQueryFunction<{ id: string }, string[]>;
+const PublicUpdated: Effect.Effect<string, RemoteFailure<never>> =
+  PublicCommand().updates(PublicPosts);
+const PublicParameterizedUpdated: Effect.Effect<string, RemoteFailure<never>> =
+  PublicCommand().updates(PublicPostsById, PublicClockById);
+const NativeUpdated: Effect.Effect<string, RemoteFailure<never>> =
+  PublicCommand().updates(NativePosts);
+
+Effect.gen(function* () {
+  yield* ClientUpdated;
+  yield* PublicUpdated;
+  yield* PublicParameterizedUpdated;
+  yield* NativeUpdated;
+});
+
+/** @ts-expect-error command adapters are not query update targets */
+client_command({ id: "one" }).updates(client_command);
+/** @ts-expect-error public commands are not query update targets */
+PublicCommand().updates(PublicCommand);
+`,
+	);
+});
+
 test("remote form types reject invalid preflight and command updates", async () => {
 	await assert_type_checks(
 		"remote-form-negative-boundaries.ts",
@@ -246,6 +334,10 @@ const form = create_remote_form_adapter<RemoteFormInput | undefined, { id: strin
   {},
   (value) => value,
 );
+const named_form = create_remote_form_adapter<{ name: string }, { id: string }>(
+  {},
+  (value) => value,
+);
 const posts = create_remote_query_adapter<void, string[]>(
   () => Promise.resolve(["one"]),
   (value) => value as string[],
@@ -259,6 +351,9 @@ form();
 form.submit();
 form.preflight(schema);
 form.preflight(Schema.Struct({ name: Schema.String }));
+named_form.preflight(Schema.Struct({ name: Schema.String }));
+/** @ts-expect-error Effect Schema encoded shape must match the form input */
+named_form.preflight(Schema.Struct({ id: Schema.Number }));
 /** @ts-expect-error preflight expects a Standard Schema or Effect Schema */
 form.preflight(123);
 

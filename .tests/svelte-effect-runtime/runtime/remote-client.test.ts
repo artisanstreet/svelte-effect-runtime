@@ -17,6 +17,9 @@ import { error as svelte_error, isRedirect, redirect as svelte_redirect } from "
 import { reset_dispatcher } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
 import { Live } from "../../../modules/svelte-effect-runtime/src/live.ts";
 import { Cause, Effect, Exit, Fiber, Schema, Stream } from "effect";
+import { pathToFileURL } from "node:url";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import { assert_equals, assert_throws } from "./helpers/assert.ts";
 import { afterAll, test } from "vitest";
 import { stringify } from "devalue";
@@ -685,6 +688,50 @@ test("remote command invocation and pending accounting stay lazy", async () => {
 	assert_equals(command.pending, 0);
 });
 
+test("remote command updates are applied immediately and stay scoped to one invocation", async () => {
+	const events: string[] = [];
+	const update_targets: unknown[][] = [];
+	const posts = create_remote_query_adapter<void, string[]>(
+		() => Promise.resolve(["one"]),
+		(value) => value,
+	);
+	const native = (input: string) => {
+		events.push(`invoke:${input}`);
+
+		const result = Promise.resolve(input).then((value) => {
+			events.push(`settled:${input}`);
+
+			return value;
+		}) as Promise<string> & {
+			updates: (...updates: unknown[]) => Promise<string>;
+		};
+
+		result.updates = (...updates: unknown[]) => {
+			events.push(`updates:${input}`);
+			update_targets.push(updates);
+
+			return result;
+		};
+
+		return result;
+	};
+	const command = create_remote_command_adapter<string, string>(native, (value) => value);
+	const UpdatedCommand = command("first").updates(posts);
+	const PlainCommand = command("second");
+
+	assert_equals(events, []);
+	assert_equals(await get_server_dispatcher().run(UpdatedCommand), "first");
+	assert_equals(await get_server_dispatcher().run(PlainCommand), "second");
+	assert_equals(events, [
+		"invoke:first",
+		"updates:first",
+		"settled:first",
+		"invoke:second",
+		"settled:second",
+	]);
+	assert_equals(update_targets, [[posts]]);
+});
+
 test("remote command interruption releases its pending acquisition", async () => {
 	let signal_invoke_started = () => {};
 
@@ -747,11 +794,11 @@ test("remote command adapter supports invoke objects and rejects invalid factori
 	);
 });
 
-test("remote form data encodes nested scalar, array, blob, and empty values", () => {
-	const blob = new Blob(["avatar"]);
+test("current SvelteKit decodes SER multipart form data", async () => {
+	const avatar = new File(["avatar"], "avatar.txt", { type: "text/plain" });
 	const form_data = to_form_data({
 		active: true,
-		avatar: blob,
+		avatar,
 		count: 2,
 		draft: false,
 		nested: {
@@ -765,33 +812,37 @@ test("remote form data encodes nested scalar, array, blob, and empty values", ()
 		tags: ["svelte", "effect"],
 		title: "Hello",
 	});
-
-	assert_equals(form_data.get("title"), "Hello");
-	assert_equals(form_data.get("n:count"), "2");
-	assert_equals(form_data.get("b:active"), "on");
-	assert_equals(form_data.has("b:draft"), false);
-	assert_equals(form_data.get("tags[0]"), "svelte");
-	assert_equals(form_data.get("tags[1]"), "effect");
-	assert_equals(form_data.get("rows[0].title"), "First");
-	assert_equals(form_data.get("n:rows[1].count"), "2");
-	assert_equals(form_data.get("nested.nil"), "");
-	assert_equals(form_data.has("nested.missing"), false);
-	assert_equals(form_data.get("avatar") instanceof Blob, true);
-});
-
-test("remote form data indexes arrays of objects", () => {
-	const form_data = to_form_data({
-		variants: [
-			{ content_type: "image/avif", suffix: 400 },
-			{ content_type: "image/webp", suffix: 800 },
-		],
+	const request = new Request("https://example.test/_app/remote/abc/create", {
+		method: "POST",
+		body: form_data,
 	});
+	const decoded = await deserialize_with_current_sveltekit(request);
+	const data = decoded.data as {
+		active: boolean;
+		avatar: File;
+		count: number;
+		draft: boolean;
+		nested: { nil: string };
+		rows: Array<{ count: number; title: string }>;
+		tags: string[];
+		title: string;
+	};
 
-	assert_equals(form_data.get("variants[0].content_type"), "image/avif");
-	assert_equals(form_data.get("n:variants[0].suffix"), "400");
-	assert_equals(form_data.get("variants[1].content_type"), "image/webp");
-	assert_equals(form_data.get("n:variants[1].suffix"), "800");
-	assert_equals(form_data.has("n:variants[].suffix"), false);
+	assert_equals(data.active, true);
+	assert_equals(data.count, 2);
+	assert_equals(data.draft, false);
+	assert_equals(data.nested, { nil: "" });
+	assert_equals(data.rows, [
+		{ count: 1, title: "First" },
+		{ count: 2, title: "Second" },
+	]);
+	assert_equals(data.tags, ["svelte", "effect"]);
+	assert_equals(data.title, "Hello");
+	assert_equals(data.avatar.name, "avatar.txt");
+	assert_equals(data.avatar.type, "text/plain");
+	assert_equals(await data.avatar.text(), "avatar");
+	assert_equals(decoded.meta, {});
+	assert_equals(decoded.form_data instanceof FormData, true);
 });
 
 test("remote form adapter preserves descriptors and wraps validate in an Effect", async () => {
@@ -904,7 +955,8 @@ test("remote form adapter posts explicit input when native submit is form-bound"
 	let requested_url = "";
 	let request_pathname: string | null = null;
 	let request_search: string | null = null;
-	let posted_title: FormDataEntryValue | null = null;
+	let posted_title: string | undefined;
+	let posted_draft: boolean | undefined;
 
 	const native = {
 		method: "POST",
@@ -920,33 +972,35 @@ test("remote form adapter posts explicit input when native submit is form-bound"
 		value: new URL("https://example.test/profile?tab=settings"),
 	});
 
-	globalThis.fetch = ((url: string | URL | Request, init?: RequestInit) => {
-		const body = init?.body as FormData;
+	globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
 		const headers = new Headers(init?.headers);
+		const request = new Request(new URL(String(url), globalThis.location.href), init);
+		const decoded = await deserialize_with_current_sveltekit(request);
 
 		requested_url = String(url);
 		request_pathname = headers.get("x-sveltekit-pathname");
 		request_search = headers.get("x-sveltekit-search");
-		posted_title = body.get("title");
+		posted_title = decoded.data.title as string;
+		posted_draft = decoded.data.draft as boolean;
 
-		return Promise.resolve(
-			new Response(
-				JSON.stringify({
-					type: "result",
-					result: stringify({ result: { ok: true } }),
+		return new Response(
+			JSON.stringify({
+				type: "result",
+				data: stringify({
+					_: { submission: true, result: { ok: true } },
 				}),
-			),
+			}),
 		);
 	}) as typeof fetch;
 
 	try {
-		const form = create_remote_form_adapter<{ title: string }, { ok: boolean }>(
+		const form = create_remote_form_adapter<{ draft: boolean; title: string }, { ok: boolean }>(
 			native,
 			(value) => value,
 			"/_app/remote",
 		);
 
-		const result = await get_server_dispatcher().run(form({ title: "hello" }));
+		const result = await get_server_dispatcher().run(form({ draft: false, title: "hello" }));
 
 		assert_equals(result, { ok: true });
 		assert_equals(native_submit_called, false);
@@ -954,6 +1008,7 @@ test("remote form adapter posts explicit input when native submit is form-bound"
 		assert_equals(request_pathname, "/profile");
 		assert_equals(request_search, "?tab=settings");
 		assert_equals(posted_title, "hello");
+		assert_equals(posted_draft, false);
 	} finally {
 		globalThis.fetch = original_fetch;
 
@@ -968,73 +1023,367 @@ test("remote form adapter posts explicit input when native submit is form-bound"
 	}
 });
 
-test("interrupting a remote form aborts its lazy fetch request", async () => {
-	const original_fetch = globalThis.fetch;
-	let fetch_calls = 0;
-	let request_signal: AbortSignal | undefined;
-	let signal_fetch_started = () => {};
+test("remote form adapter uses Kit's binary request bridge", async () => {
+	class TransportValue {
+		constructor(readonly value: string) {}
+	}
 
-	const fetch_started = new Promise<void>((resolve) => {
-		signal_fetch_started = resolve;
+	const had_location = "location" in globalThis;
+	const original_location = globalThis.location;
+	const serialized_inputs: unknown[] = [];
+	const serialized_meta: unknown[] = [];
+	let refresh_calls = 0;
+	let request_calls = 0;
+	let request_init: RequestInit | undefined;
+	let requested_url = "";
+
+	Object.defineProperty(globalThis, "location", {
+		configurable: true,
+		value: new URL("https://example.test/profile?tab=settings"),
 	});
 
-	globalThis.fetch = ((_url: string | URL | Request, init?: RequestInit) => {
-		fetch_calls += 1;
-		request_signal = init?.signal ?? undefined;
-		signal_fetch_started();
-
-		return new Promise<Response>((_resolve, reject) => {
-			request_signal?.addEventListener("abort", () => reject(new Error("aborted")), {
-				once: true,
-			});
-		});
-	}) as typeof fetch;
-
 	try {
-		const form = create_remote_form_adapter<{ title: string }, string>(
+		const form = create_remote_form_adapter<
+			{ draft: boolean; title: string },
+			{ message: TransportValue }
+		>(
 			{
 				method: "POST",
 				action: "?/remote=abc%2Fcreate",
 			},
 			(value) => value,
 			"/_app/remote",
+			{
+				binary_form_content_type: "application/x-sveltekit-formdata",
+				refresh: () => {
+					refresh_calls += 1;
+				},
+				remote_request: (url, init) => {
+					request_calls += 1;
+					requested_url = url;
+					request_init = init;
+
+					return Promise.resolve({
+						_: {
+							result: {
+								message: new TransportValue(`decoded ${request_calls}`),
+							},
+							submission: true,
+						},
+						...(request_calls === 1
+							? { q: { "abc/query": { v: "fresh" } }, r: true }
+							: {}),
+					});
+				},
+				serialize_binary_form: (data, meta) => {
+					serialized_inputs.push(data);
+					serialized_meta.push(meta);
+
+					return { blob: new Blob(["binary-form"]) };
+				},
+			},
 		);
-		const FormProgram = form({ title: "draft" });
 
-		assert_equals(fetch_calls, 0);
+		const first = await get_server_dispatcher().run(form({ draft: false, title: "first" }));
+		const second = await get_server_dispatcher().run(form({ draft: true, title: "second" }));
+		const headers = new Headers(request_init?.headers);
 
-		const InterruptProgram = Effect.gen(function* () {
-			const fiber = yield* Effect.forkChild(FormProgram);
+		assert_equals(first.message.value, "decoded 1");
+		assert_equals(second.message.value, "decoded 2");
+		assert_equals(serialized_inputs, [
+			{ draft: false, title: "first" },
+			{ draft: true, title: "second" },
+		]);
+		assert_equals(serialized_meta, [{ remote_refreshes: [] }, { remote_refreshes: [] }]);
+		assert_equals(requested_url, "/_app/remote/abc/create");
+		assert_equals(request_init?.method, "POST");
+		assert_equals(request_init?.body instanceof Blob, true);
+		assert_equals(request_init?.signal instanceof AbortSignal, true);
+		assert_equals(headers.get("content-type"), "application/x-sveltekit-formdata");
+		assert_equals(headers.get("x-sveltekit-pathname"), "/profile");
+		assert_equals(headers.get("x-sveltekit-search"), "?tab=settings");
+		assert_equals(refresh_calls, 1);
+	} finally {
+		if (had_location) {
+			Object.defineProperty(globalThis, "location", {
+				configurable: true,
+				value: original_location,
+			});
+		} else {
+			Reflect.deleteProperty(globalThis, "location");
+		}
+	}
+});
 
-			yield* Effect.promise(() => fetch_started);
+test("keyed remote forms post the key in Kit's binary payload", async () => {
+	let requested_url = "";
+	let serialized_input: unknown;
 
-			const calls_before_interrupt = fetch_calls;
-			const aborted_before_interrupt = request_signal?.aborted;
+	const form = create_remote_form_adapter<{ title: string }, { ok: boolean }>(
+		{
+			method: "POST",
+			action: "?/remote=abc%2Fcreate",
+			for(key: string | number | boolean) {
+				return {
+					method: "POST",
+					action: `?/remote=${encodeURIComponent(`abc/create/${JSON.stringify(key)}`)}`,
+				};
+			},
+		},
+		(value) => value,
+		"/_app/remote",
+		{
+			binary_form_content_type: "application/x-sveltekit-formdata",
+			remote_request: (url) => {
+				requested_url = url;
 
-			yield* Fiber.interrupt(fiber);
+				return Promise.resolve({ _: { result: { ok: true } } });
+			},
+			serialize_binary_form: (data) => {
+				serialized_input = data;
 
-			return { aborted_before_interrupt, calls_before_interrupt };
-		});
-		const { aborted_before_interrupt, calls_before_interrupt } =
-			await get_server_dispatcher().run(InterruptProgram);
+				return { blob: new Blob() };
+			},
+		},
+	);
 
-		assert_equals(calls_before_interrupt, 1);
-		assert_equals(aborted_before_interrupt, false);
-		assert_equals(request_signal?.aborted, true);
+	const result = await get_server_dispatcher().run(form.for("profile")({ title: "saved" }));
+
+	assert_equals(result, { ok: true });
+	assert_equals(requested_url, "/_app/remote/abc/create");
+	assert_equals(serialized_input, { id: "profile", title: "saved" });
+});
+
+test("keyed remote forms preserve Kit's fallback form payload", async () => {
+	const original_fetch = globalThis.fetch;
+	const posted_inputs: Record<string, unknown>[] = [];
+	let requested_url = "";
+
+	globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+		const request = new Request(new URL(String(url), "https://example.test"), init);
+		const decoded = await deserialize_with_current_sveltekit(request);
+
+		requested_url = String(url);
+		posted_inputs.push(decoded.data);
+
+		return new Response(
+			JSON.stringify({
+				type: "result",
+				data: stringify({ _: { result: { ok: true } } }),
+			}),
+		);
+	}) as typeof fetch;
+
+	try {
+		const form = create_remote_form_adapter<{ id?: string; title: string }, { ok: boolean }>(
+			{
+				method: "POST",
+				action: "?/remote=abc%2Fcreate",
+				for(key: string | number | boolean) {
+					return {
+						method: "POST",
+						action: `?/remote=${encodeURIComponent(`abc/create/${JSON.stringify(key)}`)}`,
+					};
+				},
+			},
+			(value) => value,
+			"/_app/remote",
+		);
+
+		const keyed_form = form.for("profile");
+
+		await get_server_dispatcher().run(keyed_form({ title: "saved" }));
+		await get_server_dispatcher().run(keyed_form({ id: "custom", title: "saved" }));
+
+		assert_equals(requested_url, "/_app/remote/abc/create");
+		assert_equals(posted_inputs, [
+			{ id: "profile", title: "saved" },
+			{ id: "custom", title: "saved" },
+		]);
 	} finally {
 		globalThis.fetch = original_fetch;
 	}
 });
 
-test("remote form adapter decodes SvelteKit data result envelopes", async () => {
+test("remote form adapter serializes no-input Kit forms as an object", async () => {
+	let serialized_input: unknown;
+
+	const form = create_remote_form_adapter<void, string>(
+		{
+			method: "POST",
+			action: "?/remote=abc%2Fcreate",
+		},
+		(value) => value,
+		"/_app/remote",
+		{
+			binary_form_content_type: "application/x-sveltekit-formdata",
+			remote_request: () =>
+				Promise.resolve({
+					_: { result: "created", submission: true },
+					r: true,
+				}),
+			serialize_binary_form: (data) => {
+				serialized_input = data;
+
+				return { blob: new Blob() };
+			},
+		},
+	);
+
+	const result = await get_server_dispatcher().run(form());
+
+	assert_equals(result, "created");
+	assert_equals(serialized_input, {});
+});
+
+test("remote form adapter delegates exact redirect invalidation to Kit", async () => {
+	const navigated_to: Array<[string, boolean]> = [];
+	let request_calls = 0;
+	let continued_after_redirect = false;
+
+	const form = create_remote_form_adapter<{ title: string }, string>(
+		{
+			method: "POST",
+			action: "?/remote=abc%2Fcreate",
+		},
+		(value) => value,
+		"/_app/remote",
+		{
+			binary_form_content_type: "application/x-sveltekit-formdata",
+			navigate: (location, invalidate_all) => {
+				navigated_to.push([location, invalidate_all]);
+			},
+			remote_request: () => {
+				request_calls += 1;
+
+				return Promise.resolve({
+					redirect: request_calls === 1 ? "/posts" : "/archive",
+					...(request_calls === 1 ? { r: true } : {}),
+				});
+			},
+			serialize_binary_form: () => ({ blob: new Blob() }),
+		},
+	);
+	const RedirectProgram = Effect.gen(function* () {
+		yield* form({ title: "first" });
+
+		continued_after_redirect = true;
+	});
+
+	await get_server_dispatcher().run(RedirectProgram);
+	await get_server_dispatcher().run(form({ title: "second" }));
+
+	assert_equals(continued_after_redirect, false);
+	assert_equals(navigated_to, [
+		["/posts", false],
+		["/archive", true],
+	]);
+});
+
+test("interrupting a remote form aborts Kit's lazy remote request", async () => {
+	let request_calls = 0;
+	let request_signal: AbortSignal | undefined;
+	let signal_request_started = () => {};
+
+	const request_started = new Promise<void>((resolve) => {
+		signal_request_started = resolve;
+	});
+	const form = create_remote_form_adapter<{ title: string }, string>(
+		{
+			method: "POST",
+			action: "?/remote=abc%2Fcreate",
+		},
+		(value) => value,
+		"/_app/remote",
+		{
+			binary_form_content_type: "application/x-sveltekit-formdata",
+			remote_request: (_url, init) => {
+				request_calls += 1;
+				request_signal = init?.signal ?? undefined;
+				signal_request_started();
+
+				return new Promise<unknown>((_resolve, reject) => {
+					request_signal?.addEventListener("abort", () => reject(new Error("aborted")), {
+						once: true,
+					});
+				});
+			},
+			serialize_binary_form: () => ({ blob: new Blob() }),
+		},
+	);
+	const FormProgram = form({ title: "draft" });
+
+	assert_equals(request_calls, 0);
+
+	const InterruptProgram = Effect.gen(function* () {
+		const fiber = yield* Effect.forkChild(FormProgram);
+
+		yield* Effect.promise(() => request_started);
+
+		const calls_before_interrupt = request_calls;
+		const aborted_before_interrupt = request_signal?.aborted;
+
+		yield* Fiber.interrupt(fiber);
+
+		return { aborted_before_interrupt, calls_before_interrupt };
+	});
+	const { aborted_before_interrupt, calls_before_interrupt } =
+		await get_server_dispatcher().run(InterruptProgram);
+
+	assert_equals(calls_before_interrupt, 1);
+	assert_equals(aborted_before_interrupt, false);
+	assert_equals(request_signal?.aborted, true);
+});
+
+test("remote form adapter decodes current SvelteKit form result data", async () => {
 	const original_fetch = globalThis.fetch;
+	let refresh_calls = 0;
 
 	globalThis.fetch = (() =>
 		Promise.resolve(
 			new Response(
 				JSON.stringify({
 					type: "result",
-					data: stringify({ result: { ok: true } }),
+					data: stringify({
+						_: { submission: true, result: { ok: true } },
+					}),
+				}),
+			),
+		)) as typeof fetch;
+
+	try {
+		const form = create_remote_form_adapter<{ title: string }, { ok: boolean }>(
+			{
+				method: "POST",
+				action: "?/remote=abc%2Fcreate",
+			},
+			(value) => value,
+			"/_app/remote",
+			{
+				refresh: () => {
+					refresh_calls += 1;
+				},
+			},
+		);
+
+		const result = await get_server_dispatcher().run(form({ title: "hello" }));
+
+		assert_equals(result, { ok: true });
+		assert_equals(refresh_calls, 1);
+	} finally {
+		globalThis.fetch = original_fetch;
+	}
+});
+
+test("remote form adapter reads status from current SvelteKit error data", async () => {
+	const original_fetch = globalThis.fetch;
+
+	globalThis.fetch = (() =>
+		Promise.resolve(
+			new Response(
+				JSON.stringify({
+					type: "error",
+					error: { message: "Post not found", status: 404 },
 				}),
 			),
 		)) as typeof fetch;
@@ -1049,9 +1398,202 @@ test("remote form adapter decodes SvelteKit data result envelopes", async () => 
 			"/_app/remote",
 		);
 
+		const exit = await get_server_dispatcher().run(Effect.exit(form({ title: "missing" })));
+		const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
+
+		assert_equals(Exit.isFailure(exit), true);
+		assert_equals((error as { _tag?: string })._tag, "RemoteHttpError");
+		assert_equals((error as { status?: number }).status, 404);
+	} finally {
+		globalThis.fetch = original_fetch;
+	}
+});
+
+test("remote form adapter prefers SvelteKit 2's top-level error status", async () => {
+	const original_fetch = globalThis.fetch;
+
+	globalThis.fetch = (() =>
+		Promise.resolve(
+			new Response(
+				JSON.stringify({
+					type: "error",
+					status: 404,
+					error: { message: "Post not found", status: 418 },
+				}),
+			),
+		)) as typeof fetch;
+
+	try {
+		const form = create_remote_form_adapter<{ title: string }, { ok: boolean }>(
+			{
+				method: "POST",
+				action: "?/remote=abc%2Fcreate",
+			},
+			(value) => value,
+			"/_app/remote",
+		);
+
+		const exit = await get_server_dispatcher().run(Effect.exit(form({ title: "missing" })));
+		const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
+
+		assert_equals(Exit.isFailure(exit), true);
+		assert_equals((error as { _tag?: string })._tag, "RemoteHttpError");
+		assert_equals((error as { status?: number }).status, 404);
+	} finally {
+		globalThis.fetch = original_fetch;
+	}
+});
+
+test("remote form adapter navigates result and top-level redirect envelopes", async () => {
+	const original_fetch = globalThis.fetch;
+	const navigated_to: Array<[string, boolean]> = [];
+	let refresh_calls = 0;
+	let response_index = 0;
+	let continued_after_redirect = false;
+
+	const responses = [
+		{
+			type: "result",
+			data: stringify({ redirect: "/posts" }),
+		},
+		{
+			type: "redirect",
+			location: "/archive",
+		},
+	];
+
+	globalThis.fetch = (() =>
+		Promise.resolve(new Response(JSON.stringify(responses[response_index++])))) as typeof fetch;
+
+	try {
+		const form = create_remote_form_adapter<{ title: string }, { ok: boolean }>(
+			{
+				method: "POST",
+				action: "?/remote=abc%2Fcreate",
+			},
+			(value) => value,
+			"/_app/remote",
+			{
+				navigate: (location, invalidate_all) => {
+					navigated_to.push([location, invalidate_all]);
+				},
+				refresh: () => {
+					refresh_calls += 1;
+				},
+			},
+		);
+
+		const RedirectProgram = Effect.gen(function* () {
+			yield* form({ title: "hello" });
+
+			continued_after_redirect = true;
+		});
+
+		const result_redirect = await get_server_dispatcher().run(RedirectProgram);
+		const top_level_redirect = await get_server_dispatcher().run(form({ title: "again" }));
+
+		assert_equals(result_redirect, undefined);
+		assert_equals(top_level_redirect, undefined);
+		assert_equals(continued_after_redirect, false);
+		assert_equals(navigated_to, [
+			["/posts", true],
+			["/archive", true],
+		]);
+		assert_equals(refresh_calls, 0);
+	} finally {
+		globalThis.fetch = original_fetch;
+	}
+});
+
+test("remote form adapter falls back to full refresh for SvelteKit side-channel data", async () => {
+	const original_fetch = globalThis.fetch;
+	let refresh_calls = 0;
+
+	globalThis.fetch = (() =>
+		Promise.resolve(
+			new Response(
+				JSON.stringify({
+					type: "result",
+					data: stringify({
+						_: { submission: true, result: { ok: true } },
+						l: { "abc/live": { v: "live" } },
+						q: { "abc/query": { v: "query" } },
+						r: true,
+					}),
+				}),
+			),
+		)) as typeof fetch;
+
+	try {
+		const form = create_remote_form_adapter<{ title: string }, { ok: boolean }>(
+			{
+				method: "POST",
+				action: "?/remote=abc%2Fcreate",
+			},
+			(value) => value,
+			"/_app/remote",
+			{
+				refresh: () => {
+					refresh_calls += 1;
+				},
+			},
+		);
+
 		const result = await get_server_dispatcher().run(form({ title: "hello" }));
 
 		assert_equals(result, { ok: true });
+		assert_equals(refresh_calls, 1);
+	} finally {
+		globalThis.fetch = original_fetch;
+	}
+});
+
+test("remote form adapter uses SvelteKit transport decoders", async () => {
+	class TransportValue {
+		constructor(readonly value: string) {}
+	}
+
+	const original_fetch = globalThis.fetch;
+
+	globalThis.fetch = (() =>
+		Promise.resolve(
+			new Response(
+				JSON.stringify({
+					type: "result",
+					data: stringify(
+						{
+							_: {
+								result: { message: new TransportValue("decoded") },
+								submission: true,
+							},
+						},
+						{
+							TransportValue: (value) =>
+								value instanceof TransportValue ? value.value : undefined,
+						},
+					),
+				}),
+			),
+		)) as typeof fetch;
+
+	try {
+		const form = create_remote_form_adapter<{ title: string }, { message: TransportValue }>(
+			{
+				method: "POST",
+				action: "?/remote=abc%2Fcreate",
+			},
+			(value) => value,
+			"/_app/remote",
+			{
+				decoders: {
+					TransportValue: (value) => new TransportValue(String(value)),
+				},
+			},
+		);
+
+		const result = await get_server_dispatcher().run(form({ title: "hello" }));
+
+		assert_equals(result.message.value, "decoded");
 	} finally {
 		globalThis.fetch = original_fetch;
 	}
@@ -1098,14 +1640,18 @@ test("remote form adapter reports transport errors without submit or endpoint", 
 
 test("remote form adapter maps endpoint validation issues to the Effect error channel", async () => {
 	const original_fetch = globalThis.fetch;
+	let refresh_calls = 0;
 
 	globalThis.fetch = (() =>
 		Promise.resolve(
 			new Response(
 				JSON.stringify({
 					type: "result",
-					result: stringify({
-						issues: [{ message: "Title too short", path: ["title"] }],
+					data: stringify({
+						_: {
+							issues: [{ message: "Title too short", path: ["title"] }],
+							submission: true,
+						},
 					}),
 				}),
 			),
@@ -1119,6 +1665,11 @@ test("remote form adapter maps endpoint validation issues to the Effect error ch
 			},
 			(value) => value,
 			"/_app/remote",
+			{
+				refresh: () => {
+					refresh_calls += 1;
+				},
+			},
 		);
 
 		const exit = await get_server_dispatcher().run(Effect.exit(form({ title: "x" })));
@@ -1130,6 +1681,7 @@ test("remote form adapter maps endpoint validation issues to the Effect error ch
 			(error as { issues?: Array<{ message: string }> }).issues?.[0]?.message,
 			"Title too short",
 		);
+		assert_equals(refresh_calls, 0);
 	} finally {
 		globalThis.fetch = original_fetch;
 	}
@@ -1493,3 +2045,24 @@ test("remote form adapter preserves enhance submit updates as an Effect", async 
 	assert_equals(submit_started, true);
 	assert_equals(updates_called, true);
 });
+
+interface CurrentSvelteKitFormData {
+	readonly data: Record<string, unknown>;
+	readonly form_data: FormData | null;
+	readonly meta: Record<string, unknown>;
+}
+
+async function deserialize_with_current_sveltekit(
+	request: Request,
+): Promise<CurrentSvelteKitFormData> {
+	const require = createRequire(import.meta.url);
+	const package_path = require.resolve("@sveltejs/kit/package.json");
+	const module_url = pathToFileURL(
+		join(dirname(package_path), "src", "runtime", "form-utils.js"),
+	).href;
+	const form_utils = (await import(module_url)) as {
+		deserialize_binary_form: (request: Request) => Promise<CurrentSvelteKitFormData>;
+	};
+
+	return form_utils.deserialize_binary_form(request);
+}

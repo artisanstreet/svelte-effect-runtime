@@ -1,3 +1,8 @@
+import {
+	append_sveltekit_remote_transport_bridge,
+	is_sveltekit_remote_runtime_index,
+	make_missing_sveltekit_remote_runtime_message,
+} from "./compiler/sveltekit-remote-bridge.ts";
 import { find_svelte_effect_diagnostics } from "./diagnostics.ts";
 import type { Plugin } from "vite";
 
@@ -373,9 +378,25 @@ function has_file_extension(filename: string, extensions: readonly string[]): bo
 }
 
 function make_remote_client_wrapper_plugin(options?: EffectOptions): Plugin {
+	let has_remote_form_module = false;
+	let has_sveltekit_remote_bridge = false;
+
 	return {
 		name: "svelte-effect-runtime:remote-client",
 		enforce: "post",
+
+		buildStart() {
+			has_remote_form_module = false;
+			has_sveltekit_remote_bridge = false;
+		},
+
+		buildEnd(error) {
+			if (error || !has_remote_form_module || has_sveltekit_remote_bridge) {
+				return;
+			}
+
+			this.error(make_missing_sveltekit_remote_runtime_message());
+		},
 
 		config() {
 			return { ssr: { noExternal: ["svelte-effect-runtime"] } };
@@ -405,8 +426,32 @@ function make_remote_client_wrapper_plugin(options?: EffectOptions): Plugin {
 		},
 
 		async transform(code: string, id: string) {
+			if (is_sveltekit_remote_runtime_index(id)) {
+				const rewritten = append_sveltekit_remote_transport_bridge(code);
+
+				has_sveltekit_remote_bridge = true;
+
+				if (rewritten === code) {
+					return undefined;
+				}
+
+				return { code: rewritten, map: null };
+			}
+
 			if (!is_remote_module(id) || !code.includes("__sveltekit/remote")) {
 				return undefined;
+			}
+
+			const has_remote_form = /\.[\s\n]*form[\s\n]*\(/.test(code);
+
+			has_remote_form_module ||= has_remote_form;
+
+			if (has_remote_form) {
+				const resolved_runtime = await this.resolve("__sveltekit/remote", id);
+
+				if (!resolved_runtime || !is_sveltekit_remote_runtime_index(resolved_runtime.id)) {
+					this.error(make_missing_sveltekit_remote_runtime_message());
+				}
 			}
 
 			const rewritten = await rewrite_remote_client_exports(code, options);

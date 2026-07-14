@@ -32,13 +32,11 @@ export async function run_remote_effect<A>(
 		return exit.value;
 	}
 
-	handle_failure(exit.cause, invalid, error);
+	throw_remote_cause(exit.cause, invalid, error);
 }
 
-/**
- * Applies a classified remote Cause decision to SvelteKit's server helpers.
- */
-function handle_failure(
+/** Applies a classified remote Cause decision to SvelteKit's server helpers. */
+export function throw_remote_cause(
 	cause: Cause.Cause<unknown>,
 	invalid: SvelteInvalid,
 	error: SvelteError,

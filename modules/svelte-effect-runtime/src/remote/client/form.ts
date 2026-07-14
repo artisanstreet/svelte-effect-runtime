@@ -1,6 +1,10 @@
 import { is_standard_schema, normalize_validator, type StandardSchema } from "$/internal/schema.ts";
 import type { EffectRemoteForm, NativeFormRecord, NativeMethod } from "./types.ts";
-import { get_remote_action_id, SubmitRemoteForm } from "./form-transport.ts";
+import {
+	get_remote_action_id,
+	SubmitRemoteForm,
+	type RemoteFormTransport,
+} from "./form-transport.ts";
 import { MakeEffectFromPromise, MakeEffectFromSync } from "$/remote/effect.ts";
 import { copy_property_descriptors, has_method } from "./utils.ts";
 import { wrap_enhance_callback } from "./form-enhance.ts";
@@ -23,6 +27,7 @@ export function create_remote_form_adapter<
 	native_factory: unknown,
 	decode_payload: (value: unknown) => unknown,
 	remote_base = "",
+	remote_transport: RemoteFormTransport = {},
 	adapter_state: RemoteFormAdapterState = {},
 	keyed = false,
 ): EffectRemoteForm<Input, Output, ErrorType> {
@@ -49,6 +54,7 @@ export function create_remote_form_adapter<
 				input,
 				decode_payload,
 				remote_base,
+				remote_transport,
 				local_preflight_schema ?? adapter_state.shared_preflight_schema,
 			);
 		});
@@ -100,6 +106,7 @@ export function create_remote_form_adapter<
 					form_obj.for(key),
 					decode_payload,
 					remote_base,
+					remote_transport,
 					adapter_state,
 					true,
 				),

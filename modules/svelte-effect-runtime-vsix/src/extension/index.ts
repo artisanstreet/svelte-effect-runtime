@@ -14,6 +14,7 @@ import {
 } from "./package-manager-install.ts";
 import { affects_language_server_configuration, ExtensionConfigurationLive } from "./settings.ts";
 import { LanguageClientControlLive, make_language_client_factory_layer } from "./client.ts";
+import { ServerInstallRetentionPolicyLive } from "./server-install-retention/index.ts";
 import { SvelteExtensionControlLive } from "./svelte-extension-control.ts";
 import { make_server_path_resolver_layer } from "./server-path.ts";
 import { register_language_server_commands } from "./commands.ts";
@@ -141,6 +142,7 @@ function make_extension_runtime(
 		ExtensionConfigurationLive,
 		PackageManagerCommandLive,
 		install_files,
+		ServerInstallRetentionPolicyLive,
 	);
 	const resolver = make_server_path_resolver_layer(storage_path).pipe(
 		Layer.provide(resolver_dependencies),

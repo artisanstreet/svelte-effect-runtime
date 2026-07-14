@@ -269,6 +269,7 @@ export type {
 	EffectLike,
 	EffectRemoteBatchHandler,
 	EffectRemoteCommand,
+	EffectRemoteCommandCall,
 	EffectRemoteForm,
 	EffectRemoteFunction,
 	EffectRemoteLiveQuery,

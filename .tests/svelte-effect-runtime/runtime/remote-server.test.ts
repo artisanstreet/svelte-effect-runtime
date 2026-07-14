@@ -1,5 +1,7 @@
 import {
+	Command as ServerCommand,
 	Error as ServerError,
+	Handler as ServerHandler,
 	Prerender as ServerPrerender,
 	Redirect as ServerRedirect,
 	ServerRuntime,
@@ -27,8 +29,10 @@ import {
 	assert_string_includes,
 } from "./helpers/assert.ts";
 import {
+	reset_test_command,
 	reset_test_prerender,
 	reset_test_request_event,
+	set_test_command,
 	set_test_prerender,
 	set_test_request_event,
 } from "./fixtures/app-server.ts";
@@ -104,6 +108,131 @@ test("SvelteKit server fallback exports throw clear boundary errors", () => {
 
 		assert_string_includes(error.message, name);
 		assert_string_includes(error.message, "inside a SvelteKit server module");
+	}
+});
+
+test("Command calls remain Effect-yieldable outside native remote dispatch", async () => {
+	const descriptor = { id: "command" };
+
+	set_test_command((...args) => {
+		const handler = args.at(-1) as (input: unknown) => Promise<unknown>;
+		const native = (input: unknown) => handler(input);
+
+		Object.defineProperty(native, "__", { value: descriptor });
+		Object.defineProperty(native, "pending", { get: () => 0 });
+
+		return native;
+	});
+	set_test_request_event({
+		...make_request_event(),
+		isRemoteRequest: false,
+		request: new Request("http://localhost/test", { method: "POST" }),
+	});
+
+	try {
+		const SaveDraft = ServerCommand(Schema.String, (title) => Effect.succeed({ saved: title }));
+		const Program = Effect.gen(function* () {
+			return yield* SaveDraft("publish");
+		});
+		const result = await get_server_dispatcher().run(Program);
+
+		assert_equals(result, { saved: "publish" });
+		assert_equals(Object.getOwnPropertyDescriptor(SaveDraft, "__")?.value, descriptor);
+		assert_equals(SaveDraft.pending, 0);
+	} finally {
+		reset_test_command();
+		reset_test_request_event();
+	}
+});
+
+test("Command remote dispatch preserves the native result while nested Commands stay yieldable", async () => {
+	type NativeCommandRecord = {
+		readonly descriptor: { readonly index: number };
+		result?: Promise<unknown>;
+	};
+
+	const records: NativeCommandRecord[] = [];
+
+	set_test_command((...args) => {
+		const handler = args.at(-1) as (input: unknown) => Promise<unknown>;
+		const record: NativeCommandRecord = {
+			descriptor: { index: records.length },
+		};
+		const native = (input: unknown) => {
+			const result = handler(input) as Promise<unknown> & {
+				updates: (...updates: unknown[]) => Promise<unknown>;
+			};
+
+			result.updates = () => result;
+			record.result = result;
+
+			return result;
+		};
+
+		Object.defineProperty(native, "__", { value: record.descriptor });
+		Object.defineProperty(native, "pending", { get: () => 0 });
+		records.push(record);
+
+		return native;
+	});
+	set_test_request_event({
+		...make_request_event(),
+		isRemoteRequest: true,
+		request: new Request("http://localhost/_app/remote/command", { method: "POST" }),
+	});
+
+	try {
+		const NormalizeTitle = ServerCommand(Schema.String, (title) =>
+			Effect.succeed(title.trim()),
+		);
+		const SaveDraft = ServerCommand(Schema.String, (title) =>
+			Effect.gen(function* () {
+				const normalized = yield* NormalizeTitle(title);
+
+				return { saved: normalized };
+			}),
+		);
+		const native_result = SaveDraft("  publish  ") as unknown as Promise<unknown>;
+
+		assert_equals(native_result, records[1]?.result);
+		assert_equals(
+			Object.getOwnPropertyDescriptor(SaveDraft, "__")?.value,
+			records[1]?.descriptor,
+		);
+		assert_equals(await native_result, { saved: "publish" });
+	} finally {
+		reset_test_command();
+		reset_test_request_event();
+	}
+});
+
+test("mutative Handler callbacks can yield Command calls", async () => {
+	type NativeHandler = () => Promise<Response>;
+
+	set_test_command((...args) => {
+		const handler = args.at(-1) as (input: unknown) => Promise<unknown>;
+
+		return (input: unknown) => handler(input);
+	});
+	set_test_request_event({
+		...make_request_event(),
+		isRemoteRequest: true,
+		request: new Request("http://localhost/posts", { method: "POST" }),
+	});
+
+	try {
+		const SaveDraft = ServerCommand(Schema.String, (title) => Effect.succeed({ saved: title }));
+		const POST = ServerHandler<NativeHandler>(function* () {
+			const saved = yield* SaveDraft("publish");
+
+			return Response.json(saved);
+		});
+		const response = await POST();
+
+		assert_equals(await response.json(), { saved: "publish" });
+	} finally {
+		reset_test_command();
+		reset_test_request_event();
 	}
 });
 
@@ -924,6 +1053,111 @@ test("run_live_handler_source wraps stream failures after emitted values", async
 	const error = await assert_rejects(() => iterator.next());
 
 	assert_live_failure_envelope(error, "after");
+});
+
+test("run_live_handler_source preserves redirects before the first value", async () => {
+	const source = await run_live_handler_source(
+		Stream.fromEffect(ServerRedirect("TemporaryRedirect", "/login")),
+		make_request_event(),
+	);
+	const iterator = source[Symbol.asyncIterator]();
+	const error = await assert_rejects(() => iterator.next());
+
+	assert_truthy(isRedirect(error));
+
+	if (isRedirect(error)) {
+		assert_equals(error.status, 307);
+		assert_equals(error.location, "/login");
+	}
+});
+
+test("run_live_handler_source preserves HTTP errors after emitted values", async () => {
+	const source = await run_live_handler_source(
+		Stream.make("first").pipe(
+			Stream.concat(Stream.fromEffect(ServerError("NotFound", "missing"))),
+		),
+		make_request_event(),
+	);
+	const iterator = source[Symbol.asyncIterator]();
+
+	assert_equals(await iterator.next(), { done: false, value: "first" });
+
+	const error = await assert_rejects(() => iterator.next());
+
+	assert_truthy(isHttpError(error, 404));
+});
+
+test("run_live_handler_source preserves control flow from combined stream causes", async () => {
+	class LiveDomainError extends Data.TaggedError("LiveDomainError")<{
+		readonly reason: string;
+	}> {}
+
+	const redirect = assert_throws(() => svelte_redirect(307, "/login"));
+	const cause = Cause.combine(
+		Cause.fail(new LiveDomainError({ reason: "hidden" })),
+		Cause.die(redirect),
+	);
+	const source = await run_live_handler_source(Stream.failCause(cause), make_request_event());
+	const iterator = source[Symbol.asyncIterator]();
+	const error = await assert_rejects(() => iterator.next());
+
+	assert_truthy(isRedirect(error));
+
+	if (isRedirect(error)) {
+		assert_equals(error.status, 307);
+		assert_equals(error.location, "/login");
+	}
+});
+
+test("run_live_handler_source masks tagged stream defects", async () => {
+	const defect = {
+		_tag: "SecretLiveDefect",
+		secret: "must-not-cross-the-wire",
+	};
+	const source = await run_live_handler_source(
+		Stream.failCause(Cause.die(defect)),
+		make_request_event(),
+	);
+	const iterator = source[Symbol.asyncIterator]();
+	const error = await assert_rejects(() => iterator.next());
+
+	assert_truthy(isHttpError(error, 500));
+
+	const body = (error as { body?: unknown }).body as {
+		__svelte_effect_remote__: true;
+		encoded: string;
+	};
+	const parsed = parse(body.encoded);
+
+	assert_equals(parsed.message, "[UNKNOWN_REMOTE_FAILURE]: Unknown error");
+	assert_false(body.encoded.includes(defect._tag));
+	assert_false(body.encoded.includes(defect.secret));
+});
+
+test("run_live_handler_source closes scoped streams when throw is injected", async () => {
+	let finalized = false;
+	const stream = Stream.scoped(
+		Stream.fromEffect(
+			Effect.acquireRelease(Effect.succeed("first"), () =>
+				Effect.sync(() => {
+					finalized = true;
+				}),
+			),
+		).pipe(Stream.concat(Stream.never)),
+	);
+	const source = await run_live_handler_source(stream, make_request_event());
+
+	async function* delegate(): AsyncGenerator<string> {
+		yield* source;
+	}
+
+	const iterator = delegate();
+
+	assert_equals(await iterator.next(), { done: false, value: "first" });
+
+	await assert_rejects(() => iterator.throw(new globalThis.Error("stop")));
+
+	assert_truthy(finalized);
 });
 
 test("run_live_handler_source rejects native async iterables", async () => {

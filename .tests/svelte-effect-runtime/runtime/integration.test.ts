@@ -1198,6 +1198,16 @@ test("vite remote client wrapper preserves native SvelteKit remote module", asyn
 	assert_string_includes(result, `create_remote_live_query_adapter`);
 	assert_string_includes(result, `create_remote_command_adapter`);
 	assert_string_includes(result, `create_remote_form_adapter`);
+	assert_string_includes(result, `from "$app/navigation";`);
+	assert_string_includes(result, `globalThis.location.assign(target.href);`);
+	assert_string_includes(result, `__SER___goto(target, { invalidateAll: invalidate_all })`);
+	assert_string_includes(
+		result,
+		`binary_form_content_type: __remote.__SER___binary_form_content_type`,
+	);
+	assert_string_includes(result, `remote_request: __remote.__SER___remote_request`);
+	assert_string_includes(result, `serialize_binary_form: __remote.__SER___serialize_binary_form`);
+	assert_not_match(result, /from "__sveltekit\/manifest";/);
 	assert_string_includes(
 		result,
 		`export const get_post = create_remote_query_adapter(__remote.query('abc/get_post'), __SER___decode_payload);`,
@@ -1216,7 +1226,7 @@ test("vite remote client wrapper preserves native SvelteKit remote module", asyn
 	);
 	assert_string_includes(
 		result,
-		`export const create_post = create_remote_form_adapter(__remote.form('abc/create_post'), __SER___decode_payload, __SER___remote_base);`,
+		`export const create_post = create_remote_form_adapter(__remote.form('abc/create_post'), __SER___decode_payload, __SER___remote_base, __SER___remote_form_transport);`,
 	);
 	assert_string_includes(
 		result,

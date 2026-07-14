@@ -7,7 +7,7 @@ export class SvelteExtensionControl extends Context.Service<
 	SvelteExtensionControl,
 	{
 		readonly available: Effect.Effect<boolean>;
-		readonly restart: Effect.Effect<boolean, unknown>;
+		readonly restart: Effect.Effect<boolean>;
 	}
 >()("svelte-effect-runtime-vsix/SvelteExtensionControl") {}
 
@@ -25,5 +25,5 @@ export const SvelteExtensionControlLive = Layer.succeed(SvelteExtensionControl, 
 		);
 
 		return true;
-	}),
+	}).pipe(Effect.catch(() => Effect.succeed(false))),
 });

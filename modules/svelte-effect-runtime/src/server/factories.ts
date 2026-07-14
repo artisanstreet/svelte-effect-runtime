@@ -2,6 +2,7 @@ import type {
 	EffectLike,
 	EffectRemoteBatchHandler,
 	EffectRemoteCommand,
+	EffectRemoteCommandCall,
 	EffectRemoteForm,
 	EffectRemoteLiveQuery,
 	EffectRemoteLiveQueryFunction,
@@ -51,14 +52,14 @@ import {
 	make_remote_wrapper,
 } from "./wrappers.ts";
 import { make_failed_remote_live_stream, make_remote_live_stream } from "$/live.ts";
-import { FailWithRemoteError, MakeEffectFromPromise } from "$/remote/effect.ts";
+import { FailWithRemoteError, MakeEffectFromPromise, MakeEffectFromSync } from "$/remote/effect.ts";
 import { is_running_remote_effect_handler } from "./remote-handler-context.ts";
 import { is_handler, is_unchecked, normalize_validator } from "./schema.ts";
 import { copy_property_descriptors } from "$/internal/descriptors.ts";
 import { normalize_remote_helper_error } from "$/remote/server.ts";
 import { create_remote_transport_error } from "$/remote/shared.ts";
 import type { RemoteFormInput } from "@sveltejs/kit";
-import { Result, type Schema } from "effect";
+import { Effect, Result, type Schema } from "effect";
 
 type FormSchemaEncodedInput<S> = S extends Schema.Top ? FormRemoteInput<S["Encoded"]> : never;
 
@@ -143,6 +144,68 @@ function to_effect_prerender<Input, Output, ErrorType = never>(
 		attach_remote_resource_getters,
 		attach_failed_remote_resource_getters,
 	) as unknown as EffectRemotePrerenderFunction<Input, Output, ErrorType>;
+}
+
+function to_effect_command<Input, Output, ErrorType = never>(
+	native: NativeQueryLike<Input>,
+): EffectRemoteCommand<Input, Output, ErrorType> {
+	const wrapped = ((input: Input) => {
+		if (is_current_remote_request()) {
+			return native(input);
+		}
+
+		return MakeServerCommandEffect<Input, Output, ErrorType>(native, input);
+	}) as unknown as EffectRemoteCommand<Input, Output, ErrorType>;
+
+	copy_property_descriptors(native, wrapped);
+
+	return wrapped;
+}
+
+const MakeServerCommandEffect = <Input, Output, ErrorType>(
+	native: NativeQueryLike<Input>,
+	input: Input,
+) => {
+	let updates_args: unknown[] | undefined;
+
+	const CommandEffect = Effect.gen(function* () {
+		const invocation = yield* MakeEffectFromSync<unknown, ErrorType>(() => {
+			const result = native(input);
+
+			if (updates_args && has_command_updates(result)) {
+				return result.updates(...updates_args);
+			}
+
+			return result;
+		});
+
+		return yield* MakeEffectFromPromise<Output, ErrorType>(
+			() => Promise.resolve(invocation) as Promise<Output>,
+		);
+	}) as EffectRemoteCommandCall<Output, ErrorType>;
+
+	Object.defineProperty(CommandEffect, "updates", {
+		configurable: true,
+		enumerable: false,
+		value: (...args: unknown[]) => {
+			updates_args ??= args;
+
+			return CommandEffect;
+		},
+	});
+
+	return CommandEffect;
+};
+
+function has_command_updates(
+	value: unknown,
+): value is { readonly updates: (...updates: unknown[]) => unknown } {
+	const value_type = typeof value;
+
+	return (
+		((value_type === "object" && value !== null) || value_type === "function") &&
+		typeof (value as { readonly updates?: unknown }).updates === "function"
+	);
 }
 
 function to_effect_remote_resource<
@@ -531,9 +594,11 @@ export function Command<S extends StandardSchema, A, E = never, R = never>(
 export function Command(validate_or_handler: unknown, maybe_handler?: unknown): unknown {
 	try {
 		if (maybe_handler) {
-			return native_command(
-				normalize_validator(validate_or_handler) as never,
-				make_remote_wrapper(maybe_handler as RemoteHandler, "Command") as never,
+			return to_effect_command(
+				native_command(
+					normalize_validator(validate_or_handler) as never,
+					make_remote_wrapper(maybe_handler as RemoteHandler, "Command") as never,
+				) as NativeQueryLike,
 			);
 		}
 
@@ -541,9 +606,11 @@ export function Command(validate_or_handler: unknown, maybe_handler?: unknown): 
 			throw new UncheckedCommandHandlerMissingError();
 		}
 
-		return native_command(
-			make_remote_wrapper(validate_or_handler as RemoteHandler, "Command") as never,
-		) as ReturnType<typeof native_command>;
+		return to_effect_command(
+			native_command(
+				make_remote_wrapper(validate_or_handler as RemoteHandler, "Command") as never,
+			) as NativeQueryLike,
+		);
 	} catch (error: unknown) {
 		throw normalize_remote_helper_error(error, "Command");
 	}

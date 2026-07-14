@@ -42,9 +42,7 @@ function append_form_value(form_data: FormData, path: string, value: unknown): v
 	}
 
 	if (typeof value === "boolean") {
-		if (value) {
-			form_data.append(`b:${path}`, "on");
-		}
+		form_data.append(`b:${path}`, value ? "on" : "off");
 
 		return;
 	}

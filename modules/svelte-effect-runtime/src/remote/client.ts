@@ -7,6 +7,7 @@ export {
 } from "./client/index.ts";
 
 export type {
+	EffectRemoteCommandCall,
 	EffectRemoteForm,
 	EffectRemoteFormEnhanceOptions,
 	EffectRemoteFormPreflightSchema,

@@ -1,11 +1,10 @@
 import { error as svelte_error, invalid as svelte_invalid } from "@sveltejs/kit";
-import { create_serialized_remote_failure_envelope } from "$/remote/shared.ts";
-import { encode_remote_failure, run_remote_effect } from "$/remote/server.ts";
+import { run_remote_effect, throw_remote_cause } from "$/remote/server.ts";
 import { RunInsideRemoteEffectHandler } from "./remote-handler-context.ts";
 import { get_server_runtime_or_throw, RequestEvent } from "./runtime.ts";
 import type { RequestEvent as RequestEventShape } from "./runtime.ts";
 import { InvalidLiveQueryReturnError } from "$/errors.ts";
-import { Cause, Effect, Stream } from "effect";
+import { Effect, Stream } from "effect";
 import type { EffectLike } from "./types.ts";
 
 type ResolvedLiveSource<A> = AsyncIterable<A>;
@@ -80,9 +79,18 @@ function run_live_source_effect<A>(
 }
 
 const ToLiveSourceEffect = <A>(value: LiveHandlerResult<A>, event: RequestEventShape) =>
-	Stream.toAsyncIterableEffect(value as Stream.Stream<A, unknown, unknown>).pipe(
+	Stream.toAsyncIterableEffect(preserve_live_source_cause(value)).pipe(
 		Effect.map((source) => wrap_live_source_errors(source, event)),
 	) as Effect.Effect<ResolvedLiveSource<A>, unknown, unknown>;
+
+const preserve_live_source_cause = <A>(value: LiveHandlerResult<A>) =>
+	value.pipe(
+		Stream.catchCause((cause) =>
+			Stream.fromEffect(
+				Effect.sync(() => throw_remote_cause(cause, svelte_invalid, svelte_remote_error)),
+			),
+		),
+	);
 
 function wrap_live_source_errors<A>(
 	source: AsyncIterable<A>,
@@ -91,6 +99,7 @@ function wrap_live_source_errors<A>(
 	return {
 		[Symbol.asyncIterator]() {
 			const iterator = source[Symbol.asyncIterator]();
+			const throw_iterator = iterator.throw?.bind(iterator);
 
 			return {
 				next() {
@@ -110,17 +119,13 @@ function wrap_live_source_errors<A>(
 						value: undefined as A,
 					});
 				},
-
-				throw(error?: unknown) {
-					if (iterator.throw) {
-						return RunLiveIteratorCall(
-							event,
-							() => iterator.throw?.(error) as PromiseLike<IteratorResult<A>>,
-						);
-					}
-
-					return RunLiveIteratorCall(event, () => Promise.reject(error));
-				},
+				...(throw_iterator === undefined
+					? {}
+					: {
+							throw(error?: unknown) {
+								return RunLiveIteratorCall(event, () => throw_iterator(error));
+							},
+						}),
 			};
 		},
 	};
@@ -131,18 +136,11 @@ function RunLiveIteratorCall<A>(event: RequestEventShape, run: () => PromiseLike
 	const IteratorEffect = Effect.tryPromise({
 		try: run,
 		catch: (error: unknown) => error,
-	}).pipe(Effect.catch((error) => Effect.sync(() => throw_live_source_error(error))));
+	});
 
 	return runtime.runPromise(
 		RunInsideRemoteEffectHandler(event, IteratorEffect) as Effect.Effect<A, unknown, unknown>,
 	);
-}
-
-function throw_live_source_error(error: unknown): never {
-	const encoded = encode_remote_failure(Cause.fail(error));
-	const envelope = create_serialized_remote_failure_envelope(encoded);
-
-	svelte_error(500, envelope as never);
 }
 
 export function run_handler_effect<A>(

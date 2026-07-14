@@ -26,9 +26,33 @@ type RemoteFormResponseEnvelope =
 	  }
 	| {
 			readonly _tag: "RemoteFormResultEnvelope";
-			readonly data?: string | undefined;
-			readonly result?: string | undefined;
+			readonly data: string;
+	  }
+	| {
+			readonly _tag: "RemoteFormRedirectEnvelope";
+			readonly location: string;
 	  };
+
+export interface RemoteFormTransport {
+	readonly binary_form_content_type?: string;
+	readonly decoders?: Record<string, (value: unknown) => unknown>;
+	readonly navigate?: (location: string, invalidate_all: boolean) => PromiseLike<void> | void;
+	readonly remote_request?: (url: string, init?: RequestInit) => PromiseLike<unknown>;
+	readonly refresh?: () => PromiseLike<void> | void;
+	readonly serialize_binary_form?: (
+		data: unknown,
+		meta: { readonly remote_refreshes: readonly string[] },
+	) => { readonly blob: Blob };
+}
+
+interface KitRemoteFormTransport extends RemoteFormTransport {
+	readonly binary_form_content_type: string;
+	readonly remote_request: (url: string, init?: RequestInit) => PromiseLike<unknown>;
+	readonly serialize_binary_form: (
+		data: unknown,
+		meta: { readonly remote_refreshes: readonly string[] },
+	) => { readonly blob: Blob };
+}
 
 type RemoteFormDecodedPayload<Output> = {
 	readonly issues?: readonly FormIssue[];
@@ -50,13 +74,18 @@ const RemoteFormErrorEnvelopeSchema = Schema.Struct({
 
 const RemoteFormResultEnvelopeSchema = Schema.Struct({
 	type: Schema.Literal("result"),
-	data: Schema.optional(Schema.String),
-	result: Schema.optional(Schema.String),
+	data: Schema.String,
+});
+
+const RemoteFormRedirectEnvelopeSchema = Schema.Struct({
+	type: Schema.Literal("redirect"),
+	location: Schema.String,
 });
 
 const RemoteFormResponseEnvelopeSchema = Schema.Union([
 	RemoteFormErrorEnvelopeSchema,
 	RemoteFormResultEnvelopeSchema,
+	RemoteFormRedirectEnvelopeSchema,
 ]);
 
 const RemoteFormDecodedPayloadSchema = Schema.Struct({
@@ -64,16 +93,34 @@ const RemoteFormDecodedPayloadSchema = Schema.Struct({
 	result: Schema.optional(Schema.Unknown),
 });
 
+const RemoteFormRedirectDataSchema = Schema.Struct({
+	redirect: Schema.String,
+});
+
+const RemoteFormResultDataSchema = Schema.Struct({
+	_: Schema.Unknown,
+});
+
+const KitRemoteFormDataSchema = Schema.Struct({
+	_: Schema.optional(Schema.Unknown),
+	redirect: Schema.optional(Schema.String),
+	r: Schema.optional(Schema.Literal(true)),
+});
+
 const DecodeRemoteFormResponseEnvelope = Schema.decodeUnknownOption(
 	RemoteFormResponseEnvelopeSchema,
 );
 const DecodeRemoteFormPayload = Schema.decodeUnknownOption(RemoteFormDecodedPayloadSchema);
+const DecodeRemoteFormRedirectData = Schema.decodeUnknownOption(RemoteFormRedirectDataSchema);
+const DecodeRemoteFormResultData = Schema.decodeUnknownOption(RemoteFormResultDataSchema);
+const DecodeKitRemoteFormData = Schema.decodeUnknownOption(KitRemoteFormDataSchema);
 
 export const SubmitRemoteForm = <Output, ErrorType = never>(
 	form_obj: NativeFormRecord,
 	input: unknown,
 	decode_payload: (value: unknown) => unknown,
 	remote_base: string,
+	remote_transport: RemoteFormTransport,
 	preflight_schema?: StandardSchema,
 ) =>
 	Effect.gen(function* () {
@@ -89,11 +136,21 @@ export const SubmitRemoteForm = <Output, ErrorType = never>(
 
 		yield* ValidatePreflightInput<ErrorType>(preflight_schema, input);
 
+		if (is_kit_remote_form_transport(remote_transport)) {
+			return yield* SubmitRemoteFormWithKit<Output, ErrorType>(
+				action_id,
+				input,
+				decode_payload,
+				remote_base,
+				remote_transport,
+			);
+		}
+
 		const response = yield* MakeEffectFromPromise<Response, ErrorType>((signal) =>
 			fetch(to_remote_form_url(remote_base, action_id), {
 				method: "POST",
 				headers: get_remote_request_headers(),
-				body: to_form_data(input),
+				body: to_form_data(to_remote_form_input(input, action_id)),
 				signal,
 			}),
 		);
@@ -106,7 +163,41 @@ export const SubmitRemoteForm = <Output, ErrorType = never>(
 
 		const envelope = yield* MakeEffectFromPromise<unknown, ErrorType>(() => response.json());
 
-		return yield* DecodeFormResponse<Output, ErrorType>(envelope, decode_payload);
+		return yield* DecodeFormResponse<Output, ErrorType>(
+			envelope,
+			decode_payload,
+			remote_transport,
+		);
+	});
+
+const SubmitRemoteFormWithKit = <Output, ErrorType>(
+	action_id: string,
+	input: unknown,
+	decode_payload: (value: unknown) => unknown,
+	remote_base: string,
+	remote_transport: KitRemoteFormTransport,
+) =>
+	Effect.gen(function* () {
+		const url = to_remote_form_url(remote_base, action_id);
+		const body = yield* MakeEffectFromSync<Blob, ErrorType>(
+			() =>
+				remote_transport.serialize_binary_form(to_remote_form_input(input, action_id), {
+					remote_refreshes: [],
+				}).blob,
+		);
+		const data = yield* MakeEffectFromPromise<unknown, ErrorType>((signal) =>
+			remote_transport.remote_request(url, {
+				method: "POST",
+				headers: {
+					...get_remote_request_headers(),
+					"Content-Type": remote_transport.binary_form_content_type,
+				},
+				body,
+				signal,
+			}),
+		);
+
+		return yield* DecodeKitFormData<Output, ErrorType>(data, decode_payload, remote_transport);
 	});
 
 export function get_remote_action_id(form_obj: NativeFormRecord): string | undefined {
@@ -126,17 +217,27 @@ export function get_remote_action_id(form_obj: NativeFormRecord): string | undef
 function to_remote_form_url(remote_base: string, action_id: string): string {
 	const parts = action_id.split("/");
 	const head = parts.slice(0, 2).join("/");
-	const tail = parts.slice(2).join("/");
 	const normalized_base = remote_base.replace(/\/$/, "");
 
-	if (tail.length === 0) {
-		return `${normalized_base}/${head}`;
-	}
-
-	return `${normalized_base}/${head}/${encodeURIComponent(tail)}`;
+	return `${normalized_base}/${head}`;
 }
 
-function get_remote_request_headers(): HeadersInit {
+function to_remote_form_input(input: unknown, action_id: string): Record<string, unknown> {
+	const data = is_record(input) ? input : {};
+	const serialized_key = action_id.split("/").slice(2).join("/");
+	const key: unknown = serialized_key.length === 0 ? undefined : JSON.parse(serialized_key);
+
+	if (key === undefined || data.id !== undefined) {
+		return data;
+	}
+
+	return {
+		...data,
+		id: key,
+	};
+}
+
+function get_remote_request_headers(): Record<string, string> {
 	if (typeof location === "undefined") {
 		return {};
 	}
@@ -202,6 +303,7 @@ function is_record(value: unknown): value is Record<string, unknown> {
 const DecodeFormResponse = <Output, ErrorType>(
 	envelope: unknown,
 	decode_payload: (value: unknown) => unknown,
+	remote_transport: RemoteFormTransport,
 ) =>
 	Effect.gen(function* () {
 		const response = decode_remote_form_response_envelope(envelope);
@@ -223,13 +325,36 @@ const DecodeFormResponse = <Output, ErrorType>(
 			}
 
 			return yield* Effect.fail(
-				create_remote_http_error(response.status ?? 500, response.error),
+				create_remote_http_error(get_remote_form_error_status(response), response.error),
 			);
 		}
 
-		const result_text = response.result ?? response.data;
+		if (response._tag === "RemoteFormRedirectEnvelope") {
+			return yield* NavigateRemoteForm<ErrorType>(
+				response.location,
+				true,
+				remote_transport,
+				envelope,
+			);
+		}
 
-		if (result_text === undefined) {
+		const parsed = yield* MakeEffectFromSync<unknown, ErrorType>(() =>
+			parse(response.data, remote_transport.decoders),
+		);
+		const redirect_data = DecodeRemoteFormRedirectData(parsed);
+
+		if (Option.isSome(redirect_data)) {
+			return yield* NavigateRemoteForm<ErrorType>(
+				redirect_data.value.redirect,
+				true,
+				remote_transport,
+				envelope,
+			);
+		}
+
+		const result_data = DecodeRemoteFormResultData(parsed);
+
+		if (!Option.isSome(result_data)) {
 			return yield* Effect.fail(
 				create_remote_transport_error(
 					new UnsupportedRemoteFormResponseError(envelope),
@@ -238,8 +363,9 @@ const DecodeFormResponse = <Output, ErrorType>(
 			);
 		}
 
-		const parsed = yield* MakeEffectFromSync<unknown, ErrorType>(() => parse(result_text));
-		const payload = yield* MakeEffectFromSync<unknown, ErrorType>(() => decode_payload(parsed));
+		const payload = yield* MakeEffectFromSync<unknown, ErrorType>(() =>
+			decode_payload(result_data.value._),
+		);
 		const decoded = decode_remote_form_payload<Output>(payload);
 
 		if (!decoded) {
@@ -255,7 +381,98 @@ const DecodeFormResponse = <Output, ErrorType>(
 			return yield* Effect.fail(create_remote_validation_error(decoded.issues, decoded, 400));
 		}
 
+		yield* RefreshRemoteFormState<ErrorType>(remote_transport);
+
 		return decoded.result as Output;
+	});
+
+const DecodeKitFormData = <Output, ErrorType>(
+	data: unknown,
+	decode_payload: (value: unknown) => unknown,
+	remote_transport: RemoteFormTransport,
+) =>
+	Effect.gen(function* () {
+		const decoded_data = DecodeKitRemoteFormData(data);
+
+		if (!Option.isSome(decoded_data)) {
+			return yield* Effect.fail(
+				create_remote_transport_error(new UnsupportedRemoteFormResponseError(data), data),
+			);
+		}
+
+		const should_invalidate = decoded_data.value.r !== true;
+
+		if (decoded_data.value.redirect) {
+			return yield* NavigateRemoteForm<ErrorType>(
+				decoded_data.value.redirect,
+				should_invalidate,
+				remote_transport,
+				data,
+			);
+		}
+
+		if (!("_" in decoded_data.value)) {
+			return yield* Effect.fail(
+				create_remote_transport_error(new UnsupportedRemoteFormResponseError(data), data),
+			);
+		}
+
+		const payload = yield* MakeEffectFromSync<unknown, ErrorType>(() =>
+			decode_payload(decoded_data.value._),
+		);
+		const decoded = decode_remote_form_payload<Output>(payload);
+
+		if (!decoded) {
+			return yield* Effect.fail(
+				create_remote_transport_error(new UnsupportedRemoteFormResponseError(data), data),
+			);
+		}
+
+		if (decoded.issues && decoded.issues.length > 0) {
+			return yield* Effect.fail(create_remote_validation_error(decoded.issues, decoded, 400));
+		}
+
+		if (should_invalidate) {
+			yield* RefreshRemoteFormState<ErrorType>(remote_transport);
+		}
+
+		return decoded.result as Output;
+	});
+
+const NavigateRemoteForm = <ErrorType>(
+	location: string,
+	invalidate_all: boolean,
+	remote_transport: RemoteFormTransport,
+	envelope: unknown,
+) =>
+	Effect.gen(function* () {
+		const navigate = remote_transport.navigate;
+
+		if (!navigate) {
+			return yield* Effect.fail(
+				create_remote_transport_error(
+					new UnsupportedRemoteFormResponseError(envelope),
+					envelope,
+				),
+			);
+		}
+
+		yield* MakeEffectFromPromise<void, ErrorType>(() =>
+			Promise.resolve(navigate(location, invalidate_all)),
+		);
+
+		return yield* Effect.interrupt;
+	});
+
+const RefreshRemoteFormState = <ErrorType>(remote_transport: RemoteFormTransport) =>
+	Effect.gen(function* () {
+		const refresh = remote_transport.refresh;
+
+		if (!refresh) {
+			return;
+		}
+
+		yield* MakeEffectFromPromise<void, ErrorType>(() => Promise.resolve(refresh()));
 	});
 
 function decode_remote_form_response_envelope(
@@ -275,11 +492,39 @@ function decode_remote_form_response_envelope(
 		};
 	}
 
+	if (decoded.value.type === "redirect") {
+		return {
+			_tag: "RemoteFormRedirectEnvelope",
+			location: decoded.value.location,
+		};
+	}
+
 	return {
 		_tag: "RemoteFormResultEnvelope",
 		data: decoded.value.data,
-		result: decoded.value.result,
 	};
+}
+
+function get_remote_form_error_status(
+	response: Extract<RemoteFormResponseEnvelope, { _tag: "RemoteFormErrorEnvelope" }>,
+): number {
+	const nested_status = is_record(response.error) ? response.error.status : undefined;
+
+	if (response.status !== undefined) {
+		return response.status;
+	}
+
+	return typeof nested_status === "number" ? nested_status : 500;
+}
+
+function is_kit_remote_form_transport(
+	remote_transport: RemoteFormTransport,
+): remote_transport is KitRemoteFormTransport {
+	return (
+		typeof remote_transport.binary_form_content_type === "string" &&
+		typeof remote_transport.remote_request === "function" &&
+		typeof remote_transport.serialize_binary_form === "function"
+	);
 }
 
 function decode_remote_form_payload<Output>(

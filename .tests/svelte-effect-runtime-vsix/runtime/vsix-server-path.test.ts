@@ -1,5 +1,6 @@
 import {
 	PackageManagerCommand,
+	PackageManagerCommandLive,
 	PackageManagerInstallFiles,
 	RunPackageManagerInstall,
 	make_package_manager_candidates,
@@ -24,9 +25,14 @@ import {
 	assert_throws,
 	assert_truthy,
 } from "../../svelte-effect-runtime/runtime/helpers/assert.ts";
+import { ServerInstallRetentionPolicyLive } from "../../../modules/svelte-effect-runtime-vsix/src/extension/server-install-retention/index.ts";
+import {
+	make_configuration_layer,
+	make_installing_command_layer,
+	make_output_layer,
+	vscode_configuration,
+} from "./helpers/server-path.ts";
 import { language_server_package_name } from "../../../modules/svelte-effect-runtime-vsix/src/extension/constants.ts";
-import { ExtensionOutput } from "../../../modules/svelte-effect-runtime-vsix/src/extension/extension-services.ts";
-import { ExtensionConfiguration } from "../../../modules/svelte-effect-runtime-vsix/src/extension/settings.ts";
 import { get_server_dispatcher } from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
 import { paths_equal } from "../../../modules/svelte-effect-runtime-vsix/src/extension/paths.ts";
 import { Cause, Effect, Exit, FileSystem, Layer, Option } from "effect";
@@ -35,10 +41,6 @@ import { test, vi } from "vitest";
 import { join } from "node:path";
 
 import extension_manifest from "../../../modules/svelte-effect-runtime-vsix/package.json" with { type: "json" };
-
-const vscode_configuration: { global_path: unknown } = {
-	global_path: undefined,
-};
 
 vi.mock("vscode", () => ({}));
 
@@ -211,6 +213,52 @@ test("VS Code extension reports every package-manager failure", async () => {
 	assert_string_includes(error.message, "unverified verify: server missing");
 });
 
+test("VS Code extension limits package-manager stdout and stderr independently", async () => {
+	const stream_bytes = 6 * 1024 * 1024;
+	const script = [
+		`process.stdout.write(Buffer.alloc(${stream_bytes}, 97));`,
+		`process.stderr.write(Buffer.alloc(${stream_bytes}, 98));`,
+	].join("");
+	const result = await get_server_dispatcher().run(
+		Effect.gen(function* () {
+			const command = yield* PackageManagerCommand;
+
+			return yield* command.run({
+				command: process.execPath,
+				args: ["-e", script],
+			});
+		}).pipe(Effect.provide(PackageManagerCommandLive)),
+	);
+
+	assert_equals(result.stdout.length, stream_bytes);
+	assert_equals(result.stderr.length, stream_bytes);
+});
+
+test("VS Code extension rejects one oversized package-manager output stream", async () => {
+	const stream_bytes = 10 * 1024 * 1024 + 1;
+	const script = `process.stdout.write(Buffer.alloc(${stream_bytes}, 97));`;
+	const result = await get_server_dispatcher().run(
+		Effect.gen(function* () {
+			const command = yield* PackageManagerCommand;
+
+			return yield* Effect.exit(
+				command.run({
+					command: process.execPath,
+					args: ["-e", script],
+				}),
+			);
+		}).pipe(Effect.provide(PackageManagerCommandLive)),
+	);
+
+	assert_truthy(Exit.isFailure(result));
+
+	if (Exit.isSuccess(result)) {
+		return;
+	}
+
+	assert_string_includes(Cause.pretty(result.cause), "Command output exceeded 10485760 bytes.");
+});
+
 test("VS Code extension ignores workspace language-server executable paths", () => {
 	const safe_path = process.execPath;
 	const workspace_path = "scripts/workspace-server.cjs";
@@ -352,6 +400,7 @@ test("VS Code extension publishes beside a stale invalid exact-version cache", a
 		make_output_layer(output_lines),
 		make_configuration_layer(),
 		Layer.succeed(PackageManagerInstallFiles, { clean: () => Effect.void }),
+		ServerInstallRetentionPolicyLive,
 	);
 	const result = await get_server_dispatcher().run(
 		Effect.scoped(
@@ -360,7 +409,7 @@ test("VS Code extension publishes beside a stale invalid exact-version cache", a
 				const storage_path = yield* file_system.makeTempDirectoryScoped({
 					prefix: "ser-vsix-cache-",
 				});
-				const cache_root = join(storage_path, "language-server");
+				const cache_root = join(storage_path, "language-server", "installs");
 				const encoded_version = encodeURIComponent(language_server_package_version);
 				const stale_package_root = join(
 					cache_root,
@@ -409,7 +458,9 @@ test("VS Code extension publishes beside a stale invalid exact-version cache", a
 	assert_truthy(
 		result.cache_entries.some((entry) => entry.startsWith(`${result.encoded_version}-`)),
 	);
-	assert_false(result.cache_entries.some((entry) => entry.startsWith(".")));
+	assert_false(
+		result.cache_entries.some((entry) => entry.startsWith(`.${result.encoded_version}-`)),
+	);
 	assert_truthy(output_lines.some((line) => line.startsWith("Installing ")));
 });
 
@@ -428,6 +479,7 @@ test("VS Code extension atomically shares one published cache across windows", a
 		make_output_layer(output_lines),
 		make_configuration_layer(),
 		Layer.succeed(PackageManagerInstallFiles, { clean: () => Effect.void }),
+		ServerInstallRetentionPolicyLive,
 	);
 	const Program = Effect.scoped(
 		Effect.gen(function* () {
@@ -452,8 +504,9 @@ test("VS Code extension atomically shares one published cache across windows", a
 				[ResolveWith(first_layer), ResolveWith(second_layer)],
 				{ concurrency: "unbounded" },
 			);
-			const cache_root = join(storage_path, "language-server");
+			const cache_root = join(storage_path, "language-server", "installs");
 			const cache_entries = yield* file_system.readDirectory(cache_root);
+			const published_entries = cache_entries.filter((entry) => !entry.startsWith("."));
 			const encoded_version = encodeURIComponent(language_server_package_version);
 			const expected_prefix = join(cache_root, `${encoded_version}-`);
 			const expected_suffix = join(
@@ -471,6 +524,7 @@ test("VS Code extension atomically shares one published cache across windows", a
 				encoded_version,
 				expected_prefix,
 				expected_suffix,
+				published_entries,
 				server_paths,
 				server_path_types,
 			};
@@ -487,11 +541,13 @@ test("VS Code extension atomically shares one published cache across windows", a
 		),
 	);
 	assert_equals(result.server_path_types, ["File", "File"]);
-	assert_truthy(result.cache_entries.length >= 1 && result.cache_entries.length <= 2);
+	assert_truthy(result.published_entries.length >= 1 && result.published_entries.length <= 2);
 	assert_truthy(
-		result.cache_entries.every((entry) => entry.startsWith(`${result.encoded_version}-`)),
+		result.published_entries.every((entry) => entry.startsWith(`${result.encoded_version}-`)),
 	);
-	assert_false(result.cache_entries.some((entry) => entry.startsWith(".")));
+	assert_false(
+		result.cache_entries.some((entry) => entry.startsWith(`.${result.encoded_version}-`)),
+	);
 });
 
 function make_test_candidate(name: string): PackageManagerCandidate {
@@ -511,82 +567,6 @@ function make_package_manager_test_layer(run_command: PackageManagerCommandRunne
 		Layer.succeed(PackageManagerCommand, { run: run_command }),
 		Layer.succeed(PackageManagerInstallFiles, {
 			clean: () => Effect.void,
-		}),
-	);
-}
-
-function make_output_layer(output_lines: string[]) {
-	return Layer.succeed(ExtensionOutput, {
-		append_line: (message: string) =>
-			Effect.sync(() => {
-				output_lines.push(message);
-			}),
-		show: Effect.void,
-		show_error: () => Effect.void,
-		show_information: () => Effect.void,
-	});
-}
-
-function make_configuration_layer() {
-	return Layer.succeed(ExtensionConfiguration, {
-		get_client_mode: Effect.succeed("auto" as const),
-		get_enabled: Effect.succeed(true),
-		inspect_runtime_server_path: Effect.sync(() => ({
-			global_path: vscode_configuration.global_path,
-		})),
-		inspect_svelte_server_path: Effect.succeed({}),
-		set_enabled: () => Effect.void,
-		write_svelte_server_path: () => Effect.void,
-	});
-}
-
-function make_installing_command_layer(install_attempts: { value: number }, install_delay_ms = 0) {
-	return Layer.effect(
-		PackageManagerCommand,
-		Effect.gen(function* () {
-			const file_system = yield* FileSystem.FileSystem;
-
-			return {
-				run: (invocation: CommandInvocation, cwd?: string) =>
-					Effect.gen(function* () {
-						if (invocation.args.includes("install") && cwd) {
-							yield* Effect.sync(() => {
-								install_attempts.value += 1;
-							});
-
-							if (install_delay_ms > 0) {
-								yield* Effect.sleep(`${install_delay_ms} millis`);
-							}
-
-							const package_root = join(
-								cwd,
-								"node_modules",
-								language_server_package_name,
-							);
-
-							yield* file_system.makeDirectory(join(package_root, ".dist"), {
-								recursive: true,
-							});
-							yield* file_system.makeDirectory(join(package_root, "runtime"), {
-								recursive: true,
-							});
-							yield* file_system.writeFileString(
-								join(package_root, "package.json"),
-								JSON.stringify({ version: language_server_package_version }),
-							);
-							yield* file_system.writeFileString(
-								join(package_root, ".dist", "server.cjs"),
-								"module.exports = {};\n",
-							);
-							yield* file_system.writeFileString(
-								join(package_root, "runtime", "package.json"),
-								"{}\n",
-							);
-						}
-
-						return { stdout: "1.0.0", stderr: "" };
-					}),
-			};
 		}),
 	);
 }

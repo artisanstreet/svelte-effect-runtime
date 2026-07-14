@@ -1,10 +1,4 @@
-import type {
-	RemoteForm,
-	RemoteFormInput,
-	RemoteLiveQuery,
-	RemoteQuery,
-	RemoteQueryOverride,
-} from "@sveltejs/kit";
+import type { RemoteForm, RemoteFormInput, RemoteQueryUpdate } from "@sveltejs/kit";
 import type { RemoteFailure } from "$/remote/shared.ts";
 import type { Effect, Schema, Stream } from "effect";
 
@@ -34,7 +28,7 @@ type NativeRemoteFormValidateOptions<Input extends RemoteFormInput | void, Outpu
 export type EffectRemoteFormPreflightSchema<
 	Input extends RemoteFormInput | void,
 	Output = unknown,
-> = NativeRemoteFormPreflightSchema<Input, Output> | Schema.Schema<unknown>;
+> = NativeRemoteFormPreflightSchema<Input, Output> | Schema.Codec<unknown, Input, never, unknown>;
 
 export type EffectRemoteFormValidateOptions<
 	Input extends RemoteFormInput | void,
@@ -67,21 +61,18 @@ type EffectRemoteQueryUpdates<Updates extends readonly unknown[]> = Updates & {
 	[Index in keyof Updates]: EffectRemoteQueryUpdateInput<Updates[Index]>;
 };
 
-type NativeRemoteQueryUpdate =
-	| RemoteQuery<unknown>
-	| RemoteLiveQuery<unknown>
-	| RemoteQueryOverride;
+type NativeRemoteQueryUpdate = RemoteQueryUpdate;
 
-type EffectRemoteQueryUpdateFunction = EffectRemoteQueryUpdateBrand &
-	((input: never) => EffectRemoteQueryUpdateResource);
+type EffectRemoteQueryUpdateFunction = (input: never) => EffectRemoteQueryUpdateResource;
 
-type EffectRemoteLiveQueryUpdateFunction = EffectRemoteQueryUpdateBrand &
-	((input: never) => Stream.Stream<unknown, unknown, unknown>);
+type EffectRemoteLiveQueryUpdateFunction = (
+	input: never,
+) => Stream.Stream<unknown, unknown, unknown>;
 
 type EffectRemoteQueryUpdateResource = Effect.Effect<unknown, unknown> & {
 	readonly refresh: () => Effect.Effect<void, unknown, never>;
 	readonly set: (value: never) => void;
-	readonly withOverride: (update: (current: never) => unknown) => unknown;
+	readonly withOverride: (update: never) => unknown;
 };
 
 export interface Pending {
@@ -91,6 +82,15 @@ export interface Pending {
 export type NativeMethod = (...args: unknown[]) => unknown;
 
 export type NativeFormRecord = Record<PropertyKey, unknown>;
+
+export type EffectRemoteCommandCall<Output, ErrorType = never> = Effect.Effect<
+	Output,
+	RemoteFailure<ErrorType>
+> & {
+	updates: <const Updates extends readonly unknown[]>(
+		...updates: EffectRemoteQueryUpdates<Updates>
+	) => Effect.Effect<Output, RemoteFailure<ErrorType>>;
+};
 
 export type EffectRemoteFormSubmit<Output = unknown, ErrorType = never> = Effect.Effect<
 	Output | undefined,
@@ -127,7 +127,8 @@ export type EffectRemoteForm<
 		): ReturnType<RemoteForm<Input, Output>["enhance"]>;
 		for(
 			id: Parameters<RemoteForm<Input, Output>["for"]>[0],
-		): Omit<EffectRemoteForm<Input, Output, ErrorType>, "for">;
+		): EffectRemoteFormCallable<Input, Output, ErrorType> &
+			Omit<EffectRemoteForm<Input, Output, ErrorType>, "for">;
 		preflight(
 			schema: EffectRemoteFormPreflightSchema<Input, Output>,
 		): EffectRemoteForm<Input, Output, ErrorType>;
