@@ -3,7 +3,12 @@ import { scan_svelte_effect_source } from "../../../modules/svelte-effect-runtim
 import { create_relocations } from "../../../modules/svelte-effect-runtime/src/markup/transform/apply.ts";
 import { sanitize_markup } from "../../../modules/svelte-effect-runtime/src/markup/transform/scan.ts";
 import { reset_dispatcher } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
-import { assert_equals, assert_throws, assert_string_includes } from "../unit/helpers/assert.ts";
+import {
+	assert_equals,
+	assert_false,
+	assert_throws,
+	assert_string_includes,
+} from "../unit/helpers/assert.ts";
 import { promise } from "../../../modules/svelte-effect-runtime/src/markup/promise.ts";
 import { value } from "../../../modules/svelte-effect-runtime/src/markup/value.ts";
 import { run } from "../../../modules/svelte-effect-runtime/src/markup/run.ts";
@@ -1817,9 +1822,13 @@ test("does not choke on template literal expressions", () => {
 test("rewrites {@html yield* expr} in raw HTML insertion", () => {
 	const source = `{@html yield* renderMarkup()}`;
 	const result = transform_markup_effect(source, "Test.svelte");
+	const server = transform_markup_effect(source, "Test.svelte", { target: "server" });
 
 	assert_string_includes(result.code, `Code.Markup.Promise`);
 	assert_string_includes(result.code, `renderMarkup`);
+	assert_string_includes(result.code, `fn: () => (function* ()`);
+	assert_false(result.code.includes(`function* __SER___markup_effect`));
+	assert_false(server.code.includes(`ssr_fallback`));
 });
 
 test("rejects {@debug yield* expr} instead of emitting invalid Svelte", () => {

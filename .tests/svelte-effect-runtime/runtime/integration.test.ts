@@ -1214,7 +1214,7 @@ test("vite remote client wrapper preserves native SvelteKit remote module", asyn
 	);
 	assert_string_includes(
 		result,
-		`export const get_post_batch = create_remote_query_adapter(__remote.query_batch('abc/get_post_batch'), __SER___decode_payload);`,
+		`export const get_post_batch = create_remote_query_adapter(__remote.query_batch('abc/get_post_batch'), __SER___decode_payload, "", "batch");`,
 	);
 	assert_string_includes(
 		result,

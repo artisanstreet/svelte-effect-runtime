@@ -136,6 +136,10 @@ function make_remote_export(
 		return `export const ${name} = create_remote_prerender_adapter(${native_call}, __SER___decode_payload);`;
 	}
 
+	if (remote_type === "query_batch") {
+		return `export const ${name} = create_remote_query_adapter(${native_call}, __SER___decode_payload, "", "batch");`;
+	}
+
 	return `export const ${name} = create_remote_query_adapter(${native_call}, __SER___decode_payload);`;
 }
 

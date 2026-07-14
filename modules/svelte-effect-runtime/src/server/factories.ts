@@ -95,6 +95,8 @@ type AttachRemoteResource<Resource> = (resource: unknown, effect: Resource) => v
 
 type AttachFailedRemoteResource<Resource> = (error: unknown, effect: Resource) => void;
 
+type QueryAdapterMode = "standard" | "batch";
+
 type NativePrerenderOptions<Input> = {
 	readonly inputs?: (() => Promise<Input[]>) | undefined;
 	readonly dynamic?: boolean | undefined;
@@ -118,6 +120,7 @@ const request_store_context_error = "Could not get the request store.";
 
 function to_effect_query<Input, Output, ErrorType = never>(
 	native: NativeQueryLike<Input>,
+	mode: QueryAdapterMode = "standard",
 ): EffectRemoteQueryFunction<Input, Output, ErrorType> {
 	return to_effect_remote_resource<
 		Input,
@@ -128,6 +131,7 @@ function to_effect_query<Input, Output, ErrorType = never>(
 		native,
 		attach_query_resource_methods,
 		attach_failed_remote_query_resource,
+		mode,
 	) as unknown as EffectRemoteQueryFunction<Input, Output, ErrorType>;
 }
 
@@ -217,6 +221,7 @@ function to_effect_remote_resource<
 	native: NativeQueryLike<Input>,
 	attach_resource: AttachRemoteResource<Resource>,
 	attach_failed_resource: AttachFailedRemoteResource<Resource>,
+	mode: QueryAdapterMode = "standard",
 ): (input: Input) => Resource {
 	const wrapped = ((input: Input) => {
 		if (is_current_remote_request()) {
@@ -236,8 +241,9 @@ function to_effect_remote_resource<
 		}
 
 		const resource = resource_attempt.success;
+		const started_result = mode === "batch" ? begin_batch_resource(resource) : undefined;
 		const ResourceEffect = MakeEffectFromPromise<Output, ErrorType>(
-			() => Promise.resolve(resource) as Promise<Output>,
+			() => (started_result ?? Promise.resolve(resource)) as Promise<Output>,
 		) as Resource;
 
 		attach_resource(resource, ResourceEffect);
@@ -248,6 +254,14 @@ function to_effect_remote_resource<
 	copy_property_descriptors(native, wrapped);
 
 	return wrapped;
+}
+
+function begin_batch_resource(resource: unknown): Promise<unknown> {
+	const result = Promise.resolve(resource);
+
+	void result.catch(() => {});
+
+	return result;
 }
 
 function is_current_remote_request(): boolean {
@@ -439,6 +453,7 @@ function QueryBatch(validate_or_handler: unknown, maybe_handler?: unknown): unkn
 				normalize_validator(validate_or_handler) as never,
 				make_remote_wrapper(maybe_handler as RemoteHandler, "Query.batch") as never,
 			) as NativeQueryLike,
+			"batch",
 		);
 	} catch (error: unknown) {
 		throw normalize_remote_helper_error(error, "Query.batch");

@@ -261,7 +261,7 @@ function get_tag_info(trimmed: string): TagInfo {
 		return { kind: "plain", prefix_length: "@const ".length };
 	}
 	if (trimmed.startsWith("@html ")) {
-		return { kind: "plain", prefix_length: "@html ".length };
+		return { kind: "html", prefix_length: "@html ".length };
 	}
 	if (trimmed.startsWith("@debug ")) {
 		return { kind: "plain", prefix_length: "@debug ".length };

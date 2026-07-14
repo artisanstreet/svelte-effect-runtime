@@ -296,6 +296,31 @@ test("remote query adapter awaits callable thenable resources", async () => {
 	assert_equals(run_called, false);
 });
 
+test("remote batch query adapter opens the native batch window before Effects run", async () => {
+	const started: string[] = [];
+	const native = (input: string) => ({
+		then: (resolve: (value: string) => unknown) => {
+			started.push(input);
+
+			return resolve(input);
+		},
+	});
+	const query = create_remote_query_adapter<string, string>(
+		native,
+		(value) => value,
+		"",
+		"batch",
+	);
+	const First = query("first");
+	const Second = query("second");
+
+	await Promise.resolve();
+
+	assert_equals(started, ["first", "second"]);
+	assert_equals(await get_server_dispatcher().run(First), "first");
+	assert_equals(await get_server_dispatcher().run(Second), "second");
+});
+
 test("remote query adapter maps SvelteKit app errors to HTTP errors", async () => {
 	const body = {
 		message: "Bad Request",

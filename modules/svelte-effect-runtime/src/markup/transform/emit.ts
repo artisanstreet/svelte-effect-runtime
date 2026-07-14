@@ -159,6 +159,17 @@ function emit_replacement(
 			event.expr_text,
 			event.relocation,
 		);
+	} else if (kind === "html") {
+		const effect = make_inline_effect(normalized_candidate, helper_bindings);
+
+		replacement_text = emit_await_expression(id_text, effect, helper_bindings);
+		helpers = normalized.helpers;
+		relocation = make_pending_relocation(
+			candidate,
+			replacement_text,
+			effect.effect_text,
+			effect.relocation,
+		);
 	} else {
 		const effect = make_effect_helper(normalized_candidate, helper_name, helper_bindings);
 
@@ -259,16 +270,24 @@ function server_fallback(is_server_target: boolean, fallback: string): string | 
 }
 
 interface EffectHelper {
-	helper: HelperDeclaration;
 	call: string;
 	deps_text: string;
+}
+
+interface DeclaredEffectHelper extends EffectHelper {
+	helper: HelperDeclaration;
+}
+
+interface InlineEffectHelper extends EffectHelper {
+	effect_text: string;
+	relocation: ExpressionRelocation | undefined;
 }
 
 function make_effect_helper(
 	candidate: MarkupCandidate,
 	helper_name: string,
 	helper_bindings: Pick<MarkupHelperBindings, "yieldable">,
-): EffectHelper {
+): DeclaredEffectHelper {
 	const deps = collect_free_identifiers(candidate.expr_text);
 	const args_text = deps.join(", ");
 	const deps_text = deps.length === 0 ? "[]" : `[${args_text}]`;
@@ -302,6 +321,27 @@ function make_effect_helper(
 				generatedEndInReplacement: generated_start + relocation.generatedEnd,
 			},
 		},
+	};
+}
+
+function make_inline_effect(
+	candidate: MarkupCandidate,
+	helper_bindings: Pick<MarkupHelperBindings, "yieldable">,
+): InlineEffectHelper {
+	const deps = collect_free_identifiers(candidate.expr_text);
+	const deps_text = deps.length === 0 ? "[]" : `[${deps.join(", ")}]`;
+	const effect_text = wrap_yield_stars(candidate.expr_text, helper_bindings);
+	const relocation = make_yield_operand_relocation(
+		candidate.expr_text,
+		effect_text,
+		helper_bindings,
+	);
+
+	return {
+		call: `(function* () { return (${effect_text}); })()`,
+		deps_text,
+		effect_text,
+		relocation,
 	};
 }
 

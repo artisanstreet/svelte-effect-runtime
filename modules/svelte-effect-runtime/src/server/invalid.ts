@@ -15,7 +15,15 @@ export function make_invalid_proxy<Input = unknown>(
 				return undefined;
 			}
 
-			return make_invalid_proxy([...path, property]);
+			const segment = normalize_path_segment(property);
+
+			return make_invalid_proxy([...path, segment]);
 		},
 	}) as FormInvalid<Input>;
+}
+
+function normalize_path_segment(property: string): string | number {
+	const is_array_index = /^(0|[1-9]\d*)$/.test(property);
+
+	return is_array_index ? Number(property) : property;
 }
