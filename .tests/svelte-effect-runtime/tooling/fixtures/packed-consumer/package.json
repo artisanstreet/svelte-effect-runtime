@@ -1,0 +1,15 @@
+{
+	"name": "ser-packed-tooling-contract",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"check": "corepack pnpm run sync && corepack pnpm run check:types && corepack pnpm run check:ser",
+		"check:ser": "vite build --mode conformance-check",
+		"check:types": "tsc --noEmit",
+		"sync": "svelte-kit sync"
+	},
+	"dependencies": {
+		"svelte-effect-runtime": "__PACKED_ARTIFACT__"
+	},
+	"packageManager": "pnpm@11.10.0"
+}
