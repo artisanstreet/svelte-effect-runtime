@@ -13,9 +13,9 @@ import { create_serialized_remote_failure_envelope } from "../../../modules/svel
 import { normalize_native_error } from "../../../modules/svelte-effect-runtime/src/remote/failures.ts";
 import { to_form_data } from "../../../modules/svelte-effect-runtime/src/remote/client/form-data.ts";
 import { InvalidPrerenderFactoryError } from "../../../modules/svelte-effect-runtime/src/errors.ts";
+import { error as svelte_error, isRedirect, redirect as svelte_redirect } from "@sveltejs/kit";
 import { reset_dispatcher } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
 import { Live } from "../../../modules/svelte-effect-runtime/src/live.ts";
-import { isRedirect, redirect as svelte_redirect } from "@sveltejs/kit";
 import { Cause, Effect, Exit, Fiber, Schema, Stream } from "effect";
 import { assert_equals, assert_throws } from "./helpers/assert.ts";
 import { afterAll, test } from "vitest";
@@ -131,6 +131,40 @@ test("remote query adapter captures synchronous invocation failures", async () =
 	assert_equals(QueryProgram.ready, false);
 });
 
+test("remote query adapter exposes synchronous SvelteKit HTTP failures", async () => {
+	const query = create_remote_query_adapter<undefined, never>(
+		() => svelte_error(401, "sign in required"),
+		(value) => value,
+		"",
+	);
+	const QueryProgram = query(undefined);
+	const result = await get_server_dispatcher().run(
+		QueryProgram.pipe(
+			Effect.catchTag("RemoteHttpError", (error) => Effect.succeed(error.status)),
+		),
+	);
+
+	assert_equals(result, 401);
+	assert_equals((QueryProgram.error as { _tag?: string })._tag, "RemoteHttpError");
+});
+
+test("remote query adapter defers synchronous redirects as control flow", async () => {
+	const query = create_remote_query_adapter<undefined, never>(
+		() => svelte_redirect(303, "/oauth"),
+		(value) => value,
+		"",
+	);
+	const QueryProgram = query(undefined);
+	const exit = await get_server_dispatcher().run(Effect.exit(QueryProgram));
+	const defect = Exit.isFailure(exit)
+		? exit.cause.reasons.find(Cause.isDieReason)?.defect
+		: undefined;
+
+	assert_equals(isRedirect(defect), true);
+	assert_equals((defect as { status?: number }).status, 303);
+	assert_equals((defect as { location?: string }).location, "/oauth");
+});
+
 test("remote query load stays lazy until its Effect runs", async () => {
 	let load_calls = 0;
 
@@ -219,6 +253,43 @@ test("remote query adapter awaits modern thenable resources before legacy run ha
 	const result = await get_server_dispatcher().run(query(undefined));
 
 	assert_equals(result, "ready");
+	assert_equals(run_called, false);
+});
+
+test("remote query adapter awaits callable thenable resources", async () => {
+	const then_name = ["th", "en"].join("");
+	let decoded_value: unknown;
+	let then_called = false;
+	let run_called = false;
+
+	const native = () =>
+		Object.assign(() => undefined, {
+			[then_name]: (resolve: (value: string) => unknown) => {
+				then_called = true;
+
+				return resolve("ready");
+			},
+			run: () => {
+				run_called = true;
+
+				throw new Error("run removed");
+			},
+		});
+
+	const query = create_remote_query_adapter<undefined, string>(
+		native,
+		(value) => {
+			decoded_value = value;
+
+			return value === "ready" ? value : "unresolved";
+		},
+		"",
+	);
+	const result = await get_server_dispatcher().run(query(undefined));
+
+	assert_equals(result, "ready");
+	assert_equals(decoded_value, "ready");
+	assert_equals(then_called, true);
 	assert_equals(run_called, false);
 });
 

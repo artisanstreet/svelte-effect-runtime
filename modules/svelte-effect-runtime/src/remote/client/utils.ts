@@ -5,9 +5,10 @@ export function has_method<K extends PropertyKey>(
 	value: unknown,
 	key: K,
 ): value is Record<K, NativeMethod> {
+	const value_type = typeof value;
+
 	return (
-		typeof value === "object" &&
-		value !== null &&
+		((value_type === "object" && value !== null) || value_type === "function") &&
 		typeof (value as Record<PropertyKey, unknown>)[key] === "function"
 	);
 }

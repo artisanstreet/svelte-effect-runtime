@@ -60,33 +60,6 @@ async function run_svelte_transform(
 	throw new Error("svelte transform plugin should expose a transform hook");
 }
 
-async function collect_transform_warnings(
-	plugin: ReturnType<typeof effect>[number],
-	source: string,
-	id: string,
-): Promise<string[]> {
-	const warnings: string[] = [];
-	const transform = plugin.transform;
-
-	if (typeof transform !== "function") {
-		throw new Error("guard plugin should expose a transform hook");
-	}
-
-	await transform.call(
-		{
-			warn(warning: string | { message?: string }) {
-				warnings.push(
-					typeof warning === "string" ? warning : (warning.message ?? String(warning)),
-				);
-			},
-		} as never,
-		source,
-		id,
-	);
-
-	return warnings;
-}
-
 async function run_server_import_transform(source: string, id: string): Promise<string> {
 	const plugin = effect().find(
 		(candidate) => candidate.name === "svelte-effect-runtime:server-imports",
@@ -644,6 +617,29 @@ test("vite diagnostics plugin warns for explicit Effect runners", async () => {
 	assert_string_includes(warnings[0], "bypass SER cancellation");
 });
 
+test("vite diagnostics plugin warns for parenthesized Effect runners", async () => {
+	const warnings: string[] = [];
+	const diagnostics_plugin = get_diagnostics_plugin();
+	const runner_name = ["run", "Promise"].join("");
+	const source = [
+		`<script lang="ts">`,
+		`  import { Effect } from "effect";`,
+		`</script>`,
+		``,
+		`<button onclick={() => (Effect).${runner_name}(Effect.succeed("ready"))}>run</button>`,
+	].join("\n");
+
+	await diagnostics_plugin.transform.call(
+		make_warning_context(warnings),
+		source,
+		"src/routes/+page.svelte",
+	);
+
+	assert_equals(warnings.length, 1);
+	assert_string_includes(warnings[0], "explicit Effect runner");
+	assert_string_includes(warnings[0], "bypass SER cancellation");
+});
+
 test("vite diagnostics plugin warns for non-event Effect attributes", async () => {
 	const warnings: string[] = [];
 	const diagnostics_plugin = get_diagnostics_plugin();
@@ -806,24 +802,14 @@ test("vite plugins do not force pre transform ordering", () => {
 	assert_equals(pre_plugins, []);
 });
 
-test("vite plugin warns when SER files use reserved generated helper names", async () => {
+test("vite plugin does not reserve safely aliased markup helper names", async () => {
 	const plugins = effect();
-	const guard_index = plugins.findIndex(
+	const guard_plugin = plugins.find(
 		(candidate) => candidate.name === "svelte-effect-runtime:reserved-helper-guard",
 	);
-	const transform_index = plugins.findIndex(
+	const transform_plugin = plugins.find(
 		(candidate) => candidate.name === "svelte-effect-runtime:svelte-transform",
 	);
-	const plugin = plugins[guard_index];
-
-	if (!plugin) {
-		throw new Error("reserved helper guard plugin should exist");
-	}
-
-	if (guard_index >= transform_index) {
-		throw new Error("reserved helper guard should run before the transform");
-	}
-
 	const source = [
 		`<script>`,
 		`  const Dispatcher = "local dispatcher";`,
@@ -836,78 +822,19 @@ test("vite plugin warns when SER files use reserved generated helper names", asy
 		`</Component>`,
 	].join("\n");
 
-	const warnings = await collect_transform_warnings(plugin, source, "C:/src/routes/Test.svelte");
-
-	assert_equals(warnings.length, 1);
-	assert_string_includes(warnings[0], "`Dispatcher`");
-	assert_string_includes(warnings[0], "`Code`");
-	assert_string_includes(warnings[0], "are reserved for generated markup helpers");
-});
-
-test("vite plugin reserved helper guard ignores ordinary Svelte files", async () => {
-	const plugin = effect().find(
-		(candidate) => candidate.name === "svelte-effect-runtime:reserved-helper-guard",
-	);
-
-	if (!plugin) {
-		throw new Error("reserved helper guard plugin should exist");
+	if (!transform_plugin) {
+		throw new Error("svelte transform plugin should exist");
 	}
 
-	const source = [
-		`<script>`,
-		`  const Dispatcher = "plain";`,
-		`  const Code = "plain";`,
-		`</script>`,
-		`<p>{Code}</p>`,
-	].join("\n");
-
-	const warnings = await collect_transform_warnings(plugin, source, "C:/src/routes/Test.svelte");
-
-	assert_equals(warnings, []);
-});
-
-test("vite plugin reserved helper guard ignores structural lookalikes", async () => {
-	const plugin = effect().find(
-		(candidate) => candidate.name === "svelte-effect-runtime:reserved-helper-guard",
+	const result = await run_svelte_transform(
+		transform_plugin,
+		source,
+		"C:/src/routes/Test.svelte",
 	);
 
-	if (!plugin) {
-		throw new Error("reserved helper guard plugin should exist");
-	}
-
-	const source = [
-		`<!-- <script>const Dispatcher = Code;</script> -->`,
-		`<p>{yield* loadValue()}</p>`,
-	].join("\n");
-	const warnings = await collect_transform_warnings(plugin, source, "C:/src/routes/Test.svelte");
-
-	assert_equals(warnings, []);
-});
-
-test("vite plugin reserved helper guard ignores non-binding identifier lookalikes", async () => {
-	const plugin = effect().find(
-		(candidate) => candidate.name === "svelte-effect-runtime:reserved-helper-guard",
-	);
-
-	if (!plugin) {
-		throw new Error("reserved helper guard plugin should exist");
-	}
-
-	const source = [
-		`<script lang="ts">const response = { Code: 1 };</script>`,
-		`{#snippet child(value: Dispatcher)}`,
-		`  <p>{value}</p>`,
-		`{/snippet}`,
-		`{#each rows as { Dispatcher: row }}`,
-		`  <p>{response.Code}: {"Dispatcher"}: {row}</p>`,
-		`  <p>{null as Code}</p>`,
-		`  <p>{({ Code() { return 1 }, get Dispatcher() { return 1 } })}</p>`,
-		`  <p>{yield* loadValue()}</p>`,
-		`{/each}`,
-	].join("\n");
-	const warnings = await collect_transform_warnings(plugin, source, "C:/src/routes/Test.svelte");
-
-	assert_equals(warnings, []);
+	assert_equals(guard_plugin, undefined);
+	assert_string_includes(result.code, "Code as Code_1");
+	assert_string_includes(result.code, "Dispatcher as Dispatcher_1");
 });
 
 test("vite plugin lowers svelte yield through its transform hook", async () => {

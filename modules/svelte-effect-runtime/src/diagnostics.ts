@@ -586,6 +586,10 @@ function is_effect_member(
 }
 
 function get_static_access_path(node: ts.Node): string[] | undefined {
+	if (ts.isParenthesizedExpression(node)) {
+		return get_static_access_path(node.expression);
+	}
+
 	if (ts.isIdentifier(node)) {
 		return [node.text];
 	}

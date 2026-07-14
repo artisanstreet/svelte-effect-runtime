@@ -370,6 +370,86 @@ test("scans markup beside a root preprocessor style without parsing its body", (
 	}
 });
 
+test("keeps preprocessor closing-tag lookalikes inside line comments opaque", () => {
+	const style = [
+		`<style lang="scss">`,
+		`// </style>`,
+		`$color: red;`,
+		`.button { color: $color; }`,
+		`</style>`,
+	].join("\n");
+	const source = `${style}\n<p>{yield* load()}</p>`;
+	const scan = scan_svelte_effect_source(source, "CommentedPreprocessorStyle.svelte");
+
+	assert_equals(scan.styles.length, 1);
+	assert_equals(source.slice(scan.styles[0]?.start, scan.styles[0]?.end), style);
+	assert_equals(
+		scan.markup_expressions.map(({ expression_text }) => expression_text),
+		["yield* load()"],
+	);
+});
+
+test("keeps URL slashes separate from preprocessor line comments", () => {
+	const style = [
+		`<style lang="scss">`,
+		`// </style>`,
+		`.hero { background: url(http://example.com/image.svg); }</style>`,
+	].join("\n");
+	const source = `${style}\n<p>{yield* load()}</p>`;
+	const scan = scan_svelte_effect_source(source, "PreprocessorUrlStyle.svelte");
+
+	assert_equals(scan.styles.length, 1);
+	assert_equals(source.slice(scan.styles[0]?.start, scan.styles[0]?.end), style);
+	assert_equals(
+		scan.markup_expressions.map(({ expression_text }) => expression_text),
+		["yield* load()"],
+	);
+});
+
+test("recognizes preprocessor URL lexical variants before line comments", () => {
+	const urls = [
+		`url(//cdn.example.com/image.svg)`,
+		`url ( http://example.com/image.svg )`,
+		`url( "http://example.com/image.svg" )`,
+		`url('http://example.com/image.svg')`,
+		`url(http://example.com/a\\)b.svg)`,
+	];
+
+	for (const [index, url] of urls.entries()) {
+		const style = [
+			`<style lang="scss">`,
+			`// </style>`,
+			`.hero { background: ${url}; }</style>`,
+		].join("\n");
+		const source = `${style}\n<p>{yield* load()}</p>`;
+		const scan = scan_svelte_effect_source(source, `PreprocessorUrl${index}.svelte`);
+
+		assert_equals(scan.styles.length, 1);
+		assert_equals(source.slice(scan.styles[0]?.start, scan.styles[0]?.end), style);
+		assert_equals(
+			scan.markup_expressions.map(({ expression_text }) => expression_text),
+			["yield* load()"],
+		);
+	}
+});
+
+test("allows block-comment trivia after quoted preprocessor URLs", () => {
+	const style = [
+		`<style lang="scss">`,
+		`// </style>`,
+		`.hero { background: url("https://example.com/image.svg" /* cache key */); }</style>`,
+	].join("\n");
+	const source = `${style}\n<p>{yield* load()}</p>`;
+	const scan = scan_svelte_effect_source(source, "CommentedPreprocessorUrl.svelte");
+
+	assert_equals(scan.styles.length, 1);
+	assert_equals(source.slice(scan.styles[0]?.start, scan.styles[0]?.end), style);
+	assert_equals(
+		scan.markup_expressions.map(({ expression_text }) => expression_text),
+		["yield* load()"],
+	);
+});
+
 test("shadows preprocessor styles after textarea lookalikes", () => {
 	const source = [
 		`<textarea><script>pseudo</script>{inside}</TEXTAREA>`,

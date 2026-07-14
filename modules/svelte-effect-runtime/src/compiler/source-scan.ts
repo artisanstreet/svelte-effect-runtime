@@ -718,13 +718,16 @@ function locate_raw_tag(
 	}
 
 	const opening_tag = source.slice(start, content_start);
+	const is_preprocessor_style = name === "style" && has_style_lang_attribute(opening_tag);
 	const parsed_style_end =
-		name === "style" ? find_style_closing_tag(source, content_start) : undefined;
+		name === "style"
+			? find_style_closing_tag(source, content_start, is_preprocessor_style)
+			: undefined;
 	const content_end =
 		name === "script"
 			? find_raw_closing_tag(source, content_start, name)
 			: (parsed_style_end ??
-				(has_style_lang_attribute(opening_tag)
+				(is_preprocessor_style
 					? find_raw_closing_tag(source, content_start, name)
 					: undefined));
 
@@ -826,11 +829,29 @@ function find_static_opening_tag_end(
 	return -1;
 }
 
-function find_style_closing_tag(source: string, start: number): SourceRange | undefined {
+function find_style_closing_tag(
+	source: string,
+	start: number,
+	skip_line_comments: boolean,
+): SourceRange | undefined {
 	let cursor = start;
 
 	while (cursor < source.length) {
 		const char = source[cursor];
+		const identifier_end = skip_line_comments
+			? find_css_identifier_end(source, cursor)
+			: undefined;
+
+		if (identifier_end !== undefined) {
+			const url_end = skip_css_url(source, cursor, identifier_end);
+
+			if (url_end === -1) {
+				return undefined;
+			}
+
+			cursor = url_end === undefined ? identifier_end : url_end + 1;
+			continue;
+		}
 
 		if (char === '"' || char === "'") {
 			const close = skip_quoted_string(source, cursor, char);
@@ -854,6 +875,11 @@ function find_style_closing_tag(source: string, start: number): SourceRange | un
 			continue;
 		}
 
+		if (skip_line_comments && source.startsWith("//", cursor)) {
+			cursor = skip_line_comment(source, cursor) + 1;
+			continue;
+		}
+
 		const closing_end = find_closing_tag_end_at(source, cursor, "style", false);
 
 		if (closing_end !== undefined) {
@@ -864,6 +890,130 @@ function find_style_closing_tag(source: string, start: number): SourceRange | un
 	}
 
 	return undefined;
+}
+
+function find_css_identifier_end(source: string, start: number): number | undefined {
+	const first = source[start];
+
+	if (!is_css_identifier_start(first)) {
+		return undefined;
+	}
+
+	let cursor = start;
+
+	while (cursor < source.length) {
+		const char = source[cursor];
+
+		if (is_css_identifier_character(char)) {
+			cursor += 1;
+			continue;
+		}
+
+		if (char === "\\") {
+			cursor = skip_css_escape(source, cursor);
+			continue;
+		}
+
+		break;
+	}
+
+	return cursor;
+}
+
+function skip_css_url(source: string, start: number, identifier_end: number): number | undefined {
+	if (source.slice(start, identifier_end).toLowerCase() !== "url") {
+		return undefined;
+	}
+
+	let cursor = skip_css_whitespace(source, identifier_end);
+
+	if (source[cursor] !== "(") {
+		return undefined;
+	}
+
+	cursor = skip_css_whitespace(source, cursor + 1);
+
+	const quote = source[cursor];
+
+	if (quote === '"' || quote === "'") {
+		const close = skip_quoted_string(source, cursor, quote);
+
+		if (close === -1) {
+			return -1;
+		}
+
+		cursor = skip_css_url_trivia(source, close + 1);
+
+		if (cursor === -1) {
+			return -1;
+		}
+
+		return source[cursor] === ")" ? cursor : -1;
+	}
+
+	while (cursor < source.length) {
+		const char = source[cursor];
+
+		if (char === "\\") {
+			cursor = skip_css_escape(source, cursor);
+			continue;
+		}
+
+		if (char === ")") {
+			return cursor;
+		}
+
+		cursor += 1;
+	}
+
+	return -1;
+}
+
+function skip_css_whitespace(source: string, start: number): number {
+	let cursor = start;
+
+	while (cursor < source.length && /[\t\n\f\r ]/.test(source[cursor] ?? "")) {
+		cursor += 1;
+	}
+
+	return cursor;
+}
+
+function skip_css_url_trivia(source: string, start: number): number {
+	let cursor = start;
+
+	while (cursor < source.length) {
+		cursor = skip_css_whitespace(source, cursor);
+
+		if (!source.startsWith("/*", cursor)) {
+			return cursor;
+		}
+
+		const close = skip_block_comment(source, cursor);
+
+		if (close === -1) {
+			return -1;
+		}
+
+		cursor = close + 1;
+	}
+
+	return cursor;
+}
+
+function skip_css_escape(source: string, start: number): number {
+	return Math.min(start + 2, source.length);
+}
+
+function is_css_identifier_start(char: string | undefined): boolean {
+	return (
+		char !== undefined &&
+		(/[A-Za-z_-]/.test(char) || char === "\\" || char.charCodeAt(0) >= 0x80)
+	);
+}
+
+function is_css_identifier_character(char: string | undefined): boolean {
+	return char !== undefined && (/[A-Za-z0-9_-]/.test(char) || char.charCodeAt(0) >= 0x80);
 }
 
 function is_fast_raw_opening(source: string, raw_tag: LocatedRawTag): boolean {

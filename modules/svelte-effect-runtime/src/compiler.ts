@@ -1,5 +1,3 @@
-import { scan_svelte_effect_source, type SvelteEffectSourceScan } from "./compiler/source-scan.ts";
-import { collect_markup_identifier_names } from "./compiler/markup-identifiers.ts";
 import { find_svelte_effect_diagnostics } from "./diagnostics.ts";
 import type { Plugin } from "vite";
 
@@ -66,7 +64,6 @@ export function effect(options?: EffectOptions): Plugin[] {
 
 	return [
 		make_diagnostics_plugin(component_filter),
-		make_reserved_helper_guard_plugin(component_filter),
 		make_svelte_transform_plugin(component_filter),
 		make_server_rewrite_plugin(),
 		make_remote_client_wrapper_plugin(options),
@@ -110,34 +107,6 @@ function make_diagnostics_plugin(component_filter: SvelteComponentModuleFilter):
 					},
 				});
 			}
-
-			return undefined;
-		},
-	};
-}
-
-function make_reserved_helper_guard_plugin(component_filter: SvelteComponentModuleFilter): Plugin {
-	return {
-		name: "svelte-effect-runtime:reserved-helper-guard",
-
-		transform(code: string, id: string) {
-			if (!component_filter.is_module(id) || !may_have_ser_syntax(code)) {
-				return undefined;
-			}
-
-			const source_scan = scan_svelte_effect_source(code, id);
-
-			if (!has_ser_syntax(source_scan)) {
-				return undefined;
-			}
-
-			const reserved_names = find_reserved_helper_names(source_scan);
-
-			if (reserved_names.length === 0) {
-				return undefined;
-			}
-
-			this.warn(make_reserved_helper_warning(reserved_names));
 
 			return undefined;
 		},
@@ -481,41 +450,12 @@ function is_svelte_component_module(id: string, extensions: readonly string[]): 
 	return [...params.keys()].every((key) => allowed_params.includes(key));
 }
 
-function has_ser_syntax(source_scan: SvelteEffectSourceScan): boolean {
-	return (
-		source_scan.effect_script !== undefined ||
-		source_scan.markup_expressions.some((expression) => /\byield\s*\*/.test(expression.inner))
-	);
-}
-
 function may_have_effect_diagnostics(code: string): boolean {
 	return code.includes("Effect") || /["']effect(?:\/Effect)?["']/.test(code);
 }
 
 function may_have_ser_syntax(code: string): boolean {
 	return /\byield\s*\*/.test(code) || /<script\b[^>]*\beffect(?:[\s=>]|$)/i.test(code);
-}
-
-function find_reserved_helper_names(source_scan: SvelteEffectSourceScan): string[] {
-	const markup_identifier_names = collect_markup_identifier_names(source_scan);
-
-	return ["Dispatcher", "Code"].filter((name) => markup_identifier_names.has(name));
-}
-
-function make_reserved_helper_warning(names: string[]): string {
-	const quoted_names = names.map((name) => `\`${name}\``);
-	const subject =
-		quoted_names.length === 1
-			? quoted_names[0]
-			: `${quoted_names.slice(0, -1).join(", ")} and ${
-					quoted_names[quoted_names.length - 1]
-				}`;
-	const verb = names.length === 1 ? "is" : "are";
-
-	return [
-		`[svelte-effect-runtime] ${subject} ${verb} reserved for generated markup helpers.`,
-		`Rename or alias local bindings that use ${subject} before using SER syntax in this component.`,
-	].join(" ");
 }
 
 /**

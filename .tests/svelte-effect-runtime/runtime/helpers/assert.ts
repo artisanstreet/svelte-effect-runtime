@@ -20,7 +20,7 @@ export function assert_exists<T>(
 	actual: T | null | undefined,
 	message?: string,
 ): asserts actual is T {
-	assert.notEqual(actual, null, message);
+	assert.ok(actual !== null && actual !== undefined, message);
 }
 
 export function assert_string_includes(actual: string, expected: string, message?: string): void {

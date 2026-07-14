@@ -18,8 +18,12 @@ export const MakeEffectFromSync = <Output, ErrorType = never>(run: () => Output)
 	});
 
 export const FailWithRemoteError = <ErrorType = never>(error: unknown) =>
-	MakeEffectFromSync<never, ErrorType>(() => {
-		throw error;
+	Effect.gen(function* () {
+		if (isRedirect(error)) {
+			return yield* Effect.die(error);
+		}
+
+		return yield* Effect.fail(normalize_remote_effect_error<ErrorType>(error));
 	});
 
 export function normalize_remote_effect_error<ErrorType>(error: unknown): RemoteFailure<ErrorType> {
