@@ -29,6 +29,7 @@ Known deviations stay executable and preserve raw evidence. Stable 4.0.0 differs
 batch collection, indexed form paths, Effect-backed HTML/render sites, and live-stream disposal.
 The current candidate fixes the first three; the lifecycle scenario records the remaining candidate
 defect by proving that native finalizes on page closure while both SER targets retain their streams.
+The production fix is tracked separately in GitHub issue #30.
 
 The fast lane uses the repository's primary SvelteKit version and Chromium. The broad lane adds
 Firefox and WebKit and accepts an exact `SVELTEKIT_VERSION`; CI matrix scheduling remains issue #29.
