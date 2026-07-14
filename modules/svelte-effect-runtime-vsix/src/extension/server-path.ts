@@ -19,14 +19,10 @@ import {
 	Schema,
 	Semaphore,
 } from "effect";
-import {
-	resolve_configured_server_path,
-	type ScopedServerPathConfiguration,
-} from "./server-path-policy.ts";
-import { config_root, config_server_path, language_server_package_name } from "./constants.ts";
-import type { GlobalStorageContext, InstallOutput } from "./types.ts";
-
-import * as vscode from "vscode";
+import { resolve_configured_server_path } from "./server-path-policy.ts";
+import { language_server_package_name } from "./constants.ts";
+import { ExtensionOutput } from "./extension-services.ts";
+import { ExtensionConfiguration } from "./settings.ts";
 
 const language_server_cache_directory = "language-server";
 const language_server_script_path = [
@@ -51,91 +47,81 @@ class ServerPathError extends Data.TaggedError("ServerPathError")<{
 	readonly message: string;
 }> {}
 
+type ServerPathResolverDependencies =
+	| ExtensionConfiguration
+	| ExtensionOutput
+	| FileSystem.FileSystem
+	| PackageManagerCommand
+	| PackageManagerInstallFiles
+	| Path.Path;
+
 /** Resolves configured paths or publishes a validated immutable package cache entry. */
 export class ServerPathResolver extends Context.Service<
 	ServerPathResolver,
 	{
-		readonly get: Effect.Effect<
-			string,
-			unknown,
-			FileSystem.FileSystem | PackageManagerCommand | PackageManagerInstallFiles | Path.Path
-		>;
+		readonly get: Effect.Effect<string, unknown>;
 	}
 >()("svelte-effect-runtime-vsix/ServerPathResolver") {}
 
 export function make_server_path_resolver_layer(
-	context: GlobalStorageContext,
-	output_channel: InstallOutput,
-): Layer.Layer<ServerPathResolver> {
+	storage_path: string,
+): Layer.Layer<ServerPathResolver, never, ServerPathResolverDependencies> {
 	return Layer.effect(
 		ServerPathResolver,
 		Effect.gen(function* () {
+			const dependency_context = yield* Effect.context<ServerPathResolverDependencies>();
 			const semaphore = yield* Semaphore.make(1);
+			const Get = semaphore
+				.withPermits(1)(ResolveServerPath(storage_path))
+				.pipe(Effect.provide(dependency_context));
 
-			return {
-				get: semaphore.withPermits(1)(ResolveServerPath(context, output_channel)),
-			};
+			return { get: Get };
 		}),
 	);
 }
 
-export const GetConfiguredServerPath = (output_channel?: InstallOutput) =>
+export const GetConfiguredServerPath = Effect.gen(function* () {
+	const configuration_service = yield* ExtensionConfiguration;
+	const output = yield* ExtensionOutput;
+	const configuration = yield* configuration_service.inspect_runtime_server_path;
+	const result = resolve_configured_server_path(configuration);
+
+	if (result.ignored_workspace_path) {
+		yield* output.append_line(
+			"Ignoring workspace svelte-effect-runtime.languageServer.path because executable paths must be configured in user or machine settings.",
+		);
+	}
+
+	if (result.invalid_global_path) {
+		yield* output.append_line(
+			"Ignoring svelte-effect-runtime.languageServer.path because it is not an absolute local filesystem path.",
+		);
+	}
+
+	if (!result.path) {
+		return Option.none<string>();
+	}
+
+	return yield* ResolveExistingConfiguredServerPath(result.path);
+});
+
+const ResolveServerPath = (storage_path: string) =>
 	Effect.gen(function* () {
-		const configuration = yield* ReadScopedServerPathConfiguration;
-		const result = resolve_configured_server_path(configuration);
-
-		if (result.ignored_workspace_path) {
-			yield* AppendLine(
-				output_channel,
-				"Ignoring workspace svelte-effect-runtime.languageServer.path because executable paths must be configured in user or machine settings.",
-			);
-		}
-
-		if (result.invalid_global_path) {
-			yield* AppendLine(
-				output_channel,
-				"Ignoring svelte-effect-runtime.languageServer.path because it is not an absolute local filesystem path.",
-			);
-		}
-
-		if (!result.path) {
-			return Option.none<string>();
-		}
-
-		return yield* ResolveExistingConfiguredServerPath(result.path, output_channel);
-	});
-
-const ResolveServerPath = (context: GlobalStorageContext, output_channel: InstallOutput) =>
-	Effect.gen(function* () {
-		const configured_path = yield* GetConfiguredServerPath(output_channel);
+		const configured_path = yield* GetConfiguredServerPath;
 
 		if (Option.isSome(configured_path)) {
 			return configured_path.value;
 		}
 
-		return yield* InstallLanguageServer(context, output_channel);
+		return yield* InstallLanguageServer(storage_path);
 	});
 
-const ReadScopedServerPathConfiguration = Effect.sync((): ScopedServerPathConfiguration => {
-	const inspection = vscode.workspace.getConfiguration(config_root).inspect(config_server_path);
-
-	return {
-		global_path: inspection?.globalValue,
-		workspace_path: inspection?.workspaceValue,
-		workspace_folder_path: inspection?.workspaceFolderValue,
-		workspace_language_path: inspection?.workspaceLanguageValue,
-		workspace_folder_language_path: inspection?.workspaceFolderLanguageValue,
-	};
-});
-
-const InstallLanguageServer = (context: GlobalStorageContext, output_channel: InstallOutput) =>
+const InstallLanguageServer = (storage_path: string) =>
 	Effect.gen(function* () {
+		const output = yield* ExtensionOutput;
 		const file_system = yield* FileSystem.FileSystem;
 		const path_service = yield* Path.Path;
-		const cache_root = path_service.join(
-			context.globalStorageUri.fsPath,
-			language_server_cache_directory,
-		);
+		const cache_root = path_service.join(storage_path, language_server_cache_directory);
 		const target_version = language_server_package_version;
 
 		yield* file_system.makeDirectory(cache_root, { recursive: true });
@@ -146,22 +132,14 @@ const InstallLanguageServer = (context: GlobalStorageContext, output_channel: In
 			return cached_install.value;
 		}
 
-		yield* AppendLine(
-			output_channel,
-			`Installing ${language_server_package_name}@${target_version}.`,
-		);
+		yield* output.append_line(`Installing ${language_server_package_name}@${target_version}.`);
 
-		return yield* Effect.scoped(
-			InstallAndPublishLanguageServer(cache_root, target_version, output_channel),
-		);
+		return yield* Effect.scoped(InstallAndPublishLanguageServer(cache_root, target_version));
 	});
 
-const InstallAndPublishLanguageServer = (
-	cache_root: string,
-	target_version: string,
-	output_channel: InstallOutput,
-) =>
+const InstallAndPublishLanguageServer = (cache_root: string, target_version: string) =>
 	Effect.gen(function* () {
+		const output = yield* ExtensionOutput;
 		const file_system = yield* FileSystem.FileSystem;
 		const path_service = yield* Path.Path;
 		const encoded_version = encodeURIComponent(target_version);
@@ -185,7 +163,7 @@ const InstallAndPublishLanguageServer = (
 		const package_manager = yield* RunPackageManagerInstall({
 			install_root: staging_root,
 			reporter: {
-				append_line: (message) => AppendLine(output_channel, message),
+				append_line: output.append_line,
 			},
 			verify_install: Effect.asVoid(
 				VerifyLanguageServerInstall(staging_root, target_version),
@@ -197,8 +175,7 @@ const InstallAndPublishLanguageServer = (
 		const winner = yield* FindPublishedLanguageServer(cache_root, target_version);
 
 		if (Option.isSome(winner)) {
-			yield* AppendLine(
-				output_channel,
+			yield* output.append_line(
 				`Using concurrently installed ${language_server_package_name}@${target_version}.`,
 			);
 
@@ -211,7 +188,7 @@ const InstallAndPublishLanguageServer = (
 		const publication = yield* Effect.result(file_system.rename(staging_root, install_root));
 
 		if (Result.isSuccess(publication)) {
-			yield* AppendLine(output_channel, `Installed with ${package_manager}.`);
+			yield* output.append_line(`Installed with ${package_manager}.`);
 
 			return yield* VerifyLanguageServerInstall(install_root, target_version);
 		}
@@ -222,8 +199,7 @@ const InstallAndPublishLanguageServer = (
 		);
 
 		if (Option.isSome(published_after_failure)) {
-			yield* AppendLine(
-				output_channel,
+			yield* output.append_line(
 				`Using concurrently installed ${language_server_package_name}@${target_version}.`,
 			);
 
@@ -283,19 +259,16 @@ const ReadInstalledPackageVersion = (install_root: string) =>
 		return Option.map(manifest, (package_manifest) => package_manifest.version);
 	});
 
-const ResolveExistingConfiguredServerPath = (
-	configured_path: string,
-	output_channel?: InstallOutput,
-) =>
+const ResolveExistingConfiguredServerPath = (configured_path: string) =>
 	Effect.gen(function* () {
+		const output = yield* ExtensionOutput;
 		const path_is_file = yield* IsRegularFile(configured_path);
 
 		if (path_is_file) {
 			return Option.some(configured_path);
 		}
 
-		yield* AppendLine(
-			output_channel,
+		yield* output.append_line(
 			"Ignoring svelte-effect-runtime.languageServer.path because the configured file does not exist or is not a regular file.",
 		);
 
@@ -353,6 +326,3 @@ const VerifyLanguageServerInstall = (install_root: string, target_version: strin
 
 		return script_path;
 	});
-
-const AppendLine = (output_channel: InstallOutput | undefined, message: string) =>
-	Effect.sync(() => output_channel?.appendLine(message));

@@ -25,6 +25,8 @@ import {
 	assert_truthy,
 } from "../../svelte-effect-runtime/runtime/helpers/assert.ts";
 import { language_server_package_name } from "../../../modules/svelte-effect-runtime-vsix/src/extension/constants.ts";
+import { ExtensionOutput } from "../../../modules/svelte-effect-runtime-vsix/src/extension/extension-services.ts";
+import { ExtensionConfiguration } from "../../../modules/svelte-effect-runtime-vsix/src/extension/settings.ts";
 import { get_server_dispatcher } from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
 import { paths_equal } from "../../../modules/svelte-effect-runtime-vsix/src/extension/paths.ts";
 import { Cause, Effect, Exit, FileSystem, Layer, Option } from "effect";
@@ -34,19 +36,11 @@ import { join } from "node:path";
 
 import extension_manifest from "../../../modules/svelte-effect-runtime-vsix/package.json" with { type: "json" };
 
-const vscode_configuration: { global_path: unknown } = vi.hoisted(() => ({
+const vscode_configuration: { global_path: unknown } = {
 	global_path: undefined,
-}));
+};
 
-vi.mock("vscode", () => ({
-	workspace: {
-		getConfiguration: () => ({
-			inspect: () => ({
-				globalValue: vscode_configuration.global_path,
-			}),
-		}),
-	},
-}));
+vi.mock("vscode", () => ({}));
 
 test("VS Code extension pins language-server install to extension version", () => {
 	const manifest = make_language_server_install_manifest();
@@ -304,6 +298,8 @@ test("VS Code extension preserves POSIX path case sensitivity", () => {
 test("VS Code extension accepts only regular configured server files", async () => {
 	const { GetConfiguredServerPath } =
 		await import("../../../modules/svelte-effect-runtime-vsix/src/extension/server-path.ts");
+	const output_layer = make_output_layer([]);
+	const configuration_layer = make_configuration_layer();
 	const result = await get_server_dispatcher().run(
 		Effect.scoped(
 			Effect.gen(function* () {
@@ -316,7 +312,7 @@ test("VS Code extension accepts only regular configured server files", async () 
 					vscode_configuration.global_path = temp_directory;
 				});
 
-				const directory_result = yield* GetConfiguredServerPath();
+				const directory_result = yield* GetConfiguredServerPath;
 				const server_path = join(temp_directory, "server.cjs");
 
 				yield* file_system.writeFileString(server_path, "module.exports = {};\n");
@@ -324,11 +320,13 @@ test("VS Code extension accepts only regular configured server files", async () 
 					vscode_configuration.global_path = server_path;
 				});
 
-				const file_result = yield* GetConfiguredServerPath();
+				const file_result = yield* GetConfiguredServerPath;
 
 				return { directory_result, file_result, server_path };
 			}),
-		).pipe(Effect.provide(NodeFileSystem.layer)),
+		).pipe(
+			Effect.provide(Layer.mergeAll(NodeFileSystem.layer, output_layer, configuration_layer)),
+		),
 	);
 
 	assert_truthy(Option.isNone(result.directory_result));
@@ -351,6 +349,8 @@ test("VS Code extension publishes beside a stale invalid exact-version cache", a
 	const application_layer = Layer.mergeAll(
 		node_layer,
 		command_layer,
+		make_output_layer(output_lines),
+		make_configuration_layer(),
 		Layer.succeed(PackageManagerInstallFiles, { clean: () => Effect.void }),
 	);
 	const result = await get_server_dispatcher().run(
@@ -378,10 +378,7 @@ test("VS Code extension publishes beside a stale invalid exact-version cache", a
 					vscode_configuration.global_path = undefined;
 				});
 
-				const resolver_layer = make_server_path_resolver_layer(
-					{ globalStorageUri: { fsPath: storage_path } },
-					{ appendLine: (message: string) => output_lines.push(message) },
-				);
+				const resolver_layer = make_server_path_resolver_layer(storage_path);
 				const server_path = yield* Effect.gen(function* () {
 					const resolver = yield* ServerPathResolver;
 
@@ -428,6 +425,8 @@ test("VS Code extension atomically shares one published cache across windows", a
 	const application_layer = Layer.mergeAll(
 		node_layer,
 		command_layer,
+		make_output_layer(output_lines),
+		make_configuration_layer(),
 		Layer.succeed(PackageManagerInstallFiles, { clean: () => Effect.void }),
 	);
 	const Program = Effect.scoped(
@@ -436,10 +435,8 @@ test("VS Code extension atomically shares one published cache across windows", a
 			const storage_path = yield* file_system.makeTempDirectoryScoped({
 				prefix: "ser-vsix-concurrent-cache-",
 			});
-			const output = { appendLine: (message: string) => output_lines.push(message) };
-			const context = { globalStorageUri: { fsPath: storage_path } };
-			const first_layer = make_server_path_resolver_layer(context, output);
-			const second_layer = make_server_path_resolver_layer(context, output);
+			const first_layer = make_server_path_resolver_layer(storage_path);
+			const second_layer = make_server_path_resolver_layer(storage_path);
 			const ResolveWith = (layer: typeof first_layer) =>
 				Effect.gen(function* () {
 					const resolver = yield* ServerPathResolver;
@@ -516,6 +513,31 @@ function make_package_manager_test_layer(run_command: PackageManagerCommandRunne
 			clean: () => Effect.void,
 		}),
 	);
+}
+
+function make_output_layer(output_lines: string[]) {
+	return Layer.succeed(ExtensionOutput, {
+		append_line: (message: string) =>
+			Effect.sync(() => {
+				output_lines.push(message);
+			}),
+		show: Effect.void,
+		show_error: () => Effect.void,
+		show_information: () => Effect.void,
+	});
+}
+
+function make_configuration_layer() {
+	return Layer.succeed(ExtensionConfiguration, {
+		get_client_mode: Effect.succeed("auto" as const),
+		get_enabled: Effect.succeed(true),
+		inspect_runtime_server_path: Effect.sync(() => ({
+			global_path: vscode_configuration.global_path,
+		})),
+		inspect_svelte_server_path: Effect.succeed({}),
+		set_enabled: () => Effect.void,
+		write_svelte_server_path: () => Effect.void,
+	});
 }
 
 function make_installing_command_layer(install_attempts: { value: number }, install_delay_ms = 0) {

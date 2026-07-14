@@ -5,64 +5,77 @@ import {
 	TransportKind,
 } from "vscode-languageclient/node.js";
 import { MakeSerializedClientControl, type SerializedClientHandle } from "./client-lifecycle.ts";
+import { LanguageClientControl, LanguageClientFactory } from "./client-control.ts";
 import { create_initialization_options } from "./initialization-options.ts";
 import { assert_safe_language_server_path } from "./server-path-policy.ts";
 import { client_id, client_name } from "./constants.ts";
-import { Context, Effect, Layer } from "effect";
+import { Effect, Layer } from "effect";
 
 import process from "node:process";
 
 import * as vscode from "vscode";
 
-export class LanguageClientControl extends Context.Service<
+export { LanguageClientControl, LanguageClientFactory } from "./client-control.ts";
+
+export const LanguageClientControlLive = Layer.effect(
 	LanguageClientControl,
-	{
-		readonly start: (server_path: string) => Effect.Effect<void, unknown>;
-		readonly stop: Effect.Effect<void, unknown>;
-	}
->()("svelte-effect-runtime-vsix/LanguageClientControl") {}
-
-export function make_language_client_control_layer(
-	output_channel: vscode.OutputChannel,
-): Layer.Layer<LanguageClientControl> {
-	return Layer.effect(
-		LanguageClientControl,
-		MakeSerializedClientControl((server_path) =>
-			CreateLanguageClient(output_channel, server_path),
-		),
-	);
-}
-
-const CreateLanguageClient = (output_channel: vscode.OutputChannel, server_path: string) =>
 	Effect.gen(function* () {
-		yield* Effect.try(() => assert_safe_language_server_path(server_path));
+		const factory = yield* LanguageClientFactory;
 
-		const file_watcher = yield* Effect.sync(() =>
-			vscode.workspace.createFileSystemWatcher("**/*.{svelte,sv,ts,js,mjs,cjs,json}"),
-		);
-		const AcquireClient = Effect.gen(function* () {
-			const client_options = create_client_options(output_channel, file_watcher);
-			const server_options = yield* CreateServerOptions(server_path);
-			const next_client = yield* Effect.try(
-				() => new LanguageClient(client_id, client_name, server_options, client_options),
+		return yield* MakeSerializedClientControl(factory.create);
+	}),
+);
+
+export function make_language_client_factory_layer(
+	output_channel: vscode.OutputChannel,
+): Layer.Layer<LanguageClientFactory> {
+	const CreateClient = (server_path: string) =>
+		Effect.gen(function* () {
+			yield* Effect.try(() => assert_safe_language_server_path(server_path));
+
+			const file_watcher = yield* Effect.sync(() =>
+				vscode.workspace.createFileSystemWatcher("**/*.{svelte,sv,ts,js,mjs,cjs,json}"),
 			);
+			const AcquireClient = Effect.gen(function* () {
+				const client_options = create_client_options(file_watcher);
+				const server_options = yield* CreateServerOptions(server_path);
+				const next_client = yield* Effect.try(
+					() =>
+						new LanguageClient(client_id, client_name, server_options, client_options),
+				);
 
-			return {
-				start: Effect.tryPromise(() => next_client.start()).pipe(
-					Effect.tapError((error) =>
-						Effect.sync(() => output_channel.appendLine(format_error(error))),
+				return {
+					start: Effect.tryPromise(() => next_client.start()).pipe(
+						Effect.tapError((error) =>
+							Effect.sync(() => output_channel.appendLine(format_error(error))),
+						),
 					),
-				),
-				stop: Effect.tryPromise(() => next_client.stop()),
-				dispose: Effect.sync(() => {
-					next_client.dispose();
-					file_watcher.dispose();
-				}),
-			} satisfies SerializedClientHandle;
-		}).pipe(Effect.onError(() => Effect.sync(() => file_watcher.dispose())));
+					stop: Effect.tryPromise(() => next_client.stop()),
+					dispose: Effect.sync(() => {
+						next_client.dispose();
+						file_watcher.dispose();
+					}),
+				} satisfies SerializedClientHandle;
+			}).pipe(Effect.onError(() => Effect.sync(() => file_watcher.dispose())));
 
-		return yield* AcquireClient;
+			return yield* AcquireClient;
+		});
+	const create_client_options = (
+		file_watcher: vscode.FileSystemWatcher,
+	): LanguageClientOptions => ({
+		documentSelector: [
+			{ scheme: "file", language: "svelte" },
+			{ scheme: "untitled", language: "svelte" },
+		],
+		initializationOptions: create_initialization_options(),
+		outputChannel: output_channel,
+		synchronize: {
+			fileEvents: file_watcher,
+		},
 	});
+
+	return Layer.succeed(LanguageClientFactory, { create: CreateClient });
+}
 
 const CreateServerOptions = (server_path: string) =>
 	Effect.gen(function* () {
@@ -93,23 +106,6 @@ function create_server_executable(
 			env: environment,
 		},
 		transport: TransportKind.stdio,
-	};
-}
-
-function create_client_options(
-	output_channel: vscode.OutputChannel,
-	file_watcher: vscode.FileSystemWatcher,
-): LanguageClientOptions {
-	return {
-		documentSelector: [
-			{ scheme: "file", language: "svelte" },
-			{ scheme: "untitled", language: "svelte" },
-		],
-		initializationOptions: create_initialization_options(),
-		outputChannel: output_channel,
-		synchronize: {
-			fileEvents: file_watcher,
-		},
 	};
 }
 

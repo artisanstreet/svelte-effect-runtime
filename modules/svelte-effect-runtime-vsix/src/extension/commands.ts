@@ -1,5 +1,3 @@
-import type { SubscriptionContext } from "./types.ts";
-
 import * as vscode from "vscode";
 
 export interface LanguageServerCommandHandlers {
@@ -10,10 +8,9 @@ export interface LanguageServerCommandHandlers {
 }
 
 export function register_language_server_commands(
-	context: SubscriptionContext,
 	handlers: LanguageServerCommandHandlers,
-): void {
-	context.subscriptions.push(
+): vscode.Disposable[] {
+	return [
 		vscode.commands.registerCommand(
 			"svelte-effect-runtime.startLanguageServer",
 			handlers.start,
@@ -24,5 +21,5 @@ export function register_language_server_commands(
 			handlers.restart,
 		),
 		vscode.commands.registerCommand("svelte-effect-runtime.showOutput", handlers.show_output),
-	);
+	];
 }
