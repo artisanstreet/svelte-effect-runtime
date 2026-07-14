@@ -20,7 +20,7 @@ import { Cause, Effect, Exit, Fiber, Schema, Stream } from "effect";
 import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import { assert_equals, assert_throws } from "./helpers/assert.ts";
+import { assert_equals, assert_throws } from "../unit/helpers/assert.ts";
 import { afterAll, test } from "vitest";
 import { stringify } from "devalue";
 

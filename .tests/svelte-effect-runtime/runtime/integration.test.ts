@@ -17,7 +17,7 @@ import {
 	assert_throws,
 	assert_not_match,
 	assert_string_includes,
-} from "./helpers/assert.ts";
+} from "../unit/helpers/assert.ts";
 import { RuntimeAlreadyInitializedError } from "../../../modules/svelte-effect-runtime/src/errors.ts";
 import { promise } from "../../../modules/svelte-effect-runtime/src/markup/promise.ts";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";

@@ -2,7 +2,7 @@ import {
 	scan_svelte_effect_source,
 	shift_scan_after_at_insertions,
 } from "../../../modules/svelte-effect-runtime/src/compiler/source-scan.ts";
-import { assert_equals, assert_exists } from "./helpers/assert.ts";
+import { assert_equals, assert_exists } from "../unit/helpers/assert.ts";
 
 import { test } from "vitest";
 

@@ -3,7 +3,7 @@ import {
 	SvelteExtensionControlLive,
 } from "../../../modules/svelte-effect-runtime-vsix/src/extension/svelte-extension-control.ts";
 import { get_server_dispatcher } from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
-import { assert_equals } from "../../svelte-effect-runtime/runtime/helpers/assert.ts";
+import { assert_equals } from "../../svelte-effect-runtime/unit/helpers/assert.ts";
 import { beforeEach, test, vi } from "vitest";
 import { Effect } from "effect";
 

@@ -1,5 +1,5 @@
 import { find_svelte_effect_diagnostics } from "../../../modules/svelte-effect-runtime/src/diagnostics.ts";
-import { assert_equals, assert_string_includes } from "./helpers/assert.ts";
+import { assert_equals, assert_string_includes } from "../unit/helpers/assert.ts";
 import { test } from "vitest";
 
 test("diagnostics ignore Effect references inside script and style blocks", () => {

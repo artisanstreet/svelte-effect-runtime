@@ -1,5 +1,5 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { assert_equals } from "./helpers/assert.ts";
+import { assert_equals } from "../unit/helpers/assert.ts";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";

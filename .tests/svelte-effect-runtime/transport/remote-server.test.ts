@@ -27,7 +27,7 @@ import {
 	assert_throws,
 	assert_rejects,
 	assert_string_includes,
-} from "./helpers/assert.ts";
+} from "../unit/helpers/assert.ts";
 import {
 	reset_test_command,
 	reset_test_prerender,
@@ -35,7 +35,7 @@ import {
 	set_test_command,
 	set_test_prerender,
 	set_test_request_event,
-} from "./fixtures/app-server.ts";
+} from "../unit/fixtures/app-server.ts";
 import {
 	get_server_dispatcher,
 	reset_server_runtime,

@@ -12,7 +12,7 @@ import {
 	is_remote_http_error,
 	is_remote_transport_error,
 } from "../../../modules/svelte-effect-runtime/src/remote/shared.ts";
-import { assert_false, assert_truthy, assert_equals } from "./helpers/assert.ts";
+import { assert_false, assert_truthy, assert_equals } from "../unit/helpers/assert.ts";
 import { test } from "vitest";
 
 test("effect_remote_error_marker is the expected string", () => {

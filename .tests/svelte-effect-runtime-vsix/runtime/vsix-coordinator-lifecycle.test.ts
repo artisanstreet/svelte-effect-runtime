@@ -1,6 +1,6 @@
 import { MakeCoordinatorShutdownGate } from "../../../modules/svelte-effect-runtime-vsix/src/extension/coordinator-lifecycle.ts";
 import { get_server_dispatcher } from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
-import { assert_equals } from "../../svelte-effect-runtime/runtime/helpers/assert.ts";
+import { assert_equals } from "../../svelte-effect-runtime/unit/helpers/assert.ts";
 import { Effect, Fiber, Option } from "effect";
 import { test } from "vitest";
 

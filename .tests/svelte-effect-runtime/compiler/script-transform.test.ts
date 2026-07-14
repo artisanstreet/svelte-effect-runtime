@@ -5,7 +5,7 @@ import {
 	assert_truthy,
 	assert_not_match,
 	assert_string_includes,
-} from "./helpers/assert.ts";
+} from "../unit/helpers/assert.ts";
 import type { ScriptTransformResult } from "../../../modules/svelte-effect-runtime/src/script-transform/index.ts";
 import { transform_script_effect } from "../../../modules/svelte-effect-runtime/src/script-transform/index.ts";
 import { test } from "vitest";

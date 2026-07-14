@@ -39,7 +39,7 @@ export default {
 				find: "$app/server",
 				replacement: vite_path(
 					new URL(
-						"./.tests/svelte-effect-runtime/runtime/fixtures/app-server.ts",
+						"./.tests/svelte-effect-runtime/unit/fixtures/app-server.ts",
 						import.meta.url,
 					),
 				),
@@ -83,7 +83,8 @@ export default {
 		],
 	},
 	test: {
-		include: [".tests/*/runtime/**/*.test.ts"],
+		include: [".tests/*/**/*.test.ts"],
+		exclude: [".tests/**/consumer/**/*.spec.ts", ".tests/**/signals/**/*.browser.test.ts"],
 		testTimeout: 30_000,
 	},
 };

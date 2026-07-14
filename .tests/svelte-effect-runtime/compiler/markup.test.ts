@@ -3,7 +3,7 @@ import { scan_svelte_effect_source } from "../../../modules/svelte-effect-runtim
 import { create_relocations } from "../../../modules/svelte-effect-runtime/src/markup/transform/apply.ts";
 import { sanitize_markup } from "../../../modules/svelte-effect-runtime/src/markup/transform/scan.ts";
 import { reset_dispatcher } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
-import { assert_equals, assert_throws, assert_string_includes } from "./helpers/assert.ts";
+import { assert_equals, assert_throws, assert_string_includes } from "../unit/helpers/assert.ts";
 import { promise } from "../../../modules/svelte-effect-runtime/src/markup/promise.ts";
 import { value } from "../../../modules/svelte-effect-runtime/src/markup/value.ts";
 import { run } from "../../../modules/svelte-effect-runtime/src/markup/run.ts";

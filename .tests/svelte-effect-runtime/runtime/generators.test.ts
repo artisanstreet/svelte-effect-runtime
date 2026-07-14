@@ -1,6 +1,6 @@
 import { ToEffect, get_dispatcher } from "../../../modules/svelte-effect-runtime/src/generators.ts";
 import { EmptyStreamYieldError } from "../../../modules/svelte-effect-runtime/src/errors.ts";
-import { assert_equals, assert_exists } from "./helpers/assert.ts";
+import { assert_equals, assert_exists } from "../unit/helpers/assert.ts";
 import { Cause, Effect, Exit, Stream } from "effect";
 import { test } from "vitest";
 

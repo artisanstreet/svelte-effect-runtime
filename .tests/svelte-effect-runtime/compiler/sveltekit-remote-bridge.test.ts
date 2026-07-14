@@ -7,7 +7,7 @@ import {
 	assert_rejects,
 	assert_string_includes,
 	assert_throws,
-} from "./helpers/assert.ts";
+} from "../unit/helpers/assert.ts";
 import { effect } from "../../../modules/svelte-effect-runtime/src/compiler.ts";
 import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";

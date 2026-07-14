@@ -10,7 +10,7 @@ import {
 	assert_equals,
 	assert_false,
 	assert_truthy,
-} from "../../svelte-effect-runtime/runtime/helpers/assert.ts";
+} from "../../svelte-effect-runtime/unit/helpers/assert.ts";
 import { ExtensionConfiguration } from "../../../modules/svelte-effect-runtime-vsix/src/extension/settings.ts";
 import { get_server_dispatcher } from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
 import { Effect, Exit, FileSystem, Layer, Option } from "effect";
