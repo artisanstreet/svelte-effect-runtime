@@ -2,12 +2,10 @@ import {
 	PackageManagerCommand,
 	type CommandInvocation,
 } from "../../../../modules/svelte-effect-runtime-vsix/src/extension/package-manager-install.ts";
-import { language_server_package_version } from "../../../../modules/svelte-effect-runtime-vsix/src/extension/language-server-package.ts";
-import { language_server_package_name } from "../../../../modules/svelte-effect-runtime-vsix/src/extension/constants.ts";
 import { ExtensionOutput } from "../../../../modules/svelte-effect-runtime-vsix/src/extension/extension-services.ts";
 import { ExtensionConfiguration } from "../../../../modules/svelte-effect-runtime-vsix/src/extension/settings.ts";
+import { WritePublishedServerInstall } from "./server-install-retention.ts";
 import { Effect, FileSystem, Layer } from "effect";
-import { join } from "node:path";
 
 export const vscode_configuration: { global_path: unknown } = {
 	global_path: undefined,
@@ -59,29 +57,8 @@ export function make_installing_command_layer(
 								yield* Effect.sleep(`${install_delay_ms} millis`);
 							}
 
-							const package_root = join(
-								cwd,
-								"node_modules",
-								language_server_package_name,
-							);
-
-							yield* file_system.makeDirectory(join(package_root, ".dist"), {
-								recursive: true,
-							});
-							yield* file_system.makeDirectory(join(package_root, "runtime"), {
-								recursive: true,
-							});
-							yield* file_system.writeFileString(
-								join(package_root, "package.json"),
-								JSON.stringify({ version: language_server_package_version }),
-							);
-							yield* file_system.writeFileString(
-								join(package_root, ".dist", "server.cjs"),
-								"module.exports = {};\n",
-							);
-							yield* file_system.writeFileString(
-								join(package_root, "runtime", "package.json"),
-								"{}\n",
+							yield* WritePublishedServerInstall(cwd).pipe(
+								Effect.provideService(FileSystem.FileSystem, file_system),
 							);
 						}
 
