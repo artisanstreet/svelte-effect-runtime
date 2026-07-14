@@ -10,9 +10,17 @@ export const capability_names = [
 	"unit",
 ] as const;
 
+export const conformance_proxy_port = 41_730;
+
 export type Capability = (typeof capability_names)[number];
 
 export type TargetName = "native" | "stable" | "candidate";
+
+export const conformance_target_ports = {
+	native: 41_801,
+	stable: 41_802,
+	candidate: 41_803,
+} as const satisfies Readonly<Record<TargetName, number>>;
 
 export type TargetSource =
 	| { readonly _tag: "Native" }
@@ -23,7 +31,7 @@ export type TargetSource =
 export type Target = {
 	readonly name: TargetName;
 	readonly source: TargetSource;
-	readonly fixture: "native" | "ser";
+	readonly fixture: "native" | "stable" | "candidate";
 };
 
 export type Scenario<Driver, Value> = {
@@ -65,6 +73,11 @@ export type Difference = {
 
 export const harness_phases = [
 	"artifact",
+	"artifact-clone",
+	"artifact-checkout",
+	"artifact-install",
+	"artifact-build",
+	"artifact-pack",
 	"install",
 	"sync",
 	"check",

@@ -15,12 +15,12 @@ export function make_targets(
 		{
 			name: "stable",
 			source: parse_target_source(stable_source),
-			fixture: "ser",
+			fixture: "stable",
 		},
 		{
 			name: "candidate",
 			source: parse_target_source(candidate_source),
-			fixture: "ser",
+			fixture: "candidate",
 		},
 	];
 
