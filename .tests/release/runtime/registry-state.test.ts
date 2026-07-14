@@ -115,6 +115,27 @@ test.each([429, 500, 503])("HTTP %s is provider unavailability", (status) => {
 	});
 });
 
+test.each([400, 409, 422])("HTTP %s is a terminal provider rejection", (status) => {
+	const state = classify_provider_state({
+		_tag: "HttpResponse",
+		provider: "openvsx",
+		status,
+		url: "https://open-vsx.org/api/extension",
+		expected_digest: sha256,
+	});
+
+	expect(state).toEqual({
+		_tag: "ProviderRejected",
+		url: "https://open-vsx.org/api/extension",
+		status,
+		reason: `Provider rejected the request with HTTP ${status}.`,
+	});
+	expect(decide_probe(state, { attempt: 1, max_attempts: 5 })).toEqual({
+		_tag: "Failed",
+		state,
+	});
+});
+
 test("a timeout is provider unavailability without inventing an HTTP status", () => {
 	expect(
 		classify_provider_state({

@@ -74,8 +74,26 @@ test("the greatest valid semantic version below the plan wins regardless of tag 
 			"v4.2.0",
 			"v4.0.1",
 			"v4.0.0",
+			"v4.0.2-01",
+			"v9007199254740992.0.0",
 		]),
 	).toBe("v4.0.1");
+});
+
+test("semantic tag ordering follows ASCII precedence instead of the host locale", () => {
+	const prerelease_plan = plan_release({
+		event: "workflow_dispatch",
+		ref: "refs/heads/master",
+		commit: "abcdef0123456789",
+		current_versions: {
+			runtime: "4.1.0-zz",
+			grammars: "4.1.0-zz",
+			"language-server": "4.1.0-zz",
+			vsix: "4.1.0-zz",
+		},
+	});
+
+	expect(select_previous_release_tag(prerelease_plan, ["v4.1.0-Z", "v4.1.0-a"])).toBe("v4.1.0-a");
 });
 
 test("a current-tag rerun excludes itself and produces the same notes", () => {

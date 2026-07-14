@@ -33,11 +33,19 @@ export type ProviderUnavailable = {
 	readonly reason: string;
 };
 
+export type ProviderRejected = {
+	readonly _tag: "ProviderRejected";
+	readonly url: string;
+	readonly status: number;
+	readonly reason: string;
+};
+
 export type ProviderState =
 	| Absent
 	| Matching
 	| Mismatched
 	| AuthenticationFailure
+	| ProviderRejected
 	| ProviderUnavailable;
 
 export type ProbeDecision =
@@ -47,7 +55,7 @@ export type ProbeDecision =
 	  }
 	| {
 			readonly _tag: "Failed";
-			readonly state: Mismatched | AuthenticationFailure;
+			readonly state: Mismatched | AuthenticationFailure | ProviderRejected;
 	  }
 	| {
 			readonly _tag: "Retry";
@@ -111,12 +119,21 @@ export function classify_provider_state(input: unknown): ProviderState {
 		return { _tag: "AuthenticationFailure", url, status };
 	}
 
-	if (status !== 200) {
+	if (status === 408 || status === 429 || status >= 500) {
 		return {
 			_tag: "ProviderUnavailable",
 			url,
 			status,
 			reason: `Provider returned HTTP ${status}.`,
+		};
+	}
+
+	if (status !== 200) {
+		return {
+			_tag: "ProviderRejected",
+			url,
+			status,
+			reason: `Provider rejected the request with HTTP ${status}.`,
 		};
 	}
 
@@ -164,7 +181,11 @@ export function decide_probe(state: ProviderState, position: ProbePosition): Pro
 		return { _tag: "Complete", state };
 	}
 
-	if (state._tag === "AuthenticationFailure" || state._tag === "Mismatched") {
+	if (
+		state._tag === "AuthenticationFailure" ||
+		state._tag === "Mismatched" ||
+		state._tag === "ProviderRejected"
+	) {
 		return { _tag: "Failed", state };
 	}
 

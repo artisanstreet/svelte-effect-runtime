@@ -223,6 +223,9 @@ importers:
       '@types/node':
         specifier: ^24.6.1
         version: 24.6.1
+      '@types/semver':
+        specifier: 7.7.1
+        version: 7.7.1
       '@types/vscode':
         specifier: 1.100.0
         version: 1.100.0
@@ -235,6 +238,9 @@ importers:
       rolldown:
         specifier: 1.1.4
         version: 1.1.4
+      semver:
+        specifier: 7.8.5
+        version: 7.8.5
       shiki:
         specifier: 4.3.1
         version: 4.3.1
@@ -815,6 +821,9 @@ packages:
 
   '@types/node@24.6.1':
     resolution: {integrity: sha512-ljvjjs3DNXummeIaooB4cLBKg2U6SPI6Hjra/9rRIy7CpM0HpLtG9HptkMKAb4HYWy5S7HUvJEuWgr/y0U8SHw==}
+
+  '@types/semver@7.7.1':
+    resolution: {integrity: sha512-FmgJfu+MOcQ370SD0ev7EI8TlCAfKYU+B4m5T3yXc1CiRN94g/SZPtsCkk506aUDtlMnFZvasDwHHUcZUEaYuA==}
 
   '@types/trusted-types@2.0.7':
     resolution: {integrity: sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==}
@@ -2010,6 +2019,8 @@ snapshots:
   '@types/node@24.6.1':
     dependencies:
       undici-types: 7.13.0
+
+  '@types/semver@7.7.1': {}
 
   '@types/trusted-types@2.0.7': {}
 

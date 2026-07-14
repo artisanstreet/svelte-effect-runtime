@@ -145,6 +145,55 @@ test("a synchronized master version bump creates publication intent", () => {
 	]);
 });
 
+test("release versions must advance according to semantic-version precedence", () => {
+	expect(() =>
+		plan_release({
+			event: "push",
+			ref: "refs/heads/master",
+			commit: "downgrade-commit",
+			current_versions: previous_versions,
+			previous_versions: current_versions,
+		}),
+	).toThrow(/release version 4\.0\.0 must be greater than previous version 4\.1\.0/i);
+	expect(() =>
+		plan_release({
+			event: "push",
+			ref: "refs/heads/master",
+			commit: "metadata-only-commit",
+			current_versions: {
+				...current_versions,
+				runtime: "4.1.0+new",
+				grammars: "4.1.0+new",
+				"language-server": "4.1.0+new",
+				vsix: "4.1.0+new",
+			},
+			previous_versions: {
+				...current_versions,
+				runtime: "4.1.0+old",
+				grammars: "4.1.0+old",
+				"language-server": "4.1.0+old",
+				vsix: "4.1.0+old",
+			},
+		}),
+	).toThrow(/must be greater/i);
+
+	const prerelease_versions: PackageVersions = {
+		runtime: "4.1.0-rc.1",
+		grammars: "4.1.0-rc.1",
+		"language-server": "4.1.0-rc.1",
+		vsix: "4.1.0-rc.1",
+	};
+	const plan = plan_release({
+		event: "push",
+		ref: "refs/heads/master",
+		commit: "stable-release-commit",
+		current_versions,
+		previous_versions: prerelease_versions,
+	});
+
+	expect(plan.publish).toBe(true);
+});
+
 test("unsynchronized or invalid current versions fail before planning", () => {
 	expect(() =>
 		plan_release({
@@ -166,6 +215,17 @@ test("unsynchronized or invalid current versions fail before planning", () => {
 			current_versions: {
 				...current_versions,
 				runtime: "next",
+			},
+		}),
+	).toThrow(/invalid semantic version/i);
+	expect(() =>
+		plan_release({
+			event: "pull_request",
+			ref: "refs/pull/29/merge",
+			commit: "candidate-commit",
+			current_versions: {
+				...current_versions,
+				runtime: "4.1.0-01",
 			},
 		}),
 	).toThrow(/invalid semantic version/i);
@@ -195,7 +255,7 @@ test("workflow dispatch is a dry run unless an exact master version is resumed",
 		ref: "refs/heads/master",
 		commit: "release-commit",
 		current_versions,
-		resume: { version: "4.1.0" },
+		resume: { version: "4.1.0", commit: "release-commit" },
 	});
 
 	expect(dry_run_plan).toMatchObject({
@@ -214,7 +274,7 @@ test("workflow dispatch is a dry run unless an exact master version is resumed",
 			ref: "refs/heads/master",
 			commit: "release-commit",
 			current_versions,
-			resume: { version: "4.0.0" },
+			resume: { version: "4.0.0", commit: "release-commit" },
 		}),
 	).toThrow(/resume version 4\.0\.0 does not match current version 4\.1\.0/i);
 	expect(() =>
@@ -223,7 +283,44 @@ test("workflow dispatch is a dry run unless an exact master version is resumed",
 			ref: "refs/heads/feature",
 			commit: "release-commit",
 			current_versions,
-			resume: { version: "4.1.0" },
+			resume: { version: "4.1.0", commit: "release-commit" },
 		}),
 	).toThrow(/resume is only allowed from refs\/heads\/master/i);
+	expect(() =>
+		plan_release({
+			event: "workflow_dispatch",
+			ref: "refs/heads/master",
+			commit: "newer-master-commit",
+			current_versions,
+			resume: { version: "4.1.0", commit: "release-commit" },
+		}),
+	).toThrow(
+		/resume commit release-commit does not match checked out commit newer-master-commit/i,
+	);
+});
+
+test("release plans and canonical package definitions are deeply immutable", () => {
+	const plan = plan_release({
+		event: "push",
+		ref: "refs/heads/master",
+		commit: "release-commit",
+		current_versions,
+		previous_versions,
+	});
+
+	expect(Object.isFrozen(release_channels)).toBe(true);
+	expect(Object.isFrozen(release_package_definitions)).toBe(true);
+	expect(release_package_definitions.every(Object.isFrozen)).toBe(true);
+	expect(
+		release_package_definitions.every(
+			(definition) =>
+				Object.isFrozen(definition.build_dependencies) &&
+				Object.isFrozen(definition.publish_dependencies) &&
+				Object.isFrozen(definition.channels),
+		),
+	).toBe(true);
+	expect(Object.isFrozen(plan)).toBe(true);
+	expect(Object.isFrozen(plan.channels)).toBe(true);
+	expect(Object.isFrozen(plan.packages)).toBe(true);
+	expect(plan.packages.every(Object.isFrozen)).toBe(true);
 });

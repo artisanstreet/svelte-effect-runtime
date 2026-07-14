@@ -1,11 +1,17 @@
+import { compare_semantic_versions, validate_semantic_version } from "./semantic-version.ts";
 import { Schema } from "effect";
 
-export const release_channels = ["npm", "openvsx", "github-release"] as const;
+export const release_channels = Object.freeze(["npm", "openvsx", "github-release"] as const);
 export const ReleaseChannelSchema = Schema.Literals(release_channels);
 
 export type ReleaseChannel = typeof ReleaseChannelSchema.Type;
 
-export const release_package_ids = ["runtime", "grammars", "language-server", "vsix"] as const;
+export const release_package_ids = Object.freeze([
+	"runtime",
+	"grammars",
+	"language-server",
+	"vsix",
+] as const);
 
 export type ReleasePackageId = (typeof release_package_ids)[number];
 export type ArtifactKind = "npm-tarball" | "vsix";
@@ -24,7 +30,7 @@ export type PlannedReleasePackage = ReleasePackageDefinition & {
 	artifact_name: string;
 };
 
-export const release_package_definitions = [
+const mutable_release_package_definitions = [
 	{
 		id: "runtime",
 		package_name: "svelte-effect-runtime",
@@ -59,6 +65,17 @@ export const release_package_definitions = [
 	},
 ] as const satisfies ReadonlyArray<ReleasePackageDefinition>;
 
+export const release_package_definitions: ReadonlyArray<ReleasePackageDefinition> = Object.freeze(
+	mutable_release_package_definitions.map((definition) =>
+		Object.freeze({
+			...definition,
+			build_dependencies: Object.freeze([...definition.build_dependencies]),
+			publish_dependencies: Object.freeze([...definition.publish_dependencies]),
+			channels: Object.freeze([...definition.channels]),
+		}),
+	),
+);
+
 export type ReleaseEvent = "pull_request" | "push" | "workflow_dispatch";
 export type ReleaseIntent = "verify" | "publish" | "resume";
 
@@ -71,6 +88,7 @@ export type PlanReleaseInput = {
 	dry_run?: boolean;
 	resume?: {
 		version: string;
+		commit: string;
 	};
 };
 
@@ -90,8 +108,6 @@ export type ReleasePlan = {
 };
 
 const protected_release_ref = "refs/heads/master";
-const semantic_version_pattern =
-	/^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 export function parse_release_channel(input: unknown): ReleaseChannel {
 	return Schema.decodeUnknownSync(ReleaseChannelSchema)(input);
@@ -111,11 +127,24 @@ export function plan_release(input: PlanReleaseInput): ReleasePlan {
 	const previous_version = input.previous_versions
 		? resolve_synchronized_version("previous", input.previous_versions)
 		: undefined;
-	const version_changed = previous_version !== undefined && previous_version !== version;
-	const packages = release_package_definitions.map((definition) => ({
-		...definition,
-		artifact_name: expected_artifact_name(definition, version),
-	}));
+	const versions_differ = previous_version !== undefined && previous_version !== version;
+	const version_changed = versions_differ
+		? compare_semantic_versions(version, previous_version) > 0
+		: false;
+	const packages = Object.freeze(
+		release_package_definitions.map((definition) =>
+			Object.freeze({
+				...definition,
+				artifact_name: expected_artifact_name(definition, version),
+			}),
+		),
+	);
+
+	if (versions_differ && !version_changed) {
+		throw new Error(
+			`Release version ${version} must be greater than previous version ${previous_version}.`,
+		);
+	}
 
 	/**
 	 * A manual run is non-mutating unless it explicitly resumes the exact current version.
@@ -146,6 +175,12 @@ export function plan_release(input: PlanReleaseInput): ReleasePlan {
 		if (resume.version !== version) {
 			throw new Error(
 				`Resume version ${resume.version} does not match current version ${version}.`,
+			);
+		}
+
+		if (resume.commit !== input.commit) {
+			throw new Error(
+				`Resume commit ${resume.commit} does not match checked out commit ${input.commit}.`,
 			);
 		}
 
@@ -194,7 +229,15 @@ export function plan_release(input: PlanReleaseInput): ReleasePlan {
 
 function resolve_synchronized_version(label: "current" | "previous", versions: PackageVersions) {
 	const entries = release_package_ids.map((id) => [id, versions[id]] as const);
-	const invalid_entry = entries.find(([, version]) => !semantic_version_pattern.test(version));
+	const invalid_entry = entries.find(([, version]) => {
+		try {
+			validate_semantic_version(version);
+
+			return false;
+		} catch {
+			return true;
+		}
+	});
 
 	if (invalid_entry) {
 		throw new Error(
@@ -225,7 +268,7 @@ function make_plan(
 		dry_run: boolean;
 	},
 ): ReleasePlan {
-	return {
+	const plan: ReleasePlan = {
 		event: input.event,
 		ref: input.ref,
 		commit: input.commit,
@@ -236,9 +279,11 @@ function make_plan(
 		publish: policy.publish,
 		dry_run: policy.dry_run,
 		version_changed: policy.version_changed,
-		channels: release_channels,
+		channels: Object.freeze([...release_channels]),
 		packages: policy.packages,
 	};
+
+	return Object.freeze(plan);
 }
 
 function capitalize(value: string): string {
