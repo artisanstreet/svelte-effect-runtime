@@ -384,7 +384,7 @@ test(live_query_scenario.promise, async ({ browser, playwright }, test_info) => 
 	await assert_native_parity(live_query_scenario, { browser, playwright }, test_info, {
 		stable: {
 			"$.availability":
-				"The stable 4.0.0 live query does not complete SSR for the shared Stream fixture; issue #46 tracks the candidate runtime defect now exposed by the package fix.",
+				"The stable 4.0.0 live query does not complete SSR for the shared Stream fixture; the harness retains that transition evidence separately from the corrected candidate.",
 			"$.done": "The stable live route is unavailable before browser state can be observed.",
 			"$.initial_active_connections":
 				"The stable live route is unavailable before connection state can be observed.",
@@ -400,26 +400,6 @@ test(live_query_scenario.promise, async ({ browser, playwright }, test_info) => 
 				"The stable live route is unavailable before resource status can be observed.",
 			"$.traffic": "The stable live route times out before a browser live transport opens.",
 			"$.update": "The stable live route is unavailable before updates can be observed.",
-		},
-		candidate: {
-			"$.availability":
-				"The candidate reaches live runtime SSR but loses the cached initial value across same-key consumers; issue #46 records the failure.",
-			"$.done":
-				"The candidate live route is unavailable before browser state can be observed.",
-			"$.initial_active_connections":
-				"The candidate live route is unavailable before connection state can be observed.",
-			"$.initial_finalizations":
-				"The candidate live route is unavailable before finalization state can be observed.",
-			"$.initial_starts":
-				"The candidate live route is unavailable before start state can be observed.",
-			"$.reconnect_active_connections":
-				"The candidate live route is unavailable before reconnect state can be observed.",
-			"$.reconnect_start_delta":
-				"The candidate live route is unavailable before reconnect state can be observed.",
-			"$.status":
-				"The candidate live route is unavailable before resource status can be observed.",
-			"$.traffic": "The candidate fails before a browser live transport opens.",
-			"$.update": "The candidate live route is unavailable before updates can be observed.",
 		},
 	});
 });

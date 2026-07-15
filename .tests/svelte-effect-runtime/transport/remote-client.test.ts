@@ -15,6 +15,7 @@ import { to_form_data } from "../../../modules/svelte-effect-runtime/src/remote/
 import { InvalidPrerenderFactoryError } from "../../../modules/svelte-effect-runtime/src/errors.ts";
 import { error as svelte_error, isRedirect, redirect as svelte_redirect } from "@sveltejs/kit";
 import { reset_dispatcher } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
+import { ToEffect } from "../../../modules/svelte-effect-runtime/src/yieldable.ts";
 import { Live } from "../../../modules/svelte-effect-runtime/src/live.ts";
 import { Cause, Effect, Exit, Fiber, Schema, Stream } from "effect";
 import { pathToFileURL } from "node:url";
@@ -588,6 +589,37 @@ test("remote live query adapter returns a stream with separate controls", async 
 	await get_server_dispatcher().run(derived_query.pipe(Live.reconnect));
 
 	assert_equals(reconnect_called, true);
+});
+
+test("remote live query yields cached initial values before subscribing to updates", async () => {
+	let iterator_subscriptions = 0;
+
+	const resource = Object.assign(Promise.resolve("first"), {
+		connected: true,
+		done: false,
+		error: undefined,
+		[Symbol.asyncIterator]: async function* () {
+			iterator_subscriptions += 1;
+
+			yield "first";
+			yield "second";
+		},
+	});
+	const native = () => resource;
+	const query = create_remote_live_query_adapter<undefined, string>(native, (value) => value, "");
+	const left_query = query(undefined);
+	const right_query = query(undefined).pipe(Stream.map((value) => value.toUpperCase()));
+	const InitialValues = Effect.all([ToEffect(left_query), ToEffect(right_query)]);
+
+	const initial_values = await get_server_dispatcher().run(InitialValues);
+
+	assert_equals(initial_values, ["first", "FIRST"]);
+	assert_equals(iterator_subscriptions, 0);
+
+	const updates = await get_server_dispatcher().run(Stream.runCollect(left_query));
+
+	assert_equals(updates, ["first", "second"]);
+	assert_equals(iterator_subscriptions, 1);
 });
 
 test("remote live status reports failed resources before closed resources", async () => {

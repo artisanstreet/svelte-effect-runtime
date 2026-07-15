@@ -141,8 +141,11 @@ type NativeLiveResource<A> = {
 	readonly loading?: boolean;
 	readonly ready?: boolean;
 	readonly reconnect?: () => Promise<void> | void;
+	readonly then?: PromiseLike<A>["then"];
 	readonly [Symbol.asyncIterator]?: () => AsyncIterator<A>;
 };
+
+type NativeThenableLiveResource<A> = NativeLiveResource<A> & AsyncIterable<A> & PromiseLike<A>;
 
 type LiveMetadata<A = unknown, ErrorType = never> = {
 	readonly resource: NativeLiveResource<A>;
@@ -162,13 +165,54 @@ export function make_remote_live_stream<A, ErrorType = never>(
 	on_error: (error: unknown) => RemoteFailure<ErrorType>,
 ): RemoteLiveStream<A, ErrorType> {
 	const live_resource = as_native_live_resource<A>(resource);
-	const stream = Stream.fromAsyncIterable(live_resource, on_error);
+	const stream = make_live_stream(live_resource, on_error);
 	const metadata: LiveMetadata<A, ErrorType> = {
 		resource: live_resource,
 		on_error,
 	};
 
 	return attach_live_metadata(stream, metadata) as RemoteLiveStream<A, ErrorType>;
+}
+
+function make_live_stream<A, ErrorType>(
+	resource: NativeLiveResource<A> & AsyncIterable<A>,
+	on_error: (error: unknown) => RemoteFailure<ErrorType>,
+): Stream.Stream<A, RemoteFailure<ErrorType>, never> {
+	const source = is_thenable_live_resource(resource)
+		? make_cached_live_iterable(resource)
+		: resource;
+
+	return Stream.fromAsyncIterable(source, on_error);
+}
+
+function make_cached_live_iterable<A>(resource: NativeThenableLiveResource<A>): AsyncIterable<A> {
+	return {
+		async *[Symbol.asyncIterator]() {
+			const initial_value = await resource;
+			let is_first_update = true;
+
+			yield initial_value;
+
+			for await (const value of resource) {
+				/** Native iterators seed their latest value after the cached initial value. */
+				if (is_first_update && Object.is(value, initial_value)) {
+					is_first_update = false;
+
+					continue;
+				}
+
+				is_first_update = false;
+
+				yield value;
+			}
+		},
+	};
+}
+
+function is_thenable_live_resource<A>(
+	resource: NativeLiveResource<A> & AsyncIterable<A>,
+): resource is NativeThenableLiveResource<A> {
+	return typeof resource.then === "function";
 }
 
 export function make_failed_remote_live_stream<A, ErrorType = never>(
