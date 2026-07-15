@@ -22,7 +22,16 @@ test("issue 28 capability lanes have stable names and testable commands", () => 
 	expect(capability_lanes.map((lane) => lane.id)).toEqual(capability_lane_ids);
 	expect(capability_lanes.map((lane) => lane.name)).toEqual(expected_lane_names);
 	expect(capability_lanes.every((lane) => lane.test_files.length > 0)).toBe(true);
+	expect(capability_lanes.every((lane) => lane.test_command.args.length > 0)).toBe(true);
 	expect(get_capability_lane("compiler").name).toBe("Capability / Compiler");
+	expect(get_capability_lane("signals-and-reactivity").test_command.args).toEqual([
+		"pnpm",
+		"run",
+		"test:conformance:signals",
+	]);
+	expect(get_capability_lane("remote-transport").commands).toContainEqual({
+		args: ["pnpm", "run", "test:conformance:consumer"],
+	});
 	expect(() => get_capability_lane("release")).toThrow(/unknown capability lane/i);
 });
 

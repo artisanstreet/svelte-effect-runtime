@@ -10,12 +10,7 @@ export const RunCapabilityLane = (lane_id: string) =>
 		const corepack = yield* CommandName("corepack");
 		const lane = get_capability_lane(lane_id);
 
-		yield* RunCommand(
-			corepack,
-			["pnpm", "exec", "vp", "test", "run", ...lane.test_files],
-			repo_root,
-			{ inherit: true },
-		);
+		yield* RunCommand(corepack, lane.test_command.args, repo_root, { inherit: true });
 
 		for (const command of lane.commands) {
 			yield* RunCommand(corepack, command.args, repo_root, { inherit: true });
