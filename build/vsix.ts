@@ -117,8 +117,8 @@ const PackageExtension = (
 			command,
 			[
 				"pnpm",
-				"dlx",
-				"@vscode/vsce@3.7.1",
+				"exec",
+				"vsce",
 				"package",
 				"--allow-missing-repository",
 				"--no-dependencies",

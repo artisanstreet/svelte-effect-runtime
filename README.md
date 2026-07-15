@@ -6,8 +6,6 @@
   <a href="https://www.npmjs.com/package/svelte-effect-runtime">npm</a>
   •
   <a href="https://open-vsx.org/extension/barekey/svelte-effect-runtime-vscode">OpenVSX</a>
-  •
-  <a href="https://marketplace.visualstudio.com/items?itemName=Barekey.svelte-effect-runtime-vscode">VS Code Marketplace</a>
 </p>
 
 ---

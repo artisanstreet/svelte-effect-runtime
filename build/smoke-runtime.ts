@@ -1,34 +1,6 @@
 import { CommandName, RepoRoot, RemovePath, RunCommand } from "./node-utils.ts";
-import { Console, Effect, FileSystem, Path, Schema } from "effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-
-const PackedTarballSchema = Schema.Struct({
-	filename: Schema.optional(Schema.String),
-	tarball: Schema.optional(Schema.String),
-});
-const PackOutputSchema = Schema.Union([PackedTarballSchema, Schema.Array(PackedTarballSchema)]);
-
-const ResolvePackedTarball = (repo_root: string, stdout: string, package_name: string) =>
-	Effect.gen(function* () {
-		const path = yield* Path.Path;
-		const parsed = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(PackOutputSchema))(
-			stdout,
-		);
-		const result = Array.isArray(parsed) ? parsed[0] : parsed;
-		const filename = result?.filename ?? result?.tarball;
-
-		if (!filename) {
-			return yield* Effect.fail(
-				new Error(`pnpm pack did not create a ${package_name} tarball.`),
-			);
-		}
-
-		if (path.isAbsolute(filename)) {
-			return filename;
-		}
-
-		return path.join(repo_root, ".dist", package_name, filename);
-	});
+import { Console, Effect, FileSystem, Path } from "effect";
 
 const app_html = `<!doctype html>
 <html lang="en">
@@ -216,8 +188,23 @@ const Main = Effect.gen(function* () {
 	const code_root = path.join(repo_root, "..");
 	const smokes_root = path.join(code_root, "smokes");
 	const smoke_dir = path.join(smokes_root, "ser-current");
-	const package_dir = path.join(repo_root, "modules", "svelte-effect-runtime");
+	const artifact_argument = process.argv[2];
 	const corepack = yield* CommandName("corepack");
+
+	if (!artifact_argument) {
+		return yield* Effect.fail(
+			new Error("Runtime smoke requires the exact runtime .tgz artifact path."),
+		);
+	}
+
+	const runtime_tarball = path.resolve(process.cwd(), artifact_argument);
+	const has_runtime_tarball = yield* file_system.exists(runtime_tarball);
+
+	if (!runtime_tarball.endsWith(".tgz") || !has_runtime_tarball) {
+		return yield* Effect.fail(
+			new Error(`Runtime artifact must be an existing .tgz file: ${runtime_tarball}`),
+		);
+	}
 
 	if (!smoke_dir.startsWith(smokes_root)) {
 		return yield* Effect.fail(new Error(`Refusing to write outside smoke root: ${smoke_dir}`));
@@ -272,21 +259,6 @@ const Main = Effect.gen(function* () {
 		{ concurrency: "unbounded" },
 	);
 	yield* RunCommand(corepack, ["pnpm", "install"], smoke_dir, { inherit: true });
-	yield* RunCommand(corepack, ["pnpm", "run", "build"], package_dir, {
-		inherit: true,
-	});
-
-	const runtime_pack = yield* RunCommand(
-		"vp",
-		["node", "build/pack.ts", "svelte-effect-runtime"],
-		repo_root,
-	);
-	const runtime_tarball = yield* ResolvePackedTarball(
-		repo_root,
-		runtime_pack.stdout,
-		"svelte-effect-runtime",
-	);
-
 	yield* RunCommand(corepack, ["pnpm", "add", runtime_tarball], smoke_dir, {
 		inherit: true,
 	});
