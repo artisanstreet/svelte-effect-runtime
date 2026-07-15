@@ -14,6 +14,7 @@ import {
 } from "../../../modules/svelte-effect-runtime/src/compiler.ts";
 import {
 	assert_equals,
+	assert_rejects,
 	assert_throws,
 	assert_not_match,
 	assert_string_includes,
@@ -415,6 +416,97 @@ test("vite server import rewrite parses imports instead of rewriting text", asyn
 	assert_string_includes(result, `import("svelte-effect-runtime/server")`);
 	assert_string_includes(result, `const example = 'from "svelte-effect-runtime"';`);
 	assert_string_includes(result, `/** from "svelte-effect-runtime/internal/generators" */`);
+});
+
+test("vite server import rewrite retains SvelteKit's lowercase prerender binding", async () => {
+	const source = [
+		`import { Prerender as MakePrerender, Query } from "svelte-effect-runtime";`,
+		`export const GetBuildInfo = MakePrerender(() => Effect.succeed("ready"));`,
+		`export const GetPost = Query(() => Effect.succeed("post"));`,
+	].join("\n");
+	const result = await run_server_import_transform(source, "C:/src/lib/build.remote.ts");
+
+	assert_string_includes(
+		result,
+		`import { Prerender as MakePrerender, Query } from "svelte-effect-runtime/server";`,
+	);
+	assert_string_includes(result, `import { prerender } from "$app/server";`);
+	assert_string_includes(
+		result,
+		`export const GetBuildInfo = MakePrerender(() => Effect.succeed("ready"), undefined, undefined, prerender);`,
+	);
+	assert_string_includes(result, `export const GetPost = Query(() => Effect.succeed("post"));`);
+});
+
+test("vite server import rewrite retains prerender for namespace imports", async () => {
+	const source = [
+		`import * as SER from "svelte-effect-runtime";`,
+		`export const GetBuildInfo = SER.Prerender(() => Effect.succeed("ready"));`,
+	].join("\n");
+	const result = await run_server_import_transform(source, "C:/src/lib/build.remote.ts");
+
+	assert_string_includes(result, `import * as SER from "svelte-effect-runtime/server";`);
+	assert_string_includes(result, `import { prerender } from "$app/server";`);
+	assert_string_includes(
+		result,
+		`export const GetBuildInfo = SER.Prerender(() => Effect.succeed("ready"), undefined, undefined, prerender);`,
+	);
+});
+
+test("vite server import rewrite ignores unused Prerender bindings", async () => {
+	const source = [
+		`import { Prerender } from "svelte-effect-runtime";`,
+		`import * as SER from "svelte-effect-runtime";`,
+		`const prerender = "local";`,
+		`export const GetBuildInfo = SER.Query(() => Effect.succeed("ready"));`,
+	].join("\n");
+	const result = await run_server_import_transform(source, "C:/src/lib/build.remote.ts");
+
+	assert_string_includes(result, `const prerender = "local";`);
+	assert_string_includes(
+		result,
+		`export const GetBuildInfo = SER.Query(() => Effect.succeed("ready"));`,
+	);
+	assert_not_match(result, /from "\$app\/server"/);
+});
+
+test("vite server import rewrite handles wrapped Prerender initializers", async () => {
+	const source = [
+		`import { Prerender } from "svelte-effect-runtime";`,
+		`type Remote = unknown;`,
+		`export const Satisfied = Prerender(() => Effect.succeed("ready")) satisfies Remote;`,
+		`export const Asserted = Prerender(() => Effect.succeed("ready")) as Remote;`,
+		`export const Parenthesized = (Prerender(() => Effect.succeed("ready")));`,
+	].join("\n");
+	const result = await run_server_import_transform(source, "C:/src/lib/build.remote.ts");
+
+	assert_string_includes(result, `import { prerender } from "$app/server";`);
+	assert_string_includes(
+		result,
+		`Prerender(() => Effect.succeed("ready"), undefined, undefined, prerender) satisfies Remote`,
+	);
+	assert_string_includes(
+		result,
+		`Prerender(() => Effect.succeed("ready"), undefined, undefined, prerender) as Remote`,
+	);
+	assert_string_includes(
+		result,
+		`(Prerender(() => Effect.succeed("ready"), undefined, undefined, prerender))`,
+	);
+});
+
+test("vite server import rewrite rejects conflicting prerender bindings", async () => {
+	const source = [
+		`import { Prerender } from "svelte-effect-runtime";`,
+		`const prerender = () => undefined;`,
+		`export const GetBuildInfo = Prerender(() => Effect.succeed("ready"));`,
+	].join("\n");
+
+	await assert_rejects(
+		() => run_server_import_transform(source, "C:/src/lib/build.remote.ts"),
+		Error,
+		`Prerender remote modules reserve the top-level "prerender" binding for SvelteKit`,
+	);
 });
 
 test("vite diagnostics plugin warns for bare Effect.gen event handlers", async () => {
