@@ -15,7 +15,7 @@ import { LanguageClientControl } from "../../../modules/svelte-effect-runtime-vs
 import { ExtensionConfiguration } from "../../../modules/svelte-effect-runtime-vsix/src/extension/settings.ts";
 import { ServerPathResolver } from "../../../modules/svelte-effect-runtime-vsix/src/extension/server-path.ts";
 import { get_server_dispatcher } from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
-import { assert_equals, assert_false } from "../../svelte-effect-runtime/runtime/helpers/assert.ts";
+import { assert_equals, assert_false } from "../../svelte-effect-runtime/unit/helpers/assert.ts";
 import { NodeFileSystem } from "@effect/platform-node";
 import { Effect, Layer, Option } from "effect";
 import { test, vi } from "vitest";

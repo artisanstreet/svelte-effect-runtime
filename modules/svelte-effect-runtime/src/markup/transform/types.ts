@@ -75,7 +75,7 @@ export interface MarkupCandidate {
 	key: TagKind;
 }
 
-export type TagKind = "plain" | "each" | "await" | "event" | "render" | "render_argument";
+export type TagKind = "plain" | "each" | "await" | "event" | "html" | "render" | "render_argument";
 
 export interface Replacement {
 	start: number;

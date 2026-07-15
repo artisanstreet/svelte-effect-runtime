@@ -10,7 +10,7 @@ import {
 } from "../../../modules/svelte-effect-runtime/src/mod.ts";
 import { make_dependency_hasher } from "../../../modules/svelte-effect-runtime/src/dispatcher/deps.ts";
 import type { ValueOptions } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
-import { assert_equals, assert_throws, assert_rejects } from "./helpers/assert.ts";
+import { assert_equals, assert_throws, assert_rejects } from "../unit/helpers/assert.ts";
 import { redirect as svelte_redirect } from "@sveltejs/kit";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { test } from "vitest";

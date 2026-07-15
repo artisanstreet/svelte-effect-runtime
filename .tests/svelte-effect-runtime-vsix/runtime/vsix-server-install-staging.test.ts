@@ -3,7 +3,7 @@ import {
 	assert_equals,
 	assert_false,
 	assert_truthy,
-} from "../../svelte-effect-runtime/runtime/helpers/assert.ts";
+} from "../../svelte-effect-runtime/unit/helpers/assert.ts";
 import { get_server_dispatcher } from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
 import { WriteStagingOwner, make_policy_layer } from "./helpers/server-install-retention.ts";
 import { Effect, FileSystem, Layer, Option, PlatformError } from "effect";

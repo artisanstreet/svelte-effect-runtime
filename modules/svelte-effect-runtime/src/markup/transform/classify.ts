@@ -82,7 +82,7 @@ function visit_ast_node(
 			return;
 
 		case "HtmlTag":
-			classify_expression(node.expression, "plain", candidates, matched, classified);
+			classify_expression(node.expression, "html", candidates, matched, classified);
 			return;
 
 		case "DebugTag":

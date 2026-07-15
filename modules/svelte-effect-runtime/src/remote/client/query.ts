@@ -22,17 +22,20 @@ type RemoteInput<Input> = undefined extends Input ? Input | void : Input;
 
 type DecodePayload<Output> = (value: unknown) => Output;
 
+type QueryAdapterMode = "standard" | "batch";
+
 type NativeQueryFactory<Input> =
 	| ((input: RemoteInput<Input>) => unknown)
 	| {
 			readonly load: (input: RemoteInput<Input>) => unknown;
 	  };
 
-type RemoteQueryEffect<Output, ErrorType = never> = RemoteResourceEffect<Output, ErrorType> & {
-	readonly refresh: () => Effect.Effect<void, unknown, never>;
-	readonly set: (value: Output) => void;
-	readonly withOverride: (update: (current: Output) => Output) => unknown;
-};
+type RemoteQueryEffect<Output, ErrorType = never> = EffectRemoteQueryUpdateBrand &
+	RemoteResourceEffect<Output, ErrorType> & {
+		readonly refresh: () => Effect.Effect<void, unknown, never>;
+		readonly set: (value: Output) => void;
+		readonly withOverride: (update: (current: Output) => Output) => unknown;
+	};
 
 type NativeQueryResource<Output> = NativeRemoteResource<Output> & {
 	readonly refresh?: () => Promise<void>;
@@ -45,18 +48,21 @@ export function create_remote_query_adapter<Input, Output, ErrorType = never>(
 	native_factory: NativeQueryFactory<Input>,
 	decode_payload: DecodePayload<Output>,
 	_base?: string,
+	mode?: QueryAdapterMode,
 ): EffectRemoteQueryUpdateBrand &
 	((input: RemoteInput<Input>) => RemoteQueryEffect<Output, ErrorType>);
 export function create_remote_query_adapter<Input, Output, ErrorType = never>(
 	native_factory: NativeQueryFactory<Input>,
 	decode_payload: (value: unknown) => unknown,
 	_base?: string,
+	mode?: QueryAdapterMode,
 ): EffectRemoteQueryUpdateBrand &
 	((input: RemoteInput<Input>) => RemoteQueryEffect<Output, ErrorType>);
 export function create_remote_query_adapter<Input, Output, ErrorType = never>(
 	native_factory: unknown,
 	decode_payload: DecodePayload<Output>,
 	_base = "",
+	mode: QueryAdapterMode = "standard",
 ): EffectRemoteQueryUpdateBrand &
 	((input: RemoteInput<Input>) => RemoteQueryEffect<Output, ErrorType>) {
 	const load = has_method(native_factory, "load") ? native_factory.load : undefined;
@@ -91,8 +97,9 @@ export function create_remote_query_adapter<Input, Output, ErrorType = never>(
 		}
 
 		const resource = resource_attempt.success;
+		const query_result = mode === "batch" ? begin_batch_query_result(resource) : resource;
 		const QueryEffect = ResolveQueryResult<Output, ErrorType>(
-			resource,
+			query_result,
 			decode_payload,
 		) as RemoteQueryEffect<Output, ErrorType>;
 
@@ -105,6 +112,18 @@ export function create_remote_query_adapter<Input, Output, ErrorType = never>(
 	copy_property_descriptors(native_factory, wrapped);
 
 	return wrapped;
+}
+
+function begin_batch_query_result(resource: unknown): unknown {
+	if (!has_method(resource, "then")) {
+		return resource;
+	}
+
+	const result = Promise.resolve(resource);
+
+	void result.catch(() => {});
+
+	return result;
 }
 
 /** Adapts a generated SvelteKit live query to SER's Effect-based client ABI. */

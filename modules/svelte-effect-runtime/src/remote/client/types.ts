@@ -45,6 +45,7 @@ export type EffectRemoteFormValidateOptions<
 type EffectRemoteQueryUpdate =
 	| NativeRemoteQueryUpdate
 	| EffectRemoteQueryUpdateFunction
+	| EffectRemoteQueryUpdateResource
 	| EffectRemoteLiveQueryUpdateFunction;
 
 type EffectRemoteCommandUpdate = {
@@ -69,11 +70,8 @@ type EffectRemoteLiveQueryUpdateFunction = (
 	input: never,
 ) => Stream.Stream<unknown, unknown, unknown>;
 
-type EffectRemoteQueryUpdateResource = Effect.Effect<unknown, unknown> & {
-	readonly refresh: () => Effect.Effect<void, unknown, never>;
-	readonly set: (value: never) => void;
-	readonly withOverride: (update: never) => unknown;
-};
+type EffectRemoteQueryUpdateResource = EffectRemoteQueryUpdateBrand &
+	Effect.Effect<unknown, unknown>;
 
 export interface Pending {
 	value: number;

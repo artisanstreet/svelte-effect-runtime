@@ -1,0 +1,25 @@
+import * as __remote from "__sveltekit/remote";
+import { create_remote_query_adapter, create_remote_live_query_adapter, create_remote_prerender_adapter, create_remote_command_adapter, create_remote_form_adapter } from "svelte-effect-runtime/internal/remote-client";
+import { goto as __SER___goto, invalidateAll as __SER___invalidate_all } from "$app/navigation";
+import { app_dir, base } from "$app/paths/internal/client";
+const __SER___remote_base = `${base}/${app_dir}/remote`;
+function __SER___decode_payload(value) { return value; }
+function __SER___navigate_remote_form(location, invalidate_all) {
+	const target = new URL(location, globalThis.location.href);
+
+	if (target.origin !== globalThis.location.origin) {
+		globalThis.location.assign(target.href);
+
+		return Promise.resolve();
+	}
+
+	return __SER___goto(target, { invalidateAll: invalidate_all });
+}
+const __SER___remote_form_transport = { binary_form_content_type: __remote.__SER___binary_form_content_type, navigate: __SER___navigate_remote_form, refresh: __SER___invalidate_all, remote_request: __remote.__SER___remote_request, serialize_binary_form: __remote.__SER___serialize_binary_form };
+
+export const GetPost = create_remote_query_adapter(__remote.query("abc/GetPost"), __SER___decode_payload);
+export const GetPosts = create_remote_query_adapter(__remote.query_batch("abc/GetPosts"), __SER___decode_payload, "", "batch");
+export const GetClock = create_remote_live_query_adapter(__remote.query_live("abc/GetClock"), __SER___decode_payload);
+export const SavePost = create_remote_command_adapter(__remote.command("abc/SavePost"), __SER___decode_payload);
+export const EditPost = create_remote_form_adapter(__remote.form("abc/EditPost"), __SER___decode_payload, __SER___remote_base, __SER___remote_form_transport);
+export const GetNavigation = create_remote_prerender_adapter(__remote.prerender("abc/GetNavigation"), __SER___decode_payload);

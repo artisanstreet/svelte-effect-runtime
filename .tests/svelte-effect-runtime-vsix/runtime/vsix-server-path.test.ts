@@ -24,7 +24,7 @@ import {
 	assert_string_includes,
 	assert_throws,
 	assert_truthy,
-} from "../../svelte-effect-runtime/runtime/helpers/assert.ts";
+} from "../../svelte-effect-runtime/unit/helpers/assert.ts";
 import { ServerInstallRetentionPolicyLive } from "../../../modules/svelte-effect-runtime-vsix/src/extension/server-install-retention/index.ts";
 import {
 	make_configuration_layer,

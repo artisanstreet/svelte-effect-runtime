@@ -10,7 +10,7 @@ import {
 	assert_equals,
 	assert_string_includes,
 	assert_truthy,
-} from "../../svelte-effect-runtime/runtime/helpers/assert.ts";
+} from "../../svelte-effect-runtime/unit/helpers/assert.ts";
 import {
 	get_server_dispatcher,
 	reset_server_runtime,

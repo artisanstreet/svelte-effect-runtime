@@ -1,8 +1,5 @@
 import { MakeSerializedClientControl } from "../../../modules/svelte-effect-runtime-vsix/src/extension/client-lifecycle.ts";
-import {
-	assert_equals,
-	assert_truthy,
-} from "../../svelte-effect-runtime/runtime/helpers/assert.ts";
+import { assert_equals, assert_truthy } from "../../svelte-effect-runtime/unit/helpers/assert.ts";
 import { get_server_dispatcher } from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
 import { Effect, Exit } from "effect";
 import { test } from "vitest";

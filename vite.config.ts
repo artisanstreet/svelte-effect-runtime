@@ -18,6 +18,24 @@ const ignored_paths = [
 	"pnpm-lock.yaml",
 ];
 
+const ser_syntax_lint_ignored_paths = [
+	...ignored_paths,
+	".tests/svelte-effect-runtime/consumer/fixtures/ser/src/lib/components/command-page.svelte",
+	".tests/svelte-effect-runtime/consumer/fixtures/ser/src/lib/components/conformance-page.svelte",
+	".tests/svelte-effect-runtime/consumer/fixtures/ser/src/lib/components/forms-page.svelte",
+	".tests/svelte-effect-runtime/consumer/fixtures/ser/src/lib/components/lifecycle-page.svelte",
+	".tests/svelte-effect-runtime/consumer/fixtures/ser/src/lib/components/live-page.svelte",
+	".tests/svelte-effect-runtime/consumer/fixtures/ser/src/lib/components/native-prerender-query.svelte",
+	".tests/svelte-effect-runtime/consumer/fixtures/ser/src/lib/components/native-prerender-summary.svelte",
+	".tests/svelte-effect-runtime/consumer/fixtures/ser/src/lib/components/query-page.svelte",
+	".tests/svelte-effect-runtime/consumer/fixtures/ser/src/routes/prerender/+page.svelte",
+	".tests/svelte-effect-runtime/consumer/fixtures/stable/src/lib/components/command-page.svelte",
+	".tests/svelte-effect-runtime/consumer/fixtures/stable/src/lib/components/conformance-page.svelte",
+	".tests/svelte-effect-runtime/consumer/fixtures/stable/src/routes/prerender/+page.svelte",
+	".tests/svelte-effect-runtime/signals/fixtures/ser-lifecycle.svelte",
+	".tests/svelte-effect-runtime/signals/fixtures/ser-reactivity.svelte",
+];
+
 export default {
 	fmt: {
 		ignorePatterns: ignored_paths,
@@ -25,7 +43,7 @@ export default {
 		useTabs: true,
 	},
 	lint: {
-		ignorePatterns: ignored_paths,
+		ignorePatterns: ser_syntax_lint_ignored_paths,
 	},
 	resolve: {
 		alias: [
@@ -39,7 +57,7 @@ export default {
 				find: "$app/server",
 				replacement: vite_path(
 					new URL(
-						"./.tests/svelte-effect-runtime/runtime/fixtures/app-server.ts",
+						"./.tests/svelte-effect-runtime/unit/fixtures/app-server.ts",
 						import.meta.url,
 					),
 				),
@@ -83,7 +101,8 @@ export default {
 		],
 	},
 	test: {
-		include: [".tests/*/runtime/**/*.test.ts"],
+		include: [".tests/*/**/*.test.ts"],
+		exclude: [".tests/**/consumer/**/*.spec.ts", ".tests/**/signals/**/*.browser.test.ts"],
 		testTimeout: 30_000,
 	},
 };

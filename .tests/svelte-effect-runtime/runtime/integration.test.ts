@@ -17,7 +17,7 @@ import {
 	assert_throws,
 	assert_not_match,
 	assert_string_includes,
-} from "./helpers/assert.ts";
+} from "../unit/helpers/assert.ts";
 import { RuntimeAlreadyInitializedError } from "../../../modules/svelte-effect-runtime/src/errors.ts";
 import { promise } from "../../../modules/svelte-effect-runtime/src/markup/promise.ts";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -1214,7 +1214,7 @@ test("vite remote client wrapper preserves native SvelteKit remote module", asyn
 	);
 	assert_string_includes(
 		result,
-		`export const get_post_batch = create_remote_query_adapter(__remote.query_batch('abc/get_post_batch'), __SER___decode_payload);`,
+		`export const get_post_batch = create_remote_query_adapter(__remote.query_batch('abc/get_post_batch'), __SER___decode_payload, "", "batch");`,
 	);
 	assert_string_includes(
 		result,

@@ -18,10 +18,11 @@ export type CapabilityLane = {
 	readonly id: CapabilityLaneId;
 	readonly name: string;
 	readonly test_files: ReadonlyArray<string>;
+	readonly test_command: CapabilityCommand;
 	readonly commands: ReadonlyArray<CapabilityCommand>;
 };
 
-const runtime_test_root = ".tests/svelte-effect-runtime/runtime";
+const ser_test_root = ".tests/svelte-effect-runtime";
 const vsix_test_root = ".tests/svelte-effect-runtime-vsix/runtime";
 
 export const static_policy_test_files = Object.freeze([
@@ -39,33 +40,50 @@ export const static_policy_test_files = Object.freeze([
 
 export const capability_lanes: ReadonlyArray<CapabilityLane> = Object.freeze([
 	make_lane("compiler", "Capability / Compiler", [
-		`${runtime_test_root}/detect.test.ts`,
-		`${runtime_test_root}/diagnostics.test.ts`,
-		`${runtime_test_root}/script-transform.test.ts`,
-		`${runtime_test_root}/source-scan.test.ts`,
+		`${ser_test_root}/compiler/detect.test.ts`,
+		`${ser_test_root}/compiler/diagnostic-contract.test.ts`,
+		`${ser_test_root}/compiler/diagnostics.test.ts`,
+		`${ser_test_root}/compiler/markup.test.ts`,
+		`${ser_test_root}/compiler/representative-golden.test.ts`,
+		`${ser_test_root}/compiler/script-transform.test.ts`,
+		`${ser_test_root}/compiler/source-scan.test.ts`,
+		`${ser_test_root}/compiler/sveltekit-remote-bridge.test.ts`,
 	]),
 	make_lane("runtime-and-lifecycle", "Capability / Runtime and lifecycle", [
-		`${runtime_test_root}/dispatcher.test.ts`,
-		`${runtime_test_root}/generators.test.ts`,
-		`${runtime_test_root}/helpers/assert.test.ts`,
-		`${runtime_test_root}/server-handler.test.ts`,
+		`${ser_test_root}/runtime/dispatcher-ownership.test.ts`,
+		`${ser_test_root}/runtime/dispatcher.test.ts`,
+		`${ser_test_root}/runtime/effect-channels.test.ts`,
+		`${ser_test_root}/runtime/form-invalid.test.ts`,
+		`${ser_test_root}/runtime/layer-lifecycle.test.ts`,
+		`${ser_test_root}/runtime/server-handler.test.ts`,
+		`${ser_test_root}/runtime/yieldable-normalization.test.ts`,
 	]),
-	make_lane("signals-and-reactivity", "Capability / Signals and reactivity", [
-		`${runtime_test_root}/markup.test.ts`,
-	]),
-	make_lane("remote-transport", "Capability / Remote transport", [
-		`${runtime_test_root}/remote-client.test.ts`,
-		`${runtime_test_root}/remote-server.test.ts`,
-		`${runtime_test_root}/remote-shared.test.ts`,
-		`${runtime_test_root}/sveltekit-remote-bridge.test.ts`,
-	]),
+	make_lane(
+		"signals-and-reactivity",
+		"Capability / Signals and reactivity",
+		[`${ser_test_root}/signals/signals.browser.test.ts`],
+		[],
+		["pnpm", "run", "test:conformance:signals"],
+	),
+	make_lane(
+		"remote-transport",
+		"Capability / Remote transport",
+		[
+			`${ser_test_root}/transport/remote-client.test.ts`,
+			`${ser_test_root}/transport/remote-server.test.ts`,
+			`${ser_test_root}/transport/remote-shared.test.ts`,
+			`${ser_test_root}/unit/live-state.test.ts`,
+		],
+		[["pnpm", "run", "test:conformance:consumer"]],
+	),
 	make_lane("public-api", "Capability / Public API", [
-		`${runtime_test_root}/integration.test.ts`,
+		`${ser_test_root}/public-api/package.test.ts`,
+		`${ser_test_root}/runtime/integration.test.ts`,
 	]),
 	make_lane(
 		"type-contracts",
 		"Capability / Type contracts",
-		[`${runtime_test_root}/remote-client-types.test.ts`],
+		[`${ser_test_root}/types/packed-types.test.ts`],
 		[
 			["pnpm", "run", "check:grammars"],
 			["pnpm", "run", "check:runtime"],
@@ -74,6 +92,12 @@ export const capability_lanes: ReadonlyArray<CapabilityLane> = Object.freeze([
 		],
 	),
 	make_lane("package-and-tooling", "Capability / Package and tooling", [
+		`${ser_test_root}/tooling/packed-consumer.test.ts`,
+		`${ser_test_root}/tooling/sveltekit-matrix.test.ts`,
+		`${ser_test_root}/unit/artifact-manifest.test.ts`,
+		`${ser_test_root}/unit/harness.test.ts`,
+		`${ser_test_root}/unit/packed-artifact.test.ts`,
+		`${ser_test_root}/unit/server-output.test.ts`,
 		".tests/svelte-effect-runtime-grammars/runtime/grammars.test.ts",
 		".tests/svelte-effect-runtime-language-server/runtime/language-server.test.ts",
 		`${vsix_test_root}/vsix-client-lifecycle.test.ts`,
@@ -105,11 +129,13 @@ function make_lane(
 	name: string,
 	test_files: ReadonlyArray<string>,
 	commands: ReadonlyArray<ReadonlyArray<string>> = [],
+	test_command: ReadonlyArray<string> = ["pnpm", "exec", "vp", "test", "run", ...test_files],
 ): CapabilityLane {
 	return Object.freeze({
 		id,
 		name,
 		test_files: Object.freeze([...test_files]),
+		test_command: Object.freeze({ args: Object.freeze([...test_command]) }),
 		commands: Object.freeze(
 			commands.map((args) => Object.freeze({ args: Object.freeze([...args]) })),
 		),

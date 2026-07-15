@@ -2,6 +2,7 @@ import type { RemoteFormInput, RemoteQuery, RemoteQueryOverride } from "@sveltej
 import type {
 	EffectRemoteCommandCall as ClientEffectRemoteCommandCall,
 	EffectRemoteForm as ClientEffectRemoteForm,
+	EffectRemoteQueryUpdateBrand as ClientEffectRemoteQueryUpdateBrand,
 } from "$/remote/client.ts";
 import type { Effect, Layer, ManagedRuntime, Schema, Stream } from "effect";
 import type { create_form_error, RemoteFailure } from "$/remote/shared.ts";
@@ -541,7 +542,8 @@ export type EffectRemotePrerenderFunction<Input, A, E = never> = [Input] extends
  *
  * @since 2.0.0
  */
-export type EffectRemoteQuery<A, E = never> = Effect.Effect<A, RemoteFailure<E>, never> &
+export type EffectRemoteQuery<A, E = never> = ClientEffectRemoteQueryUpdateBrand &
+	Effect.Effect<A, RemoteFailure<E>, never> &
 	Pick<RemoteQuery<A>, "set"> & {
 		readonly current: A | undefined;
 		readonly error: unknown;
