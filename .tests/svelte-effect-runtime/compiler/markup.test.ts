@@ -299,6 +299,23 @@ test("rewrites yield inside snippet block bodies", () => {
 	});
 });
 
+test("preserves TypeScript mode while classifying typed snippets", () => {
+	const source = [
+		`<script lang="ts">let { load } = $props();</script>`,
+		`{#snippet child(value: string)}<p>{value}</p>{/snippet}`,
+		`{@render child(yield* load())}`,
+	].join("");
+	const result = transform_markup_effect(source, "TypedSnippet.svelte");
+
+	assert_string_includes(result.code, `return (yield* ToEffect(load()));`);
+
+	compile(result.code, {
+		filename: "TypedSnippet.svelte",
+		generate: "server",
+		experimental: { async: true },
+	});
+});
+
 test("rewrites yield in dynamic svelte element tags", () => {
 	const source = `<svelte:element this={yield* tag()}>Dynamic</svelte:element>`;
 	const result = transform_markup_effect(source, "DynamicElement.svelte");

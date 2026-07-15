@@ -1,12 +1,14 @@
 import type { HarnessPhase, Target, TargetName, TargetSource } from "../../unit/harness/model.ts";
-import type { SvelteKitProfile } from "./sveltekit-profiles.ts";
 import { get_target, make_targets } from "../../unit/harness/target.ts";
-import { resolve_sveltekit_profiles } from "./sveltekit-profiles.ts";
+import { read_packed_artifact_version } from "./artifact-manifest.ts";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { resolve_sveltekit_profiles } from "./sveltekit-profiles.ts";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import type { SvelteKitProfile } from "./sveltekit-profiles.ts";
 import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
+import { Schema } from "effect";
 
 type ResolvedArtifact = {
 	readonly path: string;
@@ -25,10 +27,6 @@ type PackageManifest = {
 	readonly version: string;
 };
 
-type ConsumerManifest = {
-	readonly dependencies: Record<string, string>;
-};
-
 class CommandFailure extends Error {
 	readonly output: CommandOutput;
 
@@ -40,6 +38,18 @@ class CommandFailure extends Error {
 	}
 }
 
+const JsonRecord = Schema.Record(Schema.String, Schema.Unknown);
+const StringRecord = Schema.Record(Schema.String, Schema.String);
+const PackageManifestSchema = Schema.Struct({ version: Schema.String });
+const RegistryMetadataSchema = Schema.Struct({
+	"dist.tarball": Schema.optional(Schema.String),
+	dist: Schema.optional(
+		Schema.Struct({
+			tarball: Schema.optional(Schema.String),
+		}),
+	),
+	version: Schema.optional(Schema.String),
+});
 const repo_root = fileURLToPath(new URL("../../../../", import.meta.url));
 
 async function main(): Promise<void> {
@@ -230,13 +240,11 @@ async function copy_artifact(
 
 	await cp(source_path, target);
 
-	const manifest = await read_manifest(
-		join(repository_root, "modules", "svelte-effect-runtime", "package.json"),
-	);
+	const version = await read_packed_artifact_version(target, repository_root);
 
 	return {
 		source: `artifact:${source_path.replaceAll("\\", "/")}`,
-		version: manifest.version,
+		version,
 	};
 }
 
@@ -251,11 +259,7 @@ async function download_package_artifact(
 		["pnpm", "view", source.specifier, "dist.tarball", "version", "--json"],
 		repository_root,
 	);
-	const metadata = JSON.parse(output.stdout) as {
-		"dist.tarball"?: string;
-		dist?: { tarball?: string };
-		version?: string;
-	};
+	const metadata = Schema.decodeUnknownSync(RegistryMetadataSchema)(JSON.parse(output.stdout));
 	const tarball = metadata["dist.tarball"] ?? metadata.dist?.tarball;
 	const version = metadata.version;
 
@@ -381,10 +385,23 @@ async function prepare_application(
 	const application_dir = join(applications_root, target.name);
 	const manifest_path = join(application_dir, "package.json");
 	const workspace_path = join(application_dir, "pnpm-workspace.yaml");
+	const checker_path = join(application_dir, ".harness", "check-svelte.ts");
 
 	ensure_contained(applications_root, application_dir);
 	await rm(application_dir, { force: true, recursive: true });
 	await cp(fixture_dir, application_dir, { force: true, recursive: true });
+	await mkdir(join(application_dir, ".harness"), { recursive: true });
+	await cp(
+		join(
+			repository_root,
+			".tests",
+			"svelte-effect-runtime",
+			"consumer",
+			"harness",
+			"check-svelte.ts",
+		),
+		checker_path,
+	);
 
 	if (target.fixture === "stable") {
 		await cp(target_adapter_dir, application_dir, { force: true, recursive: true });
@@ -393,7 +410,9 @@ async function prepare_application(
 	await prepare_adapter_workspace(repository_root, application_dir, workspace_path, profile);
 
 	const manifest_source = await readFile(manifest_path, "utf8");
-	const manifest = JSON.parse(manifest_source) as ConsumerManifest;
+	const manifest_record = Schema.decodeUnknownSync(JsonRecord)(JSON.parse(manifest_source));
+	const dependencies = Schema.decodeUnknownSync(StringRecord)(manifest_record.dependencies);
+	const manifest = { ...manifest_record, dependencies: { ...dependencies } };
 
 	manifest.dependencies["@sveltejs/kit"] = profile.sveltekit_version;
 	manifest.dependencies["@sveltejs/adapter-node"] = profile.adapter_node_version;
@@ -429,6 +448,19 @@ async function prepare_application(
 		target.name,
 		"install",
 	);
+
+	if (artifact) {
+		const installed_manifest = await read_manifest(
+			join(application_dir, "node_modules", "svelte-effect-runtime", "package.json"),
+		);
+
+		if (installed_manifest.version !== artifact.version) {
+			throw new Error(
+				`Installed ${target.name} artifact version ${installed_manifest.version} does not match recorded version ${artifact.version}.`,
+			);
+		}
+	}
+
 	await run_phase(
 		corepack,
 		["pnpm", "run", "sync"],
@@ -598,11 +630,7 @@ async function run_command(
 
 async function read_manifest(manifest_path: string): Promise<PackageManifest> {
 	const content = await readFile(manifest_path, "utf8");
-	const manifest = JSON.parse(content) as Partial<PackageManifest>;
-
-	if (typeof manifest.version !== "string") {
-		throw new Error(`Package manifest ${manifest_path} does not declare a string version.`);
-	}
+	const manifest = Schema.decodeUnknownSync(PackageManifestSchema)(JSON.parse(content));
 
 	return { version: manifest.version };
 }

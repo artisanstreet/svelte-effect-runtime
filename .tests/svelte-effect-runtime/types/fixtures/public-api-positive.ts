@@ -58,7 +58,7 @@ const reconnect_effect: Effect.Effect<void, RemoteFailure<never>, never> = Live.
 );
 const client_runtime_make: typeof ClientRuntime.make = ClientRuntime.make;
 const server_runtime_make: typeof ServerRuntime.make = ServerRuntime.make;
-const request_url = Effect.gen(function* () {
+const RequestUrl = Effect.gen(function* () {
 	const event = yield* RequestEvent;
 
 	return event.url;
@@ -78,12 +78,12 @@ void get_user_index_effect;
 void watch_user_stream;
 void save_user_effect;
 void create_user_effect;
+void RequestUrl;
 void build_label_effect;
 void live_status;
 void reconnect_effect;
 void client_runtime_make;
 void server_runtime_make;
-void request_url;
 void plugin;
 void rewrite;
 void (undefined as unknown as GetUserParameters);

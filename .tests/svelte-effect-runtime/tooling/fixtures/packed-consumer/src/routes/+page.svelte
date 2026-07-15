@@ -1,6 +1,6 @@
 <script lang="ts" effect>
 	import { Effect } from "effect";
-	import { GetLabel } from "./label.remote.ts";
+	import { GetLabel } from "./label.remote";
 
 	const ScriptLabel = Effect.gen(function* () {
 		yield* Effect.void;

@@ -2,7 +2,15 @@ import { Error as HandlerError, Handler, RequestEvent } from "svelte-effect-runt
 import type { Actions, PageServerLoad } from "./$types";
 import { Effect } from "effect";
 
-export const load = Handler<PageServerLoad>(({ locals, params, route }) =>
+type HandlerData = {
+	readonly event_param: string;
+	readonly event_request_id: string;
+	readonly id: string;
+	readonly request_id: string;
+	readonly route_id: string;
+};
+
+export const load = Handler<PageServerLoad<HandlerData>>(({ locals, params, route }) =>
 	Effect.gen(function* () {
 		const event = yield* RequestEvent;
 

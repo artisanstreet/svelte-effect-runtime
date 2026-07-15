@@ -1,5 +1,16 @@
-export const lifecycle_events: string[] = [];
+import { Effect } from "effect";
 
-export function reset_lifecycle_events(): void {
+const lifecycle_events: string[] = [];
+
+export const GetLifecycleEvents = Effect.gen(function* () {
+	return [...lifecycle_events];
+});
+
+export const RecordLifecycleEvent = (event: string) =>
+	Effect.gen(function* () {
+		lifecycle_events.push(event);
+	});
+
+export const ResetLifecycleEvents = Effect.gen(function* () {
 	lifecycle_events.length = 0;
-}
+});

@@ -30,11 +30,12 @@ type NativeQueryFactory<Input> =
 			readonly load: (input: RemoteInput<Input>) => unknown;
 	  };
 
-type RemoteQueryEffect<Output, ErrorType = never> = RemoteResourceEffect<Output, ErrorType> & {
-	readonly refresh: () => Effect.Effect<void, unknown, never>;
-	readonly set: (value: Output) => void;
-	readonly withOverride: (update: (current: Output) => Output) => unknown;
-};
+type RemoteQueryEffect<Output, ErrorType = never> = EffectRemoteQueryUpdateBrand &
+	RemoteResourceEffect<Output, ErrorType> & {
+		readonly refresh: () => Effect.Effect<void, unknown, never>;
+		readonly set: (value: Output) => void;
+		readonly withOverride: (update: (current: Output) => Output) => unknown;
+	};
 
 type NativeQueryResource<Output> = NativeRemoteResource<Output> & {
 	readonly refresh?: () => Promise<void>;

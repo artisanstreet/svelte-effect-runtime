@@ -73,16 +73,22 @@ export const GetLive = query.live(async function* () {
 export const GetSharedLive = query.live(
 	Schema.toStandardSchemaV1(Schema.String),
 	async function* (key) {
-		record_live_start();
+		const start = record_live_start();
 
 		try {
 			yield `${key}:${get_live_state().value}`;
 
 			while (true) {
-				yield `${key}:${await next_live_value()}`;
+				const update = await next_live_value(start);
+
+				if (update._tag === "Reset") {
+					return;
+				}
+
+				yield `${key}:${update.value}`;
 			}
 		} finally {
-			record_live_finalization();
+			record_live_finalization(start);
 		}
 	},
 );

@@ -11,12 +11,12 @@ value and the candidate's Effect-backed adapter at the target boundary. A dedica
 route still exercises SER's public `Prerender` export in a production server, so the known emitted
 binding defect remains executable without preventing unrelated scenarios from running.
 
-Each application runs install, SvelteKit sync, type, SER-aware Vite compilation, production build,
-and adapter-node startup as distinct phases. The preferred `better-svelte-check` package is not
-currently published in the npm registry used by these fixtures (`pnpm view better-svelte-check`
-returns 404), so the named check phase runs `svelte-kit sync`, `tsc`, and a Vite build through SER's
-`effect()` plugin. The fixtures never alias SER source. Phase logs, artifact hashes, target metadata,
-browser traces, console events, and network observations are written under `.dist/conformance`.
+Each application runs install, SvelteKit sync, TypeScript, Svelte diagnostics, production build,
+and adapter-node startup as distinct phases. The check phase runs published `svelte-check` against
+the packed consumer source; SER targets first apply the transform exported by their installed
+artifact, then restore the authored source after diagnostics complete. The fixtures never alias SER
+source. Phase logs, startup stdout and stderr, artifact hashes, target metadata, browser traces,
+console events, and network observations are written under `.dist/conformance`.
 
 Portless owns and registers every production server on a fixed loopback application port. Browser
 drivers use the named HTTPS origins, while Playwright readiness probes use side-effect-free direct

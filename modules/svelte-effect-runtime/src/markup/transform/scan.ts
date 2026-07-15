@@ -170,7 +170,17 @@ export function sanitize_markup(source_scan: SvelteEffectSourceScan): SanitizeRe
 		return { parse_code: content, candidates };
 	}
 
-	for (const region of [...source_scan.scripts, ...source_scan.styles]) {
+	for (const region of source_scan.scripts) {
+		const region_source = content.slice(region.start, region.end);
+
+		magic.overwrite(
+			region.start,
+			region.end,
+			blank_script_region(region_source, region.is_module, region.is_typescript),
+		);
+	}
+
+	for (const region of source_scan.styles) {
 		const region_source = content.slice(region.start, region.end);
 
 		magic.overwrite(region.start, region.end, blank_source_region(region_source));
@@ -181,6 +191,14 @@ export function sanitize_markup(source_scan: SvelteEffectSourceScan): SanitizeRe
 
 function blank_source_region(source: string): string {
 	return source.replace(/[^\r\n]/g, " ");
+}
+
+function blank_script_region(source: string, is_module: boolean, is_typescript: boolean): string {
+	const module_attribute = is_module ? " module" : "";
+	const lang_attribute = is_typescript ? " lang=ts" : "";
+	const scaffold = `<script${module_attribute}${lang_attribute}></script>`;
+
+	return scaffold + blank_source_region(source.slice(scaffold.length));
 }
 
 function collect_expression_yield_expressions(

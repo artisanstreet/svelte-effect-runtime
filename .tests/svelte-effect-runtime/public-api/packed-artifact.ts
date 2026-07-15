@@ -1,18 +1,20 @@
-import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
-import { setTimeout as delay } from "node:timers/promises";
-import { fileURLToPath } from "node:url";
 import {
 	copyFile,
 	mkdir,
 	readdir,
 	readFile,
 	realpath,
+	rename,
 	rm,
 	stat,
 	writeFile,
 } from "node:fs/promises";
+import { setTimeout as delay } from "node:timers/promises";
+import { createHash, randomUUID } from "node:crypto";
 import { dirname, join, relative } from "node:path";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { Schema } from "effect";
 
 export type PackedArtifact = {
 	readonly fingerprint: string;
@@ -25,13 +27,11 @@ export type CommandResult = {
 	readonly stdout: string;
 };
 
-type PackageManifest = {
-	readonly dependencies?: Readonly<Record<string, string>>;
-	readonly devDependencies?: Readonly<Record<string, string>>;
-	readonly name: string;
-	readonly version: string;
-};
-
+const StringRecord = Schema.Record(Schema.String, Schema.String);
+const PackageManifestSchema = Schema.Struct({
+	name: Schema.String,
+	version: Schema.String,
+});
 const repo_root = fileURLToPath(new URL("../../..", import.meta.url));
 const contract_root = join(repo_root, ".tmp", "packed-contracts");
 const artifact_root = join(contract_root, "artifacts");
@@ -67,10 +67,14 @@ export async function prepare_workspace(
 	manifest: Readonly<Record<string, unknown>>,
 ): Promise<string> {
 	const workspace = join(contract_root, "workspaces", `${artifact.fingerprint}-${name}`);
+	const dependencies =
+		manifest.dependencies === undefined
+			? {}
+			: Schema.decodeUnknownSync(StringRecord)(manifest.dependencies);
 	const package_json = {
 		...manifest,
 		dependencies: {
-			...(manifest.dependencies as Readonly<Record<string, string>> | undefined),
+			...dependencies,
 			"svelte-effect-runtime": `file:${artifact.path.replaceAll("\\", "/")}`,
 		},
 	};
@@ -117,7 +121,9 @@ export async function read_primary_dependency_versions(): Promise<
 				...name.split("/"),
 				"package.json",
 			);
-			const manifest = JSON.parse(await readFile(package_path, "utf8")) as PackageManifest;
+			const manifest = Schema.decodeUnknownSync(PackageManifestSchema)(
+				JSON.parse(await readFile(package_path, "utf8")),
+			);
 
 			return [name, manifest.version] as const;
 		}),
@@ -184,6 +190,27 @@ export async function resolve_installed_package_root(workspace: string): Promise
 	return realpath(result.stdout.trim());
 }
 
+export async function publish_packed_artifact(
+	packed_path: string,
+	artifact_path: string,
+): Promise<void> {
+	const temporary_path = `${artifact_path}.${process.pid}-${randomUUID()}.tmp`;
+
+	try {
+		await copyFile(packed_path, temporary_path);
+
+		try {
+			await rename(temporary_path, artifact_path);
+		} catch (error) {
+			if (!(await path_exists(artifact_path))) {
+				throw error;
+			}
+		}
+	} finally {
+		await rm(temporary_path, { force: true });
+	}
+}
+
 async function prepare_packed_artifact(): Promise<PackedArtifact> {
 	const fingerprint = await make_source_fingerprint();
 	const artifact_path = join(artifact_root, `svelte-effect-runtime-${fingerprint}.tgz`);
@@ -215,12 +242,14 @@ async function prepare_packed_artifact(): Promise<PackedArtifact> {
 
 		assert_command_succeeded("pack runtime package", pack);
 
-		const manifest = JSON.parse(
-			await readFile(
-				join(repo_root, "modules", "svelte-effect-runtime", "package.json"),
-				"utf8",
+		const manifest = Schema.decodeUnknownSync(PackageManifestSchema)(
+			JSON.parse(
+				await readFile(
+					join(repo_root, "modules", "svelte-effect-runtime", "package.json"),
+					"utf8",
+				),
 			),
-		) as PackageManifest;
+		);
 		const packed_path = join(
 			repo_root,
 			".dist",
@@ -228,7 +257,7 @@ async function prepare_packed_artifact(): Promise<PackedArtifact> {
 			`${manifest.name}-${manifest.version}.tgz`,
 		);
 
-		await copyFile(packed_path, artifact_path);
+		await publish_packed_artifact(packed_path, artifact_path);
 
 		return { fingerprint, path: artifact_path };
 	} finally {
@@ -282,7 +311,17 @@ async function acquire_build_lock(): Promise<void> {
 				throw error;
 			}
 
-			const information = await stat(build_lock);
+			let information;
+
+			try {
+				information = await stat(build_lock);
+			} catch (error) {
+				if (is_not_found_error(error)) {
+					continue;
+				}
+
+				throw error;
+			}
 
 			if (Date.now() - information.mtimeMs > 180_000) {
 				await rm(build_lock, { force: true, recursive: true });

@@ -18,6 +18,7 @@
 	const BatchedSecond = GetBatched("beta");
 	const LiveResource = GetLive();
 	const SerializedResource = GetSerialized();
+	const item_field = CreateItem.fields.items[0]!;
 
 	let command_result = $state("idle");
 	let profile = $state(yield* ProfileResource);
@@ -38,10 +39,7 @@
 
 	const RefreshProfile = Effect.gen(function* () {
 		yield* ProfileResource.refresh();
-
-		if (ProfileResource.ready) {
-			profile = ProfileResource.current;
-		}
+		profile = yield* ProfileResource;
 	});
 
 	const RunCommand = Effect.gen(function* () {
@@ -78,13 +76,13 @@
 
 	<form {...CreateItem}>
 		<input data-testid="name" {...CreateItem.fields.name.as("text")} />
-		<input data-testid="label" {...CreateItem.fields.items[0].label.as("text")} />
+		<input data-testid="label" {...item_field.label.as("text")} />
 		<button data-testid="form-submit">Save item</button>
 	</form>
 	<p data-testid="form-result">{CreateItem.result?.message ?? "idle"}</p>
 	<p data-testid="form-lifecycle">{CreateItem.submitted}:{CreateItem.pending}</p>
 	<p data-testid="form-issue">
-		{CreateItem.fields.items[0].label.issues()?.[0]?.message ?? "valid"}
+		{item_field.label.issues()?.[0]?.message ?? "valid"}
 	</p>
 	<p data-testid="form-all-issues">{JSON.stringify(CreateItem.fields.allIssues() ?? [])}</p>
 

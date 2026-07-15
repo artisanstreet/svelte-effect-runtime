@@ -20,10 +20,7 @@
 
 		command_pending = String(Mutate.pending);
 		const result = await call.updates(mutation_resource);
-
-		if (mutation_resource.ready) {
-			mutation = mutation_resource.current;
-		}
+		mutation = await mutation_resource;
 
 		command_result = `${result.method}:${result.request_id}:${result.value}`;
 		command_pending = String(Mutate.pending);

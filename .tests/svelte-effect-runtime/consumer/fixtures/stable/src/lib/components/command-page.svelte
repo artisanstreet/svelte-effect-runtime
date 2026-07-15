@@ -20,7 +20,9 @@
 		const Call = Mutate(1);
 
 		command_pending = String(Mutate.pending);
-		const result = yield* Call.updates(MutationResource);
+		const result = yield* Call;
+
+		yield* MutationResource.refresh();
 		mutation = yield* MutationResource;
 
 		command_result = `${result.method}:${result.request_id}:${result.value}`;

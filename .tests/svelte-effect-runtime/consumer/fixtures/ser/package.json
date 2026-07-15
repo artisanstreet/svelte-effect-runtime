@@ -4,7 +4,7 @@
 	"type": "module",
 	"scripts": {
 		"build": "vite build",
-		"check": "svelte-kit sync && tsc --noEmit && vite build --mode conformance-check",
+		"check": "vp node .harness/check-svelte.ts --source-pipeline auto",
 		"start": "node build",
 		"sync": "svelte-kit sync",
 		"types": "tsc --noEmit"
@@ -20,6 +20,7 @@
 	},
 	"devDependencies": {
 		"@types/node": "24.6.1",
+		"svelte-check": "4.7.2",
 		"typescript": "6.0.3"
 	},
 	"engines": {

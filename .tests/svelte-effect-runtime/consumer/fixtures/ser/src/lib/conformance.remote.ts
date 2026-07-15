@@ -14,7 +14,7 @@ import {
 } from "$lib/server/live-state.server";
 import { WaitForGate } from "$lib/server/gates.server";
 import { RuntimeLabel } from "$lib/server-runtime";
-import { lifecycle_events } from "$lib/lifecycle";
+import { RecordLifecycleEvent } from "$lib/lifecycle";
 import { requested } from "$app/server";
 import { Effect, Schema, Stream } from "effect";
 
@@ -76,16 +76,20 @@ export const GetLive = Query.live(() => Stream.make("live:first"));
 export const GetSharedLive = Query.live(Schema.String, (key) =>
 	Stream.unwrap(
 		Effect.gen(function* () {
-			yield* RecordLiveStart;
+			const start = yield* RecordLiveStart;
 
 			const state = yield* GetLiveState;
-			const updates = Stream.fromEffectRepeat(NextLiveValue).pipe(
-				Stream.map((value) => `${key}:${value}`),
+			const updates = Stream.fromEffectRepeat(NextLiveValue(start)).pipe(
+				Stream.takeWhile(
+					(update): update is Extract<typeof update, { readonly _tag: "Value" }> =>
+						update._tag === "Value",
+				),
+				Stream.map((update) => `${key}:${update.value}`),
 			);
 
 			return Stream.make(`${key}:${state.value}`).pipe(
 				Stream.concat(updates),
-				Stream.ensuring(RecordLiveFinalization),
+				Stream.ensuring(RecordLiveFinalization(start)),
 			);
 		}),
 	),
@@ -94,8 +98,8 @@ export const GetSharedLive = Query.live(Schema.String, (key) =>
 export const GetLifecycle = Query.live(() =>
 	Stream.make("connected").pipe(
 		Stream.concat(Stream.never),
-		Stream.ensuring(Effect.sync(() => lifecycle_events.push("finalized"))),
-		Stream.tap(() => Effect.sync(() => lifecycle_events.push("started"))),
+		Stream.ensuring(RecordLifecycleEvent("finalized")),
+		Stream.tap(() => RecordLifecycleEvent("started")),
 	),
 );
 

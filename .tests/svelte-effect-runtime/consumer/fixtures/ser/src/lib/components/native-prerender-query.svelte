@@ -3,18 +3,10 @@
 		GetBuildSnapshot,
 		GetDynamicSnapshot,
 	} from "$lib/native-prerender.remote";
-	import { Effect } from "effect";
+	import { ToRemoteEffect } from "$lib/remote-compat";
 
-	const BuildSnapshot = GetBuildSnapshot();
-	const DynamicSnapshot = GetDynamicSnapshot("runtime");
-	const BuildSnapshotEffect = Effect.isEffect(BuildSnapshot)
-		? BuildSnapshot
-		: Effect.promise(() => Promise.resolve(BuildSnapshot));
-	const DynamicSnapshotEffect = Effect.isEffect(DynamicSnapshot)
-		? DynamicSnapshot
-		: Effect.promise(() => Promise.resolve(DynamicSnapshot));
-	const build_snapshot = yield* BuildSnapshotEffect;
-	const dynamic_snapshot = yield* DynamicSnapshotEffect;
+	const build_snapshot = yield* ToRemoteEffect(GetBuildSnapshot());
+	const dynamic_snapshot = yield* ToRemoteEffect(GetDynamicSnapshot("runtime"));
 </script>
 
 <p data-testid="prerender-build">{build_snapshot}</p>

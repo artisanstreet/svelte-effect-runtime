@@ -1,4 +1,4 @@
-import { EmptyStreamYieldError } from "svelte-effect-runtime";
+import { EmptyStreamYieldError, InvalidYieldableError } from "svelte-effect-runtime";
 import { ToEffect, get_dispatcher } from "svelte-effect-runtime/internal/generators";
 import { reset_dispatcher } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
 import { assert_equals, assert_rejects } from "../unit/helpers/assert.ts";
@@ -61,5 +61,28 @@ test("ToEffect reports EmptyStreamYieldError when a generated yield consumes a S
 	assert_equals(
 		error.message,
 		"Cannot resolve yield* stream expression because the Stream completed without emitting a value.",
+	);
+});
+
+test("ToEffect reports InvalidYieldableError when generated code receives an invalid value", async () => {
+	const dispatcher = get_dispatcher();
+
+	const error = await assert_rejects(
+		() =>
+			dispatcher.promise({
+				id: "yieldable-invalid-value",
+				deps: [],
+				factory: function* () {
+					return yield* ToEffect(null as never);
+				},
+			}),
+		InvalidYieldableError,
+	);
+
+	assert_equals(error.name, "InvalidYieldableError");
+	assert_equals(error.value, null);
+	assert_equals(
+		error.message,
+		"Cannot resolve yield* expression because it returned a non-yieldable value. Expected an Effect, generator, or Stream.",
 	);
 });

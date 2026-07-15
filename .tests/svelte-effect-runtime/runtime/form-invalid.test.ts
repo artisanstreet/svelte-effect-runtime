@@ -42,3 +42,17 @@ test("Form invalid paths keep non-canonical numeric object keys as strings", asy
 		issues: [{ message: "Invalid", path: ["01"] }],
 	});
 });
+
+test("Form invalid paths keep canonical numeric root object keys as strings", async () => {
+	const invalid = make_invalid_proxy<{ readonly "123": string }>();
+	const handler = Handler<() => Promise<unknown>>(() => Effect.flip(invalid["123"]("Invalid")));
+
+	set_test_request_event({});
+
+	const failure = await handler();
+
+	assert_equals(failure, {
+		_tag: "FormError",
+		issues: [{ message: "Invalid", path: ["123"] }],
+	});
+});

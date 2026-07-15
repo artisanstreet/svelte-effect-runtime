@@ -28,14 +28,19 @@ export function find_differences(
 	}
 
 	if (Array.isArray(oracle) && Array.isArray(subject)) {
-		const length = Math.max(oracle.length, subject.length);
-
-		return Array.from({ length }, (_, index) =>
+		const shared_length = Math.min(oracle.length, subject.length);
+		const length_difference: ReadonlyArray<Difference> =
+			oracle.length === subject.length
+				? []
+				: [{ path: `${path}.length`, oracle: oracle.length, subject: subject.length }];
+		const item_differences = Array.from({ length: shared_length }, (_, index) =>
 			find_differences(oracle[index], subject[index], `${path}[${index}]`),
 		).flat();
+
+		return [...length_difference, ...item_differences];
 	}
 
-	if (is_record(oracle) && is_record(subject)) {
+	if (is_plain_record(oracle) && is_plain_record(subject)) {
 		const keys = [...new Set([...Object.keys(oracle), ...Object.keys(subject)])].sort();
 
 		return keys.flatMap((key) => find_differences(oracle[key], subject[key], `${path}.${key}`));
@@ -44,6 +49,12 @@ export function find_differences(
 	return [{ path, oracle, subject }];
 }
 
-function is_record(value: unknown): value is Readonly<Record<string, unknown>> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
+function is_plain_record(value: unknown): value is Readonly<Record<string, unknown>> {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) {
+		return false;
+	}
+
+	const prototype = Object.getPrototypeOf(value) as unknown;
+
+	return prototype === Object.prototype || prototype === null;
 }

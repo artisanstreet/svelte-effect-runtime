@@ -299,8 +299,14 @@ const PublicClockById = Query.live(
 );
 const PublicCommand = Command(() => Effect.succeed("done"));
 declare const NativePosts: RemoteQueryFunction<{ id: string }, string[]>;
+const ClientPostsResource = client_posts();
+const PublicPostsResource = PublicPosts();
 const PublicUpdated: Effect.Effect<string, RemoteFailure<never>> =
   PublicCommand().updates(PublicPosts);
+const ClientResourceUpdated: Effect.Effect<string, RemoteFailure<never>> =
+  client_command({ id: "one" }).updates(ClientPostsResource);
+const PublicResourceUpdated: Effect.Effect<string, RemoteFailure<never>> =
+  PublicCommand().updates(PublicPostsResource);
 const PublicParameterizedUpdated: Effect.Effect<string, RemoteFailure<never>> =
   PublicCommand().updates(PublicPostsById, PublicClockById);
 const NativeUpdated: Effect.Effect<string, RemoteFailure<never>> =
@@ -308,7 +314,9 @@ const NativeUpdated: Effect.Effect<string, RemoteFailure<never>> =
 
 Effect.gen(function* () {
   yield* ClientUpdated;
+  yield* ClientResourceUpdated;
   yield* PublicUpdated;
+  yield* PublicResourceUpdated;
   yield* PublicParameterizedUpdated;
   yield* NativeUpdated;
 });

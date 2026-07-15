@@ -18,8 +18,7 @@
 
 	async function refresh_cache() {
 		await refreshable_resource.refresh();
-
-		cache = refreshable_resource.current;
+		cache = await refreshable_resource;
 	}
 
 	async function start_slow_query() {

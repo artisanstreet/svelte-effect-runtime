@@ -459,6 +459,36 @@ export class EmptyStreamYieldError extends RuntimeError {
 }
 
 /**
+ * Thrown when generated component code receives a value that cannot be yielded
+ * through the SER runtime.
+ *
+ * @example
+ * ```ts
+ * throw new InvalidYieldableError(null);
+ * ```
+ *
+ * @since 4.0.0
+ * @param value - Runtime value that was expected to be an Effect, generator, or
+ *   Stream.
+ */
+export class InvalidYieldableError extends RuntimeError {
+	/**
+	 * Runtime value rejected by the generated yield boundary.
+	 *
+	 * @since 4.0.0
+	 */
+	readonly value: unknown;
+
+	constructor(value: unknown) {
+		super(
+			"Cannot resolve yield* expression because it returned a non-yieldable value. Expected an Effect, generator, or Stream.",
+		);
+		this.name = "InvalidYieldableError";
+		this.value = value;
+	}
+}
+
+/**
  * Thrown when a dispatcher operation is requested after disposal.
  *
  * @example

@@ -1,6 +1,6 @@
-import { compare_observations } from "./harness/comparison.ts";
+import { compare_observations, find_differences } from "./harness/comparison.ts";
 import { make_evidence } from "./harness/evidence.ts";
-import { normalize_observation } from "./harness/normalization.ts";
+import { normalize_observation, normalize_value } from "./harness/normalization.ts";
 import { get_target, make_targets, parse_target_source } from "./harness/target.ts";
 import { get_conformance_browsers } from "./harness/model.ts";
 import { describe, expect, test } from "vitest";
@@ -89,6 +89,32 @@ describe("conformance observations", () => {
 			],
 		});
 	});
+
+	test("reports missing array elements even when the present value is undefined", () => {
+		expect(find_differences([undefined], [])).toEqual([
+			{
+				path: "$.length",
+				oracle: 1,
+				subject: 0,
+			},
+		]);
+	});
+
+	test("preserves and compares opaque built-in observations", () => {
+		const oracle_date = new Date("2024-01-02T03:04:05.000Z");
+		const subject_date = new Date("2025-01-02T03:04:05.000Z");
+		const oracle_map = new Map([["answer", 42]]);
+		const subject_map = new Map([["answer", 43]]);
+		const normalized = normalize_value({ date: oracle_date, map: oracle_map });
+
+		expect(normalized).toEqual({ date: oracle_date, map: oracle_map });
+		expect(find_differences(oracle_date, subject_date)).toEqual([
+			{ path: "$", oracle: oracle_date, subject: subject_date },
+		]);
+		expect(find_differences(oracle_map, subject_map)).toEqual([
+			{ path: "$", oracle: oracle_map, subject: subject_map },
+		]);
+	});
 });
 
 test("evidence paths cannot escape the run directory", () => {
@@ -109,4 +135,14 @@ test("evidence paths cannot escape the run directory", () => {
 		path: ".dist/conformance/evidence/run-42/request-isolation/stable/drive/network.json",
 		metadata: { artifact_sha256: "abc" },
 	});
+	expect(() =>
+		make_evidence(
+			".dist/conformance/evidence",
+			"..",
+			"request isolation",
+			"stable",
+			"drive",
+			"network.json",
+		),
+	).toThrow("Invalid evidence path segment: ..");
 });

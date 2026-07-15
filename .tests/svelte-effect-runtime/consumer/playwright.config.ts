@@ -1,16 +1,18 @@
-import { defineConfig, devices, type PlaywrightTestProject } from "@playwright/test";
 import {
 	conformance_proxy_port,
 	conformance_target_ports,
 	get_conformance_browsers,
 } from "../unit/harness/model.ts";
-import { fileURLToPath } from "node:url";
+import { defineConfig, devices, type PlaywrightTestProject } from "@playwright/test";
+import { make_evidence } from "../unit/harness/evidence.ts";
 import { delimiter, dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const consumer_dir = dirname(fileURLToPath(import.meta.url));
 const repo_root = resolve(consumer_dir, "../../..");
 const applications_root = resolve(repo_root, ".dist/conformance/applications");
 const portless_cli = resolve(repo_root, "node_modules/portless/dist/cli.js");
+const server_output_recorder = resolve(consumer_dir, "harness/record-server-output.ts");
 const portless_state_dir = resolve(repo_root, ".dist/conformance/portless");
 const windows_openssl_dir = "C:\\Program Files\\Git\\usr\\bin";
 const executable_path = [process.platform === "win32" && windows_openssl_dir, process.env.PATH]
@@ -26,18 +28,26 @@ const portless_env = {
 const lane = process.env.CONFORMANCE_LANE ?? "fast";
 const target_names = ["native", "stable", "candidate"] as const;
 const browsers = get_conformance_browsers(lane, process.platform);
-const projects: PlaywrightTestProject[] = browsers.map((browser_name) => ({
-	name: browser_name,
-	use: {
-		...devices[
-			browser_name === "chromium"
-				? "Desktop Chrome"
-				: browser_name === "firefox"
-					? "Desktop Firefox"
-					: "Desktop Safari"
-		],
+const projects: PlaywrightTestProject[] = [
+	{
+		name: "startup",
+		testMatch: "startup.spec.ts",
 	},
-}));
+	...browsers.map((browser_name) => ({
+		name: browser_name,
+		dependencies: ["startup"],
+		testIgnore: "startup.spec.ts",
+		use: {
+			...devices[
+				browser_name === "chromium"
+					? "Desktop Chrome"
+					: browser_name === "firefox"
+						? "Desktop Firefox"
+						: "Desktop Safari"
+			],
+		},
+	})),
+];
 
 export default defineConfig({
 	testDir: "scenarios",
@@ -72,7 +82,7 @@ export default defineConfig({
 		},
 		...target_names.map((target) => ({
 			name: target,
-			command: `node "${portless_cli}" --name ser-conformance-${target} --force --app-port ${conformance_target_ports[target]} -- node build`,
+			command: `node "${server_output_recorder}" --evidence-dir "${resolve(repo_root, dirname(make_evidence(".dist/conformance/evidence", "playwright-startup", "server-start", target, "start", "readiness.json").path))}" -- node "${portless_cli}" --name ser-conformance-${target} --force --app-port ${conformance_target_ports[target]} -- node build`,
 			cwd: resolve(applications_root, target),
 			env: portless_env,
 			url: `http://127.0.0.1:${conformance_target_ports[target]}/api/context`,

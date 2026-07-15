@@ -1,8 +1,9 @@
-import { describe, expect, test } from "vitest";
 import { hydrate, mount, tick, unmount, type Component } from "svelte";
+import { describe, expect, test } from "vitest";
 import { render } from "virtual:signals-ssr-renderer";
 
 import NativeLifecycle from "./fixtures/native-lifecycle.svelte";
+import NativeLifecycleMissingAdvance from "./fixtures/native-lifecycle-missing-advance.svelte";
 import NativeLifecycleServer from "./fixtures/native-lifecycle.svelte?signals-ssr";
 import NativeReactivity from "./fixtures/native-reactivity.svelte";
 import SerLifecycle from "./fixtures/ser-lifecycle.svelte";
@@ -209,8 +210,11 @@ async function observe_reactivity(
 			secondary_value: read_test_text(target, "value"),
 		};
 	} finally {
-		await unmount(instance);
-		target.remove();
+		try {
+			await unmount(instance);
+		} finally {
+			target.remove();
+		}
 	}
 }
 
@@ -218,34 +222,44 @@ async function observe_lifecycle(component: Component<LifecycleProps>): Promise<
 	const recorder = new EventRecorder();
 	const target = create_target();
 	const first_start = recorder.next_event();
-	const instance = mount(component, {
-		target,
-		props: { record_event: recorder.record_event },
-	});
+	let instance: ReturnType<typeof mount> | undefined;
 
-	await first_start;
+	try {
+		instance = mount(component, {
+			target,
+			props: { record_event: recorder.record_event },
+		});
 
-	const first_finalize = recorder.next_event();
+		await first_start;
 
-	find_test_element(target, "advance").click();
-	await first_finalize;
+		const first_finalize = recorder.next_event();
 
-	const second_start = recorder.next_event();
+		find_test_element(target, "advance").click();
+		await first_finalize;
 
-	await second_start;
+		const second_start = recorder.next_event();
 
-	const second_finalize = recorder.next_event();
+		await second_start;
 
-	await unmount(instance);
-	await second_finalize;
-	await Promise.resolve();
-	await tick();
+		const second_finalize = recorder.next_event();
+		const mounted_instance = instance;
 
-	const events = recorder.snapshot();
+		instance = undefined;
+		await unmount(mounted_instance);
+		await second_finalize;
+		await Promise.resolve();
+		await tick();
 
-	target.remove();
-
-	return events;
+		return recorder.snapshot();
+	} finally {
+		try {
+			if (instance) {
+				await unmount(instance);
+			}
+		} finally {
+			target.remove();
+		}
+	}
 }
 
 async function observe_ssr_hydration(
@@ -262,41 +276,53 @@ async function observe_ssr_hydration(
 		props: { record_event: recorder.record_event },
 	});
 	const target = create_target();
+	let instance: ReturnType<typeof hydrate> | undefined;
 
-	target.innerHTML = rendered.body;
+	try {
+		target.innerHTML = rendered.body;
 
-	const server_generation = read_test_text(target, "generation");
-	const first_start = recorder.next_event();
-	const instance = hydrate(client_component, {
-		target,
-		props: { record_event: recorder.record_event },
-	});
+		const server_generation = read_test_text(target, "generation");
+		const first_start = recorder.next_event();
 
-	await first_start;
+		instance = hydrate(client_component, {
+			target,
+			props: { record_event: recorder.record_event },
+		});
 
-	const hydrated_generation = read_test_text(target, "generation");
-	const first_finalize = recorder.next_event();
-	const updated_visible = wait_for_test_text(target, "generation", "2");
+		await first_start;
 
-	find_test_element(target, "advance").click();
-	await first_finalize;
+		const hydrated_generation = read_test_text(target, "generation");
+		const first_finalize = recorder.next_event();
+		const updated_visible = wait_for_test_text(target, "generation", "2");
 
-	const second_start = recorder.next_event();
+		find_test_element(target, "advance").click();
+		await first_finalize;
 
-	await second_start;
-	await updated_visible;
+		const second_start = recorder.next_event();
 
-	const updated_generation = read_test_text(target, "generation");
-	const second_finalize = recorder.next_event();
+		await second_start;
+		await updated_visible;
 
-	await unmount(instance);
-	await second_finalize;
+		const updated_generation = read_test_text(target, "generation");
+		const second_finalize = recorder.next_event();
+		const hydrated_instance = instance;
 
-	const hydration_events = recorder.snapshot();
+		instance = undefined;
+		await unmount(hydrated_instance);
+		await second_finalize;
 
-	target.remove();
+		const hydration_events = recorder.snapshot();
 
-	return { server_generation, hydrated_generation, updated_generation, hydration_events };
+		return { server_generation, hydrated_generation, updated_generation, hydration_events };
+	} finally {
+		try {
+			if (instance) {
+				await unmount(instance);
+			}
+		} finally {
+			target.remove();
+		}
+	}
 }
 
 describe("Signals browser conformance", () => {
@@ -316,6 +342,15 @@ describe("Signals browser conformance", () => {
 
 		expect(native_events).toEqual(["start:1", "finalize:1", "start:2", "finalize:2"]);
 		expect(ser_events).toEqual(native_events);
+	});
+
+	test("removes mounted targets when lifecycle observation fails", async () => {
+		const initial_child_count = document.body.childElementCount;
+
+		await expect(observe_lifecycle(NativeLifecycleMissingAdvance)).rejects.toThrow(
+			"Missing element with data-testid=advance",
+		);
+		expect(document.body.childElementCount).toBe(initial_child_count);
 	});
 
 	test("matches native SSR output through hydration and the first client update", async () => {

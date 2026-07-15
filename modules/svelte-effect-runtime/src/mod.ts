@@ -221,6 +221,7 @@ export {
 	InvalidPrerenderFactoryError,
 	InvalidQueryFactoryError,
 	InvalidRemoteFormResponseError,
+	InvalidYieldableError,
 	PreprocessError,
 	RemoteErrorDecodeError,
 	RemoteFormEndpointMissingError,

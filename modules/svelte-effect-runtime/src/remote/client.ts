@@ -13,5 +13,6 @@ export type {
 	EffectRemoteFormPreflightSchema,
 	EffectRemoteFormSubmit,
 	EffectRemoteFormValidateOptions,
+	EffectRemoteQueryUpdateBrand,
 	Pending,
 } from "./client/index.ts";

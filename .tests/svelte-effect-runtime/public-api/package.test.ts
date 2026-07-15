@@ -9,21 +9,34 @@ import {
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { expect, test } from "vitest";
 import { join } from "node:path";
+import { Schema } from "effect";
 
-type ExportCondition = {
-	readonly default: string;
-	readonly types: string;
-};
-
-type PackedManifest = {
-	readonly dependencies?: Readonly<Record<string, string>>;
-	readonly exports: Readonly<Record<string, ExportCondition>>;
-	readonly files: readonly string[];
-	readonly name: string;
-	readonly peerDependencies?: Readonly<Record<string, string>>;
-	readonly type: string;
-	readonly version: string;
-};
+const StringRecord = Schema.Record(Schema.String, Schema.String);
+const ExportConditionSchema = Schema.Struct({
+	default: Schema.String,
+	types: Schema.String,
+});
+const PackedManifestSchema = Schema.Struct({
+	dependencies: Schema.optional(StringRecord),
+	exports: Schema.Record(Schema.String, ExportConditionSchema),
+	files: Schema.Array(Schema.String),
+	name: Schema.String,
+	peerDependencies: Schema.optional(StringRecord),
+	type: Schema.String,
+	version: Schema.String,
+});
+const ModuleExportsSchema = Schema.Struct({
+	compiler: Schema.Array(Schema.String),
+	root: Schema.Array(Schema.String),
+});
+const BrowserProbeSchema = Schema.Struct({
+	failures: Schema.Array(Schema.String),
+	resolved: Schema.String,
+});
+const ServerProbeSchema = Schema.Struct({
+	exports: Schema.Array(Schema.String),
+	resolved: Schema.String,
+});
 
 const required_entrypoints = [
 	".",
@@ -52,6 +65,7 @@ const required_root_exports = [
 	"InvalidPrerenderFactoryError",
 	"InvalidQueryFactoryError",
 	"InvalidRemoteFormResponseError",
+	"InvalidYieldableError",
 	"Live",
 	"PreprocessError",
 	"Prerender",
@@ -108,9 +122,9 @@ test("packed package resolves every supported public and generated entrypoint", 
 		dependencies: versions,
 	});
 	const package_root = await resolve_installed_package_root(workspace);
-	const manifest = JSON.parse(
-		await readFile(join(package_root, "package.json"), "utf8"),
-	) as PackedManifest;
+	const manifest = Schema.decodeUnknownSync(PackedManifestSchema)(
+		JSON.parse(await readFile(join(package_root, "package.json"), "utf8")),
+	);
 
 	expect(manifest.name).toBe("svelte-effect-runtime");
 	expect(manifest.type).toBe("module");
@@ -125,6 +139,11 @@ test("packed package resolves every supported public and generated entrypoint", 
 		const conditions = manifest.exports[entrypoint];
 
 		expect(conditions, `missing export map entry ${entrypoint}`).toBeDefined();
+
+		if (!conditions) {
+			throw new Error(`Missing export map entry ${entrypoint}.`);
+		}
+
 		expect(Object.keys(conditions).sort()).toEqual(["default", "types"]);
 		expect(conditions.types).toMatch(/^\.\/\.dist\/.*\.d\.ts$/);
 		expect(conditions.default).toMatch(/^\.\/\.dist\/.*\.js$/);
@@ -169,13 +188,10 @@ test("packed root and compiler entrypoints expose the runtime API through Node r
 
 	assert_command_succeeded("import packed public entrypoints", result);
 
-	const observed = JSON.parse(result.stdout) as {
-		readonly compiler: readonly string[];
-		readonly root: readonly string[];
-	};
+	const observed = Schema.decodeUnknownSync(ModuleExportsSchema)(JSON.parse(result.stdout));
 
-	expect(observed.root.sort()).toEqual([...required_root_exports].sort());
-	expect(observed.compiler.sort()).toEqual(["effect", "rewrite_remote_client_exports"]);
+	expect([...observed.root].sort()).toEqual([...required_root_exports].sort());
+	expect([...observed.compiler].sort()).toEqual(["effect", "rewrite_remote_client_exports"]);
 }, 180_000);
 
 test("packed browser and server entrypoints preserve their runtime boundaries", async () => {
@@ -203,10 +219,7 @@ test("packed browser and server entrypoints preserve their runtime boundaries", 
 
 	assert_command_succeeded("probe packed browser entrypoint", browser_result);
 
-	const browser = JSON.parse(browser_result.stdout) as {
-		readonly failures: readonly string[];
-		readonly resolved: string;
-	};
+	const browser = Schema.decodeUnknownSync(BrowserProbeSchema)(JSON.parse(browser_result.stdout));
 
 	expect(browser.failures).toEqual(["ServerOnlyImportError", "ServerOnlyImportError"]);
 	expect(browser.resolved.replaceAll("\\", "/")).toMatch(/\/\.dist\/mod\.js$/);
@@ -251,11 +264,8 @@ test("packed browser and server entrypoints preserve their runtime boundaries", 
 
 	assert_command_succeeded("probe packed server entrypoint", server_result);
 
-	const server = JSON.parse(server_result.stdout) as {
-		readonly exports: readonly string[];
-		readonly resolved: string;
-	};
+	const server = Schema.decodeUnknownSync(ServerProbeSchema)(JSON.parse(server_result.stdout));
 
-	expect(server.exports.sort()).toEqual([...required_server_exports].sort());
+	expect([...server.exports].sort()).toEqual([...required_server_exports].sort());
 	expect(server.resolved.replaceAll("\\", "/")).toMatch(/\/\.dist\/server\.js$/);
 }, 180_000);

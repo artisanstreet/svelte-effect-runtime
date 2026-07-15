@@ -1,4 +1,4 @@
-import { EmptyStreamYieldError } from "$/errors.ts";
+import { EmptyStreamYieldError, InvalidYieldableError } from "$/errors.ts";
 import { Effect, Option, Stream } from "effect";
 
 export type Yieldable<A = unknown, E = unknown, R = unknown> =
@@ -41,7 +41,11 @@ export function ToEffect<A, E, R>(
 		return Effect.gen(() => value) as Effect.Effect<A, E, R>;
 	}
 
-	return value;
+	if (Effect.isEffect(value)) {
+		return value;
+	}
+
+	return Effect.fail(new InvalidYieldableError(value));
 }
 
 function is_generator_result<A, E, R>(value: unknown): value is Effect.gen.Return<A, E, R> {

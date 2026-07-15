@@ -1,8 +1,3 @@
-import { compare_observations } from "../../unit/harness/comparison.ts";
-import { conformance_proxy_port, conformance_proxy_protocol } from "../../unit/harness/model.ts";
-import { normalize_observation } from "../../unit/harness/normalization.ts";
-import { make_evidence } from "../../unit/harness/evidence.ts";
-import type { Observation, Scenario, TargetName } from "../../unit/harness/model.ts";
 import {
 	expect,
 	test,
@@ -12,6 +7,11 @@ import {
 	type Playwright,
 	type TestInfo,
 } from "@playwright/test";
+import { conformance_proxy_port, conformance_proxy_protocol } from "../../unit/harness/model.ts";
+import type { Observation, Scenario, TargetName } from "../../unit/harness/model.ts";
+import { normalize_observation } from "../../unit/harness/normalization.ts";
+import { compare_observations } from "../../unit/harness/comparison.ts";
+import { make_evidence } from "../../unit/harness/evidence.ts";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
@@ -37,11 +37,25 @@ type RemoteTraffic = {
 	readonly request_content_type: string;
 	readonly request_cookie: boolean;
 	readonly request_id: string;
+	readonly request_payload: string;
 	readonly request_payload_bytes: number;
+	readonly response_body: string;
 	readonly response_content_type: string;
 	readonly response_location: string;
+	readonly response_payload_bytes: number;
 	readonly response_set_cookie: boolean;
+	readonly response_stream_payload: string;
+	readonly response_streamed: boolean;
 	readonly status: number;
+};
+
+type RemoteTrafficRecorder = {
+	readonly stop: () => Promise<void>;
+	readonly traffic: RemoteTraffic[];
+};
+
+type MutableRemoteTraffic = {
+	-readonly [Key in keyof RemoteTraffic]: RemoteTraffic[Key];
 };
 
 type QueryObservation = {
@@ -115,6 +129,26 @@ type HandlerObservation = {
 	readonly failure_status: number;
 	readonly load: Readonly<Record<string, string>>;
 	readonly traffic: ReadonlyArray<RemoteTraffic>;
+};
+
+type HandlerControlObservation = {
+	readonly error_body: string;
+	readonly error_status: number;
+	readonly redirect_location: string;
+	readonly redirect_status: number;
+};
+
+type KeyedFormObservation = {
+	readonly alpha_issue: string;
+	readonly alpha_lifecycle: string;
+	readonly alpha_result: string;
+	readonly beta_issue: string;
+	readonly beta_lifecycle: string;
+	readonly beta_result: string;
+};
+
+type LiveFinalizationObservation = {
+	readonly events: ReadonlyArray<string>;
 };
 
 const targets: ReadonlyArray<TargetEndpoint> = [
@@ -238,6 +272,66 @@ const transport_boundary_scenario: Scenario<ApplicationDriver, TransportBoundary
 	drive: observe_transport_boundary,
 };
 
+const browser_contracts_scenario: Scenario<ApplicationDriver, PageObservation> = {
+	id: "browser-visible-contracts",
+	capability: "consumer",
+	promise: "Native, stable, and candidate expose the same browser-visible contracts",
+	regression:
+		"A packed consumer can build while hydration, remote forms, Signals, or transformed markup fail in a real browser",
+	drive: observe_browser_contracts,
+};
+
+const unenhanced_form_scenario: Scenario<
+	ApplicationDriver,
+	{ readonly result: string; readonly url: string }
+> = {
+	id: "form-unenhanced-html-submission",
+	capability: "transport",
+	promise: "Remote forms preserve ordinary HTML submission without JavaScript",
+	regression:
+		"An enhancement-oriented adapter can pass browser tests while ordinary POST navigation loses the form result",
+	drive: ({ browser, target }) => observe_unenhanced_form(browser, target),
+};
+
+const keyed_form_scenario: Scenario<ApplicationDriver, KeyedFormObservation> = {
+	id: "form-keyed-instance-isolation",
+	capability: "consumer",
+	promise: "Enhanced keyed forms preserve reset, result, and instance isolation",
+	regression:
+		"A shared client form adapter can leak validation or result state between keyed instances",
+	drive: observe_keyed_form,
+};
+
+const request_isolation_scenario: Scenario<
+	ApplicationDriver,
+	ReadonlyArray<Record<string, unknown>>
+> = {
+	id: "concurrent-request-context-isolation",
+	capability: "runtime",
+	promise: "Concurrent request contexts remain isolated",
+	regression:
+		"A process-global request store can overwrite params, cookies, locals, or route data while two handlers are suspended",
+	drive: ({ playwright, target }) => observe_request_isolation(playwright, target),
+};
+
+const handler_control_scenario: Scenario<ApplicationDriver, HandlerControlObservation> = {
+	id: "handler-redirect-and-http-error",
+	capability: "transport",
+	promise: "Handler preserves native redirects and HTTP errors",
+	regression:
+		"A server Effect runner can turn SvelteKit redirect and error control flow into an ordinary 500 response",
+	drive: observe_handler_control,
+};
+
+const live_finalization_scenario: Scenario<ApplicationDriver, LiveFinalizationObservation> = {
+	id: "live-page-close-finalization",
+	capability: "runtime",
+	promise: "Closing a live-query page finalizes its server stream",
+	regression:
+		"A live transport can retain its scoped Effect and server resources after the browser disconnects",
+	drive: observe_live_finalization,
+};
+
 test(query_behavior_scenario.promise, async ({ browser, playwright }, test_info) => {
 	await assert_native_parity(query_behavior_scenario, { browser, playwright }, test_info);
 });
@@ -276,10 +370,14 @@ test(transformed_form_scenario.promise, async ({ browser, playwright }, test_inf
 test(request_interruption_scenario.promise, async ({ browser, playwright }, test_info) => {
 	await assert_native_parity(request_interruption_scenario, { browser, playwright }, test_info, {
 		stable: {
+			"$.events.length":
+				"The stable 4.0.0 Handler omits the finalization event after the HTTP client aborts; issue #33 records the minimized failure.",
 			"$.events[1]":
 				"The stable 4.0.0 Handler leaves server work running after the HTTP client aborts; issue #33 records the minimized failure.",
 		},
 		candidate: {
+			"$.events.length":
+				"The Effect-native candidate omits the finalization event after the HTTP client aborts; issue #33 records the minimized failure.",
 			"$.events[1]":
 				"The Effect-native candidate leaves Handler work running after the HTTP client aborts; issue #33 records the minimized failure.",
 		},
@@ -354,260 +452,86 @@ test(transport_boundary_scenario.promise, async ({ browser, playwright }, test_i
 	await assert_native_parity(transport_boundary_scenario, { browser, playwright }, test_info);
 });
 
-test("native, stable, and candidate expose the same browser-visible contracts", async ({
+test(browser_contracts_scenario.promise, async ({ browser, playwright }, test_info) => {
+	await assert_native_parity(browser_contracts_scenario, { browser, playwright }, test_info, {
+		stable: stable_deviations,
+	});
+});
+
+test(unenhanced_form_scenario.promise, async ({ browser, playwright }, test_info) => {
+	await assert_native_parity(unenhanced_form_scenario, { browser, playwright }, test_info);
+});
+
+test(keyed_form_scenario.promise, async ({ browser, playwright }, test_info) => {
+	await assert_native_parity(keyed_form_scenario, { browser, playwright }, test_info);
+});
+
+test(request_isolation_scenario.promise, async ({ browser, playwright }, test_info) => {
+	await assert_native_parity(request_isolation_scenario, { browser, playwright }, test_info);
+});
+
+test(handler_control_scenario.promise, async ({ browser, playwright }, test_info) => {
+	await assert_native_parity(handler_control_scenario, { browser, playwright }, test_info);
+});
+
+test(live_finalization_scenario.promise, async ({ browser, playwright }, test_info) => {
+	await assert_native_parity(live_finalization_scenario, { browser, playwright }, test_info, {
+		stable: {
+			"$.events.length":
+				"The stable 4.0.0 live transport retains the disconnected stream; issue #30 records the failure.",
+			"$.events[1]":
+				"The stable 4.0.0 live transport omits finalization after page close; issue #30 records the failure.",
+		},
+		candidate: {
+			"$.events.length":
+				"The candidate live transport retains the disconnected stream; issue #30 records the failure.",
+			"$.events[1]":
+				"The candidate live transport omits finalization after page close; issue #30 records the failure.",
+		},
+	});
+});
+
+async function observe_browser_contracts({
 	browser,
-}, test_info) => {
-	const observations: Observation<PageObservation>[] = [];
+	target,
+}: ApplicationDriver): Promise<PageObservation> {
+	const context = await browser.newContext({
+		baseURL: target.url,
+		ignoreHTTPSErrors: true,
+		extraHTTPHeaders: { "x-request-id": "browser" },
+	});
+	const page = await context.newPage();
+	const console_errors: string[] = [];
+	const network: Array<{ method: string; path: string; status: number }> = [];
 
-	for (const target of targets) {
-		const context = await browser.newContext({
-			baseURL: target.url,
-			ignoreHTTPSErrors: true,
-			extraHTTPHeaders: {
-				"x-request-id": "browser",
-			},
-		});
-		const page = await context.newPage();
-		const console_errors: string[] = [];
-		const network: Array<{ method: string; path: string; status: number }> = [];
+	page.on("console", (message) => {
+		if (message.type() === "error") {
+			console_errors.push(message.text());
+		}
+	});
+	page.on("response", (response) => {
+		const url = new URL(response.url());
 
-		page.on("console", (message) => {
-			if (message.type() === "error") {
-				console_errors.push(message.text());
-			}
-		});
-		page.on("response", (response) => {
-			const url = new URL(response.url());
-
-			if (!url.pathname.includes("/_app/remote") && !url.searchParams.has("/remote")) {
-				return;
-			}
-
-			network.push({
-				method: response.request().method(),
-				path: `${url.pathname}${url.search}`,
-				status: response.status(),
-			});
-		});
-
-		const value = await observe_page(page, target.name);
-		const observation: Observation<PageObservation> = {
-			scenario_id: "browser-contracts",
-			target: target.name,
-			value,
-			recorded_at: new Date().toISOString(),
-		};
-
-		observations.push(normalize_observation(observation));
-		expect(console_errors, `${target.name} browser console`).toEqual([]);
-		expect(network.length, `${target.name} remote traffic`).toBeGreaterThan(0);
-		expect(network.every((response) => response.status < 400)).toBe(true);
-		await test_info.attach(`${target.name}-browser-evidence`, {
-			body: Buffer.from(JSON.stringify({ observation, network, console_errors }, null, 2)),
-			contentType: "application/json",
-		});
-		await context.close();
-	}
-
-	const native = get_observation(observations, "native");
-
-	for (const target of ["stable", "candidate"] as const) {
-		const comparison = compare_observations(native, get_observation(observations, target));
-		const deviations = target === "stable" ? stable_deviations : {};
-		const unexpected = comparison.differences.filter(
-			(difference) => !(difference.path in deviations),
-		);
-
-		await test_info.attach(`${target}-comparison`, {
-			body: Buffer.from(JSON.stringify({ comparison, deviations }, null, 2)),
-			contentType: "application/json",
-		});
-		expect(unexpected, `${target} must match native`).toEqual([]);
-	}
-});
-
-test("remote forms preserve ordinary HTML submission without JavaScript", async ({
-	browser,
-}, test_info) => {
-	for (const target of targets) {
-		const observation = await observe_unenhanced_form(browser, target);
-
-		expect(observation.result).toBe("saved:no-js:native-form");
-		await test_info.attach(`${target.name}-no-js-form`, {
-			body: Buffer.from(JSON.stringify(observation, null, 2)),
-			contentType: "application/json",
-		});
-	}
-});
-
-test("enhanced keyed forms preserve reset, result, and instance isolation", async ({ browser }) => {
-	const lifecycle_observations = new Map<TargetName, string[]>();
-
-	for (const target of targets) {
-		const context = await browser.newContext({
-			baseURL: target.url,
-			ignoreHTTPSErrors: true,
-		});
-		const page = await context.newPage();
-
-		await page.goto("/forms", { waitUntil: "networkidle" });
-		await page.getByTestId("beta-name").fill("beta");
-		await page.getByTestId("beta-label").fill("saved");
-		await page.getByTestId("beta-submit").click();
-		await expect(page.getByTestId("beta-result")).toHaveText("saved:beta:beta:saved");
-		await expect(page.getByTestId("beta-name")).toHaveValue("");
-		await expect(page.getByTestId("beta-label")).toHaveValue("");
-		await expect(page.getByTestId("alpha-result")).toHaveText("idle");
-
-		await page.getByTestId("alpha-name").fill("alpha");
-		await page.getByTestId("alpha-label").fill("blocked");
-		await page.getByTestId("alpha-submit").click();
-		await expect(page.getByTestId("alpha-lifecycle")).toHaveText(/^(true|false):0$/);
-
-		await expect(page.getByTestId("alpha-issue")).toHaveText("Blocked labels are rejected.");
-
-		await expect(page.getByTestId("beta-result")).toHaveText("saved:beta:beta:saved");
-		await expect(page.getByTestId("beta-issue")).toHaveText("valid");
-		lifecycle_observations.set(target.name, [
-			await page.getByTestId("alpha-lifecycle").innerText(),
-			await page.getByTestId("beta-lifecycle").innerText(),
-		]);
-		await context.close();
-	}
-
-	expect(lifecycle_observations.get("candidate")).toEqual(lifecycle_observations.get("native"));
-});
-
-test("concurrent request contexts remain isolated", async ({ playwright }, test_info) => {
-	for (const target of targets) {
-		const observations = await observe_request_isolation(playwright, target);
-
-		expect(observations).toEqual([
-			{
-				after: {
-					client: "alpha",
-					parameter: "alpha",
-					request_id: "request-alpha",
-					route: "/api/context/[client]",
-					session: "session-alpha",
-					url: "/api/context/alpha",
-				},
-				before: {
-					client: "alpha",
-					parameter: "alpha",
-					request_id: "request-alpha",
-					route: "/api/context/[client]",
-					session: "session-alpha",
-					url: "/api/context/alpha",
-				},
-			},
-			{
-				after: {
-					client: "beta",
-					parameter: "beta",
-					request_id: "request-beta",
-					route: "/api/context/[client]",
-					session: "session-beta",
-					url: "/api/context/beta",
-				},
-				before: {
-					client: "beta",
-					parameter: "beta",
-					request_id: "request-beta",
-					route: "/api/context/[client]",
-					session: "session-beta",
-					url: "/api/context/beta",
-				},
-			},
-		]);
-		await test_info.attach(`${target.name}-request-isolation`, {
-			body: Buffer.from(JSON.stringify(observations, null, 2)),
-			contentType: "application/json",
-		});
-	}
-});
-
-test("Handler preserves native redirects and HTTP errors", async ({ playwright }) => {
-	for (const target of targets) {
-		const request = await playwright.request.newContext({
-			baseURL: target.url,
-			ignoreHTTPSErrors: true,
-		});
-		const redirect = await request.get("/control/redirect", { maxRedirects: 0 });
-		const error = await request.get("/control/error");
-
-		expect(redirect.status(), `${target.name} redirect status`).toBe(307);
-		expect(redirect.headers()["location"], `${target.name} redirect location`).toBe(
-			"/redirected",
-		);
-		expect(error.status(), `${target.name} error status`).toBe(418);
-		expect(await error.text(), `${target.name} error body`).toContain("teapot");
-		await request.dispose();
-	}
-});
-
-test("closing a live-query page finalizes its server stream", async ({
-	browser,
-	playwright,
-}, test_info) => {
-	const observations = new Map<TargetName, string[]>();
-
-	for (const target of targets) {
-		const request = await playwright.request.newContext({
-			baseURL: target.url,
-			ignoreHTTPSErrors: true,
-		});
-		const context = await browser.newContext({
-			baseURL: target.url,
-			ignoreHTTPSErrors: true,
-		});
-		const page = await context.newPage();
-
-		await request.delete("/api/lifecycle");
-		await page.goto("/lifecycle", { waitUntil: "commit" });
-		await expect(page.getByTestId("lifecycle")).toHaveText("connected");
-		await expect
-			.poll(() => read_lifecycle_events(request), {
-				message: `${target.name} stream must start`,
-			})
-			.toContain("started");
-
-		await context.close();
-
-		try {
-			await expect
-				.poll(() => read_lifecycle_events(request), {
-					message: `${target.name} stream must finalize`,
-					timeout: 5_000,
-				})
-				.toContain("finalized");
-		} catch (error: unknown) {
-			if (target.name === "native") {
-				throw error;
-			}
+		if (!url.pathname.includes("/_app/remote") && !url.searchParams.has("/remote")) {
+			return;
 		}
 
-		const events = await read_lifecycle_events(request);
-
-		observations.set(target.name, events);
-		await test_info.attach(`${target.name}-lifecycle`, {
-			body: Buffer.from(JSON.stringify(events, null, 2)),
-			contentType: "application/json",
+		network.push({
+			method: response.request().method(),
+			path: `${url.pathname}${url.search}`,
+			status: response.status(),
 		});
-		await request.dispose();
-	}
+	});
 
-	expect(observations.get("native")).toContain("finalized");
-	expect(
-		observations.get("stable"),
-		"stable 4.0.0 retains the disconnected live stream",
-	).not.toContain("finalized");
-	expect(
-		observations.get("candidate"),
-		"candidate currently retains the disconnected live stream; see the documented deviation",
-	).not.toContain("finalized");
-	expect(observations.get("candidate")).toContain("started");
-});
+	const observation = await observe_page(page, target.name);
+
+	expect(console_errors, `${target.name} browser console`).toEqual([]);
+	expect(network.length, `${target.name} remote traffic`).toBeGreaterThan(0);
+	expect(network.every((response) => response.status < 400)).toBe(true);
+	await context.close();
+
+	return observation;
+}
 
 async function observe_page(page: Page, target: TargetName): Promise<PageObservation> {
 	await page.goto("/", { waitUntil: "networkidle" });
@@ -728,6 +652,49 @@ async function observe_unenhanced_form(
 		url: new URL(page.url()).pathname,
 	};
 
+	expect(observation.result).toBe("saved:no-js:native-form");
+	expect(observation.url).toBe("/");
+	await context.close();
+
+	return observation;
+}
+
+async function observe_keyed_form({
+	browser,
+	target,
+}: ApplicationDriver): Promise<KeyedFormObservation> {
+	const context = await browser.newContext({
+		baseURL: target.url,
+		ignoreHTTPSErrors: true,
+	});
+	const page = await context.newPage();
+
+	await page.goto("/forms", { waitUntil: "networkidle" });
+	await page.getByTestId("beta-name").fill("beta");
+	await page.getByTestId("beta-label").fill("saved");
+	await page.getByTestId("beta-submit").click();
+	await expect(page.getByTestId("beta-result")).toHaveText("saved:beta:beta:saved");
+	await expect(page.getByTestId("beta-name")).toHaveValue("");
+	await expect(page.getByTestId("beta-label")).toHaveValue("");
+	await expect(page.getByTestId("alpha-result")).toHaveText("idle");
+
+	await page.getByTestId("alpha-name").fill("alpha");
+	await page.getByTestId("alpha-label").fill("blocked");
+	await page.getByTestId("alpha-submit").click();
+	await expect(page.getByTestId("alpha-lifecycle")).toHaveText(/^(true|false):0$/);
+	await expect(page.getByTestId("alpha-issue")).toHaveText("Blocked labels are rejected.");
+	await expect(page.getByTestId("beta-result")).toHaveText("saved:beta:beta:saved");
+	await expect(page.getByTestId("beta-issue")).toHaveText("valid");
+
+	const observation = {
+		alpha_issue: await page.getByTestId("alpha-issue").innerText(),
+		alpha_lifecycle: await page.getByTestId("alpha-lifecycle").innerText(),
+		alpha_result: await page.getByTestId("alpha-result").innerText(),
+		beta_issue: await page.getByTestId("beta-issue").innerText(),
+		beta_lifecycle: await page.getByTestId("beta-lifecycle").innerText(),
+		beta_result: await page.getByTestId("beta-result").innerText(),
+	};
+
 	await context.close();
 
 	return observation;
@@ -772,10 +739,115 @@ async function observe_request_isolation(
 	await control.post("/api/gates/alpha");
 
 	const alpha_observation = await alpha.complete;
+	const observations = [alpha_observation, beta_observation];
 
 	await Promise.all([alpha.request.dispose(), beta.request.dispose(), control.dispose()]);
 
-	return [alpha_observation, beta_observation];
+	expect(observations).toEqual([
+		{
+			after: {
+				client: "alpha",
+				parameter: "alpha",
+				request_id: "request-alpha",
+				route: "/api/context/[client]",
+				session: "session-alpha",
+				url: "/api/context/alpha",
+			},
+			before: {
+				client: "alpha",
+				parameter: "alpha",
+				request_id: "request-alpha",
+				route: "/api/context/[client]",
+				session: "session-alpha",
+				url: "/api/context/alpha",
+			},
+		},
+		{
+			after: {
+				client: "beta",
+				parameter: "beta",
+				request_id: "request-beta",
+				route: "/api/context/[client]",
+				session: "session-beta",
+				url: "/api/context/beta",
+			},
+			before: {
+				client: "beta",
+				parameter: "beta",
+				request_id: "request-beta",
+				route: "/api/context/[client]",
+				session: "session-beta",
+				url: "/api/context/beta",
+			},
+		},
+	]);
+
+	return observations;
+}
+
+async function observe_handler_control({
+	playwright,
+	target,
+}: ApplicationDriver): Promise<HandlerControlObservation> {
+	const request = await make_request_context(playwright, target);
+	const redirect = await request.get("/control/redirect", { maxRedirects: 0 });
+	const error = await request.get("/control/error");
+	const observation = {
+		error_body: await error.text(),
+		error_status: error.status(),
+		redirect_location: redirect.headers()["location"] ?? "missing",
+		redirect_status: redirect.status(),
+	};
+
+	expect(observation.redirect_status, `${target.name} redirect status`).toBe(307);
+	expect(observation.redirect_location, `${target.name} redirect location`).toBe("/redirected");
+	expect(observation.error_status, `${target.name} error status`).toBe(418);
+	expect(observation.error_body, `${target.name} error body`).toContain("teapot");
+	await request.dispose();
+
+	return observation;
+}
+
+async function observe_live_finalization({
+	browser,
+	playwright,
+	target,
+}: ApplicationDriver): Promise<LiveFinalizationObservation> {
+	const request = await make_request_context(playwright, target);
+	const context = await browser.newContext({
+		baseURL: target.url,
+		ignoreHTTPSErrors: true,
+	});
+	const page = await context.newPage();
+
+	await request.delete("/api/lifecycle");
+	await page.goto("/lifecycle", { waitUntil: "commit" });
+	await expect(page.getByTestId("lifecycle")).toHaveText("connected");
+	await expect
+		.poll(() => read_lifecycle_events(request), {
+			message: `${target.name} stream must start`,
+		})
+		.toContain("started");
+	await context.close();
+
+	try {
+		await expect
+			.poll(() => read_lifecycle_events(request), {
+				message: `${target.name} stream must finalize`,
+				timeout: 5_000,
+			})
+			.toContain("finalized");
+	} catch (error: unknown) {
+		if (target.name === "native") {
+			throw error;
+		}
+	}
+
+	const events = await read_lifecycle_events(request);
+
+	await request.dispose();
+
+	return { events };
 }
 
 async function assert_native_parity<Value>(
@@ -864,7 +936,8 @@ async function observe_query_behavior({
 		extraHTTPHeaders: { "x-request-id": "query" },
 	});
 	const page = await context.newPage();
-	const traffic = capture_remote_traffic(page);
+	const traffic_recorder = await capture_remote_traffic(page);
+	const traffic = traffic_recorder.traffic;
 
 	await request.put("/api/gates/query");
 	await page.goto("/query", { waitUntil: "networkidle" });
@@ -905,6 +978,7 @@ async function observe_query_behavior({
 	} satisfies QueryObservation;
 
 	await context.close();
+	await traffic_recorder.stop();
 	await request.dispose();
 
 	return observation;
@@ -922,7 +996,8 @@ async function observe_command_behavior({
 		extraHTTPHeaders: { "x-request-id": "command" },
 	});
 	const page = await context.newPage();
-	const traffic = capture_remote_traffic(page);
+	const traffic_recorder = await capture_remote_traffic(page);
+	const traffic = traffic_recorder.traffic;
 
 	await request.put("/api/gates/command");
 	await page.goto("/command", { waitUntil: "networkidle" });
@@ -967,6 +1042,7 @@ async function observe_command_behavior({
 	} satisfies CommandObservation;
 
 	await context.close();
+	await traffic_recorder.stop();
 	await request.dispose();
 
 	return observation;
@@ -1035,11 +1111,11 @@ async function observe_transformed_form({
 			ignoreHTTPSErrors: true,
 		});
 		const page = await context.newPage();
+		const traffic_recorder = await capture_remote_traffic(page, traffic);
 
-		capture_remote_traffic(page, traffic);
 		await page.goto("/forms", { waitUntil: "networkidle" });
 
-		return { context, page };
+		return { context, page, traffic_recorder };
 	};
 
 	const invalid = await open_form();
@@ -1052,6 +1128,7 @@ async function observe_transformed_form({
 	const invalid_issue = await invalid.page.getByTestId("transformed-amount-issue").innerText();
 
 	await invalid.context.close();
+	await invalid.traffic_recorder.stop();
 
 	const success = await open_form();
 
@@ -1072,6 +1149,7 @@ async function observe_transformed_form({
 	const reset_label = await success.page.getByTestId("transformed-label").inputValue();
 
 	await success.context.close();
+	await success.traffic_recorder.stop();
 
 	await request.put("/api/gates/form");
 
@@ -1097,6 +1175,7 @@ async function observe_transformed_form({
 	).replaceAll(/\s+/g, "");
 
 	await pending.context.close();
+	await pending.traffic_recorder.stop();
 
 	const redirected = await open_form();
 
@@ -1109,6 +1188,7 @@ async function observe_transformed_form({
 	const redirect_path = `${redirect_url.pathname}${redirect_url.search}`;
 
 	await redirected.context.close();
+	await redirected.traffic_recorder.stop();
 	await request.dispose();
 
 	return {
@@ -1187,7 +1267,8 @@ async function observe_live_query({
 		ignoreHTTPSErrors: true,
 	});
 	const page = await context.newPage();
-	const traffic = capture_remote_traffic(page);
+	const traffic_recorder = await capture_remote_traffic(page);
+	const traffic = traffic_recorder.traffic;
 
 	await request.delete("/api/live-state");
 
@@ -1199,6 +1280,7 @@ async function observe_live_query({
 		const availability = response ? `http:${response.status()}` : "timeout";
 
 		await context.close();
+		await traffic_recorder.stop();
 		await request.dispose();
 
 		return make_unavailable_live_observation(availability, traffic);
@@ -1211,7 +1293,7 @@ async function observe_live_query({
 
 	const initial_state = await wait_for_live_state(
 		request,
-		(state) => state.starts > 0 && state.starts - state.finalizations === 1,
+		(state) => state.ready && state.starts > 0 && state.starts - state.finalizations === 1,
 	);
 
 	await request.post("/api/live-state", { data: { value: 2 } });
@@ -1221,7 +1303,7 @@ async function observe_live_query({
 
 	const reconnected_state = await wait_for_live_state(
 		request,
-		(state) => state.starts > initial_state.starts,
+		(state) => state.ready && state.starts > initial_state.starts,
 	);
 
 	await request.post("/api/live-state", { data: { value: 3 } });
@@ -1251,6 +1333,7 @@ async function observe_live_query({
 	} satisfies LiveObservation;
 
 	await context.close();
+	await traffic_recorder.stop();
 	await request.dispose();
 
 	return observation;
@@ -1301,7 +1384,8 @@ async function observe_handler_contracts({
 		extraHTTPHeaders: { "x-request-id": "handler" },
 	});
 	const page = await context.newPage();
-	const traffic = capture_remote_traffic(page);
+	const traffic_recorder = await capture_remote_traffic(page);
+	const traffic = traffic_recorder.traffic;
 
 	await page.goto("/handler/alpha", { waitUntil: "networkidle" });
 
@@ -1358,6 +1442,7 @@ async function observe_handler_contracts({
 	const failure_status = failure.status();
 
 	await context.close();
+	await traffic_recorder.stop();
 
 	return {
 		action,
@@ -1381,29 +1466,150 @@ async function attach_json_evidence(
 	await test_info.attach(name, { path, contentType: "application/json" });
 }
 
-function capture_remote_traffic(page: Page, traffic: RemoteTraffic[] = []): RemoteTraffic[] {
+async function capture_remote_traffic(
+	page: Page,
+	traffic: RemoteTraffic[] = [],
+): Promise<RemoteTrafficRecorder> {
+	const browser_name = page.context().browser()?.browserType().name();
+	const body_tasks = new Set<Promise<void>>();
+	const protocol_tasks = new Set<Promise<void>>();
+	const stream_records: Array<{
+		chunks: number;
+		method: string;
+		path: string;
+		payload: string[];
+		request_id: string;
+	}> = [];
+	const stream_records_by_id = new Map<string, (typeof stream_records)[number]>();
+	const session =
+		browser_name === "chromium" ? await page.context().newCDPSession(page) : undefined;
+
+	if (session) {
+		await session.send("Network.enable");
+		session.on("Network.requestWillBeSent", (event) => {
+			if (!is_remote_url(event.request.url)) {
+				return;
+			}
+
+			const url = new URL(event.request.url);
+			const record = {
+				chunks: 0,
+				method: event.request.method,
+				path: url.pathname,
+				payload: [] as string[],
+				request_id: event.requestId,
+			};
+
+			stream_records.push(record);
+			stream_records_by_id.set(event.requestId, record);
+		});
+		session.on("Network.responseReceived", (event) => {
+			const record = stream_records_by_id.get(event.requestId);
+
+			if (!record) {
+				return;
+			}
+
+			const task = session
+				.send("Network.streamResourceContent", { requestId: event.requestId })
+				.then(({ bufferedData }) => {
+					if (bufferedData) {
+						record.chunks += 1;
+						record.payload.push(Buffer.from(bufferedData, "base64").toString("utf8"));
+					}
+				})
+				.catch(() => undefined)
+				.then(() => undefined);
+
+			protocol_tasks.add(task);
+			void task.finally(() => protocol_tasks.delete(task));
+		});
+		session.on("Network.dataReceived", (event) => {
+			const record = stream_records_by_id.get(event.requestId);
+
+			if (record && event.data) {
+				record.chunks += 1;
+				record.payload.push(Buffer.from(event.data, "base64").toString("utf8"));
+			}
+		});
+	}
+
 	page.on("response", (response) => {
 		const url = new URL(response.url());
 
-		if (!url.pathname.includes("/_app/remote") && !url.searchParams.has("/remote")) {
+		if (!is_remote_url(response.url())) {
 			return;
 		}
 
-		traffic.push({
+		const entry: MutableRemoteTraffic = {
 			method: response.request().method(),
 			path: url.pathname,
 			request_content_type: response.request().headers()["content-type"] ?? "none",
 			request_cookie: "cookie" in response.request().headers(),
 			request_id: response.request().headers()["x-request-id"] ?? "none",
+			request_payload: response.request().postData() ?? "",
 			request_payload_bytes: response.request().postDataBuffer()?.byteLength ?? 0,
+			response_body: "pending",
 			response_content_type: response.headers()["content-type"] ?? "none",
 			response_location: response.headers()["location"] ?? "none",
+			response_payload_bytes: 0,
 			response_set_cookie: "set-cookie" in response.headers(),
+			response_stream_payload: "",
+			response_streamed: false,
 			status: response.status(),
-		});
+		};
+		const body_task = response
+			.body()
+			.then((body) => {
+				entry.response_body = body.toString("utf8");
+				entry.response_payload_bytes = body.byteLength;
+			})
+			.catch(() => {
+				entry.response_body = "unavailable-while-stream-open";
+			})
+			.then(() => undefined);
+
+		traffic.push(entry);
+		body_tasks.add(body_task);
+		void body_task.finally(() => body_tasks.delete(body_task));
 	});
 
-	return traffic;
+	return {
+		traffic,
+		stop: async () => {
+			await Promise.allSettled([...body_tasks, ...protocol_tasks]);
+
+			const used_records = new Set<string>();
+
+			for (const entry of traffic as MutableRemoteTraffic[]) {
+				const record = stream_records.find(
+					(candidate) =>
+						!used_records.has(candidate.request_id) &&
+						candidate.method === entry.method &&
+						candidate.path === entry.path,
+				);
+
+				if (!record) {
+					continue;
+				}
+
+				const stream_payload = record.payload.join("");
+
+				used_records.add(record.request_id);
+				entry.response_stream_payload = stream_payload;
+				entry.response_streamed =
+					record.chunks > 1 || entry.response_content_type.includes("text/event-stream");
+			}
+
+			await session?.detach().catch(() => undefined);
+		},
+	};
+}
+
+function is_remote_url(value: string): boolean {
+	const url = new URL(value);
+
+	return url.pathname.includes("/_app/remote") || url.searchParams.has("/remote");
 }
 
 async function make_request_context(
@@ -1428,9 +1634,21 @@ async function wait_for_gate(request: APIRequestContext, name: string): Promise<
 
 async function wait_for_live_state(
 	request: APIRequestContext,
-	accept: (state: { finalizations: number; starts: number; value: number }) => boolean,
-): Promise<{ finalizations: number; starts: number; value: number }> {
-	let observed = { finalizations: 0, starts: 0, value: 0 };
+	accept: (state: {
+		finalizations: number;
+		ready: boolean;
+		starts: number;
+		value: number;
+		waiters: number;
+	}) => boolean,
+): Promise<{
+	finalizations: number;
+	ready: boolean;
+	starts: number;
+	value: number;
+	waiters: number;
+}> {
+	let observed = { finalizations: 0, ready: false, starts: 0, value: 0, waiters: 0 };
 
 	await expect
 		.poll(async () => {

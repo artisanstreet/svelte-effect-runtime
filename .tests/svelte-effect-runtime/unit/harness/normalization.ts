@@ -40,7 +40,7 @@ export function normalize_value<Value>(value: Value, rules = default_normalizati
 		return value.map((item) => normalize_value(item, rules)) as Value;
 	}
 
-	if (value && typeof value === "object") {
+	if (is_plain_record(value)) {
 		const entries = Object.entries(value).map(([key, item]) => [
 			key,
 			normalize_value(item, rules),
@@ -50,4 +50,14 @@ export function normalize_value<Value>(value: Value, rules = default_normalizati
 	}
 
 	return value;
+}
+
+function is_plain_record(value: unknown): value is Readonly<Record<string, unknown>> {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) {
+		return false;
+	}
+
+	const prototype = Object.getPrototypeOf(value) as unknown;
+
+	return prototype === Object.prototype || prototype === null;
 }

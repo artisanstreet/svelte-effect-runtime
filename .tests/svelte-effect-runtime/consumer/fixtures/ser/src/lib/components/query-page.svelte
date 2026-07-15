@@ -17,10 +17,7 @@
 
 	const RefreshCache = Effect.gen(function* () {
 		yield* RefreshableResource.refresh();
-
-		if (RefreshableResource.ready) {
-			cache = RefreshableResource.current;
-		}
+		cache = yield* RefreshableResource;
 	});
 
 	const StartSlowQuery = Effect.gen(function* () {
@@ -36,27 +33,31 @@
 
 		failure = "pending";
 		failure = yield* FailureResource.pipe(
-			Effect.match({
-				onFailure: normalize_error,
-				onSuccess: () => "unexpected-success",
+			Effect.matchEffect({
+				onFailure: NormalizeError,
+				onSuccess: () =>
+					Effect.gen(function* () {
+						return "unexpected-success";
+					}),
 			}),
 		);
-		failure_error = normalize_error(FailureResource.error);
+		failure_error = yield* NormalizeError(FailureResource.error);
 	});
 
-	function normalize_error(error: unknown): string {
-		if (!error || typeof error !== "object") {
-			return String(error);
-		}
+	const NormalizeError = (error: unknown) =>
+		Effect.gen(function* () {
+			if (!error || typeof error !== "object") {
+				return String(error);
+			}
 
-		const value = error as {
-			body?: { message?: string };
-			message?: string;
-			status?: number;
-		};
+			const body = Reflect.get(error, "body");
+			const body_message =
+				body && typeof body === "object" ? Reflect.get(body, "message") : undefined;
+			const message = Reflect.get(error, "message");
+			const status = Reflect.get(error, "status");
 
-		return `${value.status ?? 0}:${value.body?.message ?? value.message ?? "unknown"}`;
-	}
+			return `${typeof status === "number" ? status : 0}:${typeof body_message === "string" ? body_message : typeof message === "string" ? message : "unknown"}`;
+		});
 </script>
 
 <p data-testid="cache">{cache.key}:{cache.invocation}</p>
