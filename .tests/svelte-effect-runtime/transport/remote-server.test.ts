@@ -3,6 +3,7 @@ import {
 	Error as ServerError,
 	Handler as ServerHandler,
 	Prerender as ServerPrerender,
+	Query as ServerQuery,
 	Redirect as ServerRedirect,
 	ServerRuntime,
 } from "../../../modules/svelte-effect-runtime/src/server/index.ts";
@@ -31,9 +32,11 @@ import {
 import {
 	reset_test_command,
 	reset_test_prerender,
+	reset_test_query,
 	reset_test_request_event,
 	set_test_command,
 	set_test_prerender,
+	set_test_query,
 	set_test_request_event,
 } from "../unit/fixtures/app-server.ts";
 import {
@@ -141,6 +144,60 @@ test("Command calls remain Effect-yieldable outside native remote dispatch", asy
 		assert_equals(SaveDraft.pending, 0);
 	} finally {
 		reset_test_command();
+		reset_test_request_event();
+	}
+});
+
+test("Command updates unwrap Effect query functions and resources for SvelteKit", async () => {
+	const update_targets: unknown[][] = [];
+	let native_posts: Promise<unknown> | undefined;
+	let native_posts_query: ((input: unknown) => Promise<unknown>) | undefined;
+
+	set_test_query(() => {
+		native_posts_query = () => {
+			native_posts = Promise.resolve(["one"]);
+
+			return native_posts;
+		};
+
+		return native_posts_query;
+	});
+	set_test_command((...args) => {
+		const handler = args.at(-1) as (input: unknown) => Promise<unknown>;
+
+		return (input: unknown) => {
+			const result = handler(input) as Promise<unknown> & {
+				updates: (...updates: unknown[]) => Promise<unknown>;
+			};
+
+			result.updates = (...updates: unknown[]) => {
+				update_targets.push(updates);
+
+				return result;
+			};
+
+			return result;
+		};
+	});
+	set_test_request_event({
+		...make_request_event(),
+		isRemoteRequest: false,
+		request: new Request("http://localhost/test", { method: "POST" }),
+	});
+
+	try {
+		const GetPosts = ServerQuery(() => Effect.succeed(["one"]));
+		const Posts = GetPosts();
+		const SaveDraft = ServerCommand(Schema.String, (title) => Effect.succeed(title));
+		const result = await get_server_dispatcher().run(
+			SaveDraft("publish").updates(GetPosts, Posts),
+		);
+
+		assert_equals(result, "publish");
+		assert_equals(update_targets, [[native_posts_query, native_posts]]);
+	} finally {
+		reset_test_command();
+		reset_test_query();
 		reset_test_request_event();
 	}
 });

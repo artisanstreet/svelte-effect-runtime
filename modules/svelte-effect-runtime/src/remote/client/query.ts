@@ -12,6 +12,7 @@ import {
 } from "$/live.ts";
 import { InvalidLiveQueryFactoryError, InvalidQueryFactoryError } from "$/errors.ts";
 import { FailWithRemoteError, MakeEffectFromPromise } from "$/remote/effect.ts";
+import { attach_native_remote_query_update } from "$/remote/query-update.ts";
 import type { EffectRemoteQueryUpdateBrand, NativeMethod } from "./types.ts";
 import { copy_property_descriptors, has_method } from "./utils.ts";
 import { normalize_native_error } from "$/remote/failures.ts";
@@ -103,6 +104,7 @@ export function create_remote_query_adapter<Input, Output, ErrorType = never>(
 			decode_payload,
 		) as RemoteQueryEffect<Output, ErrorType>;
 
+		attach_native_remote_query_update(QueryEffect, resource);
 		attach_query_resource(resource, QueryEffect);
 
 		return QueryEffect;
@@ -110,6 +112,7 @@ export function create_remote_query_adapter<Input, Output, ErrorType = never>(
 		((input: RemoteInput<Input>) => RemoteQueryEffect<Output, ErrorType>);
 
 	copy_property_descriptors(native_factory, wrapped);
+	attach_native_remote_query_update(wrapped, native_factory);
 
 	return wrapped;
 }
@@ -152,11 +155,16 @@ export function create_remote_live_query_adapter<Input, Output, ErrorType = neve
 
 		const resource = resource_attempt.success;
 
-		return make_remote_live_stream<Output, ErrorType>(resource, normalize_native_error);
+		const stream = make_remote_live_stream<Output, ErrorType>(resource, normalize_native_error);
+
+		attach_native_remote_query_update(stream, resource);
+
+		return stream;
 	}) as EffectRemoteQueryUpdateBrand &
 		((input: RemoteInput<Input>) => RemoteLiveStream<Output, ErrorType>);
 
 	copy_property_descriptors(native_factory, wrapped);
+	attach_native_remote_query_update(wrapped, native_factory);
 
 	return wrapped;
 }

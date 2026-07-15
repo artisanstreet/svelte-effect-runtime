@@ -10,7 +10,7 @@ import {
 } from "@playwright/test";
 import type { Observation, Scenario, TargetName } from "../../unit/harness/model.ts";
 import { normalize_observation } from "../../unit/harness/normalization.ts";
-import { get_conformance_target_url } from "../../unit/harness/model.ts";
+import { get_conformance_proxy_url } from "../../unit/harness/model.ts";
 import { compare_observations } from "../../unit/harness/comparison.ts";
 import { make_evidence } from "../../unit/harness/evidence.ts";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -156,15 +156,15 @@ type LiveFinalizationObservation = {
 const targets: ReadonlyArray<TargetEndpoint> = [
 	{
 		name: "native",
-		url: get_conformance_target_url("native"),
+		url: get_conformance_proxy_url("native"),
 	},
 	{
 		name: "stable",
-		url: get_conformance_target_url("stable"),
+		url: get_conformance_proxy_url("stable"),
 	},
 	{
 		name: "candidate",
-		url: get_conformance_target_url("candidate"),
+		url: get_conformance_proxy_url("candidate"),
 	},
 ];
 
@@ -341,26 +341,8 @@ test(query_behavior_scenario.promise, async ({ browser, playwright }, test_info)
 test(command_behavior_scenario.promise, async ({ browser, playwright }, test_info) => {
 	await assert_native_parity(command_behavior_scenario, { browser, playwright }, test_info, {
 		stable: {
-			"$.mutation_delta":
-				"The stable 4.0.0 Command cannot complete SvelteKit's requested-query refresh protocol; issue #36 records the failure.",
-			"$.pending_during_request":
-				"The stable 4.0.0 Command does not expose native numeric pending state while blocked.",
-			"$.redirect": "The stable 4.0.0 Command loses SvelteKit's public redirect diagnostic.",
-			"$.result":
-				"The stable 4.0.0 Command leaves its client result idle when requested-query refresh fails.",
 			"$.traffic":
-				"The stable 4.0.0 client rejects the requested-query update before dispatching Mutate.",
-		},
-		candidate: {
-			"$.mutation_delta":
-				"The candidate cannot complete SvelteKit's requested-query refresh protocol; issue #36 records the failure.",
-			"$.pending_during_request":
-				"The candidate Command does not expose native numeric pending state while blocked.",
-			"$.redirect": "The candidate Command loses SvelteKit's public redirect diagnostic.",
-			"$.result":
-				"The candidate leaves its client result idle when requested-query refresh fails.",
-			"$.traffic":
-				"The candidate rejects the requested-query update before dispatching Mutate.",
+				"Stable 4.0.0 lacks Command call updates, so its equivalent fixture refreshes the query with a second GET instead of SvelteKit's single requested-query POST.",
 		},
 	});
 });
@@ -374,8 +356,6 @@ test(request_interruption_scenario.promise, async ({ browser, playwright }, test
 		stable: {
 			"$.events.length":
 				"The stable 4.0.0 Handler omits the finalization event after the HTTP client aborts; issue #33 records the minimized failure.",
-			"$.events[1]":
-				"The stable 4.0.0 Handler leaves server work running after the HTTP client aborts; issue #33 records the minimized failure.",
 		},
 	});
 });
@@ -409,14 +389,7 @@ test(handler_scenario.promise, async ({ browser, playwright }, test_info) => {
 });
 
 test(prerender_scenario.promise, async ({ browser, playwright }, test_info) => {
-	await assert_native_parity(prerender_scenario, { browser, playwright }, test_info, {
-		stable: {
-			"$.outcome":
-				"The stable 4.0.0 compiler cannot serve the Effect-authored Prerender route; issue #34 preserves the failure.",
-			"$.status":
-				"The stable 4.0.0 compiler returns an error for the Effect-authored Prerender route.",
-		},
-	});
+	await assert_native_parity(prerender_scenario, { browser, playwright }, test_info);
 });
 
 test(transport_boundary_scenario.promise, async ({ browser, playwright }, test_info) => {
@@ -911,6 +884,14 @@ async function assert_native_parity<Value>(
 		const unexpected = comparison.differences.filter(
 			(difference) => !is_documented_difference(difference.path, documented),
 		);
+		const stale = Object.keys(documented).filter(
+			(documented_path) =>
+				!comparison.differences.some((difference) =>
+					is_documented_difference(difference.path, {
+						[documented_path]: documented[documented_path] ?? "",
+					}),
+				),
+		);
 
 		await attach_json_evidence(
 			test_info,
@@ -919,6 +900,7 @@ async function assert_native_parity<Value>(
 			{ comparison, deviations: documented, evidence },
 		);
 		expect(unexpected, `${target} must match native for ${scenario.id}`).toEqual([]);
+		expect(stale, `${target} deviations must describe observed evidence`).toEqual([]);
 	}
 }
 

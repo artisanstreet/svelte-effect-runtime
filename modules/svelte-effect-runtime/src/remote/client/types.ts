@@ -1,6 +1,7 @@
 import type { RemoteForm, RemoteFormInput, RemoteQueryUpdate } from "@sveltejs/kit";
 import type { RemoteFailure } from "$/remote/shared.ts";
 import type { Effect, Schema, Stream } from "effect";
+import type { RemoteLiveStream } from "$/live.ts";
 
 /** Runtime brand used to distinguish query-update callbacks. */
 export declare const effect_remote_query_update: unique symbol;
@@ -54,9 +55,11 @@ type EffectRemoteCommandUpdate = {
 
 type EffectRemoteQueryUpdateInput<Update> = Update extends EffectRemoteCommandUpdate
 	? never
-	: Update extends EffectRemoteQueryUpdate
+	: Update extends RemoteLiveStream<infer _Output, infer _ErrorType>
 		? Update
-		: never;
+		: Update extends EffectRemoteQueryUpdate
+			? Update
+			: never;
 
 type EffectRemoteQueryUpdates<Updates extends readonly unknown[]> = Updates & {
 	[Index in keyof Updates]: EffectRemoteQueryUpdateInput<Updates[Index]>;

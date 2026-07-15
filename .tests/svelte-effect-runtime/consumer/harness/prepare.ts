@@ -1,5 +1,5 @@
 import type { HarnessPhase, Target, TargetName, TargetSource } from "../../unit/harness/model.ts";
-import { get_conformance_target_url } from "../../unit/harness/model.ts";
+import { get_conformance_proxy_url } from "../../unit/harness/model.ts";
 import { get_target, make_targets } from "../../unit/harness/target.ts";
 import { read_packed_artifact_version } from "./artifact-manifest.ts";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -441,7 +441,7 @@ async function prepare_application(
 	const config_source = await readFile(config_path, "utf8");
 	const rendered_config = render_fixture_sveltekit_config(
 		config_source,
-		get_conformance_target_url(target.name),
+		get_conformance_proxy_url(target.name),
 		profile,
 		config_path,
 	);

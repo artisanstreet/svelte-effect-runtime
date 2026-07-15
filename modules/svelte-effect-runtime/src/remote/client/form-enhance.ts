@@ -1,4 +1,5 @@
 import { MakeEffectFromPromise, MakeEffectFromSync } from "$/remote/effect.ts";
+import { resolve_native_remote_query_updates } from "$/remote/query-update.ts";
 import type { EffectRemoteFormSubmit, NativeMethod } from "./types.ts";
 import { get_dispatcher } from "$/dispatcher.ts";
 import { has_method } from "./utils.ts";
@@ -82,7 +83,9 @@ const ResolveSubmitResult = <ErrorType>(result: unknown, updates_args: unknown[]
 	Effect.gen(function* () {
 		if (updates_args && has_method(result, "updates")) {
 			return yield* MakeEffectFromPromise<unknown, ErrorType>(() =>
-				Promise.resolve(result.updates(...updates_args)),
+				Promise.resolve(
+					result.updates(...resolve_native_remote_query_updates(updates_args)),
+				),
 			);
 		}
 

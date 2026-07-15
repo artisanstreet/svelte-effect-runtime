@@ -1,4 +1,5 @@
 import { copy_property_descriptors, has_method } from "./utils.ts";
+import { resolve_native_remote_query_updates } from "$/remote/query-update.ts";
 import { InvalidCommandFactoryError } from "$/errors.ts";
 import type { EffectRemoteCommandCall, NativeMethod, Pending } from "./types.ts";
 import { DecodeResponseOrValue } from "./responses.ts";
@@ -106,7 +107,7 @@ const InvokeCommand = <Input, Output, ErrorType>(
 			const updates_args = read_updates_args();
 
 			if (updates_args && has_method(result, "updates")) {
-				return result.updates(...updates_args);
+				return result.updates(...resolve_native_remote_query_updates(updates_args));
 			}
 
 			return result;
