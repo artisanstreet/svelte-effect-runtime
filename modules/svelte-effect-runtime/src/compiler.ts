@@ -345,7 +345,7 @@ async function rewrite_server_imports(code: string, id: string): Promise<string>
 				})
 			: [],
 	);
-	const has_exported_ser_prerender = has_exported_ser_prerender_call(
+	const ser_prerender_calls = collect_exported_ser_prerender_calls(
 		source_file,
 		prerender_binding_names,
 		prerender_namespace_names,
@@ -371,7 +371,7 @@ async function rewrite_server_imports(code: string, id: string): Promise<string>
 	);
 	let changed = false;
 
-	if (has_exported_ser_prerender && !has_sveltekit_prerender_import) {
+	if (ser_prerender_calls.size > 0 && !has_sveltekit_prerender_import) {
 		if (has_top_level_prerender_binding) {
 			throw new Error(
 				`[svelte-effect-runtime] ${filename}: Prerender remote modules reserve the top-level "prerender" binding for SvelteKit. Rename the existing binding.`,
@@ -426,16 +426,7 @@ async function rewrite_server_imports(code: string, id: string): Promise<string>
 			}
 		}
 
-		if (
-			ts.isCallExpression(node) &&
-			is_ser_prerender_callee(
-				node.expression,
-				prerender_binding_names,
-				prerender_namespace_names,
-				ts,
-			) &&
-			is_exported_variable_initializer(node, ts)
-		) {
+		if (ts.isCallExpression(node) && ser_prerender_calls.has(node)) {
 			const missing_arguments = Math.max(0, 3 - node.arguments.length);
 			const injected_arguments = [
 				...Array.from({ length: missing_arguments }, () => "undefined"),
@@ -478,27 +469,21 @@ function is_ser_prerender_callee(
 	);
 }
 
-function has_exported_ser_prerender_call(
+function collect_exported_ser_prerender_calls(
 	source_file: import("typescript").SourceFile,
 	binding_names: ReadonlySet<string>,
 	namespace_names: ReadonlySet<string>,
 	ts: typeof import("typescript"),
-): boolean {
-	let found = false;
+): ReadonlySet<import("typescript").CallExpression> {
+	const calls = new Set<import("typescript").CallExpression>();
 
 	const visit = (node: import("typescript").Node) => {
-		if (found) {
-			return;
-		}
-
 		if (
 			ts.isCallExpression(node) &&
 			is_ser_prerender_callee(node.expression, binding_names, namespace_names, ts) &&
 			is_exported_variable_initializer(node, ts)
 		) {
-			found = true;
-
-			return;
+			calls.add(node);
 		}
 
 		ts.forEachChild(node, visit);
@@ -506,7 +491,7 @@ function has_exported_ser_prerender_call(
 
 	visit(source_file);
 
-	return found;
+	return calls;
 }
 
 function is_exported_variable_initializer(
