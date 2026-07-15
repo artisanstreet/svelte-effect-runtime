@@ -37,6 +37,10 @@ const ServerProbeSchema = Schema.Struct({
 	exports: Schema.Array(Schema.String),
 	resolved: Schema.String,
 });
+const MinimumPeerProbeSchema = Schema.Struct({
+	kit_version: Schema.Literal("2.61.0"),
+	server_loaded: Schema.Literal(true),
+});
 
 const required_entrypoints = [
 	".",
@@ -131,6 +135,7 @@ test("packed package resolves every supported public and generated entrypoint", 
 	expect(manifest.version).toMatch(/^\d+\.\d+\.\d+/);
 	expect(manifest.files).toContain(".dist");
 	expect(Object.keys(manifest.exports).sort()).toEqual([...required_entrypoints].sort());
+	expect(manifest.peerDependencies?.["@sveltejs/kit"]).toBe("^2.61.0 || ^3.0.0-next.0");
 	expect(JSON.stringify([manifest.dependencies, manifest.peerDependencies])).not.toContain(
 		"workspace:",
 	);
@@ -164,6 +169,41 @@ test("packed package resolves every supported public and generated entrypoint", 
 	expect(artifact_entries.sort()).toEqual(
 		[".dist", "LICENSE", "README.md", "package.json"].sort(),
 	);
+}, 180_000);
+
+test("packed server entrypoint loads at the minimum supported SvelteKit peer", async () => {
+	const artifact = await ensure_packed_artifact();
+	const primary_versions = await read_primary_dependency_versions();
+	const workspace = await prepare_workspace("minimum-sveltekit-peer", artifact, {
+		name: "ser-packed-minimum-sveltekit-peer",
+		private: true,
+		type: "module",
+		dependencies: {
+			...primary_versions,
+			"@sveltejs/kit": "2.61.0",
+		},
+	});
+
+	await write_app_server_stub(workspace);
+
+	const probe = [
+		"import { createRequire } from 'node:module';",
+		"const require = createRequire(import.meta.url);",
+		"const kit = require('@sveltejs/kit/package.json');",
+		"await import('svelte-effect-runtime/server');",
+		"console.log(JSON.stringify({ kit_version: kit.version, server_loaded: true }));",
+	].join("\n");
+	const result = run_command(
+		process.execPath,
+		["--conditions=node", "--input-type=module", "--eval", probe],
+		workspace,
+	);
+
+	assert_command_succeeded("import packed server at minimum SvelteKit peer", result);
+
+	const observed = Schema.decodeUnknownSync(MinimumPeerProbeSchema)(JSON.parse(result.stdout));
+
+	expect(observed).toEqual({ kit_version: "2.61.0", server_loaded: true });
 }, 180_000);
 
 test("packed root and compiler entrypoints expose the runtime API through Node resolution", async () => {
@@ -224,6 +264,29 @@ test("packed browser and server entrypoints preserve their runtime boundaries", 
 	expect(browser.failures).toEqual(["ServerOnlyImportError", "ServerOnlyImportError"]);
 	expect(browser.resolved.replaceAll("\\", "/")).toMatch(/\/\.dist\/mod\.js$/);
 
+	await write_app_server_stub(workspace);
+
+	const server_probe = [
+		"const server = await import('svelte-effect-runtime/server');",
+		"const runtime = server.ServerRuntime.make();",
+		"console.log(JSON.stringify({ exports: Object.keys(server), resolved: import.meta.resolve('svelte-effect-runtime/server') }));",
+		"await runtime.dispose();",
+	].join("\n");
+	const server_result = run_command(
+		process.execPath,
+		["--conditions=node", "--input-type=module", "--eval", server_probe],
+		workspace,
+	);
+
+	assert_command_succeeded("probe packed server entrypoint", server_result);
+
+	const server = Schema.decodeUnknownSync(ServerProbeSchema)(JSON.parse(server_result.stdout));
+
+	expect([...server.exports].sort()).toEqual([...required_server_exports].sort());
+	expect(server.resolved.replaceAll("\\", "/")).toMatch(/\/\.dist\/server\.js$/);
+}, 180_000);
+
+async function write_app_server_stub(workspace: string): Promise<void> {
 	const app_virtual_module = join(workspace, "node_modules", "$app");
 
 	await mkdir(app_virtual_module, { recursive: true });
@@ -249,23 +312,4 @@ test("packed browser and server entrypoints preserve their runtime boundaries", 
 			"",
 		].join("\n"),
 	);
-
-	const server_probe = [
-		"const server = await import('svelte-effect-runtime/server');",
-		"const runtime = server.ServerRuntime.make();",
-		"console.log(JSON.stringify({ exports: Object.keys(server), resolved: import.meta.resolve('svelte-effect-runtime/server') }));",
-		"await runtime.dispose();",
-	].join("\n");
-	const server_result = run_command(
-		process.execPath,
-		["--conditions=node", "--input-type=module", "--eval", server_probe],
-		workspace,
-	);
-
-	assert_command_succeeded("probe packed server entrypoint", server_result);
-
-	const server = Schema.decodeUnknownSync(ServerProbeSchema)(JSON.parse(server_result.stdout));
-
-	expect([...server.exports].sort()).toEqual([...required_server_exports].sort());
-	expect(server.resolved.replaceAll("\\", "/")).toMatch(/\/\.dist\/server\.js$/);
-}, 180_000);
+}

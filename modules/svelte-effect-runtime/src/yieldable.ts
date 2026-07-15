@@ -1,4 +1,5 @@
 import { EmptyStreamYieldError, InvalidYieldableError } from "$/errors.ts";
+import { RemoteLiveYield } from "$/internal/live.ts";
 import { Effect, Option, Stream } from "effect";
 
 export type Yieldable<A = unknown, E = unknown, R = unknown> =
@@ -26,7 +27,10 @@ export function ToEffect<A, E, R>(
 	value: Yieldable<A, E, R>,
 ): Effect.Effect<A, E | EmptyStreamYieldError, R> {
 	if (Stream.isStream(value)) {
-		return Stream.runHead(value).pipe(
+		const Head = Stream.runHead(value);
+		const ResolveHead = Effect.provideService(Head, RemoteLiveYield, true);
+
+		return ResolveHead.pipe(
 			Effect.flatMap((option) => {
 				if (Option.isSome(option)) {
 					return Effect.succeed(option.value);

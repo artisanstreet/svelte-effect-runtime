@@ -431,6 +431,10 @@ async function assert_type_checks(filename: string, source: string): Promise<voi
 	const tsconfig_path = join(dir, "tsconfig.json");
 	const node_modules_root = to_tsconfig_path(dir, join(repo_root, "node_modules"));
 	const runtime_root = to_tsconfig_path(dir, join(repo_root, "modules", "svelte-effect-runtime"));
+	const sveltekit_internal_path = join(
+		repo_root,
+		"modules/svelte-effect-runtime/src/server/sveltekit-internal.d.ts",
+	);
 
 	/**
 	 * Give the isolated compiler the SvelteKit virtual module used by Handler.
@@ -492,7 +496,7 @@ export type PageServerLoad = ServerLoad<
 					strict: true,
 					target: "es2022",
 				},
-				files: [to_posix_path(source_path)],
+				files: [to_posix_path(sveltekit_internal_path), to_posix_path(source_path)],
 			},
 			null,
 			2,
