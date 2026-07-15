@@ -135,6 +135,7 @@ test("packed package resolves every supported public and generated entrypoint", 
 	expect(manifest.version).toMatch(/^\d+\.\d+\.\d+/);
 	expect(manifest.files).toContain(".dist");
 	expect(Object.keys(manifest.exports).sort()).toEqual([...required_entrypoints].sort());
+	expect(manifest.peerDependencies?.["@sveltejs/kit"]).toBe("^2.61.0 || ^3.0.0-next.0");
 	expect(JSON.stringify([manifest.dependencies, manifest.peerDependencies])).not.toContain(
 		"workspace:",
 	);
