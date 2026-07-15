@@ -533,8 +533,13 @@ async function observe_browser_contracts({
 	return observation;
 }
 
+async function open_hydrated_page(page: Page, path: string): Promise<void> {
+	await page.goto(path, { waitUntil: "domcontentloaded" });
+	await expect(page.getByTestId("hydration-ready")).toHaveText("true");
+}
+
 async function observe_page(page: Page, target: TargetName): Promise<PageObservation> {
-	await page.goto("/", { waitUntil: "networkidle" });
+	await open_hydrated_page(page, "/");
 
 	await expect(page.getByTestId("profile")).toHaveText("profile:alpha:configured");
 	await expect(page.getByTestId("request")).toHaveText("browser:none");
@@ -669,7 +674,7 @@ async function observe_keyed_form({
 	});
 	const page = await context.newPage();
 
-	await page.goto("/forms", { waitUntil: "networkidle" });
+	await open_hydrated_page(page, "/forms");
 	await page.getByTestId("beta-name").fill("beta");
 	await page.getByTestId("beta-label").fill("saved");
 	await page.getByTestId("beta-submit").click();
@@ -940,7 +945,7 @@ async function observe_query_behavior({
 	const traffic = traffic_recorder.traffic;
 
 	await request.put("/api/gates/query");
-	await page.goto("/query", { waitUntil: "networkidle" });
+	await open_hydrated_page(page, "/query");
 	await expect(page.getByTestId("cache")).toHaveText(/^cache:\d+$/);
 
 	const initial_cache = read_trailing_number(await page.getByTestId("cache").innerText());
@@ -1000,7 +1005,7 @@ async function observe_command_behavior({
 	const traffic = traffic_recorder.traffic;
 
 	await request.put("/api/gates/command");
-	await page.goto("/command", { waitUntil: "networkidle" });
+	await open_hydrated_page(page, "/command");
 
 	const initial_mutation = Number(await page.getByTestId("mutation").innerText());
 
@@ -1059,7 +1064,7 @@ async function observe_transport_boundary({
 	});
 	const page = await context.newPage();
 
-	await page.goto("/command", { waitUntil: "networkidle" });
+	await open_hydrated_page(page, "/command");
 
 	const failure_response = page.waitForResponse((response) =>
 		response.url().includes("/FailCommand"),
@@ -1113,7 +1118,7 @@ async function observe_transformed_form({
 		const page = await context.newPage();
 		const traffic_recorder = await capture_remote_traffic(page, traffic);
 
-		await page.goto("/forms", { waitUntil: "networkidle" });
+		await open_hydrated_page(page, "/forms");
 
 		return { context, page, traffic_recorder };
 	};
@@ -1387,7 +1392,7 @@ async function observe_handler_contracts({
 	const traffic_recorder = await capture_remote_traffic(page);
 	const traffic = traffic_recorder.traffic;
 
-	await page.goto("/handler/alpha", { waitUntil: "networkidle" });
+	await open_hydrated_page(page, "/handler/alpha");
 
 	const load = {
 		event_param: await page.getByTestId("handler-event-param").innerText(),

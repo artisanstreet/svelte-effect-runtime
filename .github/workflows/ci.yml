@@ -213,6 +213,28 @@ jobs:
               uses: ./.github/actions/setup
             - name: Verify capability
               run: vp node build/ci/run-capability.ts remote-transport
+            - name: Collect conformance evidence
+              if: always() && !cancelled()
+              run: |
+                  if [ ! -d .dist/conformance ]; then
+                    exit 0
+                  fi
+
+                  mkdir -p conformance-evidence
+
+                  for path in evidence playwright playwright-results.json targets.json matrix.json; do
+                    if [ -e ".dist/conformance/$path" ]; then
+                      cp -R ".dist/conformance/$path" conformance-evidence/
+                    fi
+                  done
+            - name: Upload conformance evidence
+              if: always() && !cancelled()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              with:
+                  name: conformance-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+                  path: conformance-evidence
+                  if-no-files-found: ignore
+                  retention-days: 14
 
     capability_public_api:
         name: Capability / Public API

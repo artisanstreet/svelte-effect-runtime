@@ -27,7 +27,7 @@
 		"test:conformance:broad": "corepack pnpm run check:conformance && corepack pnpm run test:conformance:contracts && corepack pnpm run test:conformance:signals && corepack pnpm exec playwright install chromium firefox webkit && corepack pnpm exec cross-env CONFORMANCE_LANE=broad playwright test --config .tests/svelte-effect-runtime/consumer/playwright.config.ts",
 		"test:conformance:contracts": "vp test run .tests/svelte-effect-runtime/public-api/package.test.ts .tests/svelte-effect-runtime/types/packed-types.test.ts .tests/svelte-effect-runtime/tooling/packed-consumer.test.ts",
 		"test:conformance:consumer": "corepack pnpm run check:conformance && corepack pnpm exec playwright install chromium && corepack pnpm exec playwright test --config .tests/svelte-effect-runtime/consumer/playwright.config.ts",
-		"test:conformance:signals": "vp test run --config .tests/svelte-effect-runtime/signals/vitest.config.ts"
+		"test:conformance:signals": "corepack pnpm exec playwright install chromium && corepack pnpm exec vitest run --config .tests/svelte-effect-runtime/signals/vitest.config.ts"
 	},
 	"devDependencies": {
 		"@effect/platform-node": "4.0.0-beta.93",
@@ -52,7 +52,7 @@
 		"svelte": "^5.56.0",
 		"typescript": "^6.0.3",
 		"vite": "catalog:",
-		"vitest": "^4.1.9",
+		"vitest": "4.1.9",
 		"yaml": "2.9.0"
 	},
 	"devEngines": {
