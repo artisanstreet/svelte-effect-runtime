@@ -18,6 +18,27 @@ test("the authoritative workflow preserves release safety and exact artifact pro
 	expect(violations).toEqual([]);
 });
 
+test("remote transport retains conformance evidence after failures", async () => {
+	const workflow = parse(await readFile(".github/workflows/ci.yml", "utf8"));
+	const steps = workflow.jobs.capability_transport.steps as ReadonlyArray<{
+		readonly if?: string;
+		readonly name?: string;
+		readonly uses?: string;
+		readonly with?: Record<string, unknown>;
+	}>;
+	const collect_step = steps.find((step) => step.name === "Collect conformance evidence");
+	const upload_step = steps.find((step) => step.name === "Upload conformance evidence");
+
+	expect(collect_step?.if).toBe("always() && !cancelled()");
+	expect(upload_step?.if).toBe("always() && !cancelled()");
+	expect(upload_step?.uses).toMatch(/^actions\/upload-artifact@[a-f0-9]{40}$/);
+	expect(upload_step?.with).toMatchObject({
+		"if-no-files-found": "ignore",
+		name: "conformance-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}",
+		path: "conformance-evidence",
+	});
+});
+
 test("workflow policy rejects a master publication path", async () => {
 	const workflow = parse(await readFile(".github/workflows/ci.yml", "utf8"));
 	const setup_action = parse(await readFile(".github/actions/setup/action.yml", "utf8"));

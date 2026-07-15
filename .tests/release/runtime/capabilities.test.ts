@@ -4,8 +4,8 @@ import {
 	get_capability_lane,
 	static_policy_test_files,
 } from "../../../build/ci/capabilities.ts";
+import { readdir, readFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
-import { readdir } from "node:fs/promises";
 import { expect, test } from "vitest";
 
 const expected_lane_names = [
@@ -33,6 +33,25 @@ test("issue 28 capability lanes have stable names and testable commands", () => 
 		args: ["pnpm", "run", "test:conformance:consumer"],
 	});
 	expect(() => get_capability_lane("release")).toThrow(/unknown capability lane/i);
+});
+
+test("signals capability installs a coherent browser test toolchain", async () => {
+	const manifest_path = resolve(process.cwd(), "package.json");
+	const manifest = JSON.parse(await readFile(manifest_path, "utf8")) as {
+		scripts: Record<string, string>;
+		devDependencies: Record<string, string>;
+	};
+	const script = manifest.scripts["test:conformance:signals"] ?? "";
+	const browser_version = manifest.devDependencies["@vitest/browser-playwright"];
+	const vitest_version = manifest.devDependencies.vitest;
+
+	expect(script).toContain("corepack pnpm exec playwright install chromium");
+	expect(script).toContain("corepack pnpm exec vitest run");
+	expect(script.indexOf("playwright install chromium")).toBeLessThan(
+		script.indexOf("vitest run"),
+	);
+	expect(vitest_version).toBe(browser_version);
+	expect(vitest_version).toMatch(/^\d+\.\d+\.\d+$/);
 });
 
 test("every current test belongs to exactly one capability or static policy group", async () => {

@@ -28,6 +28,7 @@ const ser_syntax_lint_ignored_paths = [
 	".tests/svelte-effect-runtime/consumer/fixtures/ser/src/lib/components/native-prerender-query.svelte",
 	".tests/svelte-effect-runtime/consumer/fixtures/ser/src/lib/components/native-prerender-summary.svelte",
 	".tests/svelte-effect-runtime/consumer/fixtures/ser/src/lib/components/query-page.svelte",
+	".tests/svelte-effect-runtime/consumer/fixtures/ser/src/routes/+layout.svelte",
 	".tests/svelte-effect-runtime/consumer/fixtures/ser/src/routes/prerender/+page.svelte",
 	".tests/svelte-effect-runtime/consumer/fixtures/stable/src/lib/components/command-page.svelte",
 	".tests/svelte-effect-runtime/consumer/fixtures/stable/src/lib/components/conformance-page.svelte",
