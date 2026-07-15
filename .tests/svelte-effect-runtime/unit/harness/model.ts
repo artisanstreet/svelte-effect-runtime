@@ -37,6 +37,14 @@ export const conformance_target_ports = {
 	candidate: 41_803,
 } as const satisfies Readonly<Record<TargetName, number>>;
 
+export function get_conformance_proxy_url(target: TargetName): string {
+	return `${conformance_proxy_protocol}://ser-conformance-${target}.localhost:${conformance_proxy_port}`;
+}
+
+export function get_conformance_target_url(target: TargetName): string {
+	return `http://127.0.0.1:${conformance_target_ports[target]}`;
+}
+
 export type TargetSource =
 	| { readonly _tag: "Native" }
 	| { readonly _tag: "Package"; readonly specifier: string }

@@ -1,4 +1,5 @@
 import type { HarnessPhase, Target, TargetName, TargetSource } from "../../unit/harness/model.ts";
+import { get_conformance_target_url } from "../../unit/harness/model.ts";
 import { get_target, make_targets } from "../../unit/harness/target.ts";
 import { read_packed_artifact_version } from "./artifact-manifest.ts";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -396,6 +397,7 @@ async function prepare_application(
 	);
 	const application_dir = join(applications_root, target.name);
 	const manifest_path = join(application_dir, "package.json");
+	const config_path = join(application_dir, "vite.config.ts");
 	const workspace_path = join(application_dir, "pnpm-workspace.yaml");
 	const checker_path = join(application_dir, ".harness", "check-svelte.ts");
 
@@ -420,6 +422,18 @@ async function prepare_application(
 	}
 
 	await prepare_adapter_workspace(repository_root, application_dir, workspace_path, profile);
+
+	const config_source = await readFile(config_path, "utf8");
+	const rendered_config = config_source.replace(
+		"__CONFORMANCE_ORIGIN__",
+		get_conformance_target_url(target.name),
+	);
+
+	if (rendered_config.includes("__")) {
+		throw new Error(`Unresolved fixture placeholder in ${config_path}.`);
+	}
+
+	await writeFile(config_path, rendered_config);
 
 	const manifest_source = await readFile(manifest_path, "utf8");
 	const manifest_record = Schema.decodeUnknownSync(JsonRecord)(JSON.parse(manifest_source));

@@ -4,10 +4,10 @@
 		GetRefreshable,
 		GetSlowQuery,
 	} from "$lib/conformance.remote";
-	import { GetBuildSnapshot, GetDynamicSnapshot } from "$lib/prerender.remote";
+	import { GetDynamicSnapshot } from "$lib/prerender.remote";
 
 	const refreshable_resource = GetRefreshable("cache");
-	const build_snapshot = GetBuildSnapshot();
+	const build_snapshot = GetDynamicSnapshot("static");
 	const dynamic_snapshot = GetDynamicSnapshot("runtime");
 
 	let cache = $state(await refreshable_resource);

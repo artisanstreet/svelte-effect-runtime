@@ -7,6 +7,9 @@ export default defineConfig({
 	plugins: [
 		sveltekit({
 			adapter: adapter(),
+			paths: {
+				origin: "__CONFORMANCE_ORIGIN__",
+			},
 			compilerOptions: {
 				experimental: {
 					async: true,

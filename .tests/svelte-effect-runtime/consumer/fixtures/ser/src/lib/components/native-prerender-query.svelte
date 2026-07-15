@@ -1,11 +1,10 @@
 <script lang="ts" effect>
 	import {
-		GetBuildSnapshot,
 		GetDynamicSnapshot,
 	} from "$lib/native-prerender.remote";
 	import { ToRemoteEffect } from "$lib/remote-compat";
 
-	const build_snapshot = yield* ToRemoteEffect(GetBuildSnapshot());
+	const build_snapshot = yield* ToRemoteEffect(GetDynamicSnapshot("static"));
 	const dynamic_snapshot = yield* ToRemoteEffect(GetDynamicSnapshot("runtime"));
 </script>
 
