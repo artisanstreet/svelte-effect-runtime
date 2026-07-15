@@ -496,7 +496,11 @@ function is_svelte_component_module(id: string, extensions: readonly string[]): 
 }
 
 function may_have_effect_diagnostics(code: string): boolean {
-	return code.includes("Effect") || /["']effect(?:\/Effect)?["']/.test(code);
+	return (
+		/\byield\s*\*/.test(code) ||
+		code.includes("Effect") ||
+		/["']effect(?:\/Effect)?["']/.test(code)
+	);
 }
 
 function may_have_ser_syntax(code: string): boolean {
