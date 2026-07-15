@@ -1,0 +1,18 @@
+name: Setup SER
+description: Install the locked CI toolchain and workspace dependencies.
+
+runs:
+    using: composite
+    steps:
+        - name: Setup Vite+
+          uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb
+          with:
+              version: 0.2.4
+              node-version: 24
+              cache: true
+              cache-dependency-path: pnpm-lock.yaml
+              run-install: false
+
+        - name: Install dependencies
+          shell: bash
+          run: corepack pnpm install --frozen-lockfile

@@ -1,10 +1,3 @@
-/**
- * Encodes remote form input into SvelteKit-compatible form data.
- *
- * @since 2.0.0
- * @param input - Input value supplied to the remote form.
- * @returns FormData payload for the remote endpoint.
- */
 export function to_form_data(input: unknown): FormData {
 	const form_data = new FormData();
 
@@ -49,9 +42,7 @@ function append_form_value(form_data: FormData, path: string, value: unknown): v
 	}
 
 	if (typeof value === "boolean") {
-		if (value) {
-			form_data.append(`b:${path}`, "on");
-		}
+		form_data.append(`b:${path}`, value ? "on" : "off");
 
 		return;
 	}

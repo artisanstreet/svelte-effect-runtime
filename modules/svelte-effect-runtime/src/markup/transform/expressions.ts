@@ -1,12 +1,5 @@
 import ts from "typescript";
 
-/**
- * Strips an event handler arrow function down to its executable body.
- *
- * @since 2.0.0
- * @param expr - Event handler expression text from the original markup.
- * @returns Handler parameters, body text, and body offsets inside `expr`.
- */
 export function strip_arrow_function(expr: string): {
 	params: string;
 	body: string;
@@ -47,13 +40,6 @@ export function strip_arrow_function(expr: string): {
 	return { params, body, body_start, body_end };
 }
 
-/**
- * Returns whether an expression is a callback function.
- *
- * @since 2.0.0
- * @param expr - Expression text from a markup attribute or expression tag.
- * @returns Whether the expression parses as an arrow or function expression.
- */
 export function is_callback_function_expression(expr: string): boolean {
 	const wrapped = `const __SER___callback = ${expr};`;
 	const sf = ts.createSourceFile(
@@ -77,20 +63,6 @@ export function is_callback_function_expression(expr: string): boolean {
 	);
 }
 
-/**
- * Classifies `yield*` placement inside an event handler body.
- *
- * @example
- * ```ts
- * analyze_event_body_yield_star("yield* save()");
- * ```
- *
- * @since 2.0.0
- * @param body - Event handler body text after the outer arrow has been
- *   stripped.
- * @returns Whether the body has top-level yield* expressions and whether any
- *   yield* appears inside a nested non-generator callback.
- */
 export function analyze_event_body_yield_star(body: string): {
 	has_top_level_yield_star: boolean;
 	has_nested_invalid_yield_star: boolean;
@@ -122,13 +94,6 @@ export function analyze_event_body_yield_star(body: string): {
 	return result;
 }
 
-/**
- * Collects free identifiers that must be captured as reactive dependencies.
- *
- * @since 2.0.0
- * @param expr_text - Markup expression text to inspect.
- * @returns Identifier names referenced by the expression.
- */
 export function collect_free_identifiers(expr_text: string): string[] {
 	const wrapped = `function* __SER___w() { return (${expr_text}); }`;
 	let sf: ts.SourceFile;

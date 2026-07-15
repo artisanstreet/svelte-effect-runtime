@@ -42,25 +42,7 @@ const remote_client_export_types = new Set<RemoteClientExportType>([
 	"prerender",
 ]);
 
-/**
- * Rewrites SvelteKit's generated client remote module into Effect-aware
- * wrappers while preserving the native remote factory calls.
- *
- * @example
- * ```ts
- * const rewritten = rewrite_remote_client_exports(
- *   `export const get_post = __remote.query("hash/get_post")`,
- * );
- * ```
- *
- * @since 2.0.0
- * @param code - Generated SvelteKit remote client module source to inspect and
- *   rewrite.
- * @param options - Optional rewrite options forwarded from the SER Vite plugin.
- * @returns The rewritten module source, or the original source when no remote
- *   exports are found.
- * @internal
- */
+/** Rewrites SvelteKit's generated remote client exports to SER adapters. */
 export function rewrite_remote_client_exports(
 	code: string,
 	options?: RemoteClientRewriteOptions,
@@ -85,14 +67,38 @@ export function rewrite_remote_client_exports(
 	}
 
 	const magic = new MagicString(code);
+	const has_remote_form = remote_exports.some((remote_export) => remote_export.type === "form");
 	const imports = [
+		`import { create_remote_query_adapter, create_remote_live_query_adapter, create_remote_prerender_adapter, create_remote_command_adapter, create_remote_form_adapter } from "svelte-effect-runtime/internal/remote-client";`,
+		has_remote_form &&
+			`import { goto as __SER___goto, invalidateAll as __SER___invalidate_all } from "$app/navigation";`,
 		`import { app_dir, base } from "$app/paths/internal/client";`,
-		`import { create_remote_query_adapter, create_remote_live_query_adapter, create_remote_command_adapter, create_remote_form_adapter } from "svelte-effect-runtime/internal/remote-client";`,
-	].join("\n");
+	]
+		.filter(Boolean)
+		.join("\n");
+
 	const helpers = [
 		`const __SER___remote_base = \`\${base}/\${app_dir}/remote\`;`,
 		`function __SER___decode_payload(value) { return value; }`,
-	].join("\n");
+		has_remote_form &&
+			[
+				`function __SER___navigate_remote_form(location, invalidate_all) {`,
+				`\tconst target = new URL(location, globalThis.location.href);`,
+				``,
+				`\tif (target.origin !== globalThis.location.origin) {`,
+				`\t\tglobalThis.location.assign(target.href);`,
+				``,
+				`\t\treturn Promise.resolve();`,
+				`\t}`,
+				``,
+				`\treturn __SER___goto(target, { invalidateAll: invalidate_all });`,
+				`}`,
+			].join("\n"),
+		has_remote_form &&
+			`const __SER___remote_form_transport = { binary_form_content_type: ${namespace_import.name}.__SER___binary_form_content_type, navigate: __SER___navigate_remote_form, refresh: __SER___invalidate_all, remote_request: ${namespace_import.name}.__SER___remote_request, serialize_binary_form: ${namespace_import.name}.__SER___serialize_binary_form };`,
+	]
+		.filter(Boolean)
+		.join("\n");
 	const debug_line = options?.debug ? `console.log("[ser] remote client wrappers loaded");` : "";
 	const injected = [imports, helpers, debug_line].filter(Boolean).join("\n");
 
@@ -119,11 +125,19 @@ function make_remote_export(
 	}
 
 	if (remote_type === "form") {
-		return `export const ${name} = create_remote_form_adapter(${native_call}, __SER___decode_payload, __SER___remote_base);`;
+		return `export const ${name} = create_remote_form_adapter(${native_call}, __SER___decode_payload, __SER___remote_base, __SER___remote_form_transport);`;
 	}
 
 	if (remote_type === "query_live") {
 		return `export const ${name} = create_remote_live_query_adapter(${native_call}, __SER___decode_payload);`;
+	}
+
+	if (remote_type === "prerender") {
+		return `export const ${name} = create_remote_prerender_adapter(${native_call}, __SER___decode_payload);`;
+	}
+
+	if (remote_type === "query_batch") {
+		return `export const ${name} = create_remote_query_adapter(${native_call}, __SER___decode_payload, "", "batch");`;
 	}
 
 	return `export const ${name} = create_remote_query_adapter(${native_call}, __SER___decode_payload);`;

@@ -11,7 +11,6 @@
  * @since 2.4.0
  * @param message - Technical diagnostic message describing the failed runtime
  *   invariant.
- * @returns A runtime-authored Error instance.
  */
 export class RuntimeError extends Error {
 	constructor(message: string) {
@@ -20,19 +19,6 @@ export class RuntimeError extends Error {
 	}
 }
 
-/**
- * Formats a runtime-owned error message with a stable screaming-case code.
- *
- * @example
- * ```ts
- * throw new Error(make_error_message("DISPATCHER_DISPOSED", "Dispatcher has been disposed"));
- * ```
- *
- * @since 2.0.0
- * @param code - Stable screaming-case identifier for the error category.
- * @param message - Human-readable error message without the leading code.
- * @returns The complete error message prefixed with the stable code.
- */
 export function make_error_message(code: string, message: string): string {
 	return `[${code}]: ${message}`;
 }
@@ -50,7 +36,6 @@ export function make_error_message(code: string, message: string): string {
  * @since 2.0.0
  * @param message - Technical diagnostic message for the transform failure.
  * @param filename - Source filename that triggered the transform failure.
- * @returns A preprocessor Error instance with source file context.
  */
 export class PreprocessError extends RuntimeError {
 	/**
@@ -80,7 +65,6 @@ export class PreprocessError extends RuntimeError {
  * @param filename - Source filename containing the unsupported statement.
  * @param statement_text - Full source text for the statement containing
  *   mixed async work.
- * @returns A preprocessor Error instance with statement context.
  */
 export class AwaitInEffectWorkError extends PreprocessError {
 	/**
@@ -123,7 +107,6 @@ export class AwaitInEffectWorkError extends PreprocessError {
  *   Effect work.
  * @param expression_text - Full source text for the rune expression.
  * @param filename - Source filename containing the unsupported rune.
- * @returns A preprocessor Error instance with rune source context.
  */
 export class AsyncEffectInSyncRuneError extends PreprocessError {
 	/**
@@ -176,7 +159,6 @@ export class AsyncEffectInSyncRuneError extends PreprocessError {
  * @param filename - Source filename containing the invalid event handler.
  * @param expression_text - Event handler expression that contains the nested
  *   unsupported async Effect work.
- * @returns A preprocessor Error instance with event expression context.
  */
 export class AsyncEffectInEventCallbackError extends PreprocessError {
 	/**
@@ -226,7 +208,6 @@ export class AsyncEffectInEventCallbackError extends PreprocessError {
  *   invalid event handler callback was found.
  * @param expression_text - Original event handler callback text that contained
  *   `yield*` and should be rewritten as a direct event Effect expression.
- * @returns A preprocessor Error instance with event callback context.
  */
 export class YieldStarInEventCallbackError extends PreprocessError {
 	/**
@@ -276,7 +257,6 @@ export class YieldStarInEventCallbackError extends PreprocessError {
  * @since 2.4.2
  * @param filename - Source filename containing the unsupported markup.
  * @param expression_text - The unsupported markup expression text.
- * @returns A preprocessor Error instance with markup source context.
  */
 export class UnsupportedMarkupEffectPositionError extends PreprocessError {
 	/**
@@ -315,7 +295,6 @@ export class UnsupportedMarkupEffectPositionError extends PreprocessError {
  * ```
  *
  * @since 2.4.0
- * @returns An Error describing missing request context.
  */
 export class RequestEventUnavailableError extends RuntimeError {
 	constructor() {
@@ -335,7 +314,6 @@ export class RequestEventUnavailableError extends RuntimeError {
  * ```
  *
  * @since 2.4.0
- * @returns An Error describing the invalid Query overload usage.
  */
 export class UncheckedQueryHandlerMissingError extends RuntimeError {
 	constructor() {
@@ -355,7 +333,6 @@ export class UncheckedQueryHandlerMissingError extends RuntimeError {
  * ```
  *
  * @since 2.4.0
- * @returns An Error describing the invalid batch Query overload usage.
  */
 export class BatchQueryHandlerMissingError extends RuntimeError {
 	constructor() {
@@ -375,7 +352,6 @@ export class BatchQueryHandlerMissingError extends RuntimeError {
  * ```
  *
  * @since 2.4.0
- * @returns An Error describing the invalid live Query overload usage.
  */
 export class UncheckedLiveQueryHandlerMissingError extends RuntimeError {
 	constructor() {
@@ -395,7 +371,6 @@ export class UncheckedLiveQueryHandlerMissingError extends RuntimeError {
  * ```
  *
  * @since 2.4.0
- * @returns An Error describing the invalid Command overload usage.
  */
 export class UncheckedCommandHandlerMissingError extends RuntimeError {
 	constructor() {
@@ -415,7 +390,6 @@ export class UncheckedCommandHandlerMissingError extends RuntimeError {
  * ```
  *
  * @since 2.4.0
- * @returns An Error describing the invalid Form overload usage.
  */
 export class UncheckedFormHandlerMissingError extends RuntimeError {
 	constructor() {
@@ -435,7 +409,6 @@ export class UncheckedFormHandlerMissingError extends RuntimeError {
  * ```
  *
  * @since 2.4.0
- * @returns An Error describing the invalid Prerender overload usage.
  */
 export class UncheckedPrerenderHandlerMissingError extends RuntimeError {
 	constructor() {
@@ -455,7 +428,6 @@ export class UncheckedPrerenderHandlerMissingError extends RuntimeError {
  * ```
  *
  * @since 2.4.0
- * @returns An Error describing the expected live query return protocol.
  */
 export class InvalidLiveQueryReturnError extends RuntimeError {
 	constructor() {
@@ -476,7 +448,6 @@ export class InvalidLiveQueryReturnError extends RuntimeError {
  * ```
  *
  * @since 3.4.8
- * @returns An Error describing an empty Stream in a value position.
  */
 export class EmptyStreamYieldError extends RuntimeError {
 	constructor() {
@@ -484,6 +455,36 @@ export class EmptyStreamYieldError extends RuntimeError {
 			"Cannot resolve yield* stream expression because the Stream completed without emitting a value.",
 		);
 		this.name = "EmptyStreamYieldError";
+	}
+}
+
+/**
+ * Thrown when generated component code receives a value that cannot be yielded
+ * through the SER runtime.
+ *
+ * @example
+ * ```ts
+ * throw new InvalidYieldableError(null);
+ * ```
+ *
+ * @since 4.0.0
+ * @param value - Runtime value that was expected to be an Effect, generator, or
+ *   Stream.
+ */
+export class InvalidYieldableError extends RuntimeError {
+	/**
+	 * Runtime value rejected by the generated yield boundary.
+	 *
+	 * @since 4.0.0
+	 */
+	readonly value: unknown;
+
+	constructor(value: unknown) {
+		super(
+			"Cannot resolve yield* expression because it returned a non-yieldable value. Expected an Effect, generator, or Stream.",
+		);
+		this.name = "InvalidYieldableError";
+		this.value = value;
 	}
 }
 
@@ -496,7 +497,6 @@ export class EmptyStreamYieldError extends RuntimeError {
  * ```
  *
  * @since 2.4.0
- * @returns An Error describing an invalid dispatcher lifecycle transition.
  */
 export class DispatcherDisposedError extends RuntimeError {
 	constructor() {
@@ -518,7 +518,6 @@ export class DispatcherDisposedError extends RuntimeError {
  *
  * @since 3.4.0
  * @param runtime_name - Public runtime API that was initialized more than once.
- * @returns An Error describing the invalid runtime lifecycle transition.
  */
 export class RuntimeAlreadyInitializedError extends RuntimeError {
 	constructor(runtime_name: string) {
@@ -541,7 +540,6 @@ export class RuntimeAlreadyInitializedError extends RuntimeError {
  * ```
  *
  * @since 2.4.0
- * @returns An Error describing an invalid query adapter input.
  */
 export class InvalidQueryFactoryError extends RuntimeError {
 	constructor() {
@@ -549,6 +547,20 @@ export class InvalidQueryFactoryError extends RuntimeError {
 			"Invalid query factory: expected a function or an object exposing query/load methods from SvelteKit remote query generation.",
 		);
 		this.name = "InvalidQueryFactoryError";
+	}
+}
+
+/**
+ * Thrown when a generated or native remote prerender export is not callable.
+ *
+ * @since 4.0.0
+ */
+export class InvalidPrerenderFactoryError extends RuntimeError {
+	constructor() {
+		super(
+			"Invalid prerender factory: expected a function from SvelteKit remote prerender generation.",
+		);
+		this.name = "InvalidPrerenderFactoryError";
 	}
 }
 
@@ -561,7 +573,6 @@ export class InvalidQueryFactoryError extends RuntimeError {
  * ```
  *
  * @since 2.4.0
- * @returns An Error describing an invalid live query adapter input.
  */
 export class InvalidLiveQueryFactoryError extends RuntimeError {
 	constructor() {
@@ -581,7 +592,6 @@ export class InvalidLiveQueryFactoryError extends RuntimeError {
  * ```
  *
  * @since 2.4.0
- * @returns An Error describing an invalid command adapter input.
  */
 export class InvalidCommandFactoryError extends RuntimeError {
 	constructor() {
@@ -601,7 +611,6 @@ export class InvalidCommandFactoryError extends RuntimeError {
  * ```
  *
  * @since 2.4.0
- * @returns An Error describing missing form transport metadata.
  */
 export class RemoteFormEndpointMissingError extends RuntimeError {
 	constructor() {
@@ -623,7 +632,6 @@ export class RemoteFormEndpointMissingError extends RuntimeError {
  *
  * @since 2.4.0
  * @param envelope - Raw response envelope returned by the remote form endpoint.
- * @returns An Error describing malformed form response data.
  */
 export class InvalidRemoteFormResponseError extends RuntimeError {
 	/**
@@ -653,7 +661,6 @@ export class InvalidRemoteFormResponseError extends RuntimeError {
  *
  * @since 2.4.0
  * @param envelope - Raw response envelope returned by the remote form endpoint.
- * @returns An Error describing unsupported form response data.
  */
 export class UnsupportedRemoteFormResponseError extends RuntimeError {
 	/**
@@ -682,7 +689,6 @@ export class UnsupportedRemoteFormResponseError extends RuntimeError {
  *
  * @since 2.4.0
  * @param raw - Raw serialized remote failure payload that failed decoding.
- * @returns An Error describing a malformed remote failure payload.
  */
 export class RemoteErrorDecodeError extends RuntimeError {
 	/**
@@ -711,7 +717,6 @@ export class RemoteErrorDecodeError extends RuntimeError {
  *
  * @since 2.4.0
  * @param export_name - Name of the server-only root export that was invoked.
- * @returns An Error describing a missing server rewrite.
  */
 export class ServerOnlyImportError extends RuntimeError {
 	/**
@@ -740,7 +745,6 @@ export class ServerOnlyImportError extends RuntimeError {
  *
  * @since 2.4.0
  * @param export_name - Name of the `$app/server` export that was invoked.
- * @returns An Error describing an unavailable SvelteKit virtual module export.
  */
 export class SvelteKitServerExportUnavailableError extends RuntimeError {
 	/**
@@ -770,7 +774,6 @@ export class SvelteKitServerExportUnavailableError extends RuntimeError {
  *
  * @since 2.4.0
  * @param helper_name - SER helper name that triggered the context failure.
- * @returns An Error describing the required `.remote.ts` placement.
  */
 export class RemoteHelperContextError extends RuntimeError {
 	/**
@@ -802,7 +805,6 @@ export class RemoteHelperContextError extends RuntimeError {
  *
  * @since 2.4.0
  * @param value - Non-Error value thrown while creating a remote helper.
- * @returns An Error preserving the remote helper failure value.
  */
 export class RemoteHelperError extends RuntimeError {
 	/**

@@ -1,8 +1,19 @@
+import {
+	append_sveltekit_remote_transport_bridge,
+	is_sveltekit_remote_runtime_index,
+	make_missing_sveltekit_remote_runtime_message,
+} from "./compiler/sveltekit-remote-bridge.ts";
 import { find_svelte_effect_diagnostics } from "./diagnostics.ts";
 import type { Plugin } from "vite";
 
 /**
  * Options for the {@link effect} Vite plugin.
+ *
+ * @example
+ * ```ts
+ * const options: EffectOptions = { debug: true };
+ * const plugins = effect(options);
+ * ```
  *
  * @since 2.0.0
  */
@@ -58,7 +69,6 @@ export function effect(options?: EffectOptions): Plugin[] {
 
 	return [
 		make_diagnostics_plugin(component_filter),
-		make_reserved_helper_guard_plugin(component_filter),
 		make_svelte_transform_plugin(component_filter),
 		make_server_rewrite_plugin(),
 		make_remote_client_wrapper_plugin(options),
@@ -72,7 +82,7 @@ function make_diagnostics_plugin(component_filter: SvelteComponentModuleFilter):
 		name: "svelte-effect-runtime:diagnostics",
 
 		transform(code: string, id: string) {
-			if (!component_filter.is_module(id)) {
+			if (!component_filter.is_module(id) || !may_have_effect_diagnostics(code)) {
 				return undefined;
 			}
 
@@ -108,28 +118,6 @@ function make_diagnostics_plugin(component_filter: SvelteComponentModuleFilter):
 	};
 }
 
-function make_reserved_helper_guard_plugin(component_filter: SvelteComponentModuleFilter): Plugin {
-	return {
-		name: "svelte-effect-runtime:reserved-helper-guard",
-
-		transform(code: string, id: string) {
-			if (!component_filter.is_module(id) || !has_ser_syntax(code)) {
-				return undefined;
-			}
-
-			const reserved_names = find_reserved_helper_names(code);
-
-			if (reserved_names.length === 0) {
-				return undefined;
-			}
-
-			this.warn(make_reserved_helper_warning(reserved_names));
-
-			return undefined;
-		},
-	};
-}
-
 function make_svelte_transform_plugin(component_filter: SvelteComponentModuleFilter): Plugin {
 	return {
 		name: "svelte-effect-runtime:svelte-transform",
@@ -149,8 +137,8 @@ function make_svelte_transform_plugin(component_filter: SvelteComponentModuleFil
 			config.logger.info(make_pre_transform_plugin_notice(conflicting_plugin_names));
 		},
 
-		async transform(code: string, id: string, options?: { ssr?: boolean }) {
-			if (!component_filter.is_module(id)) {
+		async transform(code: string, id: string, options?: { ssr?: boolean | undefined }) {
+			if (!component_filter.is_module(id) || !may_have_ser_syntax(code)) {
 				return undefined;
 			}
 
@@ -390,9 +378,25 @@ function has_file_extension(filename: string, extensions: readonly string[]): bo
 }
 
 function make_remote_client_wrapper_plugin(options?: EffectOptions): Plugin {
+	let has_remote_form_module = false;
+	let has_sveltekit_remote_bridge = false;
+
 	return {
 		name: "svelte-effect-runtime:remote-client",
 		enforce: "post",
+
+		buildStart() {
+			has_remote_form_module = false;
+			has_sveltekit_remote_bridge = false;
+		},
+
+		buildEnd(error) {
+			if (error || !has_remote_form_module || has_sveltekit_remote_bridge) {
+				return;
+			}
+
+			this.error(make_missing_sveltekit_remote_runtime_message());
+		},
 
 		config() {
 			return { ssr: { noExternal: ["svelte-effect-runtime"] } };
@@ -422,8 +426,32 @@ function make_remote_client_wrapper_plugin(options?: EffectOptions): Plugin {
 		},
 
 		async transform(code: string, id: string) {
+			if (is_sveltekit_remote_runtime_index(id)) {
+				const rewritten = append_sveltekit_remote_transport_bridge(code);
+
+				has_sveltekit_remote_bridge = true;
+
+				if (rewritten === code) {
+					return undefined;
+				}
+
+				return { code: rewritten, map: null };
+			}
+
 			if (!is_remote_module(id) || !code.includes("__sveltekit/remote")) {
 				return undefined;
+			}
+
+			const has_remote_form = /\.[\s\n]*form[\s\n]*\(/.test(code);
+
+			has_remote_form_module ||= has_remote_form;
+
+			if (has_remote_form) {
+				const resolved_runtime = await this.resolve("__sveltekit/remote", id);
+
+				if (!resolved_runtime || !is_sveltekit_remote_runtime_index(resolved_runtime.id)) {
+					this.error(make_missing_sveltekit_remote_runtime_message());
+				}
 			}
 
 			const rewritten = await rewrite_remote_client_exports(code, options);
@@ -467,38 +495,12 @@ function is_svelte_component_module(id: string, extensions: readonly string[]): 
 	return [...params.keys()].every((key) => allowed_params.includes(key));
 }
 
-function has_ser_syntax(code: string): boolean {
-	return /\byield\s*\*/.test(code) || /<script\b[^>]*\beffect(?:[\s=>]|$)/.test(code);
+function may_have_effect_diagnostics(code: string): boolean {
+	return code.includes("Effect") || /["']effect(?:\/Effect)?["']/.test(code);
 }
 
-function find_reserved_helper_names(code: string): string[] {
-	const script_segments = [...code.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi)].map(
-		(match) => match[1] ?? "",
-	);
-	const markup_segments = [...code.matchAll(/\{[^{}]*(?:Dispatcher|Code)[^{}]*\}/g)].map(
-		(match) => match[0],
-	);
-	const search_segments = [...script_segments, ...markup_segments];
-
-	return ["Dispatcher", "Code"].filter((name) =>
-		search_segments.some((segment) => new RegExp(`\\b${name}\\b`).test(segment)),
-	);
-}
-
-function make_reserved_helper_warning(names: string[]): string {
-	const quoted_names = names.map((name) => `\`${name}\``);
-	const subject =
-		quoted_names.length === 1
-			? quoted_names[0]
-			: `${quoted_names.slice(0, -1).join(", ")} and ${
-					quoted_names[quoted_names.length - 1]
-				}`;
-	const verb = names.length === 1 ? "is" : "are";
-
-	return [
-		`[svelte-effect-runtime] ${subject} ${verb} reserved for generated markup helpers.`,
-		`Rename or alias local bindings that use ${subject} before using SER syntax in this component.`,
-	].join(" ");
+function may_have_ser_syntax(code: string): boolean {
+	return /\byield\s*\*/.test(code) || /<script\b[^>]*\beffect(?:[\s=>]|$)/i.test(code);
 }
 
 /**

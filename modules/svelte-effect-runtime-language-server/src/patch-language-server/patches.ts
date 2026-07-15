@@ -1,20 +1,10 @@
 /** oxlint-disable no-explicit-any */
-import {
-	CodeActionsProviderImpl,
-	DocumentSnapshot,
-	FallbackTranspiledSvelteDocument,
-	patch_marker,
-	SvelteDocument,
-	TypeScriptSnapshotManagerModule,
-	TypeScriptSvelteSysModule,
-	TypeScriptSvelteUtils,
-	TranspiledSvelteDocument,
-	ts,
-} from "./svelte-internals.ts";
-import { is_invalid_position } from "./document-mappers.ts";
-import { prepare_virtual_document } from "./virtual-document.ts";
+import { type SvelteInternalsService, SvelteInternals, patch_marker } from "./svelte-internals.ts";
 import { rebind_snapshot_to_original_document } from "./snapshot.ts";
+import { prepare_virtual_document } from "./virtual-document.ts";
+import { is_invalid_position } from "./document-mappers.ts";
 import type { TransformSet } from "./types.ts";
+import { Effect } from "effect";
 
 type TransformSvelteEffect = (
 	code: string,
@@ -28,128 +18,177 @@ const virtual_svelte_file_extensions = [
 	{ source: ".sv", virtual: ".d.sv.ts" },
 ];
 
-export function patch_svelte_file_extensions() {
-	if (TypeScriptSvelteUtils[patch_marker]) {
-		return;
-	}
+export const PatchSvelteFileExtensions = () =>
+	Effect.gen(function* () {
+		const internals = yield* SvelteInternals;
 
-	TypeScriptSvelteUtils.isSvelteFilePath = is_svelte_file_path;
-	TypeScriptSvelteUtils.isVirtualSvelteFilePath = is_virtual_svelte_file_path;
-	TypeScriptSvelteUtils.toRealSvelteFilePath = to_real_svelte_file_path;
-	TypeScriptSvelteUtils.toVirtualSvelteFilePath = to_virtual_svelte_file_path;
-	TypeScriptSvelteUtils.ensureRealSvelteFilePath = ensure_real_svelte_file_path;
-	TypeScriptSvelteUtils[patch_marker] = true;
+		yield* Effect.sync(() => {
+			const { svelte_utils } = internals;
 
-	patch_svelte_sys_file_extensions();
-	patch_snapshot_manager_file_extensions();
-}
+			if (svelte_utils[patch_marker]) {
+				return;
+			}
 
-export function patch_svelte_compiler_path(transform_svelte_effect: TransformSvelteEffect) {
-	const effect_preprocessor = create_effect_transform_preprocessor(transform_svelte_effect);
+			svelte_utils.isSvelteFilePath = is_svelte_file_path;
+			svelte_utils.isVirtualSvelteFilePath = is_virtual_svelte_file_path;
+			svelte_utils.toRealSvelteFilePath = to_real_svelte_file_path;
+			svelte_utils.toVirtualSvelteFilePath = to_virtual_svelte_file_path;
+			svelte_utils.ensureRealSvelteFilePath = ensure_real_svelte_file_path;
 
-	patch_static_factory(TranspiledSvelteDocument, (originalCreate: any) => {
-		return function create(this: unknown, document: unknown, config: any) {
-			const preprocess = merge_preprocessors(config?.preprocess, effect_preprocessor);
-			return originalCreate.call(
-				this,
-				document,
-				with_async_compiler_options({
-					...config,
-					preprocess,
-				}),
-			);
-		};
+			patch_svelte_sys_file_extensions(internals);
+			patch_snapshot_manager_file_extensions(internals);
+			svelte_utils[patch_marker] = true;
+		});
 	});
 
-	patch_static_factory(FallbackTranspiledSvelteDocument, (originalCreate: any) => {
-		return function create(this: unknown, document: unknown, preprocessors: any[] = []) {
-			return originalCreate.call(
-				this,
-				document,
-				merge_preprocessors(preprocessors, effect_preprocessor),
+export const PatchSvelteCompilerPath = (transform_svelte_effect: TransformSvelteEffect) =>
+	Effect.gen(function* () {
+		const internals = yield* SvelteInternals;
+
+		yield* Effect.sync(() => {
+			const effect_preprocessor =
+				create_effect_transform_preprocessor(transform_svelte_effect);
+			const { typescript } = internals;
+
+			patch_static_factory(internals.transpiled_svelte_document, (original_create: any) => {
+				return function create(this: unknown, document: unknown, config: any) {
+					const preprocess = merge_preprocessors(
+						config?.preprocess,
+						effect_preprocessor,
+						typescript,
+					);
+
+					return original_create.call(
+						this,
+						document,
+						with_async_compiler_options({
+							...config,
+							preprocess,
+						}),
+					);
+				};
+			});
+
+			patch_static_factory(
+				internals.fallback_transpiled_svelte_document,
+				(original_create: any) => {
+					return function create(
+						this: unknown,
+						document: unknown,
+						preprocessors: any[] = [],
+					) {
+						return original_create.call(
+							this,
+							document,
+							merge_preprocessors(preprocessors, effect_preprocessor, typescript),
+						);
+					};
+				},
 			);
-		};
+
+			patch_svelte_document_compile_options(internals);
+		});
 	});
 
-	patch_svelte_document_compile_options();
-}
+export const PatchTypeScriptSnapshotPath = (transforms: TransformSet) =>
+	Effect.gen(function* () {
+		const internals = yield* SvelteInternals;
 
-export function patch_typescript_snapshot_path(transforms: TransformSet) {
-	const original_from_document = DocumentSnapshot.fromDocument;
+		yield* Effect.sync(() => {
+			const { document_snapshot } = internals;
 
-	DocumentSnapshot.fromDocument = function fromDocument(
-		this: unknown,
-		document: any,
-		options: any,
-	) {
-		const prepared = prepare_virtual_document(document, transforms);
+			if (document_snapshot.fromDocument[patch_marker]) {
+				return;
+			}
 
-		if (!prepared) {
-			return original_from_document.call(this, document, options);
-		}
+			const original_from_document = document_snapshot.fromDocument;
 
-		const snapshot = original_from_document.call(this, prepared.document, options);
-		return rebind_snapshot_to_original_document(snapshot, document, prepared);
-	};
-	DocumentSnapshot.fromDocument[patch_marker] = true;
+			document_snapshot.fromDocument = function fromDocument(
+				this: unknown,
+				document: any,
+				options: any,
+			) {
+				const prepared = prepare_virtual_document(document, transforms, internals);
 
-	DocumentSnapshot.fromSvelteFilePath = function fromSvelteFilePath(
-		filePath: string,
-		createDocument: (path: string, text: string) => any,
-		options: any,
-		tsSystem: { readFile(path: string): string | undefined },
-	) {
-		const original_text = tsSystem.readFile(filePath) ?? "";
-		return DocumentSnapshot.fromDocument(createDocument(filePath, original_text), options);
-	};
-	DocumentSnapshot.fromSvelteFilePath[patch_marker] = true;
-}
+				if (!prepared) {
+					return original_from_document.call(this, document, options);
+				}
 
-function patch_static_factory(target_class: any, makeReplacement: (originalCreate: any) => any) {
+				const snapshot = original_from_document.call(this, prepared.document, options);
+
+				return rebind_snapshot_to_original_document(snapshot, document, prepared);
+			};
+			document_snapshot.fromDocument[patch_marker] = true;
+
+			document_snapshot.fromSvelteFilePath = function fromSvelteFilePath(
+				file_path: string,
+				create_document: (path: string, text: string) => any,
+				options: any,
+				ts_system: { readFile(path: string): string | undefined },
+			) {
+				const original_text = ts_system.readFile(file_path) ?? "";
+
+				return document_snapshot.fromDocument(
+					create_document(file_path, original_text),
+					options,
+				);
+			};
+			document_snapshot.fromSvelteFilePath[patch_marker] = true;
+		});
+	});
+
+function patch_static_factory(target_class: any, make_replacement: (original_create: any) => any) {
 	if (target_class.create[patch_marker]) {
 		return;
 	}
 
 	const original_create = target_class.create;
-	target_class.create = makeReplacement(original_create);
+
+	target_class.create = make_replacement(original_create);
 	target_class.create[patch_marker] = true;
 }
 
-function patch_svelte_document_compile_options() {
-	if (SvelteDocument.prototype.getCompiledWith?.[patch_marker]) {
+function patch_svelte_document_compile_options(internals: SvelteInternalsService) {
+	const { svelte_document } = internals;
+
+	if (svelte_document.prototype.getCompiledWith?.[patch_marker]) {
 		return;
 	}
 
-	const original_get_compiled_with = SvelteDocument.prototype.getCompiledWith;
+	const original_get_compiled_with = svelte_document.prototype.getCompiledWith;
 
-	SvelteDocument.prototype.getCompiledWith = function getCompiledWith(
+	svelte_document.prototype.getCompiledWith = function getCompiledWith(
 		this: unknown,
 		options: any = {},
 	) {
 		return original_get_compiled_with.call(this, with_async_compile_options(options));
 	};
-	SvelteDocument.prototype.getCompiledWith[patch_marker] = true;
+	svelte_document.prototype.getCompiledWith[patch_marker] = true;
 }
 
-function patch_svelte_sys_file_extensions() {
-	if (TypeScriptSvelteSysModule.createSvelteSys[patch_marker]) {
+function patch_svelte_sys_file_extensions(internals: SvelteInternalsService) {
+	const { svelte_sys_module } = internals;
+
+	if (svelte_sys_module.createSvelteSys[patch_marker]) {
 		return;
 	}
 
-	TypeScriptSvelteSysModule.createSvelteSys = function createSvelteSys(tsSystem: any) {
-		return create_svelte_sys(tsSystem);
+	svelte_sys_module.createSvelteSys = function createSvelteSys(ts_system: any) {
+		return create_svelte_sys(ts_system);
 	};
-	TypeScriptSvelteSysModule.createSvelteSys[patch_marker] = true;
+	svelte_sys_module.createSvelteSys[patch_marker] = true;
 }
 
-function patch_snapshot_manager_file_extensions() {
-	if (TypeScriptSnapshotManagerModule.SnapshotManager[patch_marker]) {
+function patch_snapshot_manager_file_extensions(internals: SvelteInternalsService) {
+	const { snapshot_manager_module } = internals;
+
+	if (snapshot_manager_module.SnapshotManager[patch_marker]) {
 		return;
 	}
 
-	const OriginalSnapshotManager = TypeScriptSnapshotManagerModule.SnapshotManager;
+	const OriginalSnapshotManager = snapshot_manager_module.SnapshotManager;
 
-	TypeScriptSnapshotManagerModule.SnapshotManager = class SnapshotManager extends (
+	snapshot_manager_module.SnapshotManager = class SnapshotManager extends (
 		OriginalSnapshotManager
 	) {
 		constructor(...args: any[]) {
@@ -158,13 +197,13 @@ function patch_snapshot_manager_file_extensions() {
 			this.watchExtensions = with_svelte_file_extensions(this.watchExtensions);
 		}
 	};
-	TypeScriptSnapshotManagerModule.SnapshotManager[patch_marker] = true;
+	snapshot_manager_module.SnapshotManager[patch_marker] = true;
 }
 
-function create_svelte_sys(tsSystem: any) {
-	const file_exists_cache = create_file_exists_cache(tsSystem);
+function create_svelte_sys(ts_system: any) {
+	const file_exists_cache = create_file_exists_cache(ts_system);
 
-	function svelteFileExists(path: string) {
+	function svelte_file_exists(path: string) {
 		if (!is_virtual_svelte_file_path(path)) {
 			return false;
 		}
@@ -186,23 +225,23 @@ function create_svelte_sys(tsSystem: any) {
 		return file_exists_cache.get(svelte_path);
 	}
 
-	function getRealSveltePathIfExists(path: string) {
-		return svelteFileExists(path) ? to_real_svelte_file_path(path) : path;
+	function get_real_svelte_path_if_exists(path: string) {
+		return svelte_file_exists(path) ? to_real_svelte_file_path(path) : path;
 	}
 
-	const svelteSys = {
-		...tsSystem,
-		svelteFileExists,
-		getRealSveltePathIfExists,
+	const svelte_sys = {
+		...ts_system,
+		svelteFileExists: svelte_file_exists,
+		getRealSveltePathIfExists: get_real_svelte_path_if_exists,
 		fileExists(path: string) {
-			if (svelteFileExists(path)) {
+			if (svelte_file_exists(path)) {
 				return true;
 			}
 
 			return file_exists_cache.get(path);
 		},
 		readFile(path: string) {
-			return tsSystem.readFile(getRealSveltePathIfExists(path));
+			return ts_system.readFile(get_real_svelte_path_if_exists(path));
 		},
 		readDirectory(
 			path: string,
@@ -211,7 +250,7 @@ function create_svelte_sys(tsSystem: any) {
 			include?: readonly string[],
 			depth?: number,
 		) {
-			return tsSystem.readDirectory(
+			return ts_system.readDirectory(
 				path,
 				with_svelte_file_extensions(extensions),
 				exclude,
@@ -222,18 +261,18 @@ function create_svelte_sys(tsSystem: any) {
 		deleteFile(path: string) {
 			delete_svelte_file_cache_entries(file_exists_cache, path);
 
-			return tsSystem.deleteFile?.(path);
+			return ts_system.deleteFile?.(path);
 		},
 		deleteFromCache(path: string) {
 			delete_svelte_file_cache_entries(file_exists_cache, path);
 		},
 	};
 
-	if (tsSystem.realpath) {
-		const realpath = tsSystem.realpath;
+	if (ts_system.realpath) {
+		const realpath = ts_system.realpath;
 
-		svelteSys.realpath = function realpath_svelte_file(path: string) {
-			if (svelteFileExists(path)) {
+		svelte_sys.realpath = function realpath_svelte_file(path: string) {
+			if (svelte_file_exists(path)) {
 				return realpath(to_real_svelte_file_path(path));
 			}
 
@@ -241,13 +280,13 @@ function create_svelte_sys(tsSystem: any) {
 		};
 	}
 
-	return svelteSys;
+	return svelte_sys;
 }
 
-function create_file_exists_cache(tsSystem: any) {
+function create_file_exists_cache(ts_system: any) {
 	const cache = new Map<string, boolean>();
 	const get_key = (path: string) =>
-		tsSystem.useCaseSensitiveFileNames ? path : path.toLowerCase();
+		ts_system.useCaseSensitiveFileNames ? path : path.toLowerCase();
 
 	return {
 		get(path: string) {
@@ -258,7 +297,7 @@ function create_file_exists_cache(tsSystem: any) {
 				return cached;
 			}
 
-			const exists = tsSystem.fileExists(path);
+			const exists = ts_system.fileExists(path);
 
 			cache.set(key, exists);
 
@@ -333,46 +372,63 @@ function ensure_real_svelte_file_path(file_path: string) {
 	return is_virtual_svelte_file_path(file_path) ? to_real_svelte_file_path(file_path) : file_path;
 }
 
-export function patch_typescript_code_actions() {
-	if (CodeActionsProviderImpl.prototype.applyQuickfix?.[patch_marker]) {
-		return;
-	}
+export const PatchTypeScriptCodeActions = () =>
+	Effect.gen(function* () {
+		const internals = yield* SvelteInternals;
 
-	const original_apply_quickfix = CodeActionsProviderImpl.prototype.applyQuickfix;
+		yield* Effect.sync(() => {
+			const { code_actions_provider } = internals;
 
-	CodeActionsProviderImpl.prototype.applyQuickfix = async function applyQuickfix(
-		document: any,
-		range: { start: any; end: any },
-		context: any,
-		cancellationToken: any,
-	) {
-		const { tsDoc } = await this.getLSAndTSDoc(document);
-		const generatedStart = tsDoc.getGeneratedPosition(range.start);
-		const generatedEnd = tsDoc.getGeneratedPosition(range.end);
+			if (code_actions_provider.prototype.applyQuickfix?.[patch_marker]) {
+				return;
+			}
 
-		if (is_invalid_position(generatedStart) || is_invalid_position(generatedEnd)) {
-			return [];
-		}
+			const original_apply_quickfix = code_actions_provider.prototype.applyQuickfix;
 
-		const start = tsDoc.offsetAt(generatedStart);
-		const end = tsDoc.offsetAt(generatedEnd);
+			code_actions_provider.prototype.applyQuickfix = async function applyQuickfix(
+				document: any,
+				range: { start: any; end: any },
+				context: any,
+				cancellation_token: any,
+			) {
+				const { tsDoc: ts_doc } = await this.getLSAndTSDoc(document);
+				const generated_start = ts_doc.getGeneratedPosition(range.start);
+				const generated_end = ts_doc.getGeneratedPosition(range.end);
 
-		if (end < start) {
-			return [];
-		}
+				if (is_invalid_position(generated_start) || is_invalid_position(generated_end)) {
+					return [];
+				}
 
-		return original_apply_quickfix.call(this, document, range, context, cancellationToken);
-	};
-	CodeActionsProviderImpl.prototype.applyQuickfix[patch_marker] = true;
-}
+				const start = ts_doc.offsetAt(generated_start);
+				const end = ts_doc.offsetAt(generated_end);
 
-function merge_preprocessors(existing: any, effect_preprocessor: any) {
+				if (end < start) {
+					return [];
+				}
+
+				return original_apply_quickfix.call(
+					this,
+					document,
+					range,
+					context,
+					cancellation_token,
+				);
+			};
+			code_actions_provider.prototype.applyQuickfix[patch_marker] = true;
+		});
+	});
+
+function merge_preprocessors(
+	existing: any,
+	effect_preprocessor: any,
+	typescript: typeof import("typescript"),
+) {
 	if (contains_effect_preprocessor(existing)) {
 		return existing;
 	}
 
 	if (!existing) {
-		return [effect_preprocessor, create_typescript_fallback_preprocessor()];
+		return [effect_preprocessor, create_typescript_fallback_preprocessor(typescript)];
 	}
 
 	if (Array.isArray(existing)) {
@@ -395,7 +451,7 @@ function create_effect_transform_preprocessor(transform_svelte_effect: Transform
 	};
 }
 
-function create_typescript_fallback_preprocessor() {
+function create_typescript_fallback_preprocessor(typescript: typeof import("typescript")) {
 	return {
 		name: "svelte-effect-runtime-language-server-ts-fallback",
 		script: ({
@@ -411,19 +467,20 @@ function create_typescript_fallback_preprocessor() {
 				return;
 			}
 
-			const { outputText, sourceMapText } = ts.transpileModule(content, {
-				fileName: filename,
-				compilerOptions: {
-					module: ts.ModuleKind.ESNext,
-					target: ts.ScriptTarget.ESNext,
-					sourceMap: true,
-					verbatimModuleSyntax: true,
-				},
-			});
+			const { outputText: output_text, sourceMapText: source_map_text } =
+				typescript.transpileModule(content, {
+					fileName: filename,
+					compilerOptions: {
+						module: typescript.ModuleKind.ESNext,
+						target: typescript.ScriptTarget.ESNext,
+						sourceMap: true,
+						verbatimModuleSyntax: true,
+					},
+				});
 
 			return {
-				code: outputText,
-				map: sourceMapText,
+				code: output_text,
+				map: source_map_text,
 				attributes: Object.fromEntries(
 					Object.entries(attributes).filter(([key]) => key !== "lang" && key !== "type"),
 				),

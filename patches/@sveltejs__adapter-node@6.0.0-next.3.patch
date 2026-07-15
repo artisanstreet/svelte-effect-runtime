@@ -1,0 +1,32 @@
+diff --git a/files/chunks/handler.js b/files/chunks/handler.js
+index 390e1f8a980ff1d5f1fad04234194da6c68f3a4d..f7678d0f333c16f04b73b88d6f44db68f0154ba0 100644
+--- a/files/chunks/handler.js
++++ b/files/chunks/handler.js
+@@ -732,7 +732,7 @@ const ssr = async (req, res) => {
+ 	/** @type {Request} */
+ 	let request;
+ 	try {
+-		request = getRequest({
++		request = await getRequest({
+ 			base: origin || get_origin(req.headers),
+ 			request: req,
+ 			bodySizeLimit: body_size_limit
+diff --git a/index.js b/index.js
+index b0bea8b92a8fbc38570f09ce548198e1237916af..d422f1e056ce07a2aa7cbd0b0c46d736ff27f730 100644
+--- a/index.js
++++ b/index.js
+@@ -46,6 +46,8 @@ export default function (opts = {}) {
+ 			// pass means shared modules (e.g. `SvelteKitError` from `@sveltejs/kit`)
+ 			// aren't duplicated. See https://github.com/sveltejs/kit/issues/15755
+ 			const entries = `${tmp}/entries`;
++			const entries_pattern = entries.split(/[\\/]/).map(escape_regex).join('[\\\\/]');
+ 			builder.copy(files, entries);
+ 
+ 			const dir_id = join(entries, 'dir.js');
++			const dir_pattern = new RegExp(`${entries_pattern}[\\\\/]dir\\.js$`);
+@@ -104 +106 @@ export default function (opts = {}) {
+-							filter: { id: new RegExp(escape_regex(entries)) },
++							filter: { id: new RegExp(entries_pattern) },
+@@ -132 +134 @@ export default function (opts = {}) {
+-							test: dir_id
++							test: dir_pattern

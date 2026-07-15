@@ -1,16 +1,6 @@
-import { is_invalid_position } from "./position.ts";
 import type { DocumentPosition, Mapper } from "../types.ts";
+import { is_invalid_position } from "./position.ts";
 
-/**
- * Composes multiple document mappers in sequence.
- *
- * @example
- * ```ts
- * const mapper = new SequentialDocumentMapper([first, second], uri);
- * ```
- *
- * @since 2.0.0
- */
 export class SequentialDocumentMapper {
 	constructor(
 		private readonly mappers: Mapper[],
@@ -48,16 +38,7 @@ export class SequentialDocumentMapper {
 	}
 }
 
-/**
- * Combines the original snapshot mapper with the preprocessor mapper.
- *
- * @example
- * ```ts
- * const mapper = new SnapshotDocumentMapper(inner, preprocess, uri);
- * ```
- *
- * @since 2.0.0
- */
+/** Maps through preprocessing before the generated Svelte snapshot. */
 export class SnapshotDocumentMapper {
 	constructor(
 		private readonly inner_mapper: Mapper,

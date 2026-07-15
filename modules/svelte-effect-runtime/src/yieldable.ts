@@ -1,54 +1,21 @@
-import { EmptyStreamYieldError } from "$/errors.ts";
+import { EmptyStreamYieldError, InvalidYieldableError } from "$/errors.ts";
 import { Effect, Option, Stream } from "effect";
 
-/**
- * Values generated `yield*` positions can normalize into an Effect.
- *
- * @example
- * ```ts
- * const value: Yieldable<number> = Stream.make(1);
- * ```
- *
- * @since 3.4.8
- */
 export type Yieldable<A = unknown, E = unknown, R = unknown> =
 	| Effect.Effect<A, E, R>
 	| Effect.gen.Return<A, E, R>
 	| Stream.Stream<A, E, R>;
 
-/**
- * Success type produced when generated code yields an Effect or a Stream.
- *
- * @example
- * ```ts
- * type User = YieldSuccess<ReturnType<typeof loadUser>>;
- * ```
- *
- * @since 3.4.8
- */
-export type YieldSuccess<Value> = Value extends Stream.Stream<infer A, unknown, unknown>
-	? A
-	: Value extends Effect.Effect<infer A, unknown, unknown>
+export type YieldSuccess<Value> =
+	Value extends Stream.Stream<infer A, unknown, unknown>
 		? A
-		: Value extends Effect.gen.Return<infer A, unknown, unknown>
+		: Value extends Effect.Effect<infer A, unknown, unknown>
 			? A
-			: never;
+			: Value extends Effect.gen.Return<infer A, unknown, unknown>
+				? A
+				: never;
 
-/**
- * Normalizes generated `yield*` operands into Effects.
- *
- * @example
- * ```ts
- * const first = yield* ToEffect(Stream.make("ready"));
- * ```
- *
- * @since 3.4.8
- * @param value - Effect, generator return object, or Stream emitted from a
- *   lowered component `yield*` expression.
- * @returns An Effect that resolves with the original Effect success value or
- *   the first Stream emission.
- * @internal
- */
+/** Normalizes generated Effect and generator values at the transform ABI boundary. */
 export function ToEffect<A, E, R>(
 	value: Effect.Effect<A, E, R> | Effect.gen.Return<A, E, R>,
 ): Effect.Effect<A, E, R>;
@@ -74,12 +41,14 @@ export function ToEffect<A, E, R>(
 		return Effect.gen(() => value) as Effect.Effect<A, E, R>;
 	}
 
-	return value;
+	if (Effect.isEffect(value)) {
+		return value;
+	}
+
+	return Effect.fail(new InvalidYieldableError(value));
 }
 
-function is_generator_result<A, E, R>(
-	value: unknown,
-): value is Effect.gen.Return<A, E, R> {
+function is_generator_result<A, E, R>(value: unknown): value is Effect.gen.Return<A, E, R> {
 	return (
 		typeof value === "object" &&
 		value !== null &&

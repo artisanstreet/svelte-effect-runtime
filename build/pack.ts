@@ -1,30 +1,15 @@
-import {
-	command_name,
-	copyFile,
-	cp,
-	is_not_found_error,
-	join,
-	mkdir,
-	path_exists,
-	readFile,
-	relative,
-	remove_path,
-	repo_root,
-	run_command,
-	writeFile,
-} from "./node-utils.ts";
+import { Console, Effect, FileSystem, Path, PlatformError, Schema } from "effect";
+import { CommandName, RepoRoot, RemovePath, RunCommand } from "./node-utils.ts";
+import { NodeRuntime, NodeServices } from "@effect/platform-node";
 
-const package_name = process.argv[2];
+type PackageContext = {
+	package_dir: string;
+	output_dir: string;
+	staging_dir: string;
+	staging_dist_dir: string;
+	package_manifest_path: string;
+};
 
-if (!package_name) {
-	throw new Error("Expected package directory name.");
-}
-
-const package_dir = join(repo_root, "modules", package_name);
-const output_dir = join(repo_root, ".dist", package_name);
-const staging_dir = join(repo_root, ".tmp", "pack", package_name);
-const staging_dist_dir = join(staging_dir, ".dist");
-const package_manifest_path = join(package_dir, "package.json");
 const dependency_fields = [
 	"dependencies",
 	"devDependencies",
@@ -32,147 +17,284 @@ const dependency_fields = [
 	"peerDependencies",
 ] as const;
 
-if (!(await path_exists(output_dir))) {
-	throw new Error(`Package build output not found at ${output_dir}`);
-}
-
-await remove_path(staging_dir);
-await mkdir(staging_dir, { recursive: true });
-await copy_package_output();
-await copy_package_manifest();
-await copy_standard_files();
-await copy_manifest_files();
-
-const pack_output = await run_command(
-	command_name("corepack"),
-	["pnpm", "pack", "--pack-destination", output_dir, "--json"],
-	staging_dir,
+const PackageManifestSchema = Schema.Record(Schema.String, Schema.Unknown);
+const WorkspaceManifestSchema = Schema.Struct({ version: Schema.String });
+const ManifestSideFilesSchema = Schema.Array(
+	Schema.String.pipe(
+		Schema.check(
+			Schema.isPattern(
+				/^(?![A-Za-z]:)(?!\/)(?!.*\/\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))(?!.*(?:\*|\?|\[|\]|\{|\}|!))[^\\]+$/,
+			),
+		),
+	),
 );
+const PackTargetSchema = Schema.Literals([
+	"svelte-effect-runtime",
+	"svelte-effect-runtime-grammars",
+	"svelte-effect-runtime-language-server",
+] as const);
 
-console.log(pack_output.stdout.trim());
+const Main = Effect.gen(function* () {
+	const file_system = yield* FileSystem.FileSystem;
+	const path = yield* Path.Path;
+	const repo_root = yield* RepoRoot;
+	const package_name = yield* Schema.decodeUnknownEffect(PackTargetSchema)(process.argv[2]);
+	const package_dir = path.join(repo_root, "modules", package_name);
+	const output_dir = path.join(repo_root, ".dist", package_name);
+	const staging_dir = path.join(repo_root, ".tmp", "pack", package_name);
+	const context: PackageContext = {
+		package_dir,
+		output_dir,
+		staging_dir,
+		staging_dist_dir: path.join(staging_dir, ".dist"),
+		package_manifest_path: path.join(package_dir, "package.json"),
+	};
+	const has_output = yield* file_system.exists(output_dir);
 
-async function copy_package_output(): Promise<void> {
-	const manifest = JSON.parse(await readFile(package_manifest_path, "utf8"));
-	const side_files = get_manifest_side_files(manifest);
+	if (!has_output) {
+		return yield* Effect.fail(new Error(`Package build output not found at ${output_dir}`));
+	}
 
-	await cp(output_dir, staging_dist_dir, {
-		filter(source) {
-			const relative_path = relative(output_dir, source).replaceAll("\\", "/");
-			const is_artifact = source.endsWith(".tgz") || source.endsWith(".vsix");
-			const is_side_file = side_files.some(
-				(file) => relative_path === file || relative_path.startsWith(`${file}/`),
-			);
+	const Package = Effect.gen(function* () {
+		yield* RemovePath(staging_dir);
+		yield* file_system.makeDirectory(staging_dir, { recursive: true });
+		yield* CopyPackageOutput(context);
+		yield* CopyPackageManifest(context, repo_root);
+		yield* CopyStandardFiles(context, repo_root);
+		yield* CopyManifestFiles(context);
 
-			return !is_artifact && !is_side_file;
-		},
-		force: true,
-		recursive: true,
+		const command = yield* CommandName("corepack");
+		const pack_output = yield* RunCommand(
+			command,
+			["pnpm", "pack", "--pack-destination", output_dir, "--json"],
+			staging_dir,
+		);
+
+		yield* Console.log(pack_output.stdout.trim());
 	});
-}
 
-function get_manifest_side_files(manifest: Record<string, unknown>): string[] {
-	const files = Array.isArray(manifest.files)
-		? manifest.files.filter((value): value is string => typeof value === "string")
-		: [];
+	yield* Package.pipe(Effect.ensuring(RemovePath(staging_dir).pipe(Effect.orDie)));
+});
 
-	return files.filter((file) => file !== ".dist" && file !== "README.md" && file !== "LICENSE");
-}
+const CopyPackageOutput = (context: PackageContext) =>
+	Effect.gen(function* () {
+		const manifest = yield* ReadPackageManifest(context.package_manifest_path);
+		const side_files = yield* GetManifestSideFiles(manifest);
 
-async function copy_package_manifest(): Promise<void> {
-	const manifest = JSON.parse(await readFile(package_manifest_path, "utf8"));
-	const publish_manifest = await prepare_publish_manifest(manifest);
+		yield* CopyDirectoryFiltered(
+			context.output_dir,
+			context.staging_dist_dir,
+			(relative_path) => {
+				const is_artifact =
+					relative_path.endsWith(".tgz") || relative_path.endsWith(".vsix");
+				const is_side_file = side_files.some(
+					(file) => relative_path === file || relative_path.startsWith(`${file}/`),
+				);
 
-	await writeFile(
-		join(staging_dir, "package.json"),
-		`${JSON.stringify(publish_manifest, null, 2)}\n`,
-	);
-}
+				return !is_artifact && !is_side_file;
+			},
+		);
+	});
 
-async function prepare_publish_manifest(
-	manifest: Record<string, unknown>,
-): Promise<Record<string, unknown>> {
-	for (const field of dependency_fields) {
-		const dependencies = manifest[field];
+const CopyDirectoryFiltered = (
+	source_dir: string,
+	target_dir: string,
+	include: (relative_path: string) => boolean,
+) =>
+	Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+		const path = yield* Path.Path;
 
-		if (!dependencies || typeof dependencies !== "object") {
-			continue;
-		}
+		yield* file_system.makeDirectory(target_dir, { recursive: true });
 
-		const dependency_map = dependencies as Record<string, unknown>;
+		const entries = yield* file_system.readDirectory(source_dir, { recursive: true });
 
-		for (const [name, version] of Object.entries(dependency_map)) {
-			if (typeof version !== "string" || !version.startsWith("workspace:")) {
+		for (const relative_path of entries) {
+			const normalized_path = relative_path.replaceAll("\\", "/");
+
+			if (!include(normalized_path)) {
 				continue;
 			}
 
-			dependency_map[name] = await resolve_workspace_version(name, version);
+			const source_path = path.join(source_dir, relative_path);
+			const target_path = path.join(target_dir, relative_path);
+			const info = yield* file_system.stat(source_path);
+
+			if (info.type === "Directory") {
+				yield* file_system.makeDirectory(target_path, { recursive: true });
+
+				continue;
+			}
+
+			if (info.type !== "File") {
+				continue;
+			}
+
+			yield* file_system.makeDirectory(path.dirname(target_path), { recursive: true });
+			yield* file_system.copyFile(source_path, target_path);
 		}
-	}
+	});
 
-	return manifest;
-}
+const GetManifestSideFiles = (manifest: Record<string, unknown>) =>
+	Effect.gen(function* () {
+		const files = yield* Schema.decodeUnknownEffect(ManifestSideFilesSchema)(
+			manifest.files ?? [],
+		);
 
-async function resolve_workspace_version(name: string, specifier: string): Promise<string> {
-	const version = specifier.slice("workspace:".length);
+		return files.filter(
+			(file) => file !== ".dist" && file !== "README.md" && file !== "LICENSE",
+		);
+	});
 
-	if (version && version !== "*" && version !== "^" && version !== "~") {
-		return version;
-	}
+const CopyPackageManifest = (context: PackageContext, repo_root: string) =>
+	Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+		const path = yield* Path.Path;
+		const manifest = yield* ReadPackageManifest(context.package_manifest_path);
+		const publish_manifest = yield* PreparePublishManifest(manifest, repo_root);
 
-	const workspace_manifest_path = join(repo_root, "modules", name, "package.json");
-	const workspace_manifest = JSON.parse(await readFile(workspace_manifest_path, "utf8"));
+		yield* file_system.writeFileString(
+			path.join(context.staging_dir, "package.json"),
+			`${JSON.stringify(publish_manifest, null, 2)}\n`,
+		);
+	});
 
-	if (typeof workspace_manifest.version !== "string") {
-		throw new Error(`Workspace package ${name} is missing a version.`);
-	}
+const PreparePublishManifest = (manifest: Record<string, unknown>, repo_root: string) =>
+	Effect.gen(function* () {
+		const publish_manifest = structuredClone(manifest);
 
-	return version === "^" || version === "~"
-		? `${version}${workspace_manifest.version}`
-		: workspace_manifest.version;
-}
+		for (const field of dependency_fields) {
+			const dependencies = publish_manifest[field];
 
-async function copy_standard_files(): Promise<void> {
-	await copy_optional(join(package_dir, "README.md"), join(staging_dir, "README.md"));
-	await copy_optional(join(repo_root, "LICENSE"), join(staging_dir, "LICENSE"));
-}
+			if (!dependencies || typeof dependencies !== "object") {
+				continue;
+			}
 
-async function copy_manifest_files(): Promise<void> {
-	const manifest = JSON.parse(await readFile(package_manifest_path, "utf8"));
-	const files = get_manifest_side_files(manifest);
+			const dependency_map = dependencies as Record<string, unknown>;
 
-	for (const file of files) {
-		await copy_manifest_file(file);
-	}
-}
+			for (const [name, version] of Object.entries(dependency_map)) {
+				if (typeof version !== "string" || !version.startsWith("workspace:")) {
+					continue;
+				}
 
-async function copy_manifest_file(file: string): Promise<void> {
-	const package_path = join(package_dir, file);
-	const output_path = join(output_dir, file);
-	const staging_path = join(staging_dir, file);
-
-	if (await path_exists(package_path)) {
-		await cp(package_path, staging_path, {
-			force: true,
-			recursive: true,
-		});
-
-		return;
-	}
-
-	if (await path_exists(output_path)) {
-		await cp(output_path, staging_path, {
-			force: true,
-			recursive: true,
-		});
-	}
-}
-
-async function copy_optional(source: string, target: string): Promise<void> {
-	try {
-		await copyFile(source, target);
-	} catch (error) {
-		if (!is_not_found_error(error)) {
-			throw error;
+				dependency_map[name] = yield* ResolveWorkspaceVersion(name, version, repo_root);
+			}
 		}
-	}
+
+		return publish_manifest;
+	});
+
+const ResolveWorkspaceVersion = (name: string, specifier: string, repo_root: string) =>
+	Effect.gen(function* () {
+		const path = yield* Path.Path;
+		const version = specifier.slice("workspace:".length);
+
+		if (version && version !== "*" && version !== "^" && version !== "~") {
+			return version;
+		}
+
+		const workspace_manifest_path = path.join(repo_root, "modules", name, "package.json");
+		const workspace_manifest = yield* ReadJsonFile(
+			workspace_manifest_path,
+			WorkspaceManifestSchema,
+		);
+
+		return version === "^" || version === "~"
+			? `${version}${workspace_manifest.version}`
+			: workspace_manifest.version;
+	});
+
+const CopyStandardFiles = (context: PackageContext, repo_root: string) =>
+	Effect.gen(function* () {
+		const path = yield* Path.Path;
+
+		yield* CopyOptional(
+			path.join(context.package_dir, "README.md"),
+			path.join(context.staging_dir, "README.md"),
+		);
+		yield* CopyOptional(
+			path.join(repo_root, "LICENSE"),
+			path.join(context.staging_dir, "LICENSE"),
+		);
+	});
+
+const CopyManifestFiles = (context: PackageContext) =>
+	Effect.gen(function* () {
+		const manifest = yield* ReadPackageManifest(context.package_manifest_path);
+		const files = yield* GetManifestSideFiles(manifest);
+
+		for (const file of files) {
+			yield* CopyManifestFile(context, file);
+		}
+	});
+
+const CopyManifestFile = (context: PackageContext, file: string) =>
+	Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+		const package_path = yield* ResolveContainedPath(context.package_dir, file);
+		const output_path = yield* ResolveContainedPath(context.output_dir, file);
+		const staging_path = yield* ResolveContainedPath(context.staging_dir, file);
+		const has_package_path = yield* file_system.exists(package_path);
+
+		if (has_package_path) {
+			yield* file_system.copy(package_path, staging_path, { overwrite: true });
+
+			return;
+		}
+
+		const has_output_path = yield* file_system.exists(output_path);
+
+		if (has_output_path) {
+			yield* file_system.copy(output_path, staging_path, { overwrite: true });
+		}
+	});
+
+const ResolveContainedPath = (root: string, relative_path: string) =>
+	Effect.gen(function* () {
+		const path = yield* Path.Path;
+		const resolved_root = path.resolve(root);
+		const resolved_path = path.resolve(resolved_root, relative_path);
+		const relative = path.relative(resolved_root, resolved_path);
+		const is_outside =
+			relative === "" ||
+			relative === ".." ||
+			relative.startsWith(`..${path.sep}`) ||
+			path.isAbsolute(relative);
+
+		if (is_outside) {
+			return yield* Effect.fail(
+				new Error(`Manifest file path escapes its package root: ${relative_path}`),
+			);
+		}
+
+		return resolved_path;
+	});
+
+const CopyOptional = (source: string, target: string) =>
+	Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+
+		yield* file_system
+			.copyFile(source, target)
+			.pipe(
+				Effect.catch((error) =>
+					is_not_found_error(error) ? Effect.void : Effect.fail(error),
+				),
+			);
+	});
+
+const ReadPackageManifest = (path: string) => ReadJsonFile(path, PackageManifestSchema);
+
+const ReadJsonFile = <S extends Schema.Top>(path: string, schema: S) =>
+	Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+		const content = yield* file_system.readFileString(path);
+
+		return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(schema))(content);
+	});
+
+function is_not_found_error(error: PlatformError.PlatformError): boolean {
+	return error.reason._tag === "NotFound";
 }
+
+NodeRuntime.runMain(Main.pipe(Effect.provide(NodeServices.layer)));

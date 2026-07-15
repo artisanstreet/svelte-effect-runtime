@@ -1,22 +1,12 @@
+import type { ScriptRegion } from "$/compiler/source-scan.ts";
 import type { HelperDeclaration } from "./types.ts";
 
 import ts from "typescript";
 
-const EFFECT_PACKAGE_MODULE = "effect";
-const EFFECT_DIRECT_MODULE = "effect/Effect";
-const GENERATED_EFFECT_NAME = "__SER___Effect";
+const effect_package_module = "effect";
+const effect_direct_module = "effect/Effect";
+const generated_effect_name = "__SER___Effect";
 
-/**
- * Describes local bindings that resolve to Effect APIs in markup expressions.
- *
- * @example
- * ```ts
- * const context = collect_effect_callback_bindings(source);
- * context.effect_object_names.has("E");
- * ```
- *
- * @since 2.4.0
- */
 export interface EffectCallbackRewriteContext {
 	/** Local names imported as the Effect object, such as `Effect` or `E`. */
 	effect_object_names: ReadonlySet<string>;
@@ -41,28 +31,15 @@ interface EffectBindingState {
 	implicit_effect_import: boolean;
 }
 
-/**
- * Collects Effect import bindings that markup callback rewriting can trust.
- *
- * @example
- * ```ts
- * const bindings = collect_effect_callback_bindings(
- *   `<script>import { Effect as E } from "effect";</script>`,
- * );
- * ```
- *
- * @since 2.4.0
- * @param content - Full Svelte component source before markup lowering.
- * @returns Binding metadata used to identify Effect callback combinators.
- */
-export function collect_effect_callback_bindings(content: string): EffectCallbackRewriteContext {
+export function collect_effect_callback_bindings(
+	scripts: readonly ScriptRegion[],
+): EffectCallbackRewriteContext {
 	const state = make_effect_binding_state();
-	const scripts = collect_script_blocks(content);
 
 	for (const script of scripts) {
 		const source_file = ts.createSourceFile(
 			"component-script.ts",
-			script,
+			script.text,
 			ts.ScriptTarget.Latest,
 			true,
 			ts.ScriptKind.TS,
@@ -94,12 +71,6 @@ function make_effect_binding_state(): EffectBindingState {
 		local_names: new Set(),
 		implicit_effect_import: false,
 	};
-}
-
-function collect_script_blocks(content: string): string[] {
-	const pattern = /<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi;
-
-	return [...content.matchAll(pattern)].map((match) => match[1] ?? "");
 }
 
 function collect_source_file_bindings(source_file: ts.SourceFile, state: EffectBindingState): void {
@@ -180,12 +151,12 @@ function collect_namespace_import_binding(
 ): void {
 	state.local_names.add(local_name);
 
-	if (module_name === EFFECT_DIRECT_MODULE) {
+	if (module_name === effect_direct_module) {
 		add_ordered_name(state.effect_module_names, local_name);
 		return;
 	}
 
-	if (module_name === EFFECT_PACKAGE_MODULE) {
+	if (module_name === effect_package_module) {
 		add_ordered_name(state.effect_package_names, local_name);
 	}
 }
@@ -200,12 +171,12 @@ function collect_named_import_binding(
 
 	state.local_names.add(local_name);
 
-	if (module_name === EFFECT_PACKAGE_MODULE && imported_name === "Effect") {
+	if (module_name === effect_package_module && imported_name === "Effect") {
 		add_ordered_name(state.effect_object_names, local_name);
 		return;
 	}
 
-	if (module_name === EFFECT_DIRECT_MODULE) {
+	if (module_name === effect_direct_module) {
 		state.direct_members.set(local_name, imported_name);
 	}
 }
@@ -250,12 +221,12 @@ function choose_effect_wrapper(state: EffectBindingState): {
 	const effect_object = state.effect_object_names[0];
 
 	if (effect_object) {
-		return {
-			expression: effect_object,
-			import_text: state.implicit_effect_import
-				? `import { Effect } from "effect";`
-				: undefined,
-		};
+		return state.implicit_effect_import
+			? {
+					expression: effect_object,
+					import_text: `import { Effect } from "effect";`,
+				}
+			: { expression: effect_object };
 	}
 
 	const effect_module = state.effect_module_names[0];
@@ -279,17 +250,17 @@ function choose_effect_wrapper(state: EffectBindingState): {
 }
 
 function make_generated_effect_name(local_names: ReadonlySet<string>): string {
-	if (!local_names.has(GENERATED_EFFECT_NAME)) {
-		return GENERATED_EFFECT_NAME;
+	if (!local_names.has(generated_effect_name)) {
+		return generated_effect_name;
 	}
 
 	let index = 1;
 
-	while (local_names.has(`${GENERATED_EFFECT_NAME}_${index}`)) {
+	while (local_names.has(`${generated_effect_name}_${index}`)) {
 		index += 1;
 	}
 
-	return `${GENERATED_EFFECT_NAME}_${index}`;
+	return `${generated_effect_name}_${index}`;
 }
 
 function add_ordered_name(names: string[], name: string): void {

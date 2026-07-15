@@ -1,6 +1,8 @@
 import type { MarkupBraceExpression, ScriptRegion } from "$/compiler/source-scan.ts";
 import { scan_svelte_effect_source } from "$/compiler/source-scan.ts";
 
+import ts from "typescript";
+
 /**
  * Warning diagnostic produced by the SER Vite diagnostics plugin.
  */
@@ -15,100 +17,155 @@ interface SourceLocation {
 	column: number;
 }
 
-/**
- * Finds best-effort SER usage diagnostics in Svelte component markup.
- *
- * @example
- * ```ts
- * const diagnostics = find_svelte_effect_diagnostics(
- *   `<button onclick={Effect.gen}>save</button>`,
- *   "Button.svelte",
- * );
- * ```
- *
- * @since 2.0.0
- * @param code - Svelte component source to scan for suspicious Effect usage.
- * @param filename - Filename used in diagnostic messages.
- * @returns Warning diagnostics with a message and source location.
- */
+interface ParsedMarkupExpression {
+	source_file: ts.SourceFile;
+	root_expression: ts.Expression | undefined;
+	is_direct_expression: boolean;
+}
+
+interface EffectBindings {
+	paths: ReadonlySet<string>;
+	root_names: readonly string[];
+}
+
+interface NormalizedMarkupExpression {
+	kind: "declaration" | "expression";
+	text: string;
+	is_direct_expression: boolean;
+}
+
+const effect_member_names = [
+	"all",
+	"fail",
+	"gen",
+	"log",
+	"promise",
+	"runFork",
+	"runPromise",
+	"runSync",
+	"succeed",
+	"sync",
+	"try",
+	"tryPromise",
+	"void",
+] as const;
+const effect_member_name_set = new Set<string>(effect_member_names);
+const effect_runner_names = new Set(["runFork", "runPromise", "runSync"]);
+const effect_gen_name = new Set(["gen"]);
+
 export function find_svelte_effect_diagnostics(
 	code: string,
 	filename: string,
 ): Array<{ message: string; line: number; column: number }> {
 	const scan = scan_svelte_effect_source(code, filename);
-	const effect_names = find_effect_local_names(scan.scripts);
+	const effect_binding_paths = find_effect_binding_paths(scan.scripts);
 	const line_starts = make_line_starts(code);
 
 	return scan.markup_expressions.flatMap((expression) =>
-		make_expression_diagnostics(filename, effect_names, expression, line_starts),
+		make_expression_diagnostics(filename, effect_binding_paths, expression, line_starts),
 	);
 }
 
-function find_effect_local_names(scripts: readonly ScriptRegion[]): Set<string> {
-	const names = new Set<string>(["Effect"]);
+function find_effect_binding_paths(scripts: readonly ScriptRegion[]): EffectBindings {
+	const seen_paths = new Set(["Effect"]);
+	const root_names = new Set(["Effect"]);
 
 	for (const script of scripts) {
-		const import_pattern = /import\s+(type\s+)?\{([^}]+)\}\s+from\s+["']effect["']/g;
+		const source_file = ts.createSourceFile(
+			"diagnostics-script.ts",
+			script.text,
+			ts.ScriptTarget.Latest,
+			true,
+			ts.ScriptKind.TS,
+		);
 
-		for (const import_match of script.text.matchAll(import_pattern)) {
-			const is_type_only_import = import_match[1] !== undefined;
-			const specifiers = import_match[2].split(",");
+		for (const statement of source_file.statements) {
+			for (const binding_path of get_effect_import_binding_paths(statement)) {
+				const key = binding_path.join(".");
 
-			if (is_type_only_import) {
-				continue;
-			}
-
-			for (const specifier of specifiers) {
-				const local_name = parse_effect_import_local_name(specifier);
-
-				if (local_name) {
-					names.add(local_name);
+				if (seen_paths.has(key)) {
+					continue;
 				}
+
+				seen_paths.add(key);
+				root_names.add(binding_path[0]);
 			}
 		}
 	}
 
-	return names;
+	return { paths: seen_paths, root_names: [...root_names] };
 }
 
-function parse_effect_import_local_name(specifier: string): string | undefined {
-	const trimmed = specifier.trim();
-	const match = trimmed.match(/^Effect(?:\s+as\s+([A-Za-z_$][\w$]*))?$/);
-
-	if (!match) {
-		return undefined;
+function get_effect_import_binding_paths(statement: ts.Statement): string[][] {
+	if (
+		!ts.isImportDeclaration(statement) ||
+		!ts.isStringLiteral(statement.moduleSpecifier) ||
+		!statement.importClause ||
+		statement.importClause.isTypeOnly
+	) {
+		return [];
 	}
 
-	return match[1] ?? "Effect";
+	const module_name = statement.moduleSpecifier.text;
+	const named_bindings = statement.importClause.namedBindings;
+
+	if (!named_bindings) {
+		return [];
+	}
+
+	if (module_name === "effect" && ts.isNamedImports(named_bindings)) {
+		return named_bindings.elements.flatMap((specifier) => {
+			const imported_name = specifier.propertyName?.text ?? specifier.name.text;
+
+			return !specifier.isTypeOnly && imported_name === "Effect"
+				? [[specifier.name.text]]
+				: [];
+		});
+	}
+
+	if (module_name === "effect" && ts.isNamespaceImport(named_bindings)) {
+		return [[named_bindings.name.text, "Effect"]];
+	}
+
+	if (module_name === "effect/Effect" && ts.isNamespaceImport(named_bindings)) {
+		return [[named_bindings.name.text]];
+	}
+
+	return [];
 }
 
 function make_expression_diagnostics(
 	filename: string,
-	effect_names: Set<string>,
+	effect_binding_paths: EffectBindings,
 	expression: MarkupBraceExpression,
 	line_starts: number[],
 ): Diagnostic[] {
 	const attribute_name = expression.attribute_name;
 	const expression_text = expression.expression_text;
-	/** The source scanner exposes a name only for a direct single-expression value. */
 	const is_event_attribute = attribute_name !== undefined && attribute_name.startsWith("on");
 	const is_attribute = attribute_name !== undefined;
+	const parsed_expression = parse_markup_expression(expression_text, effect_binding_paths);
 
-	if (!contains_effect_reference(expression_text, effect_names)) {
+	if (!parsed_expression || !contains_effect_reference(parsed_expression, effect_binding_paths)) {
 		return [];
 	}
 
-	if (starts_with_yield_star(expression_text)) {
+	const is_callback = is_callback_expression(parsed_expression);
+	const has_yield_star = is_callback
+		? contains_callback_yield_star(parsed_expression)
+		: contains_yield_star(parsed_expression);
+	const is_hidden_event_yield = is_event_attribute && is_callback && has_yield_star;
+
+	if (
+		!contains_unyielded_effect_reference(parsed_expression, effect_binding_paths) &&
+		!is_hidden_event_yield
+	) {
 		return [];
 	}
 
 	const loc = get_line_column(line_starts, expression.open);
 
-	if (
-		is_event_attribute &&
-		is_callback_expression(expression_text) &&
-		contains_yield_star(expression_text)
-	) {
+	if (is_hidden_event_yield) {
 		return [
 			make_diagnostic(
 				loc,
@@ -117,7 +174,7 @@ function make_expression_diagnostics(
 		];
 	}
 
-	if (contains_effect_runner(expression_text, effect_names)) {
+	if (contains_effect_runner(parsed_expression, effect_binding_paths)) {
 		return [
 			make_diagnostic(
 				loc,
@@ -126,7 +183,7 @@ function make_expression_diagnostics(
 		];
 	}
 
-	if (is_bare_effect_gen(expression_text, effect_names)) {
+	if (is_bare_effect_gen(parsed_expression, effect_binding_paths)) {
 		return [
 			make_diagnostic(
 				loc,
@@ -135,7 +192,7 @@ function make_expression_diagnostics(
 		];
 	}
 
-	if (is_event_attribute && is_callback_expression(expression_text)) {
+	if (is_event_attribute && is_callback) {
 		return [
 			make_diagnostic(
 				loc,
@@ -279,49 +336,330 @@ function make_sync_markup_effect_warning(filename: string, expression_text: stri
 	].join("\n");
 }
 
-function contains_effect_reference(expression_text: string, effect_names: Set<string>): boolean {
-	const name_pattern = make_effect_name_pattern(effect_names);
-	const effect_pattern = new RegExp(
-		`\\b(?:${name_pattern})\\.(?:gen|succeed|fail|try|tryPromise|promise|sync|all|void|log|runPromise|runSync|runFork)\\b`,
+function parse_markup_expression(
+	expression_text: string,
+	effect_binding_paths: EffectBindings,
+): ParsedMarkupExpression | undefined {
+	const has_binding_candidate = effect_binding_paths.root_names.some((root_name) =>
+		expression_text.includes(root_name),
+	);
+	const has_member_candidate = effect_member_names.some((member_name) =>
+		expression_text.includes(member_name),
 	);
 
-	return effect_pattern.test(expression_text);
+	if (!has_binding_candidate || !has_member_candidate) {
+		return undefined;
+	}
+
+	const normalized = normalize_markup_expression(expression_text);
+
+	if (normalized.kind === "declaration") {
+		const source_file = ts.createSourceFile(
+			"diagnostics-declaration.ts",
+			`${normalized.text};`,
+			ts.ScriptTarget.Latest,
+			true,
+			ts.ScriptKind.TS,
+		);
+		const variable_statement = source_file.statements.find(ts.isVariableStatement);
+		const root_expression = unwrap_parentheses(
+			variable_statement?.declarationList.declarations[0]?.initializer,
+		);
+
+		return {
+			source_file,
+			root_expression,
+			is_direct_expression: false,
+		};
+	}
+
+	const source_file = ts.createSourceFile(
+		"diagnostics-expression.ts",
+		`function* __SER___diagnostic() { return (${normalized.text}); }`,
+		ts.ScriptTarget.Latest,
+		true,
+		ts.ScriptKind.TS,
+	);
+	const wrapper = source_file.statements.find(ts.isFunctionDeclaration);
+	const return_statement = wrapper?.body?.statements.find(ts.isReturnStatement);
+	const root_expression = unwrap_parentheses(return_statement?.expression);
+
+	return {
+		source_file,
+		root_expression,
+		is_direct_expression: normalized.is_direct_expression,
+	};
 }
 
-function contains_effect_runner(expression_text: string, effect_names: Set<string>): boolean {
-	const name_pattern = make_effect_name_pattern(effect_names);
-	const runner_pattern = new RegExp(`\\b(?:${name_pattern})\\.run(?:Promise|Sync|Fork)\\b`);
+function normalize_markup_expression(expression_text: string): NormalizedMarkupExpression {
+	const trimmed = expression_text.trim();
 
-	return runner_pattern.test(expression_text);
+	if (/^@const\s+/.test(trimmed)) {
+		return {
+			kind: "declaration",
+			text: trimmed.slice(1),
+			is_direct_expression: false,
+		};
+	}
+
+	if (/^(?:const|let)\s+/.test(trimmed)) {
+		return {
+			kind: "declaration",
+			text: trimmed,
+			is_direct_expression: false,
+		};
+	}
+
+	const prefix = find_markup_expression_prefix(trimmed);
+	let text = prefix ? trimmed.slice(prefix.length) : trimmed;
+
+	if (prefix?.kind === "each") {
+		const boundaries = [...text.matchAll(/\s+as\s+/g)];
+		const boundary = boundaries.at(-1)?.index ?? -1;
+
+		text = boundary === -1 ? text : text.slice(0, boundary);
+	}
+
+	if (prefix?.kind === "await") {
+		text = slice_before_await_context(text);
+	}
+
+	return {
+		kind: "expression",
+		text: text.trim(),
+		is_direct_expression: prefix === undefined,
+	};
 }
 
-function is_bare_effect_gen(expression_text: string, effect_names: Set<string>): boolean {
-	const name_pattern = make_effect_name_pattern(effect_names);
-	const bare_gen_pattern = new RegExp(`^(?:${name_pattern})\\.gen$`);
+function find_markup_expression_prefix(
+	expression_text: string,
+): { kind: string; length: number } | undefined {
+	const prefixes: Array<{ kind: string; pattern: RegExp }> = [
+		{ kind: "else_if", pattern: /^:else\s+if\s+/ },
+		{ kind: "attach", pattern: /^@attach\s+/ },
+		{ kind: "render", pattern: /^@render\s+/ },
+		{ kind: "debug", pattern: /^@debug\s+/ },
+		{ kind: "html", pattern: /^@html\s+/ },
+		{ kind: "await", pattern: /^#await\s+/ },
+		{ kind: "each", pattern: /^#each\s+/ },
+		{ kind: "key", pattern: /^#key\s+/ },
+		{ kind: "if", pattern: /^#if\s+/ },
+		{ kind: "spread", pattern: /^\.\.\./ },
+	];
 
-	return bare_gen_pattern.test(expression_text);
+	for (const prefix of prefixes) {
+		const match = prefix.pattern.exec(expression_text);
+
+		if (match) {
+			return { kind: prefix.kind, length: match[0].length };
+		}
+	}
+
+	return undefined;
 }
 
-function make_effect_name_pattern(effect_names: Set<string>): string {
-	return [...effect_names]
-		.map(escape_regexp)
-		.sort((a, b) => b.length - a.length)
-		.join("|");
+function slice_before_await_context(expression_text: string): string {
+	const wrapper_prefix = "function* __SER___await() { return (";
+	const source_file = ts.createSourceFile(
+		"diagnostics-await.ts",
+		`${wrapper_prefix}${expression_text}); }`,
+		ts.ScriptTarget.Latest,
+		true,
+		ts.ScriptKind.TS,
+	);
+	const wrapper = source_file.statements.find(ts.isFunctionDeclaration);
+	const return_statement = wrapper?.body?.statements.find(ts.isReturnStatement);
+	const root_expression = unwrap_parentheses(return_statement?.expression);
+	const boundary = root_expression ? root_expression.end - wrapper_prefix.length : -1;
+	const remainder = boundary === -1 ? "" : expression_text.slice(boundary).trimStart();
+
+	if (!/^(?:then|catch)(?:\s|$)/.test(remainder)) {
+		return expression_text;
+	}
+
+	return expression_text.slice(0, boundary);
 }
 
-function starts_with_yield_star(expression_text: string): boolean {
-	return /^yield\s*\*/.test(expression_text);
+function contains_effect_reference(
+	parsed_expression: ParsedMarkupExpression,
+	effect_binding_paths: EffectBindings,
+): boolean {
+	return some_node(parsed_expression.source_file, (node) =>
+		is_effect_member(node, effect_binding_paths, effect_member_name_set),
+	);
 }
 
-function contains_yield_star(expression_text: string): boolean {
-	return /\byield\s*\*/.test(expression_text);
+function contains_effect_runner(
+	parsed_expression: ParsedMarkupExpression,
+	effect_binding_paths: EffectBindings,
+): boolean {
+	return some_node(parsed_expression.source_file, (node) =>
+		is_effect_member(node, effect_binding_paths, effect_runner_names),
+	);
 }
 
-function is_callback_expression(expression_text: string): boolean {
+function contains_unyielded_effect_reference(
+	parsed_expression: ParsedMarkupExpression,
+	effect_binding_paths: EffectBindings,
+): boolean {
+	return some_node(
+		parsed_expression.source_file,
+		(node) =>
+			is_effect_member(node, effect_binding_paths, effect_member_name_set) &&
+			!has_yield_star_ancestor(node),
+	);
+}
+
+function is_bare_effect_gen(
+	parsed_expression: ParsedMarkupExpression,
+	effect_binding_paths: EffectBindings,
+): boolean {
+	const root_expression = parsed_expression.root_expression;
+
 	return (
-		/^(?:async\s+)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/.test(expression_text) ||
-		/^(?:async\s+)?function\b/.test(expression_text)
+		parsed_expression.is_direct_expression &&
+		root_expression !== undefined &&
+		is_effect_member(root_expression, effect_binding_paths, effect_gen_name)
 	);
+}
+
+function contains_yield_star(parsed_expression: ParsedMarkupExpression): boolean {
+	return some_node(parsed_expression.source_file, is_yield_star_expression);
+}
+
+function contains_callback_yield_star(parsed_expression: ParsedMarkupExpression): boolean {
+	const callback = parsed_expression.root_expression;
+	let matched = false;
+
+	if (!callback || (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback))) {
+		return false;
+	}
+
+	function visit(node: ts.Node): void {
+		if (matched || (node !== callback && ts.isFunctionLike(node))) {
+			return;
+		}
+
+		if (is_yield_star_expression(node)) {
+			matched = true;
+
+			return;
+		}
+
+		ts.forEachChild(node, visit);
+	}
+
+	visit(callback.body);
+
+	return matched;
+}
+
+function is_callback_expression(parsed_expression: ParsedMarkupExpression): boolean {
+	const root_expression = parsed_expression.root_expression;
+
+	return (
+		parsed_expression.is_direct_expression &&
+		root_expression !== undefined &&
+		(ts.isArrowFunction(root_expression) || ts.isFunctionExpression(root_expression))
+	);
+}
+
+function is_effect_member(
+	node: ts.Node,
+	effect_binding_paths: EffectBindings,
+	member_names: ReadonlySet<string>,
+): boolean {
+	const access_path = get_static_access_path(node);
+
+	if (!access_path || access_path.length < 2) {
+		return false;
+	}
+
+	const member_name = access_path[access_path.length - 1];
+	const owner_path = access_path.slice(0, -1);
+
+	if (member_name === undefined) {
+		return false;
+	}
+
+	return member_names.has(member_name) && effect_binding_paths.paths.has(owner_path.join("."));
+}
+
+function get_static_access_path(node: ts.Node): string[] | undefined {
+	if (ts.isParenthesizedExpression(node)) {
+		return get_static_access_path(node.expression);
+	}
+
+	if (ts.isIdentifier(node)) {
+		return [node.text];
+	}
+
+	if (ts.isPropertyAccessExpression(node)) {
+		const owner_path = get_static_access_path(node.expression);
+
+		return owner_path ? [...owner_path, node.name.text] : undefined;
+	}
+
+	if (
+		ts.isElementAccessExpression(node) &&
+		node.argumentExpression &&
+		(ts.isStringLiteral(node.argumentExpression) ||
+			ts.isNoSubstitutionTemplateLiteral(node.argumentExpression))
+	) {
+		const owner_path = get_static_access_path(node.expression);
+
+		return owner_path ? [...owner_path, node.argumentExpression.text] : undefined;
+	}
+
+	return undefined;
+}
+
+function some_node(node: ts.Node, predicate: (node: ts.Node) => boolean): boolean {
+	let matched = false;
+
+	if (predicate(node)) {
+		return true;
+	}
+
+	ts.forEachChild(node, (child) => {
+		matched ||= some_node(child, predicate);
+	});
+
+	return matched;
+}
+
+function is_yield_star_expression(node: ts.Node): boolean {
+	return (
+		(ts.isYieldExpression(node) && node.asteriskToken !== undefined) ||
+		(ts.isBinaryExpression(node) &&
+			node.operatorToken.kind === ts.SyntaxKind.AsteriskToken &&
+			ts.isIdentifier(node.left) &&
+			node.left.text === "yield")
+	);
+}
+
+function has_yield_star_ancestor(node: ts.Node): boolean {
+	let current = node.parent;
+
+	while (current) {
+		if (is_yield_star_expression(current)) {
+			return true;
+		}
+
+		current = current.parent;
+	}
+
+	return false;
+}
+
+function unwrap_parentheses(expression: ts.Expression | undefined): ts.Expression | undefined {
+	let current = expression;
+
+	while (current && ts.isParenthesizedExpression(current)) {
+		current = current.expression;
+	}
+
+	return current;
 }
 
 function get_line_column(line_starts: number[], position: number): SourceLocation {
@@ -357,8 +695,4 @@ function make_line_starts(code: string): number[] {
 	}
 
 	return line_starts;
-}
-
-function escape_regexp(value: string): string {
-	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

@@ -1,18 +1,14 @@
-import { Effect, Stream } from "effect";
-
+import { create_remote_transport_error } from "$/remote/shared.ts";
 import { InvalidLiveQueryFactoryError } from "$/errors.ts";
 import type { RemoteFailure } from "$/remote/shared.ts";
+import { Effect, Stream } from "effect";
 
-/**
- * Runtime marker attached to remote live streams created by SER.
- *
- * @since 3.4.8
- */
-export const REMOTE_LIVE_STREAM: unique symbol = Symbol.for("ser.remote-live-stream") as never;
+/** Brands remote live streams without relying on class identity. */
+const remote_live_stream: unique symbol = Symbol.for("ser.remote-live-stream") as never;
 
-const LIVE_METADATA: unique symbol = Symbol.for("ser.remote-live-metadata") as never;
+const live_metadata: unique symbol = Symbol.for("ser.remote-live-metadata") as never;
 
-const LIVE_OPERATOR: unique symbol = Symbol.for("ser.live-operator") as never;
+const live_operator: unique symbol = Symbol.for("ser.live-operator") as never;
 
 type RemoteLivePipe<A, E> = {
 	(): RemoteLiveStream<A, E>;
@@ -62,7 +58,7 @@ export type RemoteLiveStream<A, E = never> = Omit<
 	Stream.Stream<A, RemoteFailure<E>, never>,
 	"pipe"
 > & {
-	readonly [REMOTE_LIVE_STREAM]: true;
+	readonly [remote_live_stream]: true;
 	readonly pipe: RemoteLivePipe<A, E>;
 };
 
@@ -106,7 +102,7 @@ export type LiveStatus =
  */
 export interface LiveFactory {
 	readonly status: {
-		readonly [LIVE_OPERATOR]: true;
+		readonly [live_operator]: true;
 		/**
 		 * Creates a stream of transport status updates for a remote live stream.
 		 *
@@ -121,7 +117,7 @@ export interface LiveFactory {
 		<A, E>(stream: RemoteLiveStream<A, E>): Stream.Stream<LiveStatus, never, never>;
 	};
 	readonly reconnect: {
-		readonly [LIVE_OPERATOR]: true;
+		readonly [live_operator]: true;
 		/**
 		 * Reconnects the transport behind a remote live stream.
 		 *
@@ -154,27 +150,13 @@ type LiveMetadata<A = unknown, ErrorType = never> = {
 };
 
 type LiveMetadataCarrier = {
-	readonly [LIVE_METADATA]?: LiveMetadata<unknown, unknown>;
+	readonly [live_metadata]?: LiveMetadata<unknown, unknown>;
 };
 
 type PipeableStream<A, E, R> = Stream.Stream<A, E, R> & {
 	readonly pipe: (...args: readonly unknown[]) => unknown;
 };
 
-/**
- * Builds a remote live stream from SvelteKit's native live resource.
- *
- * @example
- * ```ts
- * const stream = make_remote_live_stream(resource, normalize_native_error);
- * ```
- *
- * @since 3.4.8
- * @param resource - Native SvelteKit live query resource.
- * @param on_error - Error mapper used for stream and reconnect failures.
- * @returns A remote live stream carrying hidden transport metadata.
- * @internal
- */
 export function make_remote_live_stream<A, ErrorType = never>(
 	resource: unknown,
 	on_error: (error: unknown) => RemoteFailure<ErrorType>,
@@ -189,46 +171,72 @@ export function make_remote_live_stream<A, ErrorType = never>(
 	return attach_live_metadata(stream, metadata) as RemoteLiveStream<A, ErrorType>;
 }
 
-const live_status = Object.assign(
+export function make_failed_remote_live_stream<A, ErrorType = never>(
+	error: unknown,
+	on_error: (error: unknown) => RemoteFailure<ErrorType>,
+): RemoteLiveStream<A, ErrorType> {
+	const failure = on_error(error);
+	const resource: NativeLiveResource<A> & AsyncIterable<A> = {
+		connected: false,
+		done: true,
+		error: failure,
+		[Symbol.asyncIterator]: () => ({
+			next: () => Promise.reject(failure),
+		}),
+	};
+	const metadata: LiveMetadata<A, ErrorType> = {
+		resource,
+		on_error,
+	};
+	const stream = Stream.fail(failure);
+
+	return attach_live_metadata(stream, metadata) as unknown as RemoteLiveStream<A, ErrorType>;
+}
+
+const LiveStatusStream = Object.assign(
 	function status<A, E>(stream: RemoteLiveStream<A, E>): Stream.Stream<LiveStatus, never, never> {
-		const metadata = get_live_metadata(stream);
+		return Stream.unwrap(
+			Effect.sync(() => {
+				const metadata = get_live_metadata(stream);
 
-		if (!metadata) {
-			return Stream.succeed({ _tag: "Idle" } as const);
-		}
+				if (!metadata) {
+					return Stream.succeed({ _tag: "Idle" } as const);
+				}
 
-		return Stream.succeed(read_live_status(metadata.resource)).pipe(
-			Stream.concat(
-				Stream.tick("250 millis").pipe(
-					Stream.map(() => read_live_status(metadata.resource)),
-				),
-			),
+				return Stream.succeed(read_live_status(metadata.resource)).pipe(
+					Stream.concat(
+						Stream.tick("250 millis").pipe(
+							Stream.map(() => read_live_status(metadata.resource)),
+						),
+					),
+				);
+			}),
 		);
 	},
-	{ [LIVE_OPERATOR]: true as const },
+	{ [live_operator]: true as const },
 ) satisfies LiveFactory["status"];
 
-const live_reconnect = Object.assign(
+const LiveReconnect = Object.assign(
 	function reconnect<A, E>(
 		stream: RemoteLiveStream<A, E>,
 	): Effect.Effect<void, RemoteFailure<E>, never> {
-		const metadata = get_live_metadata(stream);
-		const reconnect = metadata?.resource.reconnect;
+		return Effect.gen(function* () {
+			const metadata = get_live_metadata(stream);
+			const reconnect = metadata?.resource.reconnect;
 
-		if (!metadata || typeof reconnect !== "function") {
-			return Effect.fail(new InvalidLiveQueryFactoryError()) as unknown as Effect.Effect<
-				void,
-				RemoteFailure<E>,
-				never
-			>;
-		}
+			if (!metadata || typeof reconnect !== "function") {
+				return yield* Effect.fail(
+					create_remote_transport_error(new InvalidLiveQueryFactoryError()),
+				);
+			}
 
-		return Effect.tryPromise({
-			try: () => Promise.resolve(reconnect.call(metadata.resource)),
-			catch: metadata.on_error,
-		}) as Effect.Effect<void, RemoteFailure<E>, never>;
+			yield* Effect.tryPromise({
+				try: () => Promise.resolve(reconnect.call(metadata.resource)),
+				catch: metadata.on_error,
+			});
+		});
 	},
-	{ [LIVE_OPERATOR]: true as const },
+	{ [live_operator]: true as const },
 ) satisfies LiveFactory["reconnect"];
 
 /**
@@ -237,8 +245,8 @@ const live_reconnect = Object.assign(
  * @since 3.4.8
  */
 export const Live: LiveFactory = {
-	status: live_status,
-	reconnect: live_reconnect,
+	status: LiveStatusStream,
+	reconnect: LiveReconnect,
 };
 
 function as_native_live_resource<A>(resource: unknown): NativeLiveResource<A> & AsyncIterable<A> {
@@ -271,16 +279,16 @@ function attach_live_metadata<A, E, R>(
 ): Stream.Stream<A, E, R> {
 	const carrier = stream as Stream.Stream<A, E, R> & LiveMetadataCarrier;
 
-	if (carrier[LIVE_METADATA]) {
+	if (carrier[live_metadata]) {
 		return stream;
 	}
 
-	Object.defineProperty(carrier, LIVE_METADATA, {
+	Object.defineProperty(carrier, live_metadata, {
 		configurable: true,
 		value: metadata,
 	});
 
-	Object.defineProperty(carrier, REMOTE_LIVE_STREAM, {
+	Object.defineProperty(carrier, remote_live_stream, {
 		configurable: true,
 		value: true,
 	});
@@ -317,7 +325,7 @@ function get_live_metadata(
 function get_live_metadata(
 	stream: Stream.Stream<unknown, unknown, unknown>,
 ): LiveMetadata<unknown, unknown> | undefined {
-	return (stream as LiveMetadataCarrier)[LIVE_METADATA];
+	return (stream as LiveMetadataCarrier)[live_metadata];
 }
 
 function read_live_status(resource: NativeLiveResource<unknown>): LiveStatus {

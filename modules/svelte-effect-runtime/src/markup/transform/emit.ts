@@ -1,12 +1,3 @@
-import { AsyncEffectInEventCallbackError, YieldStarInEventCallbackError } from "$/errors.ts";
-import type { EffectCallbackRewriteContext } from "./effect-bindings.ts";
-import { collect_yield_star_nodes } from "$/script-transform/ast.ts";
-import {
-	analyze_event_body_yield_star,
-	collect_free_identifiers,
-	is_callback_function_expression,
-} from "./expressions.ts";
-import { normalize_effect_callback_yields } from "./effect-callbacks.ts";
 import type {
 	HelperDeclaration,
 	MarkupCandidate,
@@ -17,13 +8,22 @@ import type {
 	Replacement,
 	TagKind,
 } from "./types.ts";
+import {
+	analyze_event_body_yield_star,
+	collect_free_identifiers,
+	is_callback_function_expression,
+} from "./expressions.ts";
+import { AsyncEffectInEventCallbackError, YieldStarInEventCallbackError } from "$/errors.ts";
+import type { EffectCallbackRewriteContext } from "./effect-bindings.ts";
+import { normalize_effect_callback_yields } from "./effect-callbacks.ts";
+import { collect_yield_star_nodes } from "$/script-transform/ast.ts";
 
 import ts from "typescript";
 
 interface ClassifiedCandidate {
 	candidate: MarkupCandidate;
 	kind: TagKind;
-	attribute_name_replacement?: AttributeNameReplacement;
+	attribute_name_replacement: AttributeNameReplacement | undefined;
 }
 
 interface AttributeNameReplacement {
@@ -39,15 +39,6 @@ type ExpressionRelocation = {
 	generatedEnd: number;
 };
 
-/**
- * Emits source edits for classified markup Effect expressions.
- *
- * @since 2.0.0
- * @param classified - Candidates paired with their Svelte markup context.
- * @param effect_context - Effect import bindings available to markup
- *   expression rewrites.
- * @returns Replacements ready to apply to the original component source.
- */
 export function emit_replacements(
 	classified: ClassifiedCandidate[],
 	effect_context: EffectCallbackRewriteContext,
@@ -168,6 +159,17 @@ function emit_replacement(
 			event.expr_text,
 			event.relocation,
 		);
+	} else if (kind === "html") {
+		const effect = make_inline_effect(normalized_candidate, helper_bindings);
+
+		replacement_text = emit_await_expression(id_text, effect, helper_bindings);
+		helpers = normalized.helpers;
+		relocation = make_pending_relocation(
+			candidate,
+			replacement_text,
+			effect.effect_text,
+			effect.relocation,
+		);
 	} else {
 		const effect = make_effect_helper(normalized_candidate, helper_name, helper_bindings);
 
@@ -185,7 +187,7 @@ function emit_replacement(
 		end: candidate.end,
 		text: replacement_text,
 		helpers,
-		relocation,
+		...(relocation ? { relocation } : {}),
 	};
 }
 
@@ -268,16 +270,24 @@ function server_fallback(is_server_target: boolean, fallback: string): string | 
 }
 
 interface EffectHelper {
-	helper: HelperDeclaration;
 	call: string;
 	deps_text: string;
+}
+
+interface DeclaredEffectHelper extends EffectHelper {
+	helper: HelperDeclaration;
+}
+
+interface InlineEffectHelper extends EffectHelper {
+	effect_text: string;
+	relocation: ExpressionRelocation | undefined;
 }
 
 function make_effect_helper(
 	candidate: MarkupCandidate,
 	helper_name: string,
 	helper_bindings: Pick<MarkupHelperBindings, "yieldable">,
-): EffectHelper {
+): DeclaredEffectHelper {
 	const deps = collect_free_identifiers(candidate.expr_text);
 	const args_text = deps.join(", ");
 	const deps_text = deps.length === 0 ? "[]" : `[${args_text}]`;
@@ -311,6 +321,27 @@ function make_effect_helper(
 				generatedEndInReplacement: generated_start + relocation.generatedEnd,
 			},
 		},
+	};
+}
+
+function make_inline_effect(
+	candidate: MarkupCandidate,
+	helper_bindings: Pick<MarkupHelperBindings, "yieldable">,
+): InlineEffectHelper {
+	const deps = collect_free_identifiers(candidate.expr_text);
+	const deps_text = deps.length === 0 ? "[]" : `[${deps.join(", ")}]`;
+	const effect_text = wrap_yield_stars(candidate.expr_text, helper_bindings);
+	const relocation = make_yield_operand_relocation(
+		candidate.expr_text,
+		effect_text,
+		helper_bindings,
+	);
+
+	return {
+		call: `(function* () { return (${effect_text}); })()`,
+		deps_text,
+		effect_text,
+		relocation,
 	};
 }
 

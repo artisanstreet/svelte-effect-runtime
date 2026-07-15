@@ -5,143 +5,162 @@ import {
 	create_source_map_mapper,
 	SequentialDocumentMapper,
 } from "./document-mappers.ts";
-import type { SvelteEffectSourceScan } from "../../../svelte-effect-runtime/src/compiler/source-scan.ts";
 import {
 	scan_svelte_effect_source,
 	shift_scan_after_at_insertions,
 } from "../../../svelte-effect-runtime/src/compiler/source-scan.ts";
+import type { SvelteEffectSourceScan } from "../../../svelte-effect-runtime/src/compiler/source-scan.ts";
 import { safe_markup_transform_result, safe_script_transform_result } from "./transform-results.ts";
-import { Document, extractScriptTags } from "./svelte-internals.ts";
+import type { SvelteInternalsService } from "./svelte-internals.ts";
 import type { Mapper, TransformSet } from "./types.ts";
 
 import MagicString from "magic-string";
 
-export function prepare_virtual_document(originalDocument: any, transforms: TransformSet) {
-	const originalText = originalDocument.getText();
-	const filename = originalDocument.getFilePath() ?? "Component.svelte";
-	const sourceUri = originalDocument.uri;
-	const originalScan = scan_svelte_effect_source(originalText, filename);
-	const normalizedDeclarations = normalize_bare_const_declaration_tags(
-		originalText,
-		sourceUri,
-		originalScan,
+export function prepare_virtual_document(
+	original_document: any,
+	transforms: TransformSet,
+	internals: SvelteInternalsService,
+) {
+	const original_text = original_document.getText();
+	const filename = original_document.getFilePath() ?? "Component.svelte";
+	const source_uri = original_document.uri;
+	const original_scan = scan_svelte_effect_source(original_text, filename);
+	const normalized_declarations = normalize_bare_const_declaration_tags(
+		original_text,
+		source_uri,
+		original_scan,
 	);
-	const normalizationMapper = normalizedDeclarations
-		? create_source_map_mapper(normalizedDeclarations.map, sourceUri)
-		: null;
-	const normalizedCode = normalizedDeclarations?.code ?? originalText;
-	const normalizedScan = normalizedDeclarations
-		? shift_scan_after_at_insertions(
-				originalScan,
-				normalizedCode,
-				originalScan.bare_const_tags.map((tag) => tag.insert_position),
+	const normalization_mapper = normalized_declarations
+		? create_source_map_mapper(
+				normalized_declarations.map,
+				source_uri,
+				internals.source_map_document_mapper,
 			)
-		: originalScan;
-	const globalTypescript = add_global_typescript_scripts(
-		normalizedCode,
-		sourceUri,
-		normalizedScan,
-	);
-	const globalTypescriptMapper = globalTypescript
-		? create_source_map_mapper(globalTypescript.map, sourceUri)
 		: null;
-	const baseCode = globalTypescript?.code ?? normalizedCode;
+	const normalized_code = normalized_declarations?.code ?? original_text;
+	const normalized_scan = normalized_declarations
+		? shift_scan_after_at_insertions(
+				original_scan,
+				normalized_code,
+				original_scan.bare_const_tags.map((tag) => tag.insert_position),
+			)
+		: original_scan;
+	const global_typescript = add_global_typescript_scripts(
+		normalized_code,
+		source_uri,
+		normalized_scan,
+	);
+	const global_typescript_mapper = global_typescript
+		? create_source_map_mapper(
+				global_typescript.map,
+				source_uri,
+				internals.source_map_document_mapper,
+			)
+		: null;
+	const base_code = global_typescript?.code ?? normalized_code;
 
 	const markup_attempt = safe_markup_transform_result(
 		() =>
-			transforms.transformEffectMarkup(baseCode, {
+			transforms.transformEffectMarkup(base_code, {
 				filename,
 			}),
-		baseCode,
+		base_code,
 		filename,
 	);
-	const markupResult = markup_attempt.result;
+	const markup_result = markup_attempt.result;
 
-	let currentCode = markupResult.code;
-	const markupCode = currentCode;
-	let scriptMapper: Mapper | null = null;
-	const scripts = extractScriptTags(currentCode);
+	let current_code = markup_result.code;
+	const markup_code = current_code;
+	let script_mapper: Mapper | null = null;
+	const scripts = internals.extract_script_tags(current_code);
 
 	if (scripts?.script && has_own(scripts.script.attributes, "effect")) {
-		const preScriptTransformCode = currentCode;
-		const magicString = new MagicString(currentCode);
+		const pre_script_transform_code = current_code;
+		const magic_string = new MagicString(current_code);
 		const transformed_script_attempt = safe_script_transform_result(
 			() => transforms.transformEffectScript(scripts.script.content, { filename }),
 			scripts.script.content,
 			filename,
 		);
-		const transformedScript = transformed_script_attempt.result;
-		const effectAttributeRange = find_effect_attribute_range(currentCode, scripts.script);
-		const changedScriptContent = transformedScript.code !== scripts.script.content;
+		const transformed_script = transformed_script_attempt.result;
+		const effect_attribute_range = find_effect_attribute_range(current_code, scripts.script);
+		const changed_script_content = transformed_script.code !== scripts.script.content;
 
-		if (effectAttributeRange) {
-			magicString.remove(effectAttributeRange.start, effectAttributeRange.end);
+		if (effect_attribute_range) {
+			magic_string.remove(effect_attribute_range.start, effect_attribute_range.end);
 		}
 
-		if (changedScriptContent) {
-			magicString.overwrite(scripts.script.start, scripts.script.end, transformedScript.code);
+		if (changed_script_content) {
+			magic_string.overwrite(
+				scripts.script.start,
+				scripts.script.end,
+				transformed_script.code,
+			);
 		}
 
-		if (effectAttributeRange || changedScriptContent) {
-			currentCode = magicString.toString();
-			const fullDocumentMapper = create_source_map_mapper(
-				magicString.generateMap({
+		if (effect_attribute_range || changed_script_content) {
+			current_code = magic_string.toString();
+			const full_document_mapper = create_source_map_mapper(
+				magic_string.generateMap({
 					hires: true,
 					includeContent: true,
-					source: sourceUri,
+					source: source_uri,
 				}) as unknown as Record<string, unknown>,
-				sourceUri,
+				source_uri,
+				internals.source_map_document_mapper,
 			);
-			const transformedScripts = extractScriptTags(currentCode);
-			const transformedScriptTag = transformedScripts?.script;
+			const transformed_scripts = internals.extract_script_tags(current_code);
+			const transformed_script_tag = transformed_scripts?.script;
 
-			if (changedScriptContent && transformedScriptTag) {
-				scriptMapper = create_script_content_mapper(
-					preScriptTransformCode,
-					currentCode,
+			if (changed_script_content && transformed_script_tag) {
+				script_mapper = create_script_content_mapper(
+					pre_script_transform_code,
+					current_code,
 					scripts.script,
-					transformedScriptTag,
-					transformedScript.map,
-					transformedScript.relocations ?? [],
-					fullDocumentMapper,
-					sourceUri,
+					transformed_script_tag,
+					transformed_script.map,
+					transformed_script.relocations ?? [],
+					full_document_mapper,
+					source_uri,
+					internals,
 				);
 			} else {
-				scriptMapper = fullDocumentMapper;
+				script_mapper = full_document_mapper;
 			}
 		}
 	}
 
-	const markupMapper =
-		markupResult.code === baseCode
+	const markup_mapper =
+		markup_result.code === base_code
 			? null
 			: create_relocated_source_mapper(
-					baseCode,
-					markupCode,
-					markupResult.map,
-					markupResult.relocations ?? [],
-					sourceUri,
+					base_code,
+					markup_code,
+					markup_result.map,
+					markup_result.relocations ?? [],
+					source_uri,
+					internals,
 				);
 
-	if (!scriptMapper && !markupMapper && !globalTypescriptMapper && !normalizationMapper) {
+	if (!script_mapper && !markup_mapper && !global_typescript_mapper && !normalization_mapper) {
 		return null;
 	}
 
-	const virtualDocument = Document.createForTest(sourceUri, currentCode);
-	virtualDocument.version = originalDocument.version;
-	virtualDocument.openedByClient = originalDocument.openedByClient;
-	virtualDocument.config = originalDocument.config;
-	virtualDocument.configPromise = originalDocument.configPromise;
-	virtualDocument._compiler = originalDocument._compiler ?? originalDocument.compiler;
-	virtualDocument.svelteVersion = originalDocument.svelteVersion;
+	const virtual_document = internals.document.createForTest(source_uri, current_code);
+	virtual_document.version = original_document.version;
+	virtual_document.openedByClient = original_document.openedByClient;
+	virtual_document.config = original_document.config;
+	virtual_document.configPromise = original_document.configPromise;
+	virtual_document._compiler = original_document._compiler ?? original_document.compiler;
+	virtual_document.svelteVersion = original_document.svelteVersion;
 
 	return {
-		document: virtualDocument,
+		document: virtual_document,
 		preprocessMapper: new SequentialDocumentMapper(
-			[scriptMapper, markupMapper, globalTypescriptMapper, normalizationMapper].filter(
+			[script_mapper, markup_mapper, global_typescript_mapper, normalization_mapper].filter(
 				Boolean,
 			) as Mapper[],
-			sourceUri,
+			source_uri,
 		),
 	};
 }

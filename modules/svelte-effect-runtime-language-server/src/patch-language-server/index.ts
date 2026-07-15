@@ -1,25 +1,29 @@
-import { DocumentSnapshot, import_runtime_module, patch_marker } from "./svelte-internals.ts";
-import { normalize_transform_result } from "./transform-results.ts";
 import {
-	patch_svelte_file_extensions,
-	patch_svelte_compiler_path,
-	patch_typescript_code_actions,
-	patch_typescript_snapshot_path,
+	PatchSvelteCompilerPath,
+	PatchSvelteFileExtensions,
+	PatchTypeScriptCodeActions,
+	PatchTypeScriptSnapshotPath,
 } from "./patches.ts";
+import {
+	RuntimeTransforms,
+	RuntimeTransformsLive,
+	SvelteInternalsLive,
+} from "./svelte-internals.ts";
+import { normalize_transform_result } from "./transform-results.ts";
+import { Effect, Layer } from "effect";
 
-export async function bootstrap_language_server() {
-	if (DocumentSnapshot.fromDocument[patch_marker]) {
-		return;
-	}
+export const LanguageServerLive = Layer.merge(SvelteInternalsLive, RuntimeTransformsLive);
 
-	const runtime_module = await import_runtime_module("runtime/transform.js");
+/** Installs each SER language-server patch at most once per process. */
+export const Bootstrap = Effect.gen(function* () {
+	const runtime_transforms = yield* RuntimeTransforms;
 
-	patch_svelte_file_extensions();
-	patch_svelte_compiler_path(runtime_module.transform_svelte_effect);
-	patch_typescript_snapshot_path({
+	yield* PatchSvelteFileExtensions();
+	yield* PatchSvelteCompilerPath(runtime_transforms.transform_svelte_effect);
+	yield* PatchTypeScriptSnapshotPath({
 		transformEffectMarkup: (code, options) =>
 			normalize_transform_result(
-				runtime_module.transform_markup_effect(code, options.filename, {
+				runtime_transforms.transform_markup_effect(code, options.filename, {
 					target: "editor",
 				}),
 				code,
@@ -27,10 +31,10 @@ export async function bootstrap_language_server() {
 			),
 		transformEffectScript: (code, options) =>
 			normalize_transform_result(
-				runtime_module.transform_script_effect(code, options.filename),
+				runtime_transforms.transform_script_effect(code, options.filename),
 				code,
 				options.filename,
 			),
 	});
-	patch_typescript_code_actions();
-}
+	yield* PatchTypeScriptCodeActions();
+});

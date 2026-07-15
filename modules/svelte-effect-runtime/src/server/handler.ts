@@ -1,9 +1,9 @@
+import { RunInsideRemoteEffectHandler } from "./remote-handler-context.ts";
 import { getRequestEvent as get_native_request_event } from "$app/server";
-import { Effect } from "effect";
-
 import { get_server_runtime_or_throw, RequestEvent } from "./runtime.ts";
-import { ToEffect } from "./effects.ts";
 import type { EffectHandler } from "./types.ts";
+import { ToEffect } from "./effects.ts";
+import { Effect } from "effect";
 
 /**
  * Adapts an Effect-producing callback to a native SvelteKit server handler.
@@ -46,8 +46,13 @@ export function Handler<NativeHandler extends (...arguments_: never[]) => unknow
 	const native_handler = async (...arguments_: Parameters<NativeHandler>) => {
 		const event = get_native_request_event();
 		const runtime = get_server_runtime_or_throw();
-		const value = handler(...arguments_);
-		const EffectWithRequestEvent = Effect.provideService(ToEffect(value), RequestEvent, event);
+		const HandlerEffect = Effect.suspend(() => ToEffect(handler(...arguments_)));
+		const HandlerOwnedEffect = RunInsideRemoteEffectHandler(event, HandlerEffect);
+		const EffectWithRequestEvent = Effect.provideService(
+			HandlerOwnedEffect,
+			RequestEvent,
+			event,
+		);
 
 		return await runtime.runPromise(EffectWithRequestEvent);
 	};

@@ -1,44 +1,12 @@
 import { Schema } from "effect";
 
-/**
- * Shared types, markers, and constructors used by both the client-side remote
- * adapters and the server-side handler runtime. These types define the error
- * protocol that flows across the network boundary.
- *
- * @since 2.0.0
- */
+/** Remote error wire protocol shared by client and server adapters. */
 
-/**
- * Well-known marker injected into every serialised remote-failure envelope
- * so the client can reliably distinguish runtime errors from domain values.
- *
- * @example
- * ```ts
- * if (envelope[EFFECT_REMOTE_ERROR_MARKER] === true) {
- *   console.log(envelope.encoded);
- * }
- * ```
- *
- * @since 2.0.0
- * @internal
- */
-export const EFFECT_REMOTE_ERROR_MARKER = "__svelte_effect_remote__";
+/** Shared marker used to recognize remote errors across package copies. */
+export const effect_remote_error_marker = "__svelte_effect_remote__";
 
-/**
- * Well-known symbol used to attach a payload decoder to a remote function
- * so the client's transport layer can decode domain error types.
- *
- * @example
- * ```ts
- * Reflect.get(remote_function, REMOTE_ERROR_DECODER);
- * ```
- *
- * @since 2.0.0
- * @internal
- */
-export const REMOTE_ERROR_DECODER = Symbol.for("svelte-effect-runtime/remote-error-decoder");
-
-/** Form validation helpers and types. */
+/** Decodes the shared remote-error marker without relying on class identity. */
+export const remote_error_decoder = Symbol.for("svelte-effect-runtime/remote-error-decoder");
 
 /**
  * A single field-level or form-level validation issue reported by a
@@ -83,20 +51,6 @@ export interface FormError<SchemaType = unknown> {
 	readonly _schema?: SchemaType;
 }
 
-/**
- * Creates a {@link FormError} holding the given issues.
- *
- * @example
- * ```ts
- * const error = create_form_error([
- *   { message: "Required.", path: ["email"] },
- * ]);
- * ```
- *
- * @since 2.0.0
- * @param issues - The validation issues to attach.
- * @returns A FormError with the `_tag` set and no schema reference.
- */
 export function create_form_error(issues: readonly FormIssue[]): FormError {
 	return { _tag: "FormError", issues };
 }
@@ -119,16 +73,13 @@ export function is_form_error(value: unknown): value is FormError {
 	return is_form_error_value(value);
 }
 
-/** Remote error types shared by client and server helpers. */
-
 /**
  * Union of all wire-level error shapes that a remote function can
  * surface on its error channel.
  *
  * @example
  * ```ts
- * const result = yield* myQuery();
- * // error channel is RemoteFailure<DomainError>
+ * const result: Effect.Effect<User, RemoteFailure<DomainError>> = myQuery();
  * ```
  *
  * @since 2.0.0
@@ -203,21 +154,6 @@ export interface RemoteTransportError {
 	readonly body?: unknown;
 }
 
-/**
- * Wire format for an encoded remote failure. The server wraps domain
- * errors in this envelope before serialising them with devalue.
- *
- * @example
- * ```ts
- * const envelope: SerializedRemoteFailureEnvelope = {
- *   __svelte_effect_remote__: true,
- *   encoded: "[\"DomainError\"]",
- * };
- * ```
- *
- * @since 2.0.0
- * @internal
- */
 export interface SerializedRemoteFailureEnvelope {
 	readonly __svelte_effect_remote__: true;
 	readonly encoded: string;
@@ -268,25 +204,6 @@ const is_serialized_remote_failure_envelope_value = Schema.is(
 	SerializedRemoteFailureEnvelopeSchema,
 );
 
-/** Constructors for structured remote error values. */
-
-/**
- * Creates a {@link RemoteValidationError} from a list of form issues.
- *
- * @example
- * ```ts
- * const error = create_remote_validation_error([
- *   { message: "Required.", path: ["email"] },
- * ]);
- * ```
- *
- * @since 2.0.0
- * @param issues - The validation issues reported by the server handler.
- * @param body - Optional response body returned alongside the error.
- * @param status - HTTP status code (defaults to 400).
- * @returns A remote-validation error shape.
- * @internal
- */
 export function create_remote_validation_error(
 	issues: readonly FormIssue[],
 	body?: unknown,
@@ -295,21 +212,6 @@ export function create_remote_validation_error(
 	return { _tag: "RemoteValidationError", issues, body, status };
 }
 
-/**
- * Creates a {@link RemoteHttpError} for a given HTTP status.
- *
- * @example
- * ```ts
- * const error = create_remote_http_error(404, { message: "Not found" });
- * ```
- *
- * @since 2.0.0
- * @param status - The HTTP status code.
- * @param body - Optional response body.
- * @param cause - Optional underlying cause.
- * @returns A remote HTTP error shape.
- * @internal
- */
 export function create_remote_http_error(
 	status: number,
 	body?: unknown,
@@ -318,20 +220,6 @@ export function create_remote_http_error(
 	return { _tag: "RemoteHttpError", status, body, cause };
 }
 
-/**
- * Creates a {@link RemoteTransportError} for network or decode failures.
- *
- * @example
- * ```ts
- * const error = create_remote_transport_error(new Error("Network unavailable"));
- * ```
- *
- * @since 2.0.0
- * @param cause - The underlying error that caused the transport failure.
- * @param body - Optional response body if one was received.
- * @returns A remote transport error shape.
- * @internal
- */
 export function create_remote_transport_error(
 	cause: unknown,
 	body?: unknown,
@@ -339,43 +227,12 @@ export function create_remote_transport_error(
 	return { _tag: "RemoteTransportError", cause, body };
 }
 
-/**
- * Wraps a devalue-encoded error string inside a
- * {@link SerializedRemoteFailureEnvelope}.
- *
- * @example
- * ```ts
- * const envelope = create_serialized_remote_failure_envelope(encoded);
- * ```
- *
- * @since 2.0.0
- * @param encoded - The devalue-encoded error value.
- * @returns The wire-format envelope.
- * @internal
- */
 export function create_serialized_remote_failure_envelope(
 	encoded: string,
 ): SerializedRemoteFailureEnvelope {
 	return { __svelte_effect_remote__: true, encoded };
 }
 
-/** Type guards for structured remote error values. */
-
-/**
- * Checks whether a value is a {@link SerializedRemoteFailureEnvelope}.
- *
- * @example
- * ```ts
- * if (is_serialized_remote_failure_envelope(value)) {
- *   console.log(value.encoded);
- * }
- * ```
- *
- * @since 2.0.0
- * @param value - The value to check.
- * @returns `true` when the value is a serialised failure envelope.
- * @internal
- */
 export function is_serialized_remote_failure_envelope(
 	value: unknown,
 ): value is SerializedRemoteFailureEnvelope {

@@ -1,12 +1,11 @@
-import type { AST } from "svelte/compiler";
-
 import { is_svelte_event_attribute, normalize_event_attribute_name } from "../event-attributes.ts";
 import type { MarkupCandidate, TagKind } from "./types.ts";
+import type { AST } from "svelte/compiler";
 
 interface ClassifiedCandidate {
 	candidate: MarkupCandidate;
 	kind: TagKind;
-	attribute_name_replacement?: AttributeNameReplacement;
+	attribute_name_replacement: AttributeNameReplacement | undefined;
 }
 
 interface AttributeNameReplacement {
@@ -15,15 +14,6 @@ interface AttributeNameReplacement {
 	text: string;
 }
 
-/**
- * Matches sanitized placeholders back to their Svelte AST context.
- *
- * @since 2.0.0
- * @param ast - Parsed Svelte AST for the sanitized component markup.
- * @param candidates - Placeholder candidates produced by the scanner.
- * @returns Candidates paired with the markup context that determines how they
- *   should be emitted.
- */
 export function classify_candidates(
 	ast: AST.Root,
 	candidates: MarkupCandidate[],
@@ -92,7 +82,7 @@ function visit_ast_node(
 			return;
 
 		case "HtmlTag":
-			classify_expression(node.expression, "plain", candidates, matched, classified);
+			classify_expression(node.expression, "html", candidates, matched, classified);
 			return;
 
 		case "DebugTag":
@@ -114,7 +104,13 @@ function visit_ast_node(
 			return;
 
 		case "SvelteElement":
-			classify_expression(node.tag as ExpressionLike, "plain", candidates, matched, classified);
+			classify_expression(
+				node.tag as ExpressionLike,
+				"plain",
+				candidates,
+				matched,
+				classified,
+			);
 			visit_element_attributes(node, candidates, matched, classified);
 			walk_ast(node.fragment, candidates, matched, classified);
 			return;

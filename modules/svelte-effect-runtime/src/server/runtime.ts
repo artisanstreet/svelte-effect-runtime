@@ -15,6 +15,12 @@ type ViteImportMeta = ImportMeta & {
 /**
  * Subset of SvelteKit's `RequestEvent` that remote handlers typically access.
  *
+ * @example
+ * ```ts
+ * const event: RequestEvent = yield* RequestEvent;
+ * console.log(event.url.pathname);
+ * ```
+ *
  * @since 2.0.0
  */
 export interface RequestEvent extends Pick<
@@ -111,18 +117,6 @@ export function get_server_runtime_or_throw(): ManagedRuntime.ManagedRuntime<unk
 	return current_server_runtime;
 }
 
-/**
- * Returns a dispatcher backed by the active server runtime.
- *
- * @example
- * ```ts
- * const dispatcher = get_server_dispatcher();
- * ```
- *
- * @since 3.0.1
- * @returns The cached server dispatcher, creating one from the current server
- *   runtime when needed.
- */
 export function get_server_dispatcher(): InternalDispatcher {
 	current_server_dispatcher ??= new InternalDispatcher(
 		get_server_runtime_or_throw() as unknown as ManagedRuntimeType<unknown, unknown>,
@@ -137,18 +131,6 @@ function is_vite_dev_ssr(): boolean {
 	return env?.DEV === true && env?.SSR === true && env.MODE !== "test";
 }
 
-/**
- * Resets the internal server runtime singleton used by source-level tests.
- *
- * @example
- * ```ts
- * reset_server_runtime();
- * ```
- *
- * @since 3.4.0
- * @returns Nothing.
- * @internal
- */
 export function reset_server_runtime(): void {
 	const dispatcher = current_server_dispatcher;
 	const runtime = current_server_runtime;

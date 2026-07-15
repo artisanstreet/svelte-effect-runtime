@@ -1,17 +1,16 @@
 import { analyze_event_body_yield_star, strip_arrow_function } from "./expressions.ts";
-import { collect_yield_star_nodes } from "$/script-transform/ast.ts";
-import { scan_svelte_effect_source } from "$/compiler/source-scan.ts";
 import { validate_rune_yield_usage } from "$/script-transform/runes.ts";
+import type { SvelteEffectSourceScan } from "$/compiler/source-scan.ts";
+import { collect_yield_star_nodes } from "$/script-transform/ast.ts";
 import { contains_top_level_yield_star } from "$/detect.ts";
 import type { MarkupCandidate, TagKind } from "./types.ts";
-import { HELPERS } from "./constants.ts";
+import { default_helper_bindings } from "./constants.ts";
 
 import MagicString from "magic-string";
-
 import ts from "typescript";
 
 interface SanitizeResult {
-	code: string;
+	parse_code: string;
 	candidates: MarkupCandidate[];
 }
 
@@ -21,29 +20,10 @@ interface DeclarationYieldExpression {
 	expr_text: string;
 }
 
-/**
- * Replaces markup `yield*` expressions with placeholders before Svelte parses
- * the component.
- *
- * @example
- * ```ts
- * const sanitized = sanitize_markup(
- *   `<p>{yield* loadLabel()}</p>`,
- *   "Label.svelte",
- * );
- * ```
- *
- * @since 2.0.0
- * @param content - Raw Svelte component source to scan for effectful markup
- *   expressions.
- * @param filename - Source filename used when validation errors need to point
- *   back to the component being transformed.
- * @returns Sanitized source plus placeholder candidates that should be lowered
- *   after Svelte classifies their markup positions.
- */
-export function sanitize_markup(content: string, filename: string): SanitizeResult {
+export function sanitize_markup(source_scan: SvelteEffectSourceScan): SanitizeResult {
+	const content = source_scan.source;
+	const filename = source_scan.filename;
 	const candidates: MarkupCandidate[] = [];
-	const source_scan = scan_svelte_effect_source(content, filename);
 	const magic = new MagicString(content);
 	let helper_index = 0;
 
@@ -186,7 +166,39 @@ export function sanitize_markup(content: string, filename: string): SanitizeResu
 		magic.overwrite(expr_start, expr_end, key === "render" ? `${placeholder}()` : placeholder);
 	}
 
-	return { code: magic.toString(), candidates };
+	if (candidates.length === 0) {
+		return { parse_code: content, candidates };
+	}
+
+	for (const region of source_scan.scripts) {
+		const region_source = content.slice(region.start, region.end);
+
+		magic.overwrite(
+			region.start,
+			region.end,
+			blank_script_region(region_source, region.is_module, region.is_typescript),
+		);
+	}
+
+	for (const region of source_scan.styles) {
+		const region_source = content.slice(region.start, region.end);
+
+		magic.overwrite(region.start, region.end, blank_source_region(region_source));
+	}
+
+	return { parse_code: magic.toString(), candidates };
+}
+
+function blank_source_region(source: string): string {
+	return source.replace(/[^\r\n]/g, " ");
+}
+
+function blank_script_region(source: string, is_module: boolean, is_typescript: boolean): string {
+	const module_attribute = is_module ? " module" : "";
+	const lang_attribute = is_typescript ? " lang=ts" : "";
+	const scaffold = `<script${module_attribute}${lang_attribute}></script>`;
+
+	return scaffold + blank_source_region(source.slice(scaffold.length));
 }
 
 function collect_expression_yield_expressions(
@@ -267,7 +279,7 @@ function get_tag_info(trimmed: string): TagInfo {
 		return { kind: "plain", prefix_length: "@const ".length };
 	}
 	if (trimmed.startsWith("@html ")) {
-		return { kind: "plain", prefix_length: "@html ".length };
+		return { kind: "html", prefix_length: "@html ".length };
 	}
 	if (trimmed.startsWith("@debug ")) {
 		return { kind: "plain", prefix_length: "@debug ".length };
@@ -365,7 +377,7 @@ function analyze_event_yield(inner: string): {
 	const event = strip_arrow_function(inner);
 	const analysis = analyze_event_body_yield_star(event.body);
 	const generated_run = new RegExp(
-		`${HELPERS.dispatcher}(?:_\\d+)?\\.emit\\(\\{\\s*type:\\s*${HELPERS.codes}(?:_\\d+)?\\.Markup\\.Run`,
+		`${default_helper_bindings.dispatcher}(?:_\\d+)?\\.emit\\(\\{\\s*type:\\s*${default_helper_bindings.codes}(?:_\\d+)?\\.Markup\\.Run`,
 	);
 
 	if (generated_run.test(event.body)) {

@@ -1,29 +1,31 @@
-import { test } from "vitest";
+import {
+	type SvelteInternalsService,
+	SvelteInternals,
+} from "../../../modules/svelte-effect-runtime-language-server/src/patch-language-server/svelte-internals.ts";
+import { rebind_snapshot_to_original_document } from "../../../modules/svelte-effect-runtime-language-server/src/patch-language-server/snapshot.ts";
+import { normalize_transform_result } from "../../../modules/svelte-effect-runtime-language-server/src/patch-language-server/transform-results.ts";
+import { prepare_virtual_document } from "../../../modules/svelte-effect-runtime-language-server/src/patch-language-server/virtual-document.ts";
 import {
 	assert_false,
-	assert_truthy,
 	assert_equals,
 	assert_string_includes,
-} from "../../svelte-effect-runtime/runtime/helpers/assert.ts";
-import { fileURLToPath } from "node:url";
+	assert_truthy,
+} from "../../svelte-effect-runtime/unit/helpers/assert.ts";
 import {
-	Document,
-	DocumentSnapshot,
-	SvelteDocument,
-	ts,
-} from "../../../modules/svelte-effect-runtime-language-server/src/patch-language-server/svelte-internals.ts";
-import { normalize_transform_result } from "../../../modules/svelte-effect-runtime-language-server/src/patch-language-server/transform-results.ts";
-import {
-	patch_svelte_compiler_path,
-	patch_svelte_file_extensions,
-} from "../../../modules/svelte-effect-runtime-language-server/src/patch-language-server/patches.ts";
-import { prepare_virtual_document } from "../../../modules/svelte-effect-runtime-language-server/src/patch-language-server/virtual-document.ts";
-import { rebind_snapshot_to_original_document } from "../../../modules/svelte-effect-runtime-language-server/src/patch-language-server/snapshot.ts";
+	get_server_dispatcher,
+	reset_server_runtime,
+	ServerRuntime,
+} from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
 import {
 	transform_markup_effect,
 	transform_script_effect,
-	transform_svelte_effect,
 } from "../../../modules/svelte-effect-runtime/src/runtime/transform.ts";
+import { LanguageServerLive } from "../../../modules/svelte-effect-runtime-language-server/src/patch-language-server/index.ts";
+import { Bootstrap } from "../../../modules/svelte-effect-runtime-language-server/src/server.ts";
+import { NodeServices } from "@effect/platform-node";
+import { afterAll, beforeAll, test } from "vitest";
+import { fileURLToPath } from "node:url";
+import { Effect } from "effect";
 
 import * as compiler from "svelte/compiler";
 
@@ -42,6 +44,26 @@ const component_source = `<script lang="ts" effect>
 <h1>{post.title}</h1>
 `;
 
+let internals: SvelteInternalsService;
+
+beforeAll(async () => {
+	ServerRuntime.make(NodeServices.layer);
+
+	internals = await get_server_dispatcher().run(
+		Effect.gen(function* () {
+			const loaded_internals = yield* SvelteInternals;
+
+			yield* Bootstrap;
+
+			return loaded_internals;
+		}).pipe(Effect.provide(LanguageServerLive)),
+	);
+});
+
+afterAll(() => {
+	reset_server_runtime();
+});
+
 type DocumentLike = {
 	positionAt(offset: number): SourcePosition;
 };
@@ -58,10 +80,8 @@ type SourcePosition = {
 };
 
 test("patched Svelte diagnostics compile script effect top-level await", async () => {
-	patch_svelte_compiler_path(transform_svelte_effect);
-
 	const document = make_document(component_source);
-	const svelte_document = new SvelteDocument(document);
+	const svelte_document = new internals.svelte_document(document);
 	const compiled = await svelte_document.getCompiled();
 
 	assert_truthy(compiled.js);
@@ -69,7 +89,7 @@ test("patched Svelte diagnostics compile script effect top-level await", async (
 
 test("virtual TS document removes the SER effect script attribute", () => {
 	const document = make_document(component_source);
-	const prepared = prepare_virtual_document(document, make_transforms());
+	const prepared = prepare_virtual_document(document, make_transforms(), internals);
 
 	assert_truthy(prepared);
 
@@ -90,7 +110,7 @@ test("virtual TS document recovers from script transform errors", () => {
 		`</script>`,
 	].join("\n");
 	const document = make_document(source);
-	const prepared = prepare_virtual_document(document, make_transforms());
+	const prepared = prepare_virtual_document(document, make_transforms(), internals);
 
 	assert_truthy(prepared);
 	assert_string_includes(prepared.document.getText(), "__SER_language_server_transform_error");
@@ -102,12 +122,16 @@ test("virtual TS document recovers from script transform errors", () => {
 
 test("virtual TS document reports markup transform errors", () => {
 	const document = make_document(`<h1>Hello</h1>`);
-	const prepared = prepare_virtual_document(document, {
-		...make_transforms(),
-		transformEffectMarkup: () => {
-			throw new Error("markup transform exploded");
+	const prepared = prepare_virtual_document(
+		document,
+		{
+			...make_transforms(),
+			transformEffectMarkup: () => {
+				throw new Error("markup transform exploded");
+			},
 		},
-	});
+		internals,
+	);
 
 	assert_truthy(prepared);
 	assert_string_includes(prepared.document.getText(), "__SER_language_server_transform_error");
@@ -116,11 +140,14 @@ test("virtual TS document reports markup transform errors", () => {
 
 test("virtual TS snapshot maps SER hover positions to generated symbols", () => {
 	const document = make_document(component_source);
-	const prepared = prepare_virtual_document(document, make_transforms());
+	const prepared = prepare_virtual_document(document, make_transforms(), internals);
 
 	assert_truthy(prepared);
 
-	const snapshot = DocumentSnapshot.fromDocument(prepared.document, make_snapshot_options());
+	const snapshot = internals.document_snapshot.fromDocument(
+		prepared.document,
+		make_snapshot_options(),
+	);
 	const rebound_snapshot = rebind_snapshot_to_original_document(snapshot, document, prepared);
 
 	assert_maps_to_generated_text(
@@ -154,11 +181,14 @@ test("virtual TS snapshot maps SER markup yield operands to generated operands",
 		`{/each}`,
 	].join("\n");
 	const document = make_document(source);
-	const prepared = prepare_virtual_document(document, make_transforms());
+	const prepared = prepare_virtual_document(document, make_transforms(), internals);
 
 	assert_truthy(prepared);
 
-	const snapshot = DocumentSnapshot.fromDocument(prepared.document, make_snapshot_options());
+	const snapshot = internals.document_snapshot.fromDocument(
+		prepared.document,
+		make_snapshot_options(),
+	);
 	const rebound_snapshot = rebind_snapshot_to_original_document(snapshot, document, prepared);
 
 	assert_maps_to_generated_text(
@@ -211,7 +241,7 @@ test("virtual TS document normalizes bare const tags without brace rescans", () 
 	].join("\n");
 	const document = make_document(source);
 	const started_at = performance.now();
-	const prepared = prepare_virtual_document(document, make_identity_transforms());
+	const prepared = prepare_virtual_document(document, make_identity_transforms(), internals);
 	const elapsed_ms = performance.now() - started_at;
 
 	assert_truthy(prepared);
@@ -244,8 +274,8 @@ test("virtual TS snapshot scopes bare const declaration tags", () => {
 		`{/each}`,
 	].join("\n");
 	const document = make_document(source);
-	const prepared = prepare_virtual_document(document, make_transforms());
-	const snapshot = DocumentSnapshot.fromDocument(
+	const prepared = prepare_virtual_document(document, make_transforms(), internals);
+	const snapshot = internals.document_snapshot.fromDocument(
 		prepared?.document ?? document,
 		make_snapshot_options(),
 	);
@@ -262,8 +292,6 @@ test("virtual TS snapshot scopes bare const declaration tags", () => {
 });
 
 test("virtual TS snapshot treats .sv files as Svelte documents", () => {
-	patch_svelte_file_extensions();
-
 	const source = [
 		`<script lang="ts">`,
 		`  const route = "docs";`,
@@ -276,9 +304,9 @@ test("virtual TS snapshot treats .sv files as Svelte documents", () => {
 		`</Frame>`,
 	].join("\n");
 	const filename = fileURLToPath(new URL("language-server-fixture.sv", import.meta.url));
-	const snapshot = DocumentSnapshot.fromFilePath(
+	const snapshot = internals.document_snapshot.fromFilePath(
 		filename,
-		(path, text) => make_document(text, path),
+		(path: string, text: string) => make_document(text, path),
 		make_snapshot_options(),
 		{
 			readFile: (path: string) => (path === filename ? source : undefined),
@@ -295,7 +323,7 @@ function make_document(
 	filename = fileURLToPath(new URL("language-server-fixture.svelte", import.meta.url)),
 ) {
 	const uri = make_file_uri(filename);
-	const document = Document.createForTest(uri, content);
+	const document = internals.document.createForTest(uri, content);
 
 	document._compiler = compiler;
 
@@ -303,8 +331,9 @@ function make_document(
 }
 
 function collect_scoped_name_diagnostics(text: string, names: string[]): string[] {
+	const ts = internals.typescript;
 	const file_name = "Component.svelte.ts";
-	const options: ts.CompilerOptions = {
+	const options: import("typescript").CompilerOptions = {
 		module: ts.ModuleKind.ESNext,
 		noLib: true,
 		strict: true,

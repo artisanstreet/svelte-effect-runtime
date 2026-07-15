@@ -1,13 +1,9 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { rm } from "node:fs/promises";
-import { join } from "node:path";
+import { Context, Data, Deferred, Effect, FileSystem, Layer, Path, Result } from "effect";
+import { type ChildProcess, spawn } from "node:child_process";
 
 import process from "node:process";
 
-const exec_file = promisify(execFile);
-
-const INSTALL_ARTIFACTS = [
+const install_artifacts = [
 	"node_modules",
 	".pnp.cjs",
 	".pnp.loader.mjs",
@@ -22,126 +18,43 @@ const INSTALL_ARTIFACTS = [
 	"pnpm-lock.yaml",
 	"yarn.lock",
 ];
+const max_command_output_bytes = 10 * 1024 * 1024;
 
-/**
- * Command line invocation for a package manager probe or install step.
- *
- * @example
- * ```ts
- * const invocation: CommandInvocation = {
- *   command: "pnpm",
- *   args: ["install", "--prod"],
- * };
- * ```
- *
- * @since 3.4.9
- */
 export interface CommandInvocation {
-	/** Executable or shell command to run. */
 	command: string;
-	/** Arguments passed to the executable. */
 	args: string[];
-	/** Environment overrides applied on top of the extension host env. */
+	/** Environment overrides applied on top of the extension host environment. */
 	env?: NodeJS.ProcessEnv;
 }
 
-/**
- * Result captured from a package-manager command.
- *
- * @example
- * ```ts
- * const result: PackageManagerCommandResult = { stdout: "11.10.0", stderr: "" };
- * ```
- *
- * @since 3.4.9
- */
 export interface PackageManagerCommandResult {
-	/** Standard output captured from the command. */
 	stdout: string;
-	/** Standard error captured from the command. */
 	stderr: string;
 }
 
-/**
- * Function used to execute package-manager commands.
- *
- * @example
- * ```ts
- * const runner: PackageManagerCommandRunner = async (invocation) => {
- *   return { stdout: invocation.command, stderr: "" };
- * };
- * ```
- *
- * @since 3.4.9
- */
 export type PackageManagerCommandRunner = (
 	invocation: CommandInvocation,
 	cwd?: string,
-) => Promise<PackageManagerCommandResult>;
+) => Effect.Effect<PackageManagerCommandResult, unknown>;
 
-/**
- * Candidate package manager that can install the language-server dependency.
- *
- * @example
- * ```ts
- * const [candidate] = make_package_manager_candidates("linux");
- * const install = candidate.install("1.0.0");
- * ```
- *
- * @since 3.4.9
- */
 export interface PackageManagerCandidate {
-	/** Human-readable package-manager name shown in logs and errors. */
 	name: string;
-	/** Command used to check whether the package manager exists. */
 	probe: CommandInvocation;
 	/** Creates the install command from the probe output. */
 	install: (version_output: string) => CommandInvocation;
 }
 
-/**
- * Sink for package-manager installer progress.
- *
- * @example
- * ```ts
- * const reporter: PackageManagerInstallReporter = {
- *   appendLine: console.log,
- * };
- * ```
- *
- * @since 3.4.9
- */
 export interface PackageManagerInstallReporter {
-	/** Records one installer progress line. */
-	appendLine(message: string): void;
+	append_line(message: string): Effect.Effect<void>;
 }
 
-/**
- * Options for the package-manager fallback installer.
- *
- * @example
- * ```ts
- * await run_package_manager_install({
- *   install_root,
- *   verify_install: async () => assert.ok(true),
- * });
- * ```
- *
- * @since 3.4.9
- */
-export interface PackageManagerInstallOptions {
-	/** Directory containing the generated package.json to install. */
+export interface PackageManagerInstallOptions<R = never> {
 	install_root: string;
-	/** Optional progress reporter. */
 	reporter?: PackageManagerInstallReporter;
 	/** Candidate package managers to try, primarily used by tests. */
 	candidates?: PackageManagerCandidate[];
-	/** Command runner override, primarily used by tests. */
-	run_command?: PackageManagerCommandRunner;
-	/** Install-state cleanup override, primarily used by tests. */
-	clean_install_root?: (install_root: string) => Promise<void>;
 	/** Verifies that a completed install produced the expected server files. */
-	verify_install: () => Promise<void>;
+	verify_install: Effect.Effect<void, unknown, R>;
 }
 
 interface PackageManagerAttempt {
@@ -150,19 +63,65 @@ interface PackageManagerAttempt {
 	message: string;
 }
 
-/**
- * Creates the supported package-manager candidates in fallback order.
- *
- * @example
- * ```ts
- * const candidates = make_package_manager_candidates(process.platform);
- * ```
- *
- * @since 3.4.9
- * @param platform - Node platform string used to choose Windows command
- *   wrapping for package-manager shims.
- * @returns Package-manager candidates from preferred modern tools through npm.
- */
+class PackageManagerCommandError extends Data.TaggedError("PackageManagerCommandError")<{
+	readonly cause: unknown;
+	readonly stderr: string;
+	readonly stdout: string;
+}> {}
+
+class PackageManagerInstallError extends Data.TaggedError("PackageManagerInstallError")<{
+	readonly message: string;
+}> {}
+
+const RunCommandInvocation = (invocation: CommandInvocation, cwd?: string) =>
+	Effect.acquireUseRelease(
+		SpawnCommandInvocation(invocation, cwd),
+		(running_command) => running_command.completion,
+		(running_command) =>
+			TerminateProcessTree(running_command.child, running_command.AwaitClose),
+	);
+
+export class PackageManagerCommand extends Context.Service<
+	PackageManagerCommand,
+	{
+		readonly run: PackageManagerCommandRunner;
+	}
+>()("svelte-effect-runtime-vsix/PackageManagerCommand") {}
+
+export class PackageManagerInstallFiles extends Context.Service<
+	PackageManagerInstallFiles,
+	{
+		readonly clean: (install_root: string) => Effect.Effect<void, unknown>;
+	}
+>()("svelte-effect-runtime-vsix/PackageManagerInstallFiles") {}
+
+export const PackageManagerCommandLive = Layer.succeed(PackageManagerCommand, {
+	run: RunCommandInvocation,
+});
+
+export const PackageManagerInstallFilesLive = Layer.effect(
+	PackageManagerInstallFiles,
+	Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+		const path_service = yield* Path.Path;
+
+		const Clean = (install_root: string) =>
+			Effect.gen(function* () {
+				yield* Effect.forEach(
+					install_artifacts,
+					(artifact) =>
+						file_system.remove(path_service.join(install_root, artifact), {
+							recursive: true,
+							force: true,
+						}),
+					{ concurrency: "unbounded", discard: true },
+				);
+			});
+
+		return { clean: Clean };
+	}),
+);
+
 export function make_package_manager_candidates(
 	platform: NodeJS.Platform = process.platform,
 ): PackageManagerCandidate[] {
@@ -218,102 +177,235 @@ export function make_package_manager_candidates(
 	];
 }
 
-/**
- * Installs dependencies using the first available package manager that passes
- * the supplied install verifier.
- *
- * @example
- * ```ts
- * await run_package_manager_install({
- *   install_root,
- *   reporter: output_channel,
- *   verify_install: async () => verify_language_server_install(install_root, version),
- * });
- * ```
- *
- * @since 3.4.9
- * @param options - Install root, command runner, progress reporter, and final
- *   verification callback for the language-server files.
- * @returns The name of the package manager that completed a verified install.
- */
-export async function run_package_manager_install(
-	options: PackageManagerInstallOptions,
-): Promise<string> {
-	const candidates = options.candidates ?? make_package_manager_candidates();
-	const run_command = options.run_command ?? run_command_invocation;
-	const clean_install_root = options.clean_install_root ?? clean_package_manager_install_root;
-	const attempts: PackageManagerAttempt[] = [];
+export const RunPackageManagerInstall = <R>(options: PackageManagerInstallOptions<R>) =>
+	Effect.gen(function* () {
+		const command = yield* PackageManagerCommand;
+		const files = yield* PackageManagerInstallFiles;
+		const candidates = options.candidates ?? make_package_manager_candidates();
+		const attempts: PackageManagerAttempt[] = [];
 
-	/**
-	 * Probe every supported package manager until one can install and verify
-	 * the cache-local language-server package.
-	 */
-	for (const candidate of candidates) {
-		const probe_result = await run_package_manager_step(() => run_command(candidate.probe));
+		for (const candidate of candidates) {
+			const probe_result = yield* Effect.result(command.run(candidate.probe));
 
-		if (!probe_result.ok) {
-			attempts.push({
-				name: candidate.name,
-				phase: "probe",
-				message: probe_result.message,
-			});
-			continue;
+			if (Result.isFailure(probe_result)) {
+				attempts.push({
+					name: candidate.name,
+					phase: "probe",
+					message: format_command_error(probe_result.failure),
+				});
+				continue;
+			}
+
+			const install = candidate.install(probe_result.success.stdout);
+
+			if (options.reporter) {
+				yield* options.reporter.append_line(`Trying package manager: ${candidate.name}.`);
+			}
+
+			yield* files.clean(options.install_root).pipe(
+				Effect.mapError(
+					(error) =>
+						new PackageManagerInstallError({
+							message: format_command_error(error),
+						}),
+				),
+			);
+
+			const install_result = yield* Effect.result(command.run(install, options.install_root));
+
+			if (Result.isFailure(install_result)) {
+				attempts.push({
+					name: candidate.name,
+					phase: "install",
+					message: format_command_error(install_result.failure),
+				});
+				continue;
+			}
+
+			const verify_result = yield* Effect.result(options.verify_install);
+
+			if (Result.isFailure(verify_result)) {
+				attempts.push({
+					name: candidate.name,
+					phase: "verify",
+					message: format_command_error(verify_result.failure),
+				});
+				continue;
+			}
+
+			return candidate.name;
 		}
 
-		const install = candidate.install(probe_result.result.stdout);
-
-		options.reporter?.appendLine(`Trying package manager: ${candidate.name}.`);
-		await clean_install_root(options.install_root);
-
-		const install_result = await run_package_manager_step(() =>
-			run_command(install, options.install_root),
-		);
-
-		if (!install_result.ok) {
-			attempts.push({
-				name: candidate.name,
-				phase: "install",
-				message: install_result.message,
-			});
-			continue;
-		}
-
-		const verify_result = await run_package_manager_step(options.verify_install);
-
-		if (!verify_result.ok) {
-			attempts.push({
-				name: candidate.name,
-				phase: "verify",
-				message: verify_result.message,
-			});
-			continue;
-		}
-
-		return candidate.name;
-	}
-
-	throw new Error(format_package_manager_install_failure(attempts));
-}
-
-async function run_command_invocation(
-	invocation: CommandInvocation,
-	cwd?: string,
-): Promise<PackageManagerCommandResult> {
-	const result = await exec_file(invocation.command, invocation.args, {
-		cwd,
-		env: {
-			...process.env,
-			...invocation.env,
-		},
-		windowsHide: true,
-		maxBuffer: 10 * 1024 * 1024,
+		return yield* new PackageManagerInstallError({
+			message: format_package_manager_install_failure(attempts),
+		});
 	});
 
-	return {
-		stdout: String(result.stdout ?? ""),
-		stderr: String(result.stderr ?? ""),
-	};
-}
+const SpawnCommandInvocation = (invocation: CommandInvocation, cwd?: string) =>
+	Effect.try({
+		try: () => {
+			const completion = Deferred.makeUnsafe<
+				PackageManagerCommandResult,
+				PackageManagerCommandError
+			>();
+			const process_closed = Deferred.makeUnsafe<void>();
+			const stdout = { bytes: 0, chunks: [] as Buffer[] };
+			const stderr = { bytes: 0, chunks: [] as Buffer[] };
+			let output_exceeded = false;
+			const child = spawn(invocation.command, invocation.args, {
+				...(cwd === undefined ? {} : { cwd }),
+				detached: process.platform !== "win32",
+				env: {
+					...process.env,
+					...invocation.env,
+				},
+				stdio: ["ignore", "pipe", "pipe"],
+				windowsHide: true,
+			});
+			const complete_with_output_error = () =>
+				Deferred.doneUnsafe(
+					completion,
+					Effect.fail(
+						new PackageManagerCommandError({
+							cause: new Error(
+								`Command output exceeded ${max_command_output_bytes} bytes.`,
+							),
+							stderr: Buffer.concat(stderr.chunks).toString(),
+							stdout: Buffer.concat(stdout.chunks).toString(),
+						}),
+					),
+				);
+			const record_output = (stream: typeof stdout, chunk: Buffer) => {
+				if (output_exceeded) {
+					return;
+				}
+
+				stream.bytes += chunk.byteLength;
+
+				if (stream.bytes > max_command_output_bytes) {
+					output_exceeded = true;
+					complete_with_output_error();
+
+					return;
+				}
+
+				stream.chunks.push(chunk);
+			};
+
+			child.stdout?.on("data", (chunk: Buffer) => record_output(stdout, chunk));
+			child.stderr?.on("data", (chunk: Buffer) => record_output(stderr, chunk));
+			child.once("error", (error) => {
+				Deferred.doneUnsafe(
+					completion,
+					Effect.fail(
+						new PackageManagerCommandError({
+							cause: error,
+							stderr: Buffer.concat(stderr.chunks).toString(),
+							stdout: Buffer.concat(stdout.chunks).toString(),
+						}),
+					),
+				);
+			});
+			child.once("close", (code, signal) => {
+				const result = {
+					stderr: Buffer.concat(stderr.chunks).toString(),
+					stdout: Buffer.concat(stdout.chunks).toString(),
+				};
+
+				Deferred.doneUnsafe(process_closed, Effect.void);
+
+				if (code === 0) {
+					Deferred.doneUnsafe(completion, Effect.succeed(result));
+
+					return;
+				}
+
+				Deferred.doneUnsafe(
+					completion,
+					Effect.fail(
+						new PackageManagerCommandError({
+							cause: new Error(
+								`Command exited with ${code ?? `signal ${signal ?? "unknown"}`}.`,
+							),
+							...result,
+						}),
+					),
+				);
+			});
+
+			return {
+				AwaitClose: Deferred.await(process_closed),
+				child,
+				completion: Deferred.await(completion),
+			};
+		},
+		catch: (cause) =>
+			new PackageManagerCommandError({
+				cause,
+				stderr: "",
+				stdout: "",
+			}),
+	});
+
+const TerminateProcessTree = (child: ChildProcess, AwaitClose: Effect.Effect<void>) =>
+	Effect.gen(function* () {
+		if (child.exitCode === null && child.signalCode === null) {
+			if (process.platform === "win32") {
+				yield* TerminateWindowsProcessTree(child);
+			} else {
+				yield* TerminatePosixProcessTree(child);
+			}
+		}
+
+		yield* Effect.timeoutOrElse(AwaitClose, {
+			duration: "5 seconds",
+			orElse: () => Effect.void,
+		});
+	});
+
+const TerminateWindowsProcessTree = (child: ChildProcess) =>
+	Effect.gen(function* () {
+		const pid = child.pid;
+
+		if (pid === undefined) {
+			yield* Effect.sync(() => child.kill("SIGKILL"));
+
+			return;
+		}
+
+		const tree_killed = yield* Effect.callback<boolean>((resume) => {
+			const killer = spawn("taskkill.exe", ["/pid", String(pid), "/T", "/F"], {
+				stdio: "ignore",
+				windowsHide: true,
+			});
+
+			killer.once("error", () => resume(Effect.succeed(false)));
+			killer.once("close", (code) => resume(Effect.succeed(code === 0)));
+
+			return Effect.sync(() => killer.kill());
+		});
+
+		if (!tree_killed) {
+			yield* Effect.sync(() => child.kill("SIGKILL"));
+		}
+	});
+
+const TerminatePosixProcessTree = (child: ChildProcess) =>
+	Effect.gen(function* () {
+		const pid = child.pid;
+
+		if (pid === undefined) {
+			yield* Effect.sync(() => child.kill("SIGKILL"));
+
+			return;
+		}
+
+		const group_kill = yield* Effect.result(Effect.try(() => process.kill(-pid, "SIGKILL")));
+
+		if (Result.isFailure(group_kill)) {
+			yield* Effect.sync(() => child.kill("SIGKILL"));
+		}
+	});
 
 function make_candidate(
 	platform: NodeJS.Platform,
@@ -328,13 +420,13 @@ function make_candidate(
 		probe: make_platform_invocation(platform, {
 			command,
 			args: probe_args,
-			env,
+			...(env === undefined ? {} : { env }),
 		}),
 		install: (version_output) =>
 			make_platform_invocation(platform, {
 				command,
 				args: install_args(version_output),
-				env,
+				...(env === undefined ? {} : { env }),
 			}),
 	};
 }
@@ -350,7 +442,7 @@ function make_platform_invocation(
 	return {
 		command: "cmd.exe",
 		args: ["/d", "/s", "/c", invocation.command, ...invocation.args],
-		env: invocation.env,
+		...(invocation.env === undefined ? {} : { env: invocation.env }),
 	};
 }
 
@@ -362,32 +454,6 @@ function make_yarn_install_args(version_output: string): string[] {
 	}
 
 	return ["install"];
-}
-
-async function clean_package_manager_install_root(install_root: string): Promise<void> {
-	await Promise.all(
-		INSTALL_ARTIFACTS.map((artifact) =>
-			rm(join(install_root, artifact), {
-				recursive: true,
-				force: true,
-			}),
-		),
-	);
-}
-
-async function run_package_manager_step<T>(
-	step: () => Promise<T>,
-): Promise<{ ok: true; result: T } | { ok: false; message: string }> {
-	try {
-		const result = await step();
-
-		return { ok: true, result };
-	} catch (error) {
-		return {
-			ok: false,
-			message: format_command_error(error),
-		};
-	}
 }
 
 function format_package_manager_install_failure(attempts: PackageManagerAttempt[]): string {
@@ -402,28 +468,16 @@ function format_package_manager_install_failure(attempts: PackageManagerAttempt[
 }
 
 function format_command_error(error: unknown): string {
-	const message = error instanceof Error ? error.message : String(error);
-	const stdout = get_error_output(error, "stdout");
-	const stderr = get_error_output(error, "stderr");
-	const output = [stdout, stderr].filter(Boolean).join("\n").trim();
+	if (error instanceof PackageManagerCommandError) {
+		const message = error.cause instanceof Error ? error.cause.message : String(error.cause);
+		const output = [error.stdout, error.stderr].filter(Boolean).join("\n").trim();
 
-	if (!output) {
-		return message;
+		return output ? `${message}\n${output}` : message;
 	}
 
-	return `${message}\n${output}`;
-}
-
-function get_error_output(error: unknown, key: "stderr" | "stdout"): string | undefined {
-	if (typeof error !== "object" || error === null || !(key in error)) {
-		return undefined;
+	if (error instanceof PackageManagerInstallError) {
+		return error.message;
 	}
 
-	const value = (error as Record<string, unknown>)[key];
-
-	if (value === undefined || value === null) {
-		return undefined;
-	}
-
-	return String(value).trim();
+	return error instanceof Error ? error.message : String(error);
 }

@@ -1,19 +1,19 @@
-import { test } from "vitest";
 import {
-	assert_truthy,
 	assert_equals,
 	assert_string_includes,
-} from "../../svelte-effect-runtime/runtime/helpers/assert.ts";
-import { readFile } from "node:fs/promises";
+	assert_truthy,
+} from "../../svelte-effect-runtime/unit/helpers/assert.ts";
 import {
 	TextMate,
+	TreesitterQuery,
 	textmate,
 	textmate_language,
 	tree_sitter,
-	TreesitterQuery,
 } from "svelte-effect-runtime-grammars";
 import { generate_tree_sitter_query_module } from "../../../build/grammar-query-codegen.ts";
+import { readFile } from "node:fs/promises";
 import { createHighlighter } from "shiki";
+import { test } from "vitest";
 
 test("exports a Shiki-ready TextMate injection grammar for Svelte", () => {
 	assert_equals(TextMate, textmate);
@@ -70,10 +70,12 @@ test("tree-sitter query codegen keeps template breakout fixtures inert", async (
 	const breakout_key = "__ser_tree_sitter_query_codegen_breakout";
 	const highlights_query = [
 		"; fixture with backslash-backtick: \\`",
+		`; fixture with apostrophe and quote: it's "still data"`,
 		'; fixture with interpolation: ${globalThis.__ser_tree_sitter_query_codegen_breakout = "executed"}',
 	].join("\n");
 	const injections_query = [
 		"; second fixture with backslash-backtick: \\`",
+		`; second fixture with apostrophe and quote: it's "still data"`,
 		'; second fixture with interpolation: ${globalThis.__ser_tree_sitter_query_codegen_breakout = "executed-again"}',
 	].join("\n");
 	const code = generate_tree_sitter_query_module(highlights_query, injections_query);

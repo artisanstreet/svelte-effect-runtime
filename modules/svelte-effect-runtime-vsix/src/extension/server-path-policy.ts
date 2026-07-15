@@ -1,20 +1,7 @@
-import { paths_equal } from "./paths.ts";
-
 import { isAbsolute, normalize, parse } from "node:path";
+import { paths_equal } from "./paths.ts";
+import { Option, Schema } from "effect";
 
-/**
- * Scoped configuration values for an executable language-server path.
- *
- * @example
- * ```ts
- * const configuration: ScopedServerPathConfiguration = {
- *   global_path: "/Users/me/server.cjs",
- *   workspace_path: "./workspace-server.cjs",
- * };
- * ```
- *
- * @since 2.0.0
- */
 export interface ScopedServerPathConfiguration {
 	/** User or machine configured path. */
 	global_path?: unknown;
@@ -28,17 +15,6 @@ export interface ScopedServerPathConfiguration {
 	workspace_folder_language_path?: unknown;
 }
 
-/**
- * Result of applying executable path policy to scoped configuration.
- *
- * @example
- * ```ts
- * const result: ResolvedServerPathConfiguration =
- *   resolve_configured_server_path(configuration);
- * ```
- *
- * @since 2.0.0
- */
 export interface ResolvedServerPathConfiguration {
 	/** Safe user or machine configured path, when one is available. */
 	path: string | undefined;
@@ -48,23 +24,6 @@ export interface ResolvedServerPathConfiguration {
 	invalid_global_path: string | undefined;
 }
 
-/**
- * Configuration used to decide whether this extension may update the official
- * Svelte extension's language-server path.
- *
- * @example
- * ```ts
- * const can_configure = can_configure_svelte_language_server_path({
- *   current_path,
- *   current_path_exists: true,
- *   force: false,
- *   managed_path,
- *   server_path,
- * });
- * ```
- *
- * @since 3.4.8
- */
 export interface SvelteLanguageServerPathConfiguration {
 	/** Currently configured official Svelte language-server path. */
 	current_path: string | undefined;
@@ -78,22 +37,7 @@ export interface SvelteLanguageServerPathConfiguration {
 	server_path: string;
 }
 
-/**
- * Resolves a custom language-server path from trusted configuration scopes.
- *
- * @example
- * ```ts
- * const { path } = resolve_configured_server_path({
- *   global_path: "/Users/me/server.cjs",
- *   workspace_path: "./evil.cjs",
- * });
- * ```
- *
- * @since 2.0.0
- * @param configuration - Scoped setting values read from VS Code's
- *   configuration inspection API.
- * @returns The safe global path, plus any ignored unsafe configuration values.
- */
+/** Ignores workspace-scoped overrides and accepts only safe global server paths. */
 export function resolve_configured_server_path(
 	configuration: ScopedServerPathConfiguration,
 ): ResolvedServerPathConfiguration {
@@ -109,19 +53,6 @@ export function resolve_configured_server_path(
 	};
 }
 
-/**
- * Returns the first configured workspace path from a scoped configuration.
- *
- * @example
- * ```ts
- * const workspace_path = get_workspace_configured_server_path(configuration);
- * ```
- *
- * @since 2.0.0
- * @param configuration - Scoped setting values read from VS Code's
- *   configuration inspection API.
- * @returns The first non-empty workspace-scoped path, or undefined.
- */
 export function get_workspace_configured_server_path(
 	configuration: ScopedServerPathConfiguration,
 ): string | undefined {
@@ -135,18 +66,6 @@ export function get_workspace_configured_server_path(
 		.find((configured_path) => configured_path !== undefined);
 }
 
-/**
- * Determines whether the official Svelte extension path can be updated safely.
- *
- * @example
- * ```ts
- * if (can_configure_svelte_language_server_path(config)) update_setting();
- * ```
- *
- * @since 3.4.8
- * @param configuration - Current path ownership and existence information.
- * @returns Whether the SER extension may write the Svelte language-server path.
- */
 export function can_configure_svelte_language_server_path(
 	configuration: SvelteLanguageServerPathConfiguration,
 ): boolean {
@@ -168,40 +87,18 @@ export function can_configure_svelte_language_server_path(
 	);
 }
 
-/**
- * Normalizes a raw configured language-server path.
- *
- * @example
- * ```ts
- * const configured_path = normalize_configured_server_path(" /srv/server.cjs ");
- * ```
- *
- * @since 2.0.0
- * @param value - Raw configuration value read from VS Code.
- * @returns The trimmed string value, or undefined when no path is configured.
- */
 export function normalize_configured_server_path(value: unknown): string | undefined {
-	if (typeof value !== "string") {
+	const decoded_value = Schema.decodeUnknownOption(Schema.String)(value);
+
+	if (Option.isNone(decoded_value)) {
 		return undefined;
 	}
 
-	const configured_path = value.trim();
+	const configured_path = decoded_value.value.trim();
 
 	return configured_path.length === 0 ? undefined : configured_path;
 }
 
-/**
- * Checks whether a language-server path is safe to pass to Node.
- *
- * @example
- * ```ts
- * if (!is_safe_language_server_path(server_path)) throw new Error("unsafe");
- * ```
- *
- * @since 2.0.0
- * @param server_path - Candidate language-server script path.
- * @returns Whether the path is absolute, local, and non-empty.
- */
 export function is_safe_language_server_path(server_path: string): boolean {
 	const normalized_path = normalize(server_path);
 	const parsed_path = parse(normalized_path);
@@ -214,18 +111,6 @@ export function is_safe_language_server_path(server_path: string): boolean {
 	);
 }
 
-/**
- * Throws when a language-server path is unsafe to execute.
- *
- * @example
- * ```ts
- * assert_safe_language_server_path(server_path);
- * ```
- *
- * @since 2.0.0
- * @param server_path - Candidate language-server script path.
- * @returns Nothing when the path is safe.
- */
 export function assert_safe_language_server_path(server_path: string): void {
 	if (is_safe_language_server_path(server_path)) {
 		return;

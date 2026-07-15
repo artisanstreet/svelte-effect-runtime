@@ -1,7 +1,3 @@
-import { collect_free_identifiers } from "$/markup/transform/expressions.ts";
-import { contains_top_level_yield_star } from "$/detect.ts";
-import { collect_yield_star_nodes, find_yield_star_node, is_yield_star_expression } from "./ast.ts";
-import { slice, slice_start } from "./source.ts";
 import type {
 	EffectBlock,
 	LoweredExpression,
@@ -9,18 +5,13 @@ import type {
 	ScriptLoweringContext,
 	TempBinding,
 } from "./types.ts";
+import { collect_yield_star_nodes, find_yield_star_node, is_yield_star_expression } from "./ast.ts";
+import { collect_free_identifiers } from "$/markup/transform/expressions.ts";
+import { contains_top_level_yield_star } from "$/detect.ts";
+import { slice, slice_start } from "./source.ts";
 
 import ts from "typescript";
 
-/**
- * Delegates a statement to the correct lowerer based on syntax kind.
- *
- * @since 2.0.0
- * @param stmt - Statement to lower.
- * @param content - Original source text.
- * @param context - Lowering services for this transform pass.
- * @returns Lowered statement descriptor.
- */
 export function lower_statement(
 	stmt: ts.Statement,
 	content: string,

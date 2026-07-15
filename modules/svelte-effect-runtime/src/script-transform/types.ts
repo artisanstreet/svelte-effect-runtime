@@ -43,21 +43,6 @@ export interface ScriptTransformResult {
 	relocations?: Relocation[];
 }
 
-/**
- * Offset mapping between original script code and generated helper code.
- *
- * @example
- * ```ts
- * const relocation: Relocation = {
- *   originalStart: 10,
- *   originalEnd: 28,
- *   generatedStart: 64,
- *   generatedEnd: 82,
- * };
- * ```
- *
- * @since 3.2.3
- */
 export interface Relocation {
 	originalStart: number;
 	originalEnd: number;
@@ -65,40 +50,11 @@ export interface Relocation {
 	generatedEnd: number;
 }
 
-/**
- * Internal descriptor for a single `$state` temp variable that will be
- * emitted at component scope before the rewritten statement.
- *
- * @example
- * ```ts
- * const temp: TempBinding = {
- *   name: "__SER___user",
- *   type: "Effect.Success<typeof user>",
- * };
- * ```
- *
- * @since 2.0.0
- */
 export interface TempBinding {
 	name: string;
 	type?: string;
 }
 
-/**
- * Describes how a single statement was lowered.
- *
- * @example
- * ```ts
- * const lowered: LoweredStatement = {
- *   temps: [],
- *   rewritten_text: "const user = __SER___dispatcher.value(...);",
- *   effect_blocks: [],
- *   range: { start: 0, end: 26 },
- * };
- * ```
- *
- * @since 2.0.0
- */
 export interface LoweredStatement {
 	/** `$state` bindings to emit at component scope. */
 	temps: TempBinding[];
@@ -114,20 +70,6 @@ export interface LoweredStatement {
 	range: { start: number; end: number };
 }
 
-/**
- * Describes a generated script effect body and the identifiers it reads
- * synchronously for Svelte dependency tracking.
- *
- * @example
- * ```ts
- * const block: EffectBlock = {
- *   statements: ["const user = yield* load_user(id);"],
- *   deps: ["id"],
- * };
- * ```
- *
- * @since 2.0.0
- */
 export interface EffectBlock {
 	/** Statements to emit inside the generated `Effect.gen` body. */
 	statements: string[];
@@ -135,45 +77,13 @@ export interface EffectBlock {
 	deps: string[];
 }
 
-/**
- * Describes how a single expression was lowered.
- *
- * @example
- * ```ts
- * const expression: LoweredExpression = {
- *   temps: [],
- *   rewritten_expr: "__SER___dispatcher.value(...)",
- *   effect_blocks: [],
- * };
- * ```
- *
- * @since 2.0.0
- */
 export interface LoweredExpression {
 	temps: TempBinding[];
-	type_helpers?: string[];
+	type_helpers: string[];
 	rewritten_expr: string;
 	effect_blocks: EffectBlock[];
 }
 
-/**
- * Stateful services used while lowering one script block.
- *
- * @example
- * ```ts
- * const context: ScriptLoweringContext = {
- *   filename: "App.svelte",
- *   dispatcher_name: "get_dispatcher",
- *   effect_name: "Effect",
- *   emit_types: true,
- *   next_helper_name: (hint = "helper") => hint,
- *   next_temp_name: (hint = "temp") => hint,
- *   next_type_helper_name: (hint = "type") => hint,
- * };
- * ```
- *
- * @since 2.0.0
- */
 export interface ScriptLoweringContext {
 	/** Source filename used for stable generated runtime ids. */
 	filename: string;
@@ -187,46 +97,11 @@ export interface ScriptLoweringContext {
 	yield_success_name: string;
 	/** Whether generated state placeholders should carry TypeScript types. */
 	emit_types: boolean;
-	/**
-	 * Reserves a generated helper identifier.
-	 *
-	 * @param hint - Optional readable stem for the generated identifier.
-	 * @returns A collision-free helper identifier.
-	 */
 	next_helper_name(hint?: string): string;
-	/**
-	 * Reserves a generated `$state` temporary identifier.
-	 *
-	 * @param hint - Optional readable stem for the generated identifier.
-	 * @returns A collision-free temporary identifier.
-	 */
 	next_temp_name(hint?: string): string;
-	/**
-	 * Reserves a generated type-helper identifier.
-	 *
-	 * @param hint - Optional readable stem for the generated identifier.
-	 * @returns A collision-free type-helper identifier.
-	 */
 	next_type_helper_name(hint?: string): string;
 }
 
-/**
- * Runtime import bindings selected for generated script effect code.
- *
- * @example
- * ```ts
- * const bindings: RuntimeImportBindings = {
- *   effect: "Effect",
- *   dispatcher: "get_dispatcher",
- *   dispatcher_value: "__SER___dispatcher",
- *   program: "__SER___program",
- *   cancel: "__SER___cancel",
- *   untrack: "untrack",
- * };
- * ```
- *
- * @since 2.4.2
- */
 export interface RuntimeImportBindings {
 	/** Binding name used for the Effect namespace in generated code. */
 	effect: string;

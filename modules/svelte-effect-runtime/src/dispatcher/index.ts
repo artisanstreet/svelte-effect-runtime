@@ -1,13 +1,3 @@
-import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime";
-import { Cause, Effect, Exit, Fiber, Layer, ManagedRuntime } from "effect";
-import { createSubscriber } from "svelte/reactivity";
-import type { Fiber as FiberType } from "effect/Fiber";
-import { isRedirect } from "@sveltejs/kit";
-
-import { RuntimeAlreadyInitializedError, DispatcherDisposedError } from "$/errors.ts";
-import { interrupt_fiber, watch_fiber_exit } from "./fibers.ts";
-import { hash_deps } from "./deps.ts";
-import { Code } from "./types.ts";
 import type {
 	DispatcherEvent,
 	Dispose,
@@ -17,6 +7,15 @@ import type {
 	PromiseOptions,
 	ValueOptions,
 } from "./types.ts";
+import { RuntimeAlreadyInitializedError, DispatcherDisposedError } from "$/errors.ts";
+import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime";
+import { Cause, Effect, Exit, Fiber, Layer, ManagedRuntime } from "effect";
+import { InterruptFiber, WatchFiberExit } from "./fibers.ts";
+import type { Fiber as FiberType } from "effect/Fiber";
+import { createSubscriber } from "svelte/reactivity";
+import { make_dependency_hasher } from "./deps.ts";
+import { isRedirect } from "@sveltejs/kit";
+import { Code } from "./types.ts";
 
 export { Code } from "./types.ts";
 export type { Dispose, PromiseOptions, ValueOptions } from "./types.ts";
@@ -35,30 +34,11 @@ type ValueCell<A> =
 			readonly error: unknown;
 	  };
 
-/**
- * Unified effect block dispatcher. Manages the fiber lifecycle of every
- * effect block and wires results into reactive channels.
- *
- * @example
- * ```ts
- * const dispatcher = new Dispatcher();
- * const cancel = dispatcher.fork(Effect.log("running"));
- * cancel();
- * ```
- *
- * @since 2.0.0
- * @internal
- */
 export class Dispatcher {
-	/** The underlying Effect runtime that executes forked programs. */
 	#runtime: ManagedRuntimeType<unknown, unknown>;
-	/** Active fibers keyed by cache id or generated fork id. */
 	#fibers = new Map<string, FiberType<unknown, unknown>>();
-	/** Reactive value cells keyed by value cache id. */
 	#value_cells = new Map<string, ValueCell<unknown>>();
-	/** Notifies subscribed Svelte template effects when value cells change. */
 	#notify_value_cells = (): void => {};
-	/** Subscribes the current Svelte tracking scope to value cell changes. */
 	#subscribe_value_cells = createSubscriber((update) => {
 		this.#notify_value_cells = update;
 
@@ -70,30 +50,13 @@ export class Dispatcher {
 			this.#notify_value_cells = (): void => {};
 		};
 	});
-	/** Pending promises keyed by promise cache id. */
 	#promise_values = new Map<string, Promise<unknown>>();
-	/** Current cache key per value block id. */
 	#value_ids = new Map<string, string>();
-	/** Current cache key per promise block id. */
 	#promise_ids = new Map<string, string>();
-	/** Whether dispose has been called, blocking new work. */
+	#hash_deps = make_dependency_hasher();
 	#disposed = false;
-	/** Monotonically increasing counter for unnamed fiber keys. */
 	#next_fiber_id = 0;
 
-	/**
-	 * Creates a dispatcher with an optional layer and installs it as the global
-	 * singleton returned by {@link get_dispatcher}.
-	 *
-	 * @example
-	 * ```ts
-	 * const dispatcher = Dispatcher.make(Db.Live);
-	 * ```
-	 *
-	 * @since 2.0.0
-	 * @param layer - Optional Effect layer to provide to the runtime.
-	 * @returns The newly created dispatcher.
-	 */
 	static make<R = never>(layer?: Layer.Layer<R>): Dispatcher {
 		if (current_dispatcher) {
 			throw new RuntimeAlreadyInitializedError("ClientRuntime");
@@ -107,44 +70,12 @@ export class Dispatcher {
 		return dispatcher;
 	}
 
-	/**
-	 * Creates a dispatcher backed by the provided managed runtime.
-	 *
-	 * @example
-	 * ```ts
-	 * const dispatcher = new Dispatcher(runtime);
-	 * ```
-	 *
-	 * @since 2.0.0
-	 * @param runtime - Managed runtime to use, or an empty-layer runtime when
-	 *   omitted.
-	 */
 	constructor(runtime?: ManagedRuntimeType<unknown, unknown>) {
 		this.#runtime =
 			runtime ??
 			(ManagedRuntime.make(Layer.empty) as unknown as ManagedRuntimeType<unknown, unknown>);
 	}
 
-	/**
-	 * Handles a transform-generated dispatcher event.
-	 *
-	 * @example
-	 * ```ts
-	 * const value = dispatcher.emit({
-	 *   type: Code.Markup.Value,
-	 *   id: "Component.svelte:1:2",
-	 *   deps: [],
-	 *   fallback: undefined,
-	 *   fn: function* () {
-	 *     return yield* Effect.succeed(1);
-	 *   },
-	 * });
-	 * ```
-	 *
-	 * @since 3.3.0
-	 * @param event - Generated event describing the dispatcher operation to run.
-	 * @returns The operation result for the emitted dispatcher event.
-	 */
 	emit<A, F>(event: MarkupValueEvent<A, F>): A | F;
 	emit<A>(event: MarkupPromiseEvent<A>): Promise<A>;
 	emit<A>(event: MarkupRunEvent<A>): Promise<A>;
@@ -162,18 +93,6 @@ export class Dispatcher {
 		}
 	}
 
-	/**
-	 * Forks an effect as a managed fiber and returns a cleanup function.
-	 *
-	 * @example
-	 * ```ts
-	 * const dispose = dispatcher.fork(Effect.log("clicked"));
-	 * ```
-	 *
-	 * @since 2.0.0
-	 * @param effect - Effect to fork.
-	 * @returns A function that interrupts the fiber.
-	 */
 	fork<A, E, R>(effect: Effect.Effect<A, E, R>): Dispose {
 		if (this.#disposed) {
 			return () => {};
@@ -184,11 +103,12 @@ export class Dispatcher {
 
 		this.#next_fiber_id += 1;
 		this.#fibers.set(key, fiber);
-		watch_fiber_exit({
-			runtime: this.#runtime,
-			fiber,
-			on_complete: () => this.#fibers.delete(key),
-		});
+		this.#runtime.runFork(
+			WatchFiberExit({
+				fiber,
+				on_complete: () => this.#fibers.delete(key),
+			}),
+		);
 
 		let disposed = false;
 
@@ -198,22 +118,10 @@ export class Dispatcher {
 			}
 
 			disposed = true;
-			interrupt_fiber(this.#runtime, fiber);
+			this.#runtime.runFork(InterruptFiber(fiber));
 		};
 	}
 
-	/**
-	 * Forks an effect and exposes its result as a cached reactive value.
-	 *
-	 * @example
-	 * ```ts
-	 * const user = dispatcher.value({ id, deps, fallback, factory });
-	 * ```
-	 *
-	 * @since 2.0.0
-	 * @param options - Value id, dependency array, fallback, and effect factory.
-	 * @returns The cached value if resolved, otherwise the fallback.
-	 */
 	value<A>(options: ValueOptions<A>): A {
 		if (this.#disposed) {
 			return options.fallback;
@@ -249,18 +157,6 @@ export class Dispatcher {
 		return options.fallback;
 	}
 
-	/**
-	 * Forks an effect and exposes its completion as a cached promise.
-	 *
-	 * @example
-	 * ```ts
-	 * const promise = dispatcher.promise({ id, deps, factory });
-	 * ```
-	 *
-	 * @since 2.0.0
-	 * @param options - Promise id, dependency array, and effect factory.
-	 * @returns A promise that resolves with the effect result.
-	 */
 	promise<A>(options: PromiseOptions<A>): Promise<A> {
 		if (this.#disposed) {
 			return Promise.reject(new DispatcherDisposedError());
@@ -289,27 +185,13 @@ export class Dispatcher {
 		return promise;
 	}
 
-	/**
-	 * Runs an event-handler effect and surfaces failures to Svelte.
-	 *
-	 * @example
-	 * ```ts
-	 * await dispatcher.run(Effect.log("submit"));
-	 * ```
-	 *
-	 * @since 2.0.0
-	 * @param effect - Effect to execute.
-	 * @returns A promise that resolves or rejects when the effect completes.
-	 */
 	run<A, E, R>(effect: Effect.Effect<A, E, R>): Promise<A> {
 		if (this.#disposed) {
 			return Promise.reject(new DispatcherDisposedError());
 		}
 
-		const ExitProgram = Effect.exit(effect) as Effect.Effect<unknown, unknown, unknown>;
-
-		return this.#runtime.runPromise(ExitProgram).then((exit: unknown) => {
-			const result = exit as Exit.Exit<A, E>;
+		const Program = Effect.gen(function* () {
+			const result = yield* Effect.exit(effect);
 
 			if (Exit.isSuccess(result)) {
 				return result.value;
@@ -325,12 +207,16 @@ export class Dispatcher {
 				return undefined as A;
 			}
 
-			queueMicrotask(() => {
-				throw error;
+			yield* Effect.sync(() => {
+				queueMicrotask(() => {
+					throw error;
+				});
 			});
 
-			throw error;
+			return yield* Effect.fail(error);
 		});
+
+		return this.#runtime.runPromise(Program as Effect.Effect<A, unknown, unknown>);
 	}
 
 	#emit_markup_value<A, F>(event: MarkupValueEvent<A, F>): A | F {
@@ -370,22 +256,11 @@ export class Dispatcher {
 		return this.run(Program);
 	}
 
-	/**
-	 * Cancels all running fibers and releases cached values.
-	 *
-	 * @example
-	 * ```ts
-	 * dispatcher.dispose();
-	 * ```
-	 *
-	 * @since 2.0.0
-	 * @returns Nothing.
-	 */
 	dispose(): void {
 		this.#disposed = true;
 
 		for (const fiber of this.#fibers.values()) {
-			interrupt_fiber(this.#runtime, fiber);
+			this.#runtime.runFork(InterruptFiber(fiber));
 		}
 
 		this.#fibers.clear();
@@ -402,11 +277,11 @@ export class Dispatcher {
 	}
 
 	#make_value_cache_key(id: string, deps: readonly unknown[]): string {
-		return `value:${id}::${hash_deps(deps)}`;
+		return `value:${id}::${this.#hash_deps(deps)}`;
 	}
 
 	#make_promise_cache_key(id: string, deps: readonly unknown[]): string {
-		return `promise:${id}::${hash_deps(deps)}`;
+		return `promise:${id}::${this.#hash_deps(deps)}`;
 	}
 
 	#is_server_render(): boolean {
@@ -420,7 +295,7 @@ export class Dispatcher {
 			return undefined;
 		}
 
-		interrupt_fiber(this.#runtime, old_fiber);
+		this.#runtime.runFork(InterruptFiber(old_fiber));
 		this.#fibers.delete(cache_key);
 
 		return old_fiber;
@@ -455,14 +330,15 @@ export class Dispatcher {
 			});
 		});
 
-		watch_fiber_exit({
-			runtime: this.#runtime,
-			fiber,
-			surface_failure: false,
-			on_complete: () => this.#complete_fiber(cache_key, fiber),
-			on_success: (value) => this.#publish_value_success(cache_key, fiber, value),
-			on_failure: (error) => this.#publish_value_failure(cache_key, fiber, error),
-		});
+		this.#runtime.runFork(
+			WatchFiberExit({
+				fiber,
+				surface_failure: false,
+				on_complete: () => this.#complete_fiber(cache_key, fiber),
+				on_success: (value) => this.#publish_value_success(cache_key, fiber, value),
+				on_failure: (error) => this.#publish_value_failure(cache_key, fiber, error),
+			}),
+		);
 	}
 
 	#start_promise_fiber<A>(cache_key: string, options: PromiseOptions<A>): Promise<A> {
@@ -472,31 +348,33 @@ export class Dispatcher {
 			return result;
 		});
 		const fiber = this.#runtime.runFork(Program as Effect.Effect<unknown, unknown, unknown>);
+		const ReleaseFiber = Effect.sync(() => {
+			if (!this.#is_current_fiber(cache_key, fiber)) {
+				return;
+			}
+
+			this.#fibers.delete(cache_key);
+			this.#promise_values.delete(cache_key);
+
+			if (this.#promise_ids.get(options.id) === cache_key) {
+				this.#promise_ids.delete(options.id);
+			}
+		});
+		const AwaitFiber = Effect.gen(function* () {
+			const exit = yield* Fiber.await(fiber);
+
+			yield* ReleaseFiber;
+
+			if (Exit.isSuccess(exit)) {
+				return exit.value as A;
+			}
+
+			return yield* Effect.fail(Cause.squash(exit.cause));
+		});
 
 		this.#fibers.set(cache_key, fiber);
 
-		return this.#runtime.runPromise(
-			Effect.flatMap(Fiber.await(fiber), (exit) =>
-				Effect.sync(() => {
-					const is_current = this.#is_current_fiber(cache_key, fiber);
-
-					if (is_current) {
-						this.#fibers.delete(cache_key);
-						this.#promise_values.delete(cache_key);
-
-						if (this.#promise_ids.get(options.id) === cache_key) {
-							this.#promise_ids.delete(options.id);
-						}
-					}
-
-					if (Exit.isSuccess(exit)) {
-						return exit.value as A;
-					}
-
-					throw Cause.squash(exit.cause);
-				}),
-			),
-		);
+		return this.#runtime.runPromise(AwaitFiber);
 	}
 
 	#clear_pending_value_cell(
@@ -585,36 +463,12 @@ export class Dispatcher {
 
 let current_dispatcher: Dispatcher | null = null;
 
-/**
- * Resolves the active dispatcher, creating a default one if necessary.
- *
- * @example
- * ```ts
- * const dispatcher = get_dispatcher();
- * ```
- *
- * @since 2.0.0
- * @returns The active dispatcher singleton.
- * @internal
- */
 export function get_dispatcher(): Dispatcher {
 	current_dispatcher ??= new Dispatcher();
 
 	return current_dispatcher;
 }
 
-/**
- * Resets the internal singleton dispatcher used by source-level tests.
- *
- * @example
- * ```ts
- * reset_dispatcher();
- * ```
- *
- * @since 2.0.0
- * @returns Nothing.
- * @internal
- */
 export function reset_dispatcher(): void {
 	current_dispatcher?.dispose();
 	current_dispatcher = null;

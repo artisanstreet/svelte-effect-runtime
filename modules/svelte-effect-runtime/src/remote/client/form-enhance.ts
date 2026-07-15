@@ -1,17 +1,9 @@
+import { MakeEffectFromPromise, MakeEffectFromSync } from "$/remote/effect.ts";
+import type { EffectRemoteFormSubmit, NativeMethod } from "./types.ts";
 import { get_dispatcher } from "$/dispatcher.ts";
+import { has_method } from "./utils.ts";
 import { Effect } from "effect";
 
-import { MakeEffectFromPromise } from "./effect.ts";
-import { has_method } from "./utils.ts";
-import type { EffectRemoteFormSubmit, NativeMethod } from "./types.ts";
-
-/**
- * Wraps a remote form enhance callback so Effect return values are run.
- *
- * @since 2.0.0
- * @param callback - Native enhance callback to wrap.
- * @returns Wrapped callback or undefined.
- */
 export function wrap_enhance_callback<Output, ErrorType = never>(
 	callback: NativeMethod | undefined,
 ): NativeMethod | undefined {
@@ -48,33 +40,30 @@ function wrap_submit_callback<Output, ErrorType>(event: unknown): unknown {
 			submit: {
 				configurable: true,
 				enumerable: false,
-				value: () => make_submit_effect<Output, ErrorType>(original_submit, event),
+				value: () => MakeSubmitEffect<Output, ErrorType>(original_submit, event),
 			},
 		},
 	);
 }
 
-function make_submit_effect<Output, ErrorType>(
+function MakeSubmitEffect<Output, ErrorType>(
 	original_submit: NativeMethod,
 	event: unknown,
 ): EffectRemoteFormSubmit<Output, ErrorType> {
 	let updates_args: unknown[] | undefined;
 
-	const SubmitEffect = MakeEffectFromPromise<Output | undefined, ErrorType>(
-		async (): Promise<Output | undefined> => {
-			const result = original_submit();
-			const value =
-				updates_args && has_method(result, "updates")
-					? await Promise.resolve(result.updates(...updates_args))
-					: await Promise.resolve(result);
+	const SubmitEffect = Effect.gen(function* () {
+		const result = yield* MakeEffectFromSync<unknown, ErrorType>(() =>
+			original_submit.call(event),
+		);
+		const value = yield* ResolveSubmitResult<ErrorType>(result, updates_args);
 
-			if (typeof value === "boolean") {
-				return read_submit_result<Output>(event);
-			}
+		if (typeof value === "boolean") {
+			return read_submit_result<Output>(event);
+		}
 
-			return value as Output;
-		},
-	) as EffectRemoteFormSubmit<Output, ErrorType>;
+		return value as Output;
+	}) as EffectRemoteFormSubmit<Output, ErrorType>;
 
 	Object.defineProperty(SubmitEffect, "updates", {
 		configurable: true,
@@ -88,6 +77,17 @@ function make_submit_effect<Output, ErrorType>(
 
 	return SubmitEffect;
 }
+
+const ResolveSubmitResult = <ErrorType>(result: unknown, updates_args: unknown[] | undefined) =>
+	Effect.gen(function* () {
+		if (updates_args && has_method(result, "updates")) {
+			return yield* MakeEffectFromPromise<unknown, ErrorType>(() =>
+				Promise.resolve(result.updates(...updates_args)),
+			);
+		}
+
+		return yield* MakeEffectFromPromise<unknown, ErrorType>(() => Promise.resolve(result));
+	});
 
 function read_submit_result<Output>(event: unknown): Output | undefined {
 	if (typeof event !== "object" || event === null || !("result" in event)) {

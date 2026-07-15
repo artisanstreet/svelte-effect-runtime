@@ -113,9 +113,11 @@ Create a branch for each coherent change. Keep commits focused, use short
 conventional messages like `fix: preserve remote failures`, and push the branch
 after committing.
 
-Do not push to `master` without explicit human approval. A version change on
-`master` can trigger the release workflow, which builds, tests, tags, creates a
-GitHub release, publishes packages to npm, and publishes the VS Code extension.
+Pull requests target `master`, which is the integration and staging branch.
+Neither a merge nor a version change on `master` publishes anything. Production
+selection happens by fast-forwarding the protected `candidate` branch to an
+already verified `master` commit, then manually running `SER pipeline` against
+`candidate`.
 
 All publishable packages must share the same semantic version:
 
@@ -124,4 +126,6 @@ All publishable packages must share the same semantic version:
 - `modules/svelte-effect-runtime-language-server/package.json`
 - `modules/svelte-effect-runtime-vsix/package.json`
 
-If those versions drift, the release workflow fails.
+If those versions drift, candidate planning fails before artifacts or publishing
+credentials are available. See [RELEASING.md](./RELEASING.md) for dry-run,
+promotion, and exact-artifact resume instructions.

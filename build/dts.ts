@@ -1,4 +1,6 @@
-import { join, readFile, readdir, relative, repo_root, stat, writeFile } from "./node-utils.ts";
+import { Effect, FileSystem, Path, PlatformError, Schema } from "effect";
+import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import { RepoRoot } from "./node-utils.ts";
 
 type AliasPattern = {
 	prefix: string;
@@ -15,7 +17,9 @@ type TargetContext = {
 	target: TargetConfig;
 };
 
-const targets: Record<string, TargetConfig> = {
+const target_names = ["svelte-effect-runtime", "svelte-effect-runtime-grammars"] as const;
+
+const targets: Record<(typeof target_names)[number], TargetConfig> = {
 	"svelte-effect-runtime": {
 		aliases: [
 			{
@@ -29,103 +33,103 @@ const targets: Record<string, TargetConfig> = {
 	"svelte-effect-runtime-grammars": {
 		aliases: [],
 	},
-};
+} satisfies Record<string, TargetConfig>;
 
-const context = resolve_target();
+const TargetNameSchema = Schema.Literals(target_names);
 
-await visit_root(context);
-
-function resolve_target(): TargetContext {
-	const package_name = process.argv[2];
-
-	if (!package_name) {
-		throw new Error("Expected package name.");
-	}
-
+const Main = Effect.gen(function* () {
+	const path = yield* Path.Path;
+	const repo_root = yield* RepoRoot;
+	const package_name = yield* Schema.decodeUnknownEffect(TargetNameSchema)(process.argv[2]);
 	const target = targets[package_name];
-
-	if (!target) {
-		throw new Error(`Unknown declaration target: ${package_name}`);
-	}
-
-	return {
+	const context: TargetContext = {
 		package_name,
 		target,
-		dist_root: join(repo_root, ".dist", package_name).replaceAll("\\", "/"),
+		dist_root: path.join(repo_root, ".dist", package_name).replaceAll("\\", "/"),
 	};
-}
 
-async function visit_root(context: TargetContext): Promise<void> {
-	const entries = await readdir(context.dist_root, { withFileTypes: true });
+	yield* VisitRoot(context);
+});
 
-	for (const entry of entries) {
-		await visit(context, entry.name);
-	}
-}
-
-async function visit(context: TargetContext, relative_path: string): Promise<void> {
-	const file_path = `${context.dist_root}/${relative_path}`.replaceAll("\\", "/");
-	const file_stat = await stat(file_path);
-
-	if (file_stat.isDirectory()) {
-		const entries = await readdir(file_path, { withFileTypes: true });
+const VisitRoot = (context: TargetContext) =>
+	Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+		const entries = yield* file_system.readDirectory(context.dist_root);
 
 		for (const entry of entries) {
-			await visit(context, `${relative_path}/${entry.name}`);
+			yield* Visit(context, entry);
 		}
+	});
 
-		return;
-	}
-
-	if (!file_path.endsWith(".d.ts")) {
-		return;
-	}
-
-	const content = await readFile(file_path, "utf8");
-	const rewritten = rewrite_relative_specifiers(
-		rewrite_alias_specifiers(context, file_path, content),
-	);
-
-	if (rewritten !== content) {
-		await writeFile(file_path, rewritten);
-	}
-}
-
-function rewrite_alias_specifiers(
+function Visit(
 	context: TargetContext,
-	file_path: string,
-	content: string,
-): string {
-	if (context.target.aliases.length === 0) {
-		return content;
-	}
+	relative_path: string,
+): Effect.Effect<void, PlatformError.PlatformError, FileSystem.FileSystem | Path.Path> {
+	return Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+		const file_path = `${context.dist_root}/${relative_path}`.replaceAll("\\", "/");
+		const file_stat = yield* file_system.stat(file_path);
 
-	return content.replace(
-		/(["'])(\$\/[^"']+\.ts)\1/g,
-		(match, quote: string, specifier: string) => {
-			const alias = context.target.aliases.find(({ prefix }) => specifier.startsWith(prefix));
+		if (file_stat.type === "Directory") {
+			const entries = yield* file_system.readDirectory(file_path);
 
-			if (!alias) {
-				return match;
+			for (const entry of entries) {
+				yield* Visit(context, `${relative_path}/${entry}`);
 			}
 
-			return `${quote}${to_posix_relative(context, file_path, alias.resolve(specifier))}${quote}`;
-		},
-	);
+			return;
+		}
+
+		if (!file_path.endsWith(".d.ts")) {
+			return;
+		}
+
+		const content = yield* file_system.readFileString(file_path);
+		const aliases_rewritten = yield* RewriteAliasSpecifiers(context, file_path, content);
+		const rewritten = rewrite_relative_specifiers(aliases_rewritten);
+
+		if (rewritten !== content) {
+			yield* file_system.writeFileString(file_path, rewritten);
+		}
+	});
 }
+
+const RewriteAliasSpecifiers = (context: TargetContext, file_path: string, content: string) =>
+	Effect.gen(function* () {
+		const path = yield* Path.Path;
+
+		if (context.target.aliases.length === 0) {
+			return content;
+		}
+
+		return content.replace(
+			/(["'])(\$\/[^"']+\.ts)\1/g,
+			(match, quote: string, specifier: string) => {
+				const alias = context.target.aliases.find(({ prefix }) =>
+					specifier.startsWith(prefix),
+				);
+
+				if (!alias) {
+					return match;
+				}
+
+				const resolved_target =
+					`${context.dist_root}/${alias.resolve(specifier)}`.replaceAll("\\", "/");
+				const from_dir = file_path.slice(0, file_path.lastIndexOf("/"));
+				const relative_path = path
+					.relative(from_dir, resolved_target)
+					.replaceAll("\\", "/");
+				const specifier_path = relative_path.startsWith(".")
+					? relative_path
+					: `./${relative_path}`;
+
+				return `${quote}${specifier_path}${quote}`;
+			},
+		);
+	});
 
 function rewrite_relative_specifiers(content: string): string {
 	return content.replace(/((?:from|import)\s*["'])(\.{1,2}\/[^"']+)\.ts(["'])/g, "$1$2.js$3");
 }
 
-function to_posix_relative(
-	context: TargetContext,
-	from_file: string,
-	target_from_dist: string,
-): string {
-	const resolved_target = `${context.dist_root}/${target_from_dist}`.replaceAll("\\", "/");
-	const from_dir = from_file.slice(0, from_file.lastIndexOf("/"));
-	const relative_path = relative(from_dir, resolved_target).replaceAll("\\", "/");
-
-	return relative_path.startsWith(".") ? relative_path : `./${relative_path}`;
-}
+NodeRuntime.runMain(Main.pipe(Effect.provide(NodeServices.layer)));

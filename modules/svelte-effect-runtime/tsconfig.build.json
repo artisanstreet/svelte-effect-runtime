@@ -9,6 +9,7 @@
 		"ignoreDeprecations": "6.0",
 		"verbatimModuleSyntax": true,
 		"strict": true,
+		"exactOptionalPropertyTypes": true,
 		"skipLibCheck": true,
 		"allowImportingTsExtensions": true,
 		"allowSyntheticDefaultImports": true,

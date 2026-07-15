@@ -1,21 +1,8 @@
-import type { FormIssue } from "$/remote/shared.ts";
 import { isHttpError, isRedirect, isValidationError } from "@sveltejs/kit";
-import { Cause } from "effect";
+import { is_form_error, type FormIssue } from "$/remote/shared.ts";
+import { Cause, Schema } from "effect";
 import { stringify } from "devalue";
 
-/**
- * Classified result of inspecting an Effect Cause at the remote server boundary.
- *
- * @example
- * ```ts
- * const resolution = classify_remote_cause(cause);
- * if (resolution._tag === "RemoteFailure") {
- *   console.log(resolution.encoded);
- * }
- * ```
- *
- * @since 4.0.0
- */
 export type RemoteCauseResolution =
 	| {
 			readonly _tag: "SvelteKitControlFlow";
@@ -34,20 +21,7 @@ export type RemoteCauseResolution =
 			readonly encoded: string;
 	  };
 
-/**
- * Classifies a failed Effect Cause into the server action SER should take.
- *
- * @example
- * ```ts
- * const resolution = classify_remote_cause(Cause.fail({ _tag: "DbError" }));
- * ```
- *
- * @since 4.0.0
- * @param cause - Failed Effect Cause produced by a remote handler.
- * @returns A remote boundary decision preserving control flow, form errors,
- *   interrupts, or encoded typed failures.
- * @internal
- */
+/** Preserves SvelteKit control flow before classifying transportable Effect failures. */
 export function classify_remote_cause(cause: Cause.Cause<unknown>): RemoteCauseResolution {
 	const control_flow = find_sveltekit_control_flow(cause);
 
@@ -80,15 +54,7 @@ export function classify_remote_cause(cause: Cause.Cause<unknown>): RemoteCauseR
 	};
 }
 
-/**
- * Encodes an Effect Cause into a string that the client-side adapter can
- * decode back into a typed `RemoteFailure`.
- *
- * @since 2.0.0
- * @param cause - The Effect Cause from a failed execution.
- * @returns A devalue-encoded string representing the serialised failure.
- * @internal
- */
+/** Encodes a remote failure into the transport ABI shared with generated clients. */
 export function encode_remote_failure(cause: Cause.Cause<unknown>): string {
 	for (const reason of cause.reasons) {
 		if (!Cause.isFailReason(reason)) {
@@ -137,11 +103,11 @@ function find_form_error_issues(cause: Cause.Cause<unknown>): readonly FormIssue
 }
 
 function get_form_error_issues(value: unknown): readonly FormIssue[] | undefined {
-	if (!is_object_like(value) || (value as { readonly _tag?: unknown })._tag !== "FormError") {
-		return undefined;
+	if (is_form_error(value)) {
+		return value.issues;
 	}
 
-	return (value as { readonly issues?: readonly FormIssue[] }).issues ?? [];
+	return is_tagged_form_error(value) ? [] : undefined;
 }
 
 function is_sveltekit_control_flow(value: unknown): boolean {
@@ -244,3 +210,9 @@ function create_unknown_remote_failure(): { readonly message: string } {
 function stringify_unknown_remote_failure(): string {
 	return stringify(create_unknown_remote_failure());
 }
+
+const is_tagged_form_error = Schema.is(
+	Schema.Struct({
+		_tag: Schema.Literal("FormError"),
+	}),
+);

@@ -1,16 +1,8 @@
 import { create_form_error } from "$/remote/shared.ts";
-import { Effect } from "effect";
 import type { FormIssue } from "$/remote/shared.ts";
-
 import type { FormInvalid } from "./types.ts";
+import { Effect } from "effect";
 
-/**
- * Creates a path-aware proxy for remote form validation failures.
- *
- * @since 2.0.0
- * @param path - Current nested form path.
- * @returns Callable invalid proxy for this path.
- */
 export function make_invalid_proxy<Input = unknown>(
 	path: readonly (string | number)[] = [],
 ): FormInvalid<Input> {
@@ -23,7 +15,15 @@ export function make_invalid_proxy<Input = unknown>(
 				return undefined;
 			}
 
-			return make_invalid_proxy([...path, property]);
+			const segment = path.length === 0 ? property : normalize_nested_path_segment(property);
+
+			return make_invalid_proxy([...path, segment]);
 		},
 	}) as FormInvalid<Input>;
+}
+
+function normalize_nested_path_segment(property: string): string | number {
+	const is_array_index = /^(0|[1-9]\d*)$/.test(property);
+
+	return is_array_index ? Number(property) : property;
 }

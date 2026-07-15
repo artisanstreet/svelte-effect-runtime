@@ -1,46 +1,37 @@
-import { getRequestEvent as get_native_request_event } from "$app/server";
-import { normalize_remote_helper_error } from "$/remote/server.ts";
-
-import { run_handler_effect, run_live_handler_source } from "./effects.ts";
-import { make_invalid_proxy } from "./invalid.ts";
-import { is_handler } from "./schema.ts";
-import type { RequestEvent } from "./runtime.ts";
 import type {
 	EffectLike,
+	PrerenderInputs,
 	RemoteFormHandler,
 	RemoteHandler,
 	RemoteLiveHandler,
 	RemoteLiveSource,
 } from "./types.ts";
+import { run_handler_effect, run_live_handler, ToEffect } from "./effects.ts";
+import { getRequestEvent as get_native_request_event } from "$app/server";
+import { normalize_remote_helper_error } from "$/remote/server.ts";
+import { get_server_runtime_or_throw } from "./runtime.ts";
+import { make_invalid_proxy } from "./invalid.ts";
+import type { RequestEvent } from "./runtime.ts";
+import { is_handler } from "./schema.ts";
+import { Effect } from "effect";
 
-let running_remote_effect_handlers = 0;
+export { is_running_remote_effect_handler } from "./remote-handler-context.ts";
 
-/**
- * Reports whether SER is currently executing user remote handler code.
- *
- * @example
- * ```ts
- * if (is_running_remote_effect_handler()) {
- *   return query();
- * }
- * ```
- *
- * @since 2.0.0
- * @returns Whether a remote handler wrapper is currently active.
- * @internal
- */
-export function is_running_remote_effect_handler(): boolean {
-	return running_remote_effect_handlers > 0;
+export function make_prerender_inputs_wrapper<Input>(
+	generate_inputs: PrerenderInputs<Input>,
+): () => Promise<Input[]> {
+	return () => {
+		const runtime = get_server_runtime_or_throw();
+		const CollectInputs = Effect.gen(function* () {
+			const inputs = yield* Effect.suspend(() => ToEffect(generate_inputs()));
+
+			return Array.from(inputs);
+		});
+
+		return runtime.runPromise(CollectInputs);
+	};
 }
 
-/**
- * Builds the wrapper passed to native query, command, and prerender helpers.
- *
- * @since 2.0.0
- * @param handler - Effect handler or already-built Effect-like value.
- * @param helper_name - Remote helper name for error normalization.
- * @returns Native SvelteKit handler wrapper.
- */
 export function make_remote_wrapper(
 	handler: RemoteHandler<unknown, unknown, unknown, unknown> | EffectLike,
 	helper_name: string,
@@ -54,26 +45,16 @@ export function make_remote_wrapper(
 			throw normalize_remote_helper_error(error, helper_name);
 		}
 
-		return await run_inside_remote_effect_handler(() => {
-			try {
-				const result = is_handler(handler) ? handler(input) : handler;
+		const HandlerEffect = Effect.suspend(() => {
+			const result = is_handler(handler) ? handler(input) : handler;
 
-				return run_handler_effect(result, event);
-			} catch (error: unknown) {
-				throw normalize_remote_helper_error(error, helper_name);
-			}
+			return ToEffect(result);
 		});
+
+		return await run_handler_effect(HandlerEffect, event);
 	};
 }
 
-/**
- * Builds the wrapper passed to native live query helpers.
- *
- * @since 2.0.0
- * @param handler - Effect-aware live source handler.
- * @param helper_name - Remote helper name for error normalization.
- * @returns Native SvelteKit live query wrapper.
- */
 export function make_remote_live_wrapper<Input, A>(
 	handler: RemoteLiveSource<A, unknown, unknown> | RemoteLiveHandler<Input, A, unknown, unknown>,
 	helper_name: string,
@@ -87,26 +68,13 @@ export function make_remote_live_wrapper<Input, A>(
 			throw normalize_remote_helper_error(error, helper_name);
 		}
 
-		return await run_inside_remote_effect_handler(() => {
-			try {
-				const result = typeof handler === "function" ? handler(input as Input) : handler;
-
-				return run_live_handler_source(result, event);
-			} catch (error: unknown) {
-				throw normalize_remote_helper_error(error, helper_name);
-			}
-		});
+		return await run_live_handler(
+			() => (typeof handler === "function" ? handler(input as Input) : handler),
+			event,
+		);
 	};
 }
 
-/**
- * Builds the wrapper passed to native form helpers.
- *
- * @since 2.0.0
- * @param handler - Effect-aware form handler.
- * @param helper_name - Remote helper name for error normalization.
- * @returns Native SvelteKit form handler wrapper.
- */
 export function make_remote_form_wrapper<Input, A>(
 	handler: RemoteFormHandler<Input, A, unknown, unknown>,
 	helper_name: string,
@@ -120,30 +88,17 @@ export function make_remote_form_wrapper<Input, A>(
 			throw normalize_remote_helper_error(error, helper_name);
 		}
 
-		return await run_inside_remote_effect_handler(() => {
+		const HandlerEffect = Effect.suspend(() => {
 			const invalid_proxy = make_invalid_proxy<Input>();
+			const result = handler({
+				data: data as Input,
+				invalid: invalid_proxy,
+				issue,
+			});
 
-			try {
-				const result = handler({
-					data: data as Input,
-					invalid: invalid_proxy,
-					issue,
-				});
-
-				return run_handler_effect(result, event);
-			} catch (error: unknown) {
-				throw normalize_remote_helper_error(error, helper_name);
-			}
+			return ToEffect(result);
 		});
+
+		return await run_handler_effect(HandlerEffect, event);
 	};
-}
-
-async function run_inside_remote_effect_handler<A>(run: () => Promise<A>): Promise<A> {
-	running_remote_effect_handlers += 1;
-
-	try {
-		return await run();
-	} finally {
-		running_remote_effect_handlers -= 1;
-	}
 }

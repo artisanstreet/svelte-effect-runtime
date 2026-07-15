@@ -1,37 +1,5 @@
-import {
-	copyFile,
-	cp,
-	mkdir,
-	mkdtemp,
-	readdir,
-	readFile,
-	rm,
-	stat,
-	writeFile,
-} from "node:fs/promises";
-import { dirname, join, relative, resolve } from "node:path";
-import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { createServer } from "node:net";
-import { tmpdir } from "node:os";
-
-import process from "node:process";
-
-export {
-	copyFile,
-	cp,
-	dirname,
-	join,
-	mkdir,
-	readdir,
-	readFile,
-	relative,
-	resolve,
-	stat,
-	writeFile,
-};
-
-export const repo_root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+import { Effect, FileSystem, Path, Stream } from "effect";
+import { ChildProcess } from "effect/unstable/process";
 
 export type CommandOutput = {
 	stdout: string;
@@ -42,108 +10,83 @@ export type RunCommandOptions = {
 	inherit?: boolean;
 };
 
-export async function reset_dir(path: string): Promise<void> {
-	await remove_path(path);
-	await mkdir(path, { recursive: true });
-}
+export const RepoRoot = Effect.gen(function* () {
+	const path = yield* Path.Path;
+	const module_path = yield* path.fromFileUrl(new URL(import.meta.url));
 
-export async function remove_path(path: string): Promise<void> {
-	await rm(path, { force: true, recursive: true });
-}
+	return path.resolve(path.dirname(module_path), "..");
+});
 
-export async function path_exists(path: string): Promise<boolean> {
-	try {
-		await stat(path);
+export const ResetDir = (target_path: string) =>
+	Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
 
-		return true;
-	} catch (error) {
-		if (is_not_found_error(error)) {
-			return false;
-		}
-
-		throw error;
-	}
-}
-
-export function is_not_found_error(error: unknown): boolean {
-	return error instanceof Error && "code" in error && error.code === "ENOENT";
-}
-
-export function command_name(command: string): string {
-	return process.platform === "win32" ? `${command}.cmd` : command;
-}
-
-export async function make_temp_dir(prefix: string): Promise<string> {
-	return await mkdtemp(join(tmpdir(), prefix));
-}
-
-export async function get_available_port(): Promise<number> {
-	return await new Promise((resolve_port, reject_port) => {
-		const server = createServer();
-
-		server.once("error", reject_port);
-		server.listen(0, "127.0.0.1", () => {
-			const address = server.address();
-
-			if (!address || typeof address === "string") {
-				server.close();
-				reject_port(new Error("Could not reserve a local port."));
-
-				return;
-			}
-
-			server.close(() => resolve_port(address.port));
-		});
+		yield* file_system.remove(target_path, { force: true, recursive: true });
+		yield* file_system.makeDirectory(target_path, { recursive: true });
 	});
-}
 
-export async function run_command(
+export const RemovePath = (target_path: string) =>
+	Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+
+		yield* file_system.remove(target_path, { force: true, recursive: true });
+	});
+
+export const CommandName = (command: string) =>
+	Effect.gen(function* () {
+		const platform = yield* Effect.sync(() => process.platform);
+
+		return platform === "win32" ? `${command}.cmd` : command;
+	});
+
+export const MakeTempDirScoped = (prefix: string) =>
+	Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+
+		return yield* file_system.makeTempDirectoryScoped({ prefix });
+	});
+
+export const RunCommand = (
 	command: string,
-	args: string[],
+	args: ReadonlyArray<string>,
 	cwd: string,
 	options: RunCommandOptions = {},
-): Promise<CommandOutput> {
-	return await new Promise((resolve_command, reject_command) => {
-		const stdout_chunks: Buffer[] = [];
-		const stderr_chunks: Buffer[] = [];
-		const spawn_config = resolve_spawn_config(command, args);
-		const child = spawn(spawn_config.command, spawn_config.args, {
-			cwd,
-			env: process.env,
-			stdio: options.inherit ? "inherit" : ["ignore", "pipe", "pipe"],
-		});
+) =>
+	Effect.scoped(
+		Effect.gen(function* () {
+			const spawn_config = resolve_spawn_config(command, args);
+			const child = yield* ChildProcess.make(spawn_config.command, spawn_config.args, {
+				cwd,
+				extendEnv: true,
+				stdin: options.inherit ? "inherit" : "ignore",
+				stdout: options.inherit ? "inherit" : "pipe",
+				stderr: options.inherit ? "inherit" : "pipe",
+			});
+			const [stdout, stderr, exit_code] = yield* Effect.all(
+				[
+					Stream.mkString(Stream.decodeText(child.stdout)),
+					Stream.mkString(Stream.decodeText(child.stderr)),
+					child.exitCode,
+				] as const,
+				{ concurrency: "unbounded" },
+			);
 
-		if (!options.inherit) {
-			child.stdout?.on("data", (chunk: Buffer) => stdout_chunks.push(chunk));
-			child.stderr?.on("data", (chunk: Buffer) => stderr_chunks.push(chunk));
-		}
-
-		child.once("error", reject_command);
-		child.once("close", (code) => {
-			const stdout = Buffer.concat(stdout_chunks).toString();
-			const stderr = Buffer.concat(stderr_chunks).toString();
-
-			if (code === 0) {
-				resolve_command({ stdout, stderr });
-
-				return;
+			if (exit_code === 0) {
+				return { stdout, stderr };
 			}
 
-			reject_command(
-				new Error(
-					[`${command} ${args.join(" ")} failed`, stdout.trim(), stderr.trim()]
-						.filter(Boolean)
-						.join("\n\n"),
-				),
-			);
-		});
-	});
-}
+			const message = [`${command} ${args.join(" ")} failed`, stdout.trim(), stderr.trim()]
+				.filter(Boolean)
+				.join("\n\n");
+
+			return yield* Effect.fail(new Error(message));
+		}),
+	);
 
 function resolve_spawn_config(
 	command: string,
-	args: string[],
-): { command: string; args: string[] } {
+	args: ReadonlyArray<string>,
+): { command: string; args: ReadonlyArray<string> } {
 	if (process.platform !== "win32" || !command.endsWith(".cmd")) {
 		return { command, args };
 	}

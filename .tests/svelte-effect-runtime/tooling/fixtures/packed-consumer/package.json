@@ -1,0 +1,19 @@
+{
+	"name": "ser-packed-tooling-contract",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build": "vite build",
+		"check": "corepack pnpm run sync && corepack pnpm run check:types && corepack pnpm run check:ser && corepack pnpm run build",
+		"check:ser": "vp node .harness/check-svelte.ts --source-pipeline ser",
+		"check:types": "tsc --noEmit",
+		"sync": "svelte-kit sync"
+	},
+	"dependencies": {
+		"svelte-effect-runtime": "__PACKED_ARTIFACT__"
+	},
+	"devDependencies": {
+		"svelte-check": "4.7.2"
+	},
+	"packageManager": "pnpm@11.10.0"
+}

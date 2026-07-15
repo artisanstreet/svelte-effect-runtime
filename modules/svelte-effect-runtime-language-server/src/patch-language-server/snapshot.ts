@@ -4,14 +4,15 @@ import type { Mapper } from "./types.ts";
 
 export function rebind_snapshot_to_original_document(
 	snapshot: any,
-	originalDocument: any,
+	original_document: any,
 	prepared: { document: any; preprocessMapper: Mapper },
 ) {
-	const innerMapper = snapshot.getMapper();
+	const inner_mapper = snapshot.getMapper();
+
 	snapshot.mapper = new SnapshotDocumentMapper(
-		innerMapper,
+		inner_mapper,
 		prepared.preprocessMapper,
-		originalDocument.uri,
+		original_document.uri,
 	);
 
 	if (snapshot.parserError) {
@@ -25,13 +26,14 @@ export function rebind_snapshot_to_original_document(
 		snapshot.htmlAst = clone_ast_with_original_offsets(
 			snapshot.htmlAst,
 			prepared.document,
-			originalDocument,
+			original_document,
 			prepared.preprocessMapper,
 		);
 	}
 
-	snapshot.parent = originalDocument;
-	snapshot.version = originalDocument.version;
+	snapshot.parent = original_document;
+	snapshot.version = original_document.version;
+
 	return snapshot;
 }
 
@@ -44,9 +46,9 @@ function map_range(mapper: Mapper, range: { start: any; end: any }) {
 
 function clone_ast_with_original_offsets(
 	value: any,
-	preprocessedDocument: any,
-	originalDocument: any,
-	preprocessMapper: Mapper,
+	preprocessed_document: any,
+	original_document: any,
+	preprocess_mapper: Mapper,
 	seen = new WeakMap<object, any>(),
 ): any {
 	if (!value || typeof value !== "object") {
@@ -64,9 +66,9 @@ function clone_ast_with_original_offsets(
 			clone.push(
 				clone_ast_with_original_offsets(
 					item,
-					preprocessedDocument,
-					originalDocument,
-					preprocessMapper,
+					preprocessed_document,
+					original_document,
+					preprocess_mapper,
 					seen,
 				),
 			);
@@ -81,18 +83,18 @@ function clone_ast_with_original_offsets(
 		if ((key === "start" || key === "end") && typeof child === "number") {
 			clone[key] = map_offset_to_original(
 				child,
-				preprocessedDocument,
-				originalDocument,
-				preprocessMapper,
+				preprocessed_document,
+				original_document,
+				preprocess_mapper,
 			);
 			continue;
 		}
 
 		clone[key] = clone_ast_with_original_offsets(
 			child,
-			preprocessedDocument,
-			originalDocument,
-			preprocessMapper,
+			preprocessed_document,
+			original_document,
+			preprocess_mapper,
 			seen,
 		);
 	}
@@ -102,17 +104,17 @@ function clone_ast_with_original_offsets(
 
 function map_offset_to_original(
 	offset: number,
-	preprocessedDocument: any,
-	originalDocument: any,
-	preprocessMapper: Mapper,
+	preprocessed_document: any,
+	original_document: any,
+	preprocess_mapper: Mapper,
 ) {
-	const originalPosition = preprocessMapper.getOriginalPosition(
-		preprocessedDocument.positionAt(offset),
+	const original_position = preprocess_mapper.getOriginalPosition(
+		preprocessed_document.positionAt(offset),
 	);
 
-	if (is_invalid_position(originalPosition)) {
+	if (is_invalid_position(original_position)) {
 		return offset;
 	}
 
-	return originalDocument.offsetAt(originalPosition);
+	return original_document.offsetAt(original_position);
 }

@@ -1,0 +1,1080 @@
+name: SER pipeline
+
+on:
+    pull_request:
+        branches:
+            - master
+    push:
+        branches:
+            - master
+    workflow_dispatch:
+        inputs:
+            mode:
+                description: Build a candidate, publish a fresh release, or resume exact prior artifacts.
+                type: choice
+                options:
+                    - dry-run
+                    - release
+                    - resume
+                default: dry-run
+                required: true
+            resume_version:
+                description: Exact semantic version from the failed publishing run.
+                type: string
+                required: false
+            resume_commit:
+                description: Exact full candidate SHA from the failed publishing run.
+                type: string
+                required: false
+            resume_run_id:
+                description: GitHub Actions run ID containing the exact candidate bundle.
+                type: string
+                required: false
+
+permissions: {}
+
+concurrency:
+    group: ${{ github.event_name == 'workflow_dispatch' && inputs.mode != 'dry-run' && 'ser-release' || format('ser-ci-{0}', github.ref) }}
+    cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'dry-run' }}
+    queue: ${{ github.event_name == 'workflow_dispatch' && inputs.mode != 'dry-run' && 'max' || 'single' }}
+
+jobs:
+    plan:
+        name: Plan
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 10
+        permissions:
+            contents: read
+        outputs:
+            artifact_grammars: ${{ steps.plan.outputs.artifact_name_grammars || steps.plan_candidate.outputs.artifact_name_grammars || steps.plan_resume.outputs.artifact_name_grammars }}
+            artifact_language_server: ${{ steps.plan.outputs.artifact_name_language_server || steps.plan_candidate.outputs.artifact_name_language_server || steps.plan_resume.outputs.artifact_name_language_server }}
+            artifact_runtime: ${{ steps.plan.outputs.artifact_name_runtime || steps.plan_candidate.outputs.artifact_name_runtime || steps.plan_resume.outputs.artifact_name_runtime }}
+            artifact_vsix: ${{ steps.plan.outputs.artifact_name_vsix || steps.plan_candidate.outputs.artifact_name_vsix || steps.plan_resume.outputs.artifact_name_vsix }}
+            release_required: ${{ steps.plan.outputs.release_required || steps.plan_candidate.outputs.release_required || steps.plan_resume.outputs.release_required }}
+            tag: ${{ steps.plan.outputs.tag || steps.plan_candidate.outputs.tag || steps.plan_resume.outputs.tag }}
+            version: ${{ steps.plan.outputs.version || steps.plan_candidate.outputs.version || steps.plan_resume.outputs.version }}
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+
+            - name: Plan verification
+              id: plan
+              if: github.event_name != 'workflow_dispatch'
+              run: >-
+                  vp node build/release/cli.ts plan
+                  --event "${{ github.event_name }}"
+                  --ref "${{ github.ref }}"
+                  --commit "${{ github.sha }}"
+                  --output release-plan.json
+                  --github-output "$GITHUB_OUTPUT"
+
+            - name: Plan candidate construction
+              id: plan_candidate
+              if: github.event_name == 'workflow_dispatch' && inputs.mode != 'resume'
+              env:
+                  RELEASE_MODE: ${{ inputs.mode }}
+              run: >-
+                  vp node build/release/cli.ts plan
+                  --event workflow_dispatch
+                  --ref "${{ github.ref }}"
+                  --commit "${{ github.sha }}"
+                  --mode "$RELEASE_MODE"
+                  --output release-plan.json
+                  --github-output "$GITHUB_OUTPUT"
+
+            - name: Plan exact resume
+              id: plan_resume
+              if: github.event_name == 'workflow_dispatch' && inputs.mode == 'resume'
+              env:
+                  RESUME_COMMIT: ${{ inputs.resume_commit }}
+                  RESUME_RUN_ID: ${{ inputs.resume_run_id }}
+                  RESUME_VERSION: ${{ inputs.resume_version }}
+              run: >-
+                  vp node build/release/cli.ts plan
+                  --event workflow_dispatch
+                  --ref "${{ github.ref }}"
+                  --commit "${{ github.sha }}"
+                  --mode resume
+                  --resume-version "$RESUME_VERSION"
+                  --resume-commit "$RESUME_COMMIT"
+                  --resume-run-id "$RESUME_RUN_ID"
+                  --output release-plan.json
+                  --github-output "$GITHUB_OUTPUT"
+
+            - name: Upload release plan
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              with:
+                  name: release-plan-${{ github.run_id }}
+                  path: release-plan.json
+                  if-no-files-found: error
+                  retention-days: 90
+
+    static_policy:
+        name: Static policy
+        needs: plan
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 15
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+
+            - name: Check build policy
+              run: corepack pnpm run check:build-tools
+
+            - name: Lint repository
+              run: corepack pnpm run lint
+
+            - name: Test release policy
+              run: corepack pnpm exec vp test run .tests/release/runtime
+
+    capability_compiler:
+        name: Capability / Compiler
+        needs: plan
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 15
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Verify capability
+              run: vp node build/ci/run-capability.ts compiler
+
+    capability_runtime:
+        name: Capability / Runtime and lifecycle
+        needs: plan
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 15
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Verify capability
+              run: vp node build/ci/run-capability.ts runtime-and-lifecycle
+
+    capability_signals:
+        name: Capability / Signals and reactivity
+        needs: plan
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 15
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Verify capability
+              run: vp node build/ci/run-capability.ts signals-and-reactivity
+
+    capability_transport:
+        name: Capability / Remote transport
+        needs: plan
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 15
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Verify capability
+              run: vp node build/ci/run-capability.ts remote-transport
+            - name: Collect conformance evidence
+              if: always() && !cancelled()
+              run: |
+                  if [ ! -d .dist/conformance ]; then
+                    exit 0
+                  fi
+
+                  mkdir -p conformance-evidence
+
+                  for path in evidence playwright playwright-results.json targets.json matrix.json; do
+                    if [ -e ".dist/conformance/$path" ]; then
+                      cp -R ".dist/conformance/$path" conformance-evidence/
+                    fi
+                  done
+            - name: Upload conformance evidence
+              if: always() && !cancelled()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              with:
+                  name: conformance-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+                  path: conformance-evidence
+                  if-no-files-found: ignore
+                  retention-days: 14
+
+    capability_public_api:
+        name: Capability / Public API
+        needs: plan
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 15
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Verify capability
+              run: vp node build/ci/run-capability.ts public-api
+
+    capability_types:
+        name: Capability / Type contracts
+        needs: plan
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 20
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Verify capability
+              run: vp node build/ci/run-capability.ts type-contracts
+
+    capability_package:
+        name: Capability / Package and tooling
+        needs: plan
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 15
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Verify capability
+              run: vp node build/ci/run-capability.ts package-and-tooling
+
+    staging_verified:
+        name: Staging verified
+        if: always()
+        needs:
+            - plan
+            - static_policy
+            - capability_compiler
+            - capability_runtime
+            - capability_signals
+            - capability_transport
+            - capability_public_api
+            - capability_types
+            - capability_package
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 5
+        permissions: {}
+        steps:
+            - name: Require every staging check
+              env:
+                  RESULTS: ${{ toJSON(needs) }}
+              run: |
+                  if printf '%s' "$RESULTS" | grep -Eq '"result": "(failure|cancelled|skipped)"'; then
+                    printf '%s\n' "$RESULTS"
+                    exit 1
+                  fi
+
+    artifact_runtime:
+        name: Artifact / Runtime
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate' && inputs.mode != 'resume'
+        needs:
+            - plan
+            - staging_verified
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 20
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Build and pack once
+              run: |
+                  corepack pnpm run build:runtime
+                  vp node build/pack.ts svelte-effect-runtime
+                  mkdir -p release-output/runtime
+                  cp -R .dist/svelte-effect-runtime/. release-output/runtime/
+            - name: Upload exact runtime output
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              with:
+                  name: runtime-${{ github.sha }}
+                  path: release-output/runtime
+                  if-no-files-found: error
+                  retention-days: 14
+
+    artifact_grammars:
+        name: Artifact / Grammars
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate' && inputs.mode != 'resume'
+        needs:
+            - plan
+            - staging_verified
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 15
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Build and pack once
+              run: |
+                  corepack pnpm run build:grammars
+                  vp node build/pack.ts svelte-effect-runtime-grammars
+                  mkdir -p release-output/grammars
+                  cp ".dist/svelte-effect-runtime-grammars/${{ needs.plan.outputs.artifact_grammars }}" release-output/grammars/
+            - name: Upload exact grammar package
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              with:
+                  name: grammars-${{ github.sha }}
+                  path: release-output/grammars
+                  if-no-files-found: error
+                  retention-days: 14
+
+    artifact_language_server:
+        name: Artifact / Language server
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate' && inputs.mode != 'resume'
+        needs:
+            - plan
+            - staging_verified
+            - artifact_runtime
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 20
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Download verified runtime output
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: runtime-${{ github.sha }}
+                  path: .dist/svelte-effect-runtime
+            - name: Build and pack once
+              run: |
+                  corepack pnpm run build:lsp
+                  vp node build/pack.ts svelte-effect-runtime-language-server
+                  mkdir -p release-output/language-server
+                  cp ".dist/svelte-effect-runtime-language-server/${{ needs.plan.outputs.artifact_language_server }}" release-output/language-server/
+            - name: Upload exact language server package
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              with:
+                  name: language-server-${{ github.sha }}
+                  path: release-output/language-server
+                  if-no-files-found: error
+                  retention-days: 14
+
+    artifact_vsix:
+        name: Artifact / VSIX
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate' && inputs.mode != 'resume'
+        needs:
+            - plan
+            - staging_verified
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 20
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Build and package once
+              run: |
+                  corepack pnpm run package:extension
+                  mkdir -p release-output/vsix
+                  cp ".dist/svelte-effect-runtime-vsix/${{ needs.plan.outputs.artifact_vsix }}" release-output/vsix/
+            - name: Upload exact VSIX
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              with:
+                  name: vsix-${{ github.sha }}
+                  path: release-output/vsix
+                  if-no-files-found: error
+                  retention-days: 14
+
+    candidate_assemble:
+        name: Candidate / Assemble or restore
+        if: >-
+            always() &&
+            github.event_name == 'workflow_dispatch' &&
+            github.ref == 'refs/heads/candidate' &&
+            needs.plan.result == 'success' &&
+            needs.staging_verified.result == 'success' &&
+            ((inputs.mode == 'resume' &&
+              needs.artifact_runtime.result == 'skipped' &&
+              needs.artifact_grammars.result == 'skipped' &&
+              needs.artifact_language_server.result == 'skipped' &&
+              needs.artifact_vsix.result == 'skipped') ||
+             (inputs.mode != 'resume' &&
+              needs.artifact_runtime.result == 'success' &&
+              needs.artifact_grammars.result == 'success' &&
+              needs.artifact_language_server.result == 'success' &&
+              needs.artifact_vsix.result == 'success'))
+        needs:
+            - plan
+            - staging_verified
+            - artifact_runtime
+            - artifact_grammars
+            - artifact_language_server
+            - artifact_vsix
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 20
+        permissions:
+            actions: read
+            contents: read
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Download current plan
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: release-plan-${{ github.run_id }}
+                  path: release-input/plan
+            - name: Download runtime package
+              if: inputs.mode != 'resume'
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: runtime-${{ github.sha }}
+                  path: release-input/runtime
+            - name: Download grammar package
+              if: inputs.mode != 'resume'
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: grammars-${{ github.sha }}
+                  path: release-input/grammars
+            - name: Download language server package
+              if: inputs.mode != 'resume'
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: language-server-${{ github.sha }}
+                  path: release-input/language-server
+            - name: Download VSIX
+              if: inputs.mode != 'resume'
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: vsix-${{ github.sha }}
+                  path: release-input/vsix
+            - name: Download exact prior candidate
+              if: inputs.mode == 'resume'
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: release-candidate-${{ inputs.resume_version }}-${{ inputs.resume_commit }}
+                  path: release-source
+                  github-token: ${{ github.token }}
+                  run-id: ${{ inputs.resume_run_id }}
+            - name: Assemble fresh candidate
+              if: inputs.mode != 'resume'
+              run: |
+                  mkdir -p release-candidate/artifacts
+                  cp release-input/plan/release-plan.json release-candidate/release-plan.json
+                  cp "release-input/runtime/${{ needs.plan.outputs.artifact_runtime }}" release-candidate/artifacts/
+                  cp "release-input/grammars/${{ needs.plan.outputs.artifact_grammars }}" release-candidate/artifacts/
+                  cp "release-input/language-server/${{ needs.plan.outputs.artifact_language_server }}" release-candidate/artifacts/
+                  cp "release-input/vsix/${{ needs.plan.outputs.artifact_vsix }}" release-candidate/artifacts/
+                  vp node build/release/cli.ts manifest --plan release-candidate/release-plan.json --artifact-dir release-candidate/artifacts --output release-candidate/artifact-manifest.json
+                  vp node build/release/cli.ts notes --plan release-candidate/release-plan.json --repository-url "${{ github.server_url }}/${{ github.repository }}" --output release-candidate/release-notes.md
+            - name: Restore exact prior candidate
+              if: inputs.mode == 'resume'
+              run: |
+                  vp node build/release/cli.ts validate-resume --plan release-input/plan/release-plan.json --source-plan release-source/release-plan.json
+                  vp node build/release/cli.ts validate --plan release-input/plan/release-plan.json --manifest release-source/artifact-manifest.json --artifact-dir release-source/artifacts
+                  mkdir -p release-candidate
+                  cp -R release-source/artifacts release-candidate/artifacts
+                  cp release-source/artifact-manifest.json release-candidate/artifact-manifest.json
+                  cp release-source/release-notes.md release-candidate/release-notes.md
+                  cp release-source/release-plan.json release-candidate/source-plan.json
+                  cp release-input/plan/release-plan.json release-candidate/release-plan.json
+            - name: Upload immutable candidate bundle
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              with:
+                  name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
+                  path: release-candidate
+                  if-no-files-found: error
+                  retention-days: 90
+
+    candidate_consumer_smoke:
+        name: Candidate / Consumer smoke
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate'
+        needs:
+            - plan
+            - candidate_assemble
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 20
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Download candidate bundle
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
+                  path: release-candidate
+            - name: Verify exact installed artifacts
+              run: >-
+                  vp node build/release/artifact-smoke.ts
+                  --plan release-candidate/release-plan.json
+                  --manifest release-candidate/artifact-manifest.json
+                  --artifact-dir release-candidate/artifacts
+
+    candidate_browser_smoke:
+        name: Candidate / Browser smoke
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate'
+        needs:
+            - plan
+            - candidate_assemble
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 30
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Download candidate bundle
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
+                  path: release-candidate
+            - name: Verify packed runtime in Chromium
+              run: vp node build/smoke-runtime.ts "release-candidate/artifacts/${{ needs.plan.outputs.artifact_runtime }}"
+
+    candidate_verified:
+        name: Candidate verified
+        if: >-
+            always() &&
+            github.event_name == 'workflow_dispatch' &&
+            github.ref == 'refs/heads/candidate' &&
+            needs.candidate_assemble.result != 'skipped'
+        needs:
+            - candidate_assemble
+            - candidate_consumer_smoke
+            - candidate_browser_smoke
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 5
+        permissions: {}
+        steps:
+            - name: Require candidate evidence
+              env:
+                  RESULTS: ${{ toJSON(needs) }}
+              run: |
+                  if printf '%s' "$RESULTS" | grep -Eq '"result": "(failure|cancelled|skipped)"'; then
+                    printf '%s\n' "$RESULTS"
+                    exit 1
+                  fi
+
+    dry_run:
+        name: Dry-run result
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate' && inputs.mode == 'dry-run'
+        needs:
+            - plan
+            - candidate_verified
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 10
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Download candidate bundle
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
+                  path: release-candidate
+            - name: Prove zero-write promotion path
+              run: >-
+                  vp node build/release/cli.ts promote
+                  --plan release-candidate/release-plan.json
+                  --manifest release-candidate/artifact-manifest.json
+                  --artifact-dir release-candidate/artifacts
+                  --notes release-candidate/release-notes.md
+                  --repository "${{ github.repository }}"
+                  --state-output release-state.json
+                  --dry-run true
+            - name: Upload dry-run evidence
+              if: always()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              with:
+                  name: promotion-state-${{ github.run_id }}
+                  path: release-state.json
+                  if-no-files-found: error
+                  retention-days: 90
+
+    release_gate:
+        name: Authorize release
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate' && (inputs.mode == 'release' || inputs.mode == 'resume')
+        needs:
+            - plan
+            - candidate_verified
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 5
+        environment: release-approval
+        permissions:
+            contents: read
+        steps:
+            - name: Record authorization boundary
+              run: test "${{ github.ref }}" = "refs/heads/candidate"
+
+    github_prepare:
+        name: Prepare GitHub release
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate' && (inputs.mode == 'release' || inputs.mode == 'resume')
+        needs:
+            - plan
+            - candidate_verified
+            - release_gate
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 15
+        permissions:
+            actions: read
+            contents: write
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Download candidate bundle
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
+                  path: release-candidate
+            - name: Recheck fresh candidate pointer
+              if: inputs.mode == 'release'
+              run: >-
+                  vp node build/release/cli.ts plan
+                  --event workflow_dispatch
+                  --ref "${{ github.ref }}"
+                  --commit "${{ github.sha }}"
+                  --mode release
+                  --output release-candidate/rechecked-plan.json
+            - name: Recheck resumed candidate pointer
+              if: inputs.mode == 'resume'
+              env:
+                  RESUME_COMMIT: ${{ inputs.resume_commit }}
+                  RESUME_RUN_ID: ${{ inputs.resume_run_id }}
+                  RESUME_VERSION: ${{ inputs.resume_version }}
+              run: >-
+                  vp node build/release/cli.ts plan
+                  --event workflow_dispatch
+                  --ref "${{ github.ref }}"
+                  --commit "${{ github.sha }}"
+                  --mode resume
+                  --resume-version "$RESUME_VERSION"
+                  --resume-commit "$RESUME_COMMIT"
+                  --resume-run-id "$RESUME_RUN_ID"
+                  --output release-candidate/rechecked-plan.json
+            - name: Revalidate exact candidate bytes
+              run: >-
+                  vp node build/release/cli.ts validate
+                  --plan release-candidate/rechecked-plan.json
+                  --manifest release-candidate/artifact-manifest.json
+                  --artifact-dir release-candidate/artifacts
+            - name: Create the exact tag and draft release
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: >-
+                  vp node build/release/cli.ts promote
+                  --plan release-candidate/rechecked-plan.json
+                  --manifest release-candidate/artifact-manifest.json
+                  --artifact-dir release-candidate/artifacts
+                  --notes release-candidate/release-notes.md
+                  --repository "${{ github.repository }}"
+                  --state-output release-state.json
+                  --phase github-prepare
+                  --dry-run false
+            - name: Upload GitHub preparation evidence
+              if: always()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              with:
+                  name: promotion-phase-github-prepare-${{ github.run_id }}
+                  path: release-state.json
+                  if-no-files-found: warn
+                  retention-days: 90
+
+    npm_publish:
+        name: Publish npm
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate' && (inputs.mode == 'release' || inputs.mode == 'resume')
+        needs:
+            - plan
+            - github_prepare
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        permissions:
+            actions: read
+            contents: read
+            id-token: write
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Download candidate bundle
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
+                  path: release-candidate
+            - name: Publish exact npm tarballs
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: >-
+                  vp node build/release/cli.ts promote
+                  --plan release-candidate/release-plan.json
+                  --manifest release-candidate/artifact-manifest.json
+                  --artifact-dir release-candidate/artifacts
+                  --notes release-candidate/release-notes.md
+                  --repository "${{ github.repository }}"
+                  --state-output release-state.json
+                  --phase npm
+                  --dry-run false
+            - name: Upload npm evidence
+              if: always()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              with:
+                  name: promotion-phase-npm-${{ github.run_id }}
+                  path: release-state.json
+                  if-no-files-found: warn
+                  retention-days: 90
+
+    github_assets:
+        name: Publish GitHub assets
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate' && (inputs.mode == 'release' || inputs.mode == 'resume')
+        needs:
+            - plan
+            - github_prepare
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 15
+        permissions:
+            actions: read
+            contents: write
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Download candidate bundle
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
+                  path: release-candidate
+            - name: Upload exact GitHub assets
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: >-
+                  vp node build/release/cli.ts promote
+                  --plan release-candidate/release-plan.json
+                  --manifest release-candidate/artifact-manifest.json
+                  --artifact-dir release-candidate/artifacts
+                  --notes release-candidate/release-notes.md
+                  --repository "${{ github.repository }}"
+                  --state-output release-state.json
+                  --phase github-assets
+                  --dry-run false
+            - name: Upload GitHub asset evidence
+              if: always()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              with:
+                  name: promotion-phase-github-assets-${{ github.run_id }}
+                  path: release-state.json
+                  if-no-files-found: warn
+                  retention-days: 90
+
+    openvsx_publish:
+        name: Publish OpenVSX
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate' && (inputs.mode == 'release' || inputs.mode == 'resume')
+        needs:
+            - plan
+            - npm_publish
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 15
+        environment:
+            name: release
+            deployment: false
+        permissions:
+            actions: read
+            contents: read
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Download candidate bundle
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
+                  path: release-candidate
+            - name: Publish exact VSIX to OpenVSX
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
+              run: >-
+                  vp node build/release/cli.ts promote
+                  --plan release-candidate/release-plan.json
+                  --manifest release-candidate/artifact-manifest.json
+                  --artifact-dir release-candidate/artifacts
+                  --notes release-candidate/release-notes.md
+                  --repository "${{ github.repository }}"
+                  --state-output release-state.json
+                  --phase openvsx
+                  --dry-run false
+            - name: Upload OpenVSX evidence
+              if: always()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              with:
+                  name: promotion-phase-openvsx-${{ github.run_id }}
+                  path: release-state.json
+                  if-no-files-found: warn
+                  retention-days: 90
+
+    github_finalize:
+        name: Finalize GitHub release
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate' && (inputs.mode == 'release' || inputs.mode == 'resume')
+        needs:
+            - plan
+            - npm_publish
+            - github_assets
+            - openvsx_publish
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 15
+        permissions:
+            actions: read
+            contents: write
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Download candidate bundle
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
+                  path: release-candidate
+            - name: Finalize verified GitHub release
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: >-
+                  vp node build/release/cli.ts promote
+                  --plan release-candidate/release-plan.json
+                  --manifest release-candidate/artifact-manifest.json
+                  --artifact-dir release-candidate/artifacts
+                  --notes release-candidate/release-notes.md
+                  --repository "${{ github.repository }}"
+                  --state-output release-state.json
+                  --phase github-finalize
+                  --dry-run false
+            - name: Upload finalization evidence
+              if: always()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              with:
+                  name: promotion-phase-github-finalize-${{ github.run_id }}
+                  path: release-state.json
+                  if-no-files-found: warn
+                  retention-days: 90
+
+    promotion_evidence:
+        name: Inspect promotion state
+        if: always() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate' && (inputs.mode == 'release' || inputs.mode == 'resume')
+        needs:
+            - plan
+            - candidate_verified
+            - github_prepare
+            - npm_publish
+            - github_assets
+            - openvsx_publish
+            - github_finalize
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 10
+        permissions:
+            actions: read
+            contents: read
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Download candidate bundle
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
+                  path: release-candidate
+            - name: Inspect exact publication state
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: >-
+                  vp node build/release/cli.ts inspect
+                  --plan release-candidate/release-plan.json
+                  --manifest release-candidate/artifact-manifest.json
+                  --artifact-dir release-candidate/artifacts
+                  --notes release-candidate/release-notes.md
+                  --repository "${{ github.repository }}"
+                  --output release-state.json
+            - name: Upload consolidated promotion evidence
+              if: always()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              with:
+                  name: promotion-state-${{ github.run_id }}
+                  path: release-state.json
+                  if-no-files-found: warn
+                  retention-days: 90
+
+    report:
+        name: Report
+        if: always()
+        needs:
+            - plan
+            - staging_verified
+            - candidate_verified
+            - dry_run
+            - promotion_evidence
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 10
+        permissions:
+            actions: read
+            contents: read
+            deployments: read
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Download promotion evidence
+              continue-on-error: true
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: promotion-state-${{ github.run_id }}
+                  path: release-report
+            - name: Download provider timing evidence
+              if: github.event_name == 'workflow_dispatch' && inputs.mode != 'dry-run'
+              continue-on-error: true
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  pattern: promotion-phase-*-${{ github.run_id }}
+                  path: release-report/phases
+            - name: Download release plan
+              continue-on-error: true
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: release-plan-${{ github.run_id }}
+                  path: release-report/plan
+            - name: Download candidate identity
+              if: github.event_name == 'workflow_dispatch'
+              continue-on-error: true
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
+                  path: release-report/candidate
+            - name: Report timing and release state
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: >-
+                  vp node build/ci/report.ts
+                  --state release-report/release-state.json
+                  --plan release-report/plan/release-plan.json
+                  --manifest release-report/candidate/artifact-manifest.json
+                  --phases release-report/phases
+                  --output release-report/timing.json
+            - name: Upload timing evidence
+              if: always()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              with:
+                  name: timing-${{ github.run_id }}
+                  path: release-report/timing.json
+                  if-no-files-found: warn
+                  retention-days: 90

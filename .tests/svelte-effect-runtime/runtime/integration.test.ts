@@ -1,33 +1,33 @@
-import { test } from "vitest";
-import {
-	assert_equals,
-	assert_throws,
-	assert_not_match,
-	assert_string_includes,
-} from "./helpers/assert.ts";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { createServer, normalizePath } from "vite";
 import {
 	transform_markup_effect,
 	transform_script_effect,
 	transform_svelte_effect,
 } from "../../../modules/svelte-effect-runtime/src/runtime/transform.ts";
 import {
-	effect,
-	rewrite_remote_client_exports,
-} from "../../../modules/svelte-effect-runtime/src/compiler.ts";
-import {
 	get_server_runtime_or_throw,
 	reset_server_runtime,
 	ServerRuntime,
 } from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
+import {
+	effect,
+	rewrite_remote_client_exports,
+} from "../../../modules/svelte-effect-runtime/src/compiler.ts";
+import {
+	assert_equals,
+	assert_throws,
+	assert_not_match,
+	assert_string_includes,
+} from "../unit/helpers/assert.ts";
 import { RuntimeAlreadyInitializedError } from "../../../modules/svelte-effect-runtime/src/errors.ts";
 import { promise } from "../../../modules/svelte-effect-runtime/src/markup/promise.ts";
-import { Context, Layer } from "effect";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer, normalizePath } from "vite";
 import { compile, parse } from "svelte/compiler";
+import { fileURLToPath } from "node:url";
+import { Context, Layer } from "effect";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { test } from "vitest";
 
 async function run_svelte_transform(
 	plugin: ReturnType<typeof effect>[number],
@@ -58,33 +58,6 @@ async function run_svelte_transform(
 	}
 
 	throw new Error("svelte transform plugin should expose a transform hook");
-}
-
-async function collect_transform_warnings(
-	plugin: ReturnType<typeof effect>[number],
-	source: string,
-	id: string,
-): Promise<string[]> {
-	const warnings: string[] = [];
-	const transform = plugin.transform;
-
-	if (typeof transform !== "function") {
-		throw new Error("guard plugin should expose a transform hook");
-	}
-
-	await transform.call(
-		{
-			warn(warning: string | { message?: string }) {
-				warnings.push(
-					typeof warning === "string" ? warning : (warning.message ?? String(warning)),
-				);
-			},
-		} as never,
-		source,
-		id,
-	);
-
-	return warnings;
 }
 
 async function run_server_import_transform(source: string, id: string): Promise<string> {
@@ -624,12 +597,36 @@ test("vite diagnostics plugin warns for hidden event callback yield", async () =
 test("vite diagnostics plugin warns for explicit Effect runners", async () => {
 	const warnings: string[] = [];
 	const diagnostics_plugin = get_diagnostics_plugin();
+	const runner_name = ["run", "Promise"].join("");
 	const source = [
 		`<script lang="ts">`,
 		`  import { Effect } from "effect";`,
 		`</script>`,
 		``,
-		`<button onclick={() => Effect.runPromise(Effect.gen(function* () {}))}>run</button>`,
+		`<button onclick={() => Effect.${runner_name}(Effect.gen(function* () {}))}>run</button>`,
+	].join("\n");
+
+	await diagnostics_plugin.transform.call(
+		make_warning_context(warnings),
+		source,
+		"src/routes/+page.svelte",
+	);
+
+	assert_equals(warnings.length, 1);
+	assert_string_includes(warnings[0], "explicit Effect runner");
+	assert_string_includes(warnings[0], "bypass SER cancellation");
+});
+
+test("vite diagnostics plugin warns for parenthesized Effect runners", async () => {
+	const warnings: string[] = [];
+	const diagnostics_plugin = get_diagnostics_plugin();
+	const runner_name = ["run", "Promise"].join("");
+	const source = [
+		`<script lang="ts">`,
+		`  import { Effect } from "effect";`,
+		`</script>`,
+		``,
+		`<button onclick={() => (Effect).${runner_name}(Effect.succeed("ready"))}>run</button>`,
 	].join("\n");
 
 	await diagnostics_plugin.transform.call(
@@ -805,63 +802,39 @@ test("vite plugins do not force pre transform ordering", () => {
 	assert_equals(pre_plugins, []);
 });
 
-test("vite plugin warns when SER files use reserved generated helper names", async () => {
+test("vite plugin does not reserve safely aliased markup helper names", async () => {
 	const plugins = effect();
-	const guard_index = plugins.findIndex(
+	const guard_plugin = plugins.find(
 		(candidate) => candidate.name === "svelte-effect-runtime:reserved-helper-guard",
 	);
-	const transform_index = plugins.findIndex(
+	const transform_plugin = plugins.find(
 		(candidate) => candidate.name === "svelte-effect-runtime:svelte-transform",
 	);
-	const plugin = plugins[guard_index];
-
-	if (!plugin) {
-		throw new Error("reserved helper guard plugin should exist");
-	}
-
-	if (guard_index >= transform_index) {
-		throw new Error("reserved helper guard should run before the transform");
-	}
-
 	const source = [
 		`<script>`,
 		`  const Dispatcher = "local dispatcher";`,
 		`  function loadValue() {}`,
 		`</script>`,
-		`{#each [1] as Code}`,
-		`  <p>{Code}: {yield* loadValue()}</p>`,
-		`{/each}`,
+		`<Component let:Dispatcher>`,
+		`  {#each [1] as Code}`,
+		`    <p>{Code}: {yield* loadValue()}</p>`,
+		`  {/each}`,
+		`</Component>`,
 	].join("\n");
 
-	const warnings = await collect_transform_warnings(plugin, source, "C:/src/routes/Test.svelte");
-
-	assert_equals(warnings.length, 1);
-	assert_string_includes(
-		warnings[0],
-		"`Dispatcher` and `Code` are reserved for generated markup helpers",
-	);
-});
-
-test("vite plugin reserved helper guard ignores ordinary Svelte files", async () => {
-	const plugin = effect().find(
-		(candidate) => candidate.name === "svelte-effect-runtime:reserved-helper-guard",
-	);
-
-	if (!plugin) {
-		throw new Error("reserved helper guard plugin should exist");
+	if (!transform_plugin) {
+		throw new Error("svelte transform plugin should exist");
 	}
 
-	const source = [
-		`<script>`,
-		`  const Dispatcher = "plain";`,
-		`  const Code = "plain";`,
-		`</script>`,
-		`<p>{Code}</p>`,
-	].join("\n");
+	const result = await run_svelte_transform(
+		transform_plugin,
+		source,
+		"C:/src/routes/Test.svelte",
+	);
 
-	const warnings = await collect_transform_warnings(plugin, source, "C:/src/routes/Test.svelte");
-
-	assert_equals(warnings, []);
+	assert_equals(guard_plugin, undefined);
+	assert_string_includes(result.code, "Code as Code_1");
+	assert_string_includes(result.code, "Dispatcher as Dispatcher_1");
 });
 
 test("vite plugin lowers svelte yield through its transform hook", async () => {
@@ -1215,6 +1188,7 @@ test("vite remote client wrapper preserves native SvelteKit remote module", asyn
 		`export const get_clock = __remote.query_live('abc/get_clock');`,
 		`export const save_post = __remote.command('abc/save_post');`,
 		`export const create_post = __remote.form('abc/create_post');`,
+		`export const get_build_info = __remote.prerender('abc/get_build_info');`,
 	].join("\n");
 
 	const result = await rewrite_remote_client_exports(source);
@@ -1224,13 +1198,23 @@ test("vite remote client wrapper preserves native SvelteKit remote module", asyn
 	assert_string_includes(result, `create_remote_live_query_adapter`);
 	assert_string_includes(result, `create_remote_command_adapter`);
 	assert_string_includes(result, `create_remote_form_adapter`);
+	assert_string_includes(result, `from "$app/navigation";`);
+	assert_string_includes(result, `globalThis.location.assign(target.href);`);
+	assert_string_includes(result, `__SER___goto(target, { invalidateAll: invalidate_all })`);
+	assert_string_includes(
+		result,
+		`binary_form_content_type: __remote.__SER___binary_form_content_type`,
+	);
+	assert_string_includes(result, `remote_request: __remote.__SER___remote_request`);
+	assert_string_includes(result, `serialize_binary_form: __remote.__SER___serialize_binary_form`);
+	assert_not_match(result, /from "__sveltekit\/manifest";/);
 	assert_string_includes(
 		result,
 		`export const get_post = create_remote_query_adapter(__remote.query('abc/get_post'), __SER___decode_payload);`,
 	);
 	assert_string_includes(
 		result,
-		`export const get_post_batch = create_remote_query_adapter(__remote.query_batch('abc/get_post_batch'), __SER___decode_payload);`,
+		`export const get_post_batch = create_remote_query_adapter(__remote.query_batch('abc/get_post_batch'), __SER___decode_payload, "", "batch");`,
 	);
 	assert_string_includes(
 		result,
@@ -1242,7 +1226,11 @@ test("vite remote client wrapper preserves native SvelteKit remote module", asyn
 	);
 	assert_string_includes(
 		result,
-		`export const create_post = create_remote_form_adapter(__remote.form('abc/create_post'), __SER___decode_payload, __SER___remote_base);`,
+		`export const create_post = create_remote_form_adapter(__remote.form('abc/create_post'), __SER___decode_payload, __SER___remote_base, __SER___remote_form_transport);`,
+	);
+	assert_string_includes(
+		result,
+		`export const get_build_info = create_remote_prerender_adapter(__remote.prerender('abc/get_build_info'), __SER___decode_payload);`,
 	);
 
 	if (result.indexOf(`const __SER___remote_base`) > result.indexOf(`export const create_post`)) {

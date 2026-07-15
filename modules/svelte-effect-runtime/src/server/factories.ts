@@ -1,40 +1,13 @@
-import {
-	BatchQueryHandlerMissingError,
-	UncheckedCommandHandlerMissingError,
-	UncheckedFormHandlerMissingError,
-	UncheckedLiveQueryHandlerMissingError,
-	UncheckedPrerenderHandlerMissingError,
-	UncheckedQueryHandlerMissingError,
-} from "$/errors.ts";
-import { copy_property_descriptors } from "$/internal/descriptors.ts";
-import { normalize_remote_helper_error } from "$/remote/server.ts";
-import {
-	command as native_command,
-	form as native_form,
-	getRequestEvent as get_native_request_event,
-	prerender as native_prerender,
-	query as native_query,
-} from "$app/server";
-import type { RemoteFormInput } from "@sveltejs/kit";
-import { make_remote_live_stream } from "$/live.ts";
-import { create_remote_transport_error } from "$/remote/shared.ts";
-import { Effect, type Schema } from "effect";
-
-import { is_handler, is_unchecked, normalize_validator } from "./schema.ts";
-import {
-	is_running_remote_effect_handler,
-	make_remote_form_wrapper,
-	make_remote_live_wrapper,
-	make_remote_wrapper,
-} from "./wrappers.ts";
 import type {
 	EffectLike,
 	EffectRemoteBatchHandler,
 	EffectRemoteCommand,
+	EffectRemoteCommandCall,
 	EffectRemoteForm,
-	EffectRemoteFunction,
 	EffectRemoteLiveQuery,
 	EffectRemoteLiveQueryFunction,
+	EffectRemotePrerender,
+	EffectRemotePrerenderFunction,
 	EffectRemoteQuery,
 	EffectRemoteQueryFunction,
 	PrerenderOptions,
@@ -49,6 +22,44 @@ import type {
 	StandardSchemaInput,
 	StandardSchemaOutput,
 } from "./types.ts";
+import {
+	BatchQueryHandlerMissingError,
+	UncheckedCommandHandlerMissingError,
+	UncheckedFormHandlerMissingError,
+	UncheckedLiveQueryHandlerMissingError,
+	UncheckedPrerenderHandlerMissingError,
+	UncheckedQueryHandlerMissingError,
+} from "$/errors.ts";
+import {
+	attach_failed_remote_query_resource,
+	attach_failed_remote_resource_getters,
+	attach_remote_resource_getters,
+	is_remote_resource,
+	type NativeRemoteResource,
+	type RemoteResourceEffect,
+} from "$/remote/resource.ts";
+import {
+	command as native_command,
+	form as native_form,
+	getRequestEvent as get_native_request_event,
+	prerender as native_prerender,
+	query as native_query,
+} from "$app/server";
+import {
+	make_prerender_inputs_wrapper,
+	make_remote_form_wrapper,
+	make_remote_live_wrapper,
+	make_remote_wrapper,
+} from "./wrappers.ts";
+import { make_failed_remote_live_stream, make_remote_live_stream } from "$/live.ts";
+import { FailWithRemoteError, MakeEffectFromPromise, MakeEffectFromSync } from "$/remote/effect.ts";
+import { is_running_remote_effect_handler } from "./remote-handler-context.ts";
+import { is_handler, is_unchecked, normalize_validator } from "./schema.ts";
+import { copy_property_descriptors } from "$/internal/descriptors.ts";
+import { normalize_remote_helper_error } from "$/remote/server.ts";
+import { create_remote_transport_error } from "$/remote/shared.ts";
+import type { RemoteFormInput } from "@sveltejs/kit";
+import { Effect, Result, type Schema } from "effect";
 
 type FormSchemaEncodedInput<S> = S extends Schema.Top ? FormRemoteInput<S["Encoded"]> : never;
 
@@ -80,7 +91,16 @@ type OptionalFormKeys<Value> = {
 
 type NativeQueryLike<Input = unknown> = (input: Input) => unknown;
 
-type EffectRemoteResource<Output, ErrorType = never> = EffectRemoteQuery<Output, ErrorType>;
+type AttachRemoteResource<Resource> = (resource: unknown, effect: Resource) => void;
+
+type AttachFailedRemoteResource<Resource> = (error: unknown, effect: Resource) => void;
+
+type QueryAdapterMode = "standard" | "batch";
+
+type NativePrerenderOptions<Input> = {
+	readonly inputs?: (() => Promise<Input[]>) | undefined;
+	readonly dynamic?: boolean | undefined;
+};
 
 type CurrentRemoteRequestDetection =
 	| {
@@ -100,36 +120,158 @@ const request_store_context_error = "Could not get the request store.";
 
 function to_effect_query<Input, Output, ErrorType = never>(
 	native: NativeQueryLike<Input>,
+	mode: QueryAdapterMode = "standard",
 ): EffectRemoteQueryFunction<Input, Output, ErrorType> {
+	return to_effect_remote_resource<
+		Input,
+		Output,
+		ErrorType,
+		EffectRemoteQuery<Output, ErrorType>
+	>(
+		native,
+		attach_query_resource_methods,
+		attach_failed_remote_query_resource,
+		mode,
+	) as unknown as EffectRemoteQueryFunction<Input, Output, ErrorType>;
+}
+
+function to_effect_prerender<Input, Output, ErrorType = never>(
+	native: NativeQueryLike<Input>,
+): EffectRemotePrerenderFunction<Input, Output, ErrorType> {
+	return to_effect_remote_resource<
+		Input,
+		Output,
+		ErrorType,
+		EffectRemotePrerender<Output, ErrorType>
+	>(
+		native,
+		attach_remote_resource_getters,
+		attach_failed_remote_resource_getters,
+	) as unknown as EffectRemotePrerenderFunction<Input, Output, ErrorType>;
+}
+
+function to_effect_command<Input, Output, ErrorType = never>(
+	native: NativeQueryLike<Input>,
+): EffectRemoteCommand<Input, Output, ErrorType> {
 	const wrapped = ((input: Input) => {
 		if (is_current_remote_request()) {
-			return (native as (input: Input) => unknown)(input);
+			return native(input);
 		}
 
-		const resource = (native as (input: Input) => unknown)(input);
-		const effect = Effect.tryPromise({
-			try: () => Promise.resolve(resource),
-			catch: (error: unknown) => error,
-		}) as unknown as EffectRemoteQuery<Output, ErrorType>;
-
-		attach_query_resource_methods(resource, effect);
-
-		return effect;
-	}) as unknown as EffectRemoteQueryFunction<Input, Output, ErrorType>;
+		return MakeServerCommandEffect<Input, Output, ErrorType>(native, input);
+	}) as unknown as EffectRemoteCommand<Input, Output, ErrorType>;
 
 	copy_property_descriptors(native, wrapped);
 
 	return wrapped;
 }
 
-function is_current_remote_request(): boolean {
-	if (is_running_remote_effect_handler()) {
-		return false;
-	}
+const MakeServerCommandEffect = <Input, Output, ErrorType>(
+	native: NativeQueryLike<Input>,
+	input: Input,
+) => {
+	let updates_args: unknown[] | undefined;
 
+	const CommandEffect = Effect.gen(function* () {
+		const invocation = yield* MakeEffectFromSync<unknown, ErrorType>(() => {
+			const result = native(input);
+
+			if (updates_args && has_command_updates(result)) {
+				return result.updates(...updates_args);
+			}
+
+			return result;
+		});
+
+		return yield* MakeEffectFromPromise<Output, ErrorType>(
+			() => Promise.resolve(invocation) as Promise<Output>,
+		);
+	}) as EffectRemoteCommandCall<Output, ErrorType>;
+
+	Object.defineProperty(CommandEffect, "updates", {
+		configurable: true,
+		enumerable: false,
+		value: (...args: unknown[]) => {
+			updates_args ??= args;
+
+			return CommandEffect;
+		},
+	});
+
+	return CommandEffect;
+};
+
+function has_command_updates(
+	value: unknown,
+): value is { readonly updates: (...updates: unknown[]) => unknown } {
+	const value_type = typeof value;
+
+	return (
+		((value_type === "object" && value !== null) || value_type === "function") &&
+		typeof (value as { readonly updates?: unknown }).updates === "function"
+	);
+}
+
+function to_effect_remote_resource<
+	Input,
+	Output,
+	ErrorType,
+	Resource extends RemoteResourceEffect<Output, ErrorType>,
+>(
+	native: NativeQueryLike<Input>,
+	attach_resource: AttachRemoteResource<Resource>,
+	attach_failed_resource: AttachFailedRemoteResource<Resource>,
+	mode: QueryAdapterMode = "standard",
+): (input: Input) => Resource {
+	const wrapped = ((input: Input) => {
+		if (is_current_remote_request()) {
+			return native(input);
+		}
+
+		const resource_attempt = Result.try(() => native(input));
+
+		if (Result.isFailure(resource_attempt)) {
+			const ResourceEffect = FailWithRemoteError<ErrorType>(
+				resource_attempt.failure,
+			) as unknown as Resource;
+
+			attach_failed_resource(resource_attempt.failure, ResourceEffect);
+
+			return ResourceEffect;
+		}
+
+		const resource = resource_attempt.success;
+		const started_result = mode === "batch" ? begin_batch_resource(resource) : undefined;
+		const ResourceEffect = MakeEffectFromPromise<Output, ErrorType>(
+			() => (started_result ?? Promise.resolve(resource)) as Promise<Output>,
+		) as Resource;
+
+		attach_resource(resource, ResourceEffect);
+
+		return ResourceEffect;
+	}) as unknown as (input: Input) => Resource;
+
+	copy_property_descriptors(native, wrapped);
+
+	return wrapped;
+}
+
+function begin_batch_resource(resource: unknown): Promise<unknown> {
+	const result = Promise.resolve(resource);
+
+	void result.catch(() => {});
+
+	return result;
+}
+
+function is_current_remote_request(): boolean {
 	const detection = detect_current_remote_request();
 
 	if (detection._tag === "NoCurrentRemoteRequest") {
+		return false;
+	}
+
+	if (is_running_remote_effect_handler(detection.event)) {
 		return false;
 	}
 
@@ -168,7 +310,16 @@ function to_effect_live_query<Input, Output, ErrorType = never>(
 	native: NativeQueryLike<Input>,
 ): EffectRemoteLiveQueryFunction<Input, Output, ErrorType> {
 	const wrapped = ((input: Input) => {
-		const resource = (native as (input: Input) => unknown)(input);
+		const resource_attempt = Result.try(() => native(input));
+
+		if (Result.isFailure(resource_attempt)) {
+			return make_failed_remote_live_stream<Output, ErrorType>(
+				resource_attempt.failure,
+				create_remote_transport_error,
+			) as EffectRemoteLiveQuery<Output, ErrorType>;
+		}
+
+		const resource = resource_attempt.success;
 
 		return make_remote_live_stream<Output, ErrorType>(
 			resource,
@@ -181,53 +332,19 @@ function to_effect_live_query<Input, Output, ErrorType = never>(
 	return wrapped;
 }
 
-type NativeRemoteResource<Output> = {
-	readonly current?: Output;
-	readonly error?: unknown;
-	readonly loading?: boolean;
-	readonly ready?: boolean;
-};
-
 type NativeQueryResource<Output> = NativeRemoteResource<Output> & {
 	readonly refresh?: () => Promise<void>;
 	readonly set?: (value: Output) => void;
 	readonly withOverride?: (update: (current: Output) => Output) => unknown;
 };
 
-function is_query_resource<Output>(resource: unknown): resource is NativeQueryResource<Output> {
-	const resource_type = typeof resource;
-
-	return (resource_type === "object" && resource !== null) || resource_type === "function";
-}
-
-function attach_remote_resource_getters<Output, ErrorType = never>(
-	resource: unknown,
-	effect: EffectRemoteResource<Output, ErrorType>,
-): void {
-	const methods = is_query_resource<Output>(resource) ? resource : undefined;
-	const keys = ["current", "error", "loading", "ready"] as const;
-
-	if (!methods) {
-		return;
-	}
-
-	for (const key of keys) {
-		if (!(key in methods)) {
-			continue;
-		}
-
-		Object.defineProperty(effect, key, {
-			configurable: true,
-			get: () => methods[key],
-		});
-	}
-}
-
 function attach_query_resource_methods<Output, ErrorType = never>(
 	resource: unknown,
 	effect: EffectRemoteQuery<Output, ErrorType>,
 ): void {
-	const methods = is_query_resource<Output>(resource) ? resource : undefined;
+	const methods = is_remote_resource<Output>(resource)
+		? (resource as NativeQueryResource<Output>)
+		: undefined;
 	const refresh = methods?.refresh;
 	const set = methods?.set;
 	const with_override = methods?.withOverride;
@@ -241,11 +358,7 @@ function attach_query_resource_methods<Output, ErrorType = never>(
 	if (typeof refresh === "function") {
 		Object.defineProperty(effect, "refresh", {
 			configurable: true,
-			value: () =>
-				Effect.tryPromise({
-					try: () => Promise.resolve(refresh.call(resource)),
-					catch: (error: unknown) => error,
-				}),
+			value: () => MakeEffectFromPromise(() => Promise.resolve(refresh.call(resource))),
 		});
 	}
 
@@ -264,21 +377,19 @@ function attach_query_resource_methods<Output, ErrorType = never>(
 	}
 }
 
-/**
- * Factory for a read-only remote query function.
- *
- * @example
- * ```ts
- * export const getUser = Query(Schema.Struct({ id: Schema.String }), (input) =>
- *   Effect.succeed(input.id)
- * );
- * ```
- *
- * @since 2.0.0
- * @param validate_or_handler - A schema, `"unchecked"`, or no-arg handler.
- * @param maybe_handler - Handler used when a validator is supplied.
- * @returns A SvelteKit query function.
- */
+function normalize_prerender_options<Input>(
+	options: PrerenderOptions<Input> | undefined,
+): NativePrerenderOptions<Input> | undefined {
+	if (!options) {
+		return undefined;
+	}
+
+	return {
+		dynamic: options.dynamic,
+		inputs: options.inputs ? make_prerender_inputs_wrapper(options.inputs) : undefined,
+	};
+}
+
 function QueryRoot<A, E = never, R = never>(
 	validate_or_handler: EffectLike<A, E, R> | RemoteHandler<void, A, E, R>,
 ): EffectRemoteQueryFunction<void, A, E>;
@@ -319,14 +430,6 @@ function QueryRoot(validate_or_handler: unknown, maybe_handler?: unknown): unkno
 	}
 }
 
-/**
- * Factory for a batched read-only remote query function.
- *
- * @since 2.0.0
- * @param validate_or_handler - A schema or `"unchecked"` sentinel.
- * @param maybe_handler - Handler receiving validated inputs as one batch.
- * @returns A SvelteKit batch query function.
- */
 function QueryBatch<Input, A, E = never, R = never>(
 	validate_or_handler: "unchecked",
 	maybe_handler: EffectRemoteBatchHandler<Input, A, E, R>,
@@ -350,20 +453,13 @@ function QueryBatch(validate_or_handler: unknown, maybe_handler?: unknown): unkn
 				normalize_validator(validate_or_handler) as never,
 				make_remote_wrapper(maybe_handler as RemoteHandler, "Query.batch") as never,
 			) as NativeQueryLike,
+			"batch",
 		);
 	} catch (error: unknown) {
 		throw normalize_remote_helper_error(error, "Query.batch");
 	}
 }
 
-/**
- * Factory for a live remote query function.
- *
- * @since 2.0.0
- * @param validate_or_handler - A schema, `"unchecked"`, or no-arg live handler.
- * @param maybe_handler - Handler used when a validator is supplied.
- * @returns A SvelteKit live query function.
- */
 function QueryLive<A, E = never, R = never>(
 	validate_or_handler: RemoteLiveSource<A, E, R> | RemoteLiveHandler<void, A, E, R>,
 ): EffectRemoteLiveQueryFunction<void, A, E>;
@@ -513,9 +609,11 @@ export function Command<S extends StandardSchema, A, E = never, R = never>(
 export function Command(validate_or_handler: unknown, maybe_handler?: unknown): unknown {
 	try {
 		if (maybe_handler) {
-			return native_command(
-				normalize_validator(validate_or_handler) as never,
-				make_remote_wrapper(maybe_handler as RemoteHandler, "Command") as never,
+			return to_effect_command(
+				native_command(
+					normalize_validator(validate_or_handler) as never,
+					make_remote_wrapper(maybe_handler as RemoteHandler, "Command") as never,
+				) as NativeQueryLike,
 			);
 		}
 
@@ -523,9 +621,11 @@ export function Command(validate_or_handler: unknown, maybe_handler?: unknown): 
 			throw new UncheckedCommandHandlerMissingError();
 		}
 
-		return native_command(
-			make_remote_wrapper(validate_or_handler as RemoteHandler, "Command") as never,
-		) as ReturnType<typeof native_command>;
+		return to_effect_command(
+			native_command(
+				make_remote_wrapper(validate_or_handler as RemoteHandler, "Command") as never,
+			) as NativeQueryLike,
+		);
 	} catch (error: unknown) {
 		throw normalize_remote_helper_error(error, "Command");
 	}
@@ -613,8 +713,8 @@ export function Form(validate_or_handler: unknown, maybe_handler?: unknown): unk
  */
 export function Prerender<A, E = never, R = never>(
 	validate_or_handler: EffectLike<A, E, R> | RemoteHandler<void, A, E, R>,
-	maybe_options?: PrerenderOptions,
-): EffectRemoteFunction<void, A, E>;
+	maybe_options?: PrerenderOptions<void>,
+): EffectRemotePrerenderFunction<void, A, E>;
 
 /**
  * Creates a prerenderable remote function with unchecked input.
@@ -624,7 +724,7 @@ export function Prerender<A, E = never, R = never>(
  * export const GetPost = Prerender(
  *   "unchecked",
  *   (slug: string) => Effect.succeed({ slug }),
- *   { inputs: () => ["intro"] },
+ *   { inputs: () => Effect.succeed(["intro"]) },
  * );
  * ```
  *
@@ -639,8 +739,8 @@ export function Prerender<A, E = never, R = never>(
 export function Prerender<Input, A, E = never, R = never>(
 	validate_or_handler: "unchecked",
 	maybe_handler: RemoteHandler<Input, A, E, R>,
-	maybe_options?: PrerenderOptions,
-): EffectRemoteFunction<Input, A, E>;
+	maybe_options?: PrerenderOptions<Input>,
+): EffectRemotePrerenderFunction<Input, A, E>;
 
 /**
  * Creates a prerenderable remote function validated with an Effect Schema.
@@ -650,7 +750,7 @@ export function Prerender<Input, A, E = never, R = never>(
  * export const GetPost = Prerender(
  *   Schema.String,
  *   (slug) => Effect.succeed({ slug }),
- *   { inputs: () => ["intro"] },
+ *   { inputs: () => Effect.succeed(["intro"]) },
  * );
  * ```
  *
@@ -665,8 +765,8 @@ export function Prerender<Input, A, E = never, R = never>(
 export function Prerender<S extends Schema.Schema<unknown>, A, E = never, R = never>(
 	validate_or_handler: S,
 	maybe_handler: RemoteHandler<SchemaInput<S>, A, E, R>,
-	maybe_options?: PrerenderOptions,
-): EffectRemoteFunction<SchemaEncodedInput<S>, A, E>;
+	maybe_options?: PrerenderOptions<SchemaEncodedInput<S>>,
+): EffectRemotePrerenderFunction<SchemaEncodedInput<S>, A, E>;
 
 /**
  * Creates a prerenderable remote function validated with a Standard Schema.
@@ -691,19 +791,21 @@ export function Prerender<S extends Schema.Schema<unknown>, A, E = never, R = ne
 export function Prerender<S extends StandardSchema, A, E = never, R = never>(
 	validate_or_handler: S,
 	maybe_handler: RemoteHandler<StandardSchemaOutput<S>, A, E, R>,
-	maybe_options?: PrerenderOptions,
-): EffectRemoteFunction<StandardSchemaInput<S>, A, E>;
+	maybe_options?: PrerenderOptions<StandardSchemaInput<S>>,
+): EffectRemotePrerenderFunction<StandardSchemaInput<S>, A, E>;
 export function Prerender(
 	validate_or_handler: unknown,
 	maybe_handler_or_options?: unknown,
-	maybe_options?: PrerenderOptions,
+	maybe_options?: PrerenderOptions<unknown>,
 ): unknown {
 	try {
 		if (is_handler(maybe_handler_or_options)) {
-			return native_prerender(
-				normalize_validator(validate_or_handler) as never,
-				make_remote_wrapper(maybe_handler_or_options, "Prerender") as never,
-				maybe_options as never,
+			return to_effect_prerender(
+				native_prerender(
+					normalize_validator(validate_or_handler) as never,
+					make_remote_wrapper(maybe_handler_or_options, "Prerender") as never,
+					normalize_prerender_options(maybe_options) as never,
+				) as NativeQueryLike,
 			);
 		}
 
@@ -711,10 +813,14 @@ export function Prerender(
 			throw new UncheckedPrerenderHandlerMissingError();
 		}
 
-		return native_prerender(
-			make_remote_wrapper(validate_or_handler as RemoteHandler, "Prerender") as never,
-			maybe_handler_or_options as never,
-		) as ReturnType<typeof native_prerender>;
+		return to_effect_prerender(
+			native_prerender(
+				make_remote_wrapper(validate_or_handler as RemoteHandler, "Prerender") as never,
+				normalize_prerender_options(
+					maybe_handler_or_options as PrerenderOptions<void> | undefined,
+				) as never,
+			) as NativeQueryLike,
+		);
 	} catch (error: unknown) {
 		throw normalize_remote_helper_error(error, "Prerender");
 	}
