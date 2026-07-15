@@ -797,11 +797,12 @@ export function Prerender(
 	validate_or_handler: unknown,
 	maybe_handler_or_options?: unknown,
 	maybe_options?: PrerenderOptions<unknown>,
+	native_factory: typeof native_prerender = native_prerender,
 ): unknown {
 	try {
 		if (is_handler(maybe_handler_or_options)) {
 			return to_effect_prerender(
-				native_prerender(
+				native_factory(
 					normalize_validator(validate_or_handler) as never,
 					make_remote_wrapper(maybe_handler_or_options, "Prerender") as never,
 					normalize_prerender_options(maybe_options) as never,
@@ -814,7 +815,7 @@ export function Prerender(
 		}
 
 		return to_effect_prerender(
-			native_prerender(
+			native_factory(
 				make_remote_wrapper(validate_or_handler as RemoteHandler, "Prerender") as never,
 				normalize_prerender_options(
 					maybe_handler_or_options as PrerenderOptions<void> | undefined,

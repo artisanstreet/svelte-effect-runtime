@@ -436,11 +436,6 @@ test(prerender_scenario.promise, async ({ browser, playwright }, test_info) => {
 			"$.status":
 				"The stable 4.0.0 compiler returns an error for the Effect-authored Prerender route.",
 		},
-		candidate: {
-			"$.outcome":
-				"The candidate emits an undefined prerender binding; issue #34 preserves the production failure.",
-			"$.status": "The candidate returns an error for the Effect-authored Prerender route.",
-		},
 	});
 });
 

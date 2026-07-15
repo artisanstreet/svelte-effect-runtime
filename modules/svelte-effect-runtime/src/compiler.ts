@@ -297,7 +297,95 @@ async function rewrite_server_imports(code: string, id: string): Promise<string>
 		get_script_kind(filename, ts),
 	);
 	const magic = new MagicString(code);
+	const ser_prerender_imports = is_remote_module(id)
+		? source_file.statements.flatMap((statement) => {
+				if (
+					!ts.isImportDeclaration(statement) ||
+					!ts.isStringLiteralLike(statement.moduleSpecifier) ||
+					!is_ser_server_import(statement.moduleSpecifier.text)
+				) {
+					return [];
+				}
+
+				const bindings = statement.importClause?.namedBindings;
+
+				if (
+					statement.importClause?.isTypeOnly === true ||
+					!bindings ||
+					!ts.isNamedImports(bindings)
+				) {
+					return [];
+				}
+
+				return bindings.elements.filter(
+					(element) =>
+						!element.isTypeOnly &&
+						(element.propertyName?.text ?? element.name.text) === "Prerender",
+				);
+			})
+		: [];
+	const prerender_binding_names = new Set(
+		ser_prerender_imports.map((element) => element.name.text),
+	);
+	const prerender_namespace_names = new Set(
+		is_remote_module(id)
+			? source_file.statements.flatMap((statement) => {
+					if (
+						!ts.isImportDeclaration(statement) ||
+						!ts.isStringLiteralLike(statement.moduleSpecifier) ||
+						!is_ser_server_import(statement.moduleSpecifier.text) ||
+						statement.importClause?.isTypeOnly === true ||
+						statement.importClause?.namedBindings === undefined ||
+						!ts.isNamespaceImport(statement.importClause.namedBindings)
+					) {
+						return [];
+					}
+
+					return [statement.importClause.namedBindings.name.text];
+				})
+			: [],
+	);
+	const has_sveltekit_prerender_import = source_file.statements.some(
+		(statement) =>
+			ts.isImportDeclaration(statement) &&
+			ts.isStringLiteralLike(statement.moduleSpecifier) &&
+			statement.moduleSpecifier.text === "$app/server" &&
+			statement.importClause?.isTypeOnly !== true &&
+			statement.importClause?.namedBindings !== undefined &&
+			ts.isNamedImports(statement.importClause.namedBindings) &&
+			statement.importClause.namedBindings.elements.some(
+				(element) =>
+					!element.isTypeOnly &&
+					(element.propertyName?.text ?? element.name.text) === "prerender" &&
+					element.name.text === "prerender",
+			),
+	);
+	const has_top_level_prerender_binding = source_file.statements.some((statement) =>
+		declares_top_level_value_binding(statement, "prerender", ts),
+	);
 	let changed = false;
+
+	if (
+		(ser_prerender_imports.length > 0 || prerender_namespace_names.size > 0) &&
+		!has_sveltekit_prerender_import
+	) {
+		if (has_top_level_prerender_binding) {
+			throw new Error(
+				`[svelte-effect-runtime] ${filename}: Prerender remote modules reserve the top-level "prerender" binding for SvelteKit. Rename the existing binding.`,
+			);
+		}
+
+		const last_import = [...source_file.statements].reverse().find(ts.isImportDeclaration);
+		const native_import = `import { prerender } from "$app/server";`;
+
+		if (last_import) {
+			magic.appendRight(last_import.end, `\n${native_import}`);
+		} else {
+			magic.prepend(`${native_import}\n`);
+		}
+
+		changed = true;
+	}
 
 	const rewrite_specifier = (specifier: import("typescript").StringLiteralLike) => {
 		const replacement = get_server_import_replacement(specifier.text);
@@ -335,12 +423,158 @@ async function rewrite_server_imports(code: string, id: string): Promise<string>
 			}
 		}
 
+		if (
+			ts.isCallExpression(node) &&
+			is_ser_prerender_callee(
+				node.expression,
+				prerender_binding_names,
+				prerender_namespace_names,
+				ts,
+			) &&
+			is_exported_variable_initializer(node, ts)
+		) {
+			const missing_arguments = Math.max(0, 3 - node.arguments.length);
+			const injected_arguments = [
+				...Array.from({ length: missing_arguments }, () => "undefined"),
+				"prerender",
+			];
+			const separator =
+				node.arguments.length === 0 || node.arguments.hasTrailingComma ? "" : ",";
+
+			magic.appendLeft(node.end - 1, `${separator} ${injected_arguments.join(", ")}`);
+			changed = true;
+		}
+
 		ts.forEachChild(node, visit);
 	};
 
 	visit(source_file);
 
 	return changed ? magic.toString() : code;
+}
+
+function is_ser_server_import(specifier: string): boolean {
+	return specifier === "svelte-effect-runtime" || specifier === "svelte-effect-runtime/server";
+}
+
+function is_ser_prerender_callee(
+	expression: import("typescript").Expression,
+	binding_names: ReadonlySet<string>,
+	namespace_names: ReadonlySet<string>,
+	ts: typeof import("typescript"),
+): boolean {
+	if (ts.isIdentifier(expression)) {
+		return binding_names.has(expression.text);
+	}
+
+	return (
+		ts.isPropertyAccessExpression(expression) &&
+		ts.isIdentifier(expression.expression) &&
+		namespace_names.has(expression.expression.text) &&
+		expression.name.text === "Prerender"
+	);
+}
+
+function is_exported_variable_initializer(
+	node: import("typescript").CallExpression,
+	ts: typeof import("typescript"),
+): boolean {
+	let initializer: import("typescript").Expression = node;
+	let parent = initializer.parent;
+
+	while (is_transparent_expression_wrapper(parent, initializer, ts)) {
+		initializer = parent;
+		parent = initializer.parent;
+	}
+
+	if (!ts.isVariableDeclaration(parent) || parent.initializer !== initializer) {
+		return false;
+	}
+
+	const statement = parent.parent.parent;
+
+	return (
+		ts.isVariableStatement(statement) &&
+		statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) ===
+			true
+	);
+}
+
+function is_transparent_expression_wrapper(
+	parent: import("typescript").Node,
+	expression: import("typescript").Expression,
+	ts: typeof import("typescript"),
+): parent is import("typescript").Expression {
+	return (
+		(ts.isParenthesizedExpression(parent) ||
+			ts.isAsExpression(parent) ||
+			ts.isSatisfiesExpression(parent) ||
+			ts.isTypeAssertionExpression(parent) ||
+			ts.isNonNullExpression(parent)) &&
+		parent.expression === expression
+	);
+}
+
+function declares_top_level_value_binding(
+	statement: import("typescript").Statement,
+	name: string,
+	ts: typeof import("typescript"),
+): boolean {
+	if (ts.isImportDeclaration(statement)) {
+		const import_clause = statement.importClause;
+
+		if (!import_clause || import_clause.isTypeOnly) {
+			return false;
+		}
+
+		if (import_clause.name?.text === name) {
+			return true;
+		}
+
+		const bindings = import_clause.namedBindings;
+
+		if (bindings && ts.isNamespaceImport(bindings)) {
+			return bindings.name.text === name;
+		}
+
+		return (
+			bindings?.elements.some(
+				(element) => !element.isTypeOnly && element.name.text === name,
+			) === true
+		);
+	}
+
+	if (ts.isVariableStatement(statement)) {
+		return statement.declarationList.declarations.some((declaration) =>
+			binding_name_contains(declaration.name, name, ts),
+		);
+	}
+
+	if (
+		ts.isFunctionDeclaration(statement) ||
+		ts.isClassDeclaration(statement) ||
+		ts.isEnumDeclaration(statement) ||
+		ts.isModuleDeclaration(statement)
+	) {
+		return statement.name?.getText() === name;
+	}
+
+	return ts.isImportEqualsDeclaration(statement) && statement.name.text === name;
+}
+
+function binding_name_contains(
+	binding: import("typescript").BindingName,
+	name: string,
+	ts: typeof import("typescript"),
+): boolean {
+	if (ts.isIdentifier(binding)) {
+		return binding.text === name;
+	}
+
+	return binding.elements.some(
+		(element) =>
+			!ts.isOmittedExpression(element) && binding_name_contains(element.name, name, ts),
+	);
 }
 
 function get_server_import_replacement(specifier: string): string | undefined {
