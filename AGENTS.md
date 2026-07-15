@@ -251,11 +251,18 @@ must deliberately hide a more specific inferred type.
 
 ## CI / Publishing
 
-When a commit is pushed to `master`:
+Pull requests and pushes to `master` run fast staging verification only. They
+never build release candidates, access publishing credentials, create tags, or
+publish.
 
-- If any `package.json` version field changed, the CI workflow automatically builds, lints, tests, and publishes.
-- The release workflow creates a git tag, a GitHub release, and publishes to npm and the VS Code marketplace.
-- **Be careful with version bumps** — a push to `master` that changes a version number will trigger a full release.
+`candidate` is the protected production pointer. It may move only by fast-forward
+to a commit already reachable from `master`. Candidate construction and
+publication begin only through a manual `SER pipeline` dispatch with `candidate`
+selected as the workflow ref.
+
+The complete supported publication-channel set is npm, OpenVSX, and GitHub
+Releases. Keep generic VSIX packaging because OpenVSX and GitHub Releases consume
+it.
 
 ## Releasing
 
@@ -275,6 +282,14 @@ When releasing:
    - **Minor** (`1.7.0`): new features, backward-compatible.
    - **Patch** (`1.6.3`): bug fixes, no API or feature changes.
 2. Bump all four files to the same version.
-3. After explicit human approval, commit and push to `master`.
+3. Merge the version change through a pull request to `master` and wait for
+   `SER pipeline / Staging verified`.
+4. After explicit human approval, fast-forward `candidate` to that exact verified
+   commit. Do not add release-only commits to `candidate`.
+5. Manually run `SER pipeline` on `candidate` in `dry-run` mode. After it verifies
+   the exact packages and browser smoke, run `release` mode for the same commit.
 
-The CI will detect the version bump, run the full test suite, build all packages, and publish. If the versions are out of sync at any point, the release job will fail.
+If publication fails after durable provider state exists, leave `candidate`
+unchanged and dispatch `resume` with the failed run's exact version, full commit
+SHA, and run ID. Resume restores and revalidates that run's candidate bundle; it
+must not rebuild or repack. See `RELEASING.md` for the complete procedure.
