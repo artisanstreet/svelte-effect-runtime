@@ -429,6 +429,7 @@ async function prepare_application(
 		config_source,
 		get_conformance_target_url(target.name),
 		profile,
+		config_path,
 	);
 
 	if (rendered_config.includes("__")) {

@@ -53,10 +53,30 @@ test.each(sveltekit_profiles)("$name renders only supported fixture path options
 		'\t__CONFORMANCE_PATHS_ORIGIN__: "__CONFORMANCE_ORIGIN__",',
 		"},",
 	].join("\n");
-	const rendered = render_fixture_sveltekit_config(template, "http://127.0.0.1:4173", profile);
+	const rendered = render_fixture_sveltekit_config(
+		template,
+		"http://127.0.0.1:4173",
+		profile,
+		"/fixtures/vite.config.ts",
+	);
 
 	expect(rendered).not.toContain("__CONFORMANCE_");
 	expect(rendered.includes('origin: "http://127.0.0.1:4173",')).toBe(
 		profile.supports_paths_origin,
+	);
+});
+
+test("fixture rendering identifies a missing marker by profile and config", () => {
+	const [profile] = sveltekit_profiles;
+
+	expect(() =>
+		render_fixture_sveltekit_config(
+			"paths: {},",
+			"http://127.0.0.1:4173",
+			profile,
+			"/applications/native/vite.config.ts",
+		),
+	).toThrow(
+		"Missing SvelteKit fixture paths-origin placeholder in /applications/native/vite.config.ts for kit-2-stable.",
 	);
 });
