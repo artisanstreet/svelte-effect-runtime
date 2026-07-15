@@ -49,6 +49,62 @@ test("CLI parsing rejects unknown, incomplete, and unsafe release configuration"
 			"plan.json",
 		]),
 	).toThrow(/protected-branch push requires/i);
+	expect(() =>
+		parse_cli_request(
+			[
+				"promote",
+				"--plan",
+				"plan.json",
+				"--manifest",
+				"manifest.json",
+				"--artifact-dir",
+				"artifacts",
+				"--notes",
+				"notes.md",
+				"--state-output",
+				"state.json",
+				"--max-attempts",
+				"0",
+			],
+			{ GITHUB_REPOSITORY: "usebarekey/svelte-effect-runtime" },
+		),
+	).toThrow(/max-attempts must be an integer/i);
+});
+
+test("promotion CLI flags use explicit bounded defaults", () => {
+	const request = parse_cli_request(
+		[
+			"promote",
+			"--plan",
+			"plan.json",
+			"--manifest",
+			"manifest.json",
+			"--artifact-dir",
+			"artifacts",
+			"--notes",
+			"notes.md",
+			"--state-output",
+			"state.json",
+			"--dry-run",
+			"true",
+		],
+		{
+			GITHUB_REPOSITORY: "usebarekey/svelte-effect-runtime",
+			GITHUB_STEP_SUMMARY: "summary.md",
+		},
+	);
+
+	expect(request).toMatchObject({
+		command: "promote",
+		repository: "usebarekey/svelte-effect-runtime",
+		state_output: "state.json",
+		summary_output: "summary.md",
+		max_attempts: 12,
+		probe_delay_ms: 5_000,
+		request_timeout_ms: 15_000,
+		command_timeout_ms: 120_000,
+		dry_run: true,
+	});
 });
 
 test("plan, manifest, and validate share exact canonical artifacts on disk", async () => {

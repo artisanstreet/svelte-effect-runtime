@@ -1,14 +1,30 @@
-import { create_artifact_manifest, validate_artifact_manifest } from "./artifact-manifest.ts";
 import {
+	create_artifact_manifest,
+	validate_artifact_manifest,
+	type ArtifactManifest,
+} from "./artifact-manifest.ts";
+import {
+	AppendTextFile,
+	GenerateReleaseNotes,
 	ReadArtifactManifest,
 	ReadCanonicalReleasePlan,
 	ReadPackageVersions,
 	ReadPlannedArtifacts,
 	ReadPreviousPackageVersions,
+	ReadTextFile,
 	WriteGithubOutput,
 	WriteJsonFile,
+	WriteTextFile,
 } from "./io.ts";
-import { plan_release } from "./policy.ts";
+import {
+	format_promotion_summary,
+	InspectPromotion,
+	PromoteRelease,
+	type PromotionOptions,
+	type PromotionState,
+} from "./promotion.ts";
+import { ProviderAdaptersLive } from "./provider-adapters.ts";
+import { plan_release, type ReleasePlan } from "./policy.ts";
 import { RepoRoot } from "../node-utils.ts";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Effect, Schema } from "effect";
@@ -42,12 +58,48 @@ const ValidateRequestSchema = Schema.Struct({
 	manifest: NonEmptyStringSchema,
 	artifact_dir: NonEmptyStringSchema,
 });
+const NotesRequestSchema = Schema.Struct({
+	command: Schema.Literals(["notes"] as const),
+	plan: NonEmptyStringSchema,
+	repository_url: NonEmptyStringSchema,
+	output: NonEmptyStringSchema,
+});
+const InspectRequestSchema = Schema.Struct({
+	command: Schema.Literals(["inspect"] as const),
+	plan: NonEmptyStringSchema,
+	manifest: NonEmptyStringSchema,
+	artifact_dir: NonEmptyStringSchema,
+	notes: NonEmptyStringSchema,
+	repository: NonEmptyStringSchema,
+	output: NonEmptyStringSchema,
+	max_attempts: Schema.Number,
+	probe_delay_ms: Schema.Number,
+	request_timeout_ms: Schema.Number,
+});
+const PromoteRequestSchema = Schema.Struct({
+	command: Schema.Literals(["promote"] as const),
+	plan: NonEmptyStringSchema,
+	manifest: NonEmptyStringSchema,
+	artifact_dir: NonEmptyStringSchema,
+	notes: NonEmptyStringSchema,
+	repository: NonEmptyStringSchema,
+	state_output: NonEmptyStringSchema,
+	summary_output: Schema.optional(NonEmptyStringSchema),
+	max_attempts: Schema.Number,
+	probe_delay_ms: Schema.Number,
+	request_timeout_ms: Schema.Number,
+	command_timeout_ms: Schema.Number,
+	dry_run: Schema.Boolean,
+});
 
 export type CliEnvironment = Readonly<Record<string, string | undefined>>;
 export type CliRequest =
 	| typeof PlanRequestSchema.Type
 	| typeof ManifestRequestSchema.Type
-	| typeof ValidateRequestSchema.Type;
+	| typeof ValidateRequestSchema.Type
+	| typeof NotesRequestSchema.Type
+	| typeof InspectRequestSchema.Type
+	| typeof PromoteRequestSchema.Type;
 
 const command_flags = {
 	plan: new Set([
@@ -62,6 +114,32 @@ const command_flags = {
 	]),
 	manifest: new Set(["plan", "artifact-dir", "output"]),
 	validate: new Set(["plan", "manifest", "artifact-dir"]),
+	notes: new Set(["plan", "repository-url", "output"]),
+	inspect: new Set([
+		"plan",
+		"manifest",
+		"artifact-dir",
+		"notes",
+		"repository",
+		"output",
+		"max-attempts",
+		"probe-delay-ms",
+		"request-timeout-ms",
+	]),
+	promote: new Set([
+		"plan",
+		"manifest",
+		"artifact-dir",
+		"notes",
+		"repository",
+		"state-output",
+		"summary-output",
+		"max-attempts",
+		"probe-delay-ms",
+		"request-timeout-ms",
+		"command-timeout-ms",
+		"dry-run",
+	]),
 } as const;
 
 export function parse_cli_request(
@@ -70,9 +148,16 @@ export function parse_cli_request(
 ): CliRequest {
 	const command = args[0];
 
-	if (command !== "plan" && command !== "manifest" && command !== "validate") {
+	if (
+		command !== "plan" &&
+		command !== "manifest" &&
+		command !== "validate" &&
+		command !== "notes" &&
+		command !== "inspect" &&
+		command !== "promote"
+	) {
 		throw new Error(
-			`Expected release command plan, manifest, or validate; received ${command ?? "none"}.`,
+			`Expected release command plan, manifest, validate, notes, inspect, or promote; received ${command ?? "none"}.`,
 		);
 	}
 
@@ -93,6 +178,48 @@ export function parse_cli_request(
 			plan: flags.plan,
 			manifest: flags.manifest,
 			artifact_dir: flags["artifact-dir"],
+		});
+	}
+
+	if (command === "notes") {
+		return Schema.decodeUnknownSync(NotesRequestSchema)({
+			command,
+			plan: flags.plan,
+			repository_url: flags["repository-url"],
+			output: flags.output,
+		});
+	}
+
+	if (command === "inspect") {
+		return Schema.decodeUnknownSync(InspectRequestSchema)({
+			command,
+			plan: flags.plan,
+			manifest: flags.manifest,
+			artifact_dir: flags["artifact-dir"],
+			notes: flags.notes,
+			repository: flags.repository ?? environment.GITHUB_REPOSITORY,
+			output: flags.output,
+			max_attempts: parse_integer_flag(flags, "max-attempts", 12, 1),
+			probe_delay_ms: parse_integer_flag(flags, "probe-delay-ms", 5_000, 0),
+			request_timeout_ms: parse_integer_flag(flags, "request-timeout-ms", 15_000, 1),
+		});
+	}
+
+	if (command === "promote") {
+		return Schema.decodeUnknownSync(PromoteRequestSchema)({
+			command,
+			plan: flags.plan,
+			manifest: flags.manifest,
+			artifact_dir: flags["artifact-dir"],
+			notes: flags.notes,
+			repository: flags.repository ?? environment.GITHUB_REPOSITORY,
+			state_output: flags["state-output"],
+			summary_output: flags["summary-output"] ?? environment.GITHUB_STEP_SUMMARY,
+			max_attempts: parse_integer_flag(flags, "max-attempts", 12, 1),
+			probe_delay_ms: parse_integer_flag(flags, "probe-delay-ms", 5_000, 0),
+			request_timeout_ms: parse_integer_flag(flags, "request-timeout-ms", 15_000, 1),
+			command_timeout_ms: parse_integer_flag(flags, "command-timeout-ms", 120_000, 1),
+			dry_run: parse_boolean_flag(flags, "dry-run", false),
 		});
 	}
 
@@ -169,6 +296,15 @@ export const RunReleaseCli = (request: CliRequest) =>
 		}
 
 		const plan = yield* ReadCanonicalReleasePlan(request.plan);
+
+		if (request.command === "notes") {
+			const notes = yield* GenerateReleaseNotes(repo_root, plan, request.repository_url);
+
+			yield* WriteTextFile(request.output, notes.markdown);
+
+			return notes;
+		}
+
 		const files = yield* ReadPlannedArtifacts(plan, request.artifact_dir);
 
 		if (request.command === "manifest") {
@@ -180,8 +316,53 @@ export const RunReleaseCli = (request: CliRequest) =>
 		}
 
 		const manifest = yield* ReadArtifactManifest(request.manifest);
+		const validated = validate_artifact_manifest(plan, manifest, files);
 
-		return validate_artifact_manifest(plan, manifest, files);
+		if (request.command === "validate") {
+			return validated;
+		}
+
+		const notes = yield* ReadTextFile(request.notes);
+		const options = make_promotion_options(request, notes);
+
+		if (request.command === "inspect") {
+			const state = yield* InspectPromotion(plan, validated, options).pipe(
+				Effect.provide(ProviderAdaptersLive),
+			);
+
+			yield* WriteJsonFile(request.output, state);
+
+			return state;
+		}
+
+		return yield* PromoteAndPersist(plan, validated, options, request);
+	});
+
+const PromoteAndPersist = (
+	plan: ReleasePlan,
+	manifest: ArtifactManifest,
+	options: PromotionOptions,
+	request: typeof PromoteRequestSchema.Type,
+) =>
+	PromoteRelease(plan, manifest, options).pipe(
+		Effect.matchEffect({
+			onFailure: (cause) =>
+				InspectPromotion(plan, manifest, options).pipe(
+					Effect.flatMap((state) => PersistPromotionState(state, request)),
+					Effect.andThen(Effect.fail(cause)),
+				),
+			onSuccess: (state) => PersistPromotionState(state, request).pipe(Effect.as(state)),
+		}),
+		Effect.provide(ProviderAdaptersLive),
+	);
+
+const PersistPromotionState = (state: PromotionState, request: typeof PromoteRequestSchema.Type) =>
+	Effect.gen(function* () {
+		yield* WriteJsonFile(request.state_output, state);
+
+		if (request.summary_output) {
+			yield* AppendTextFile(request.summary_output, format_promotion_summary(state));
+		}
 	});
 
 const RequirePreviousCommit = (before: string | undefined) =>
@@ -197,6 +378,62 @@ const Main = Effect.gen(function* () {
 
 	return yield* RunReleaseCli(request);
 });
+
+function make_promotion_options(
+	request: typeof InspectRequestSchema.Type | typeof PromoteRequestSchema.Type,
+	notes: string,
+): PromotionOptions {
+	return {
+		repository: request.repository,
+		artifact_dir: request.artifact_dir,
+		notes,
+		max_attempts: request.max_attempts,
+		probe_delay_ms: request.probe_delay_ms,
+		request_timeout_ms: request.request_timeout_ms,
+		command_timeout_ms: request.command === "promote" ? request.command_timeout_ms : 120_000,
+		dry_run: request.command === "promote" ? request.dry_run : false,
+	};
+}
+
+function parse_integer_flag(
+	flags: Readonly<Record<string, string>>,
+	name: string,
+	default_value: number,
+	minimum: number,
+): number {
+	const raw = flags[name];
+	const value = raw === undefined ? default_value : Number(raw);
+
+	if (!Number.isSafeInteger(value) || value < minimum) {
+		throw new Error(
+			`Argument --${name} must be an integer greater than or equal to ${minimum}.`,
+		);
+	}
+
+	return value;
+}
+
+function parse_boolean_flag(
+	flags: Readonly<Record<string, string>>,
+	name: string,
+	default_value: boolean,
+): boolean {
+	const raw = flags[name];
+
+	if (raw === undefined) {
+		return default_value;
+	}
+
+	if (raw === "true") {
+		return true;
+	}
+
+	if (raw === "false") {
+		return false;
+	}
+
+	throw new Error(`Argument --${name} must be true or false.`);
+}
 
 function parse_flags(
 	args: ReadonlyArray<string>,

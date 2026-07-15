@@ -9,6 +9,11 @@ import {
 	type PackageVersions,
 	type ReleasePlan,
 } from "./policy.ts";
+import {
+	plan_release_notes,
+	select_previous_release_tag,
+	type ReleaseCommit,
+} from "./release-notes.ts";
 import { RunCommand } from "../node-utils.ts";
 import { Effect, FileSystem, Path, Schema } from "effect";
 
@@ -95,6 +100,13 @@ export const ReadArtifactManifest = (manifest_path: string) =>
 		return (yield* DecodeJson(content, ArtifactManifestSchema)) as ArtifactManifest;
 	});
 
+export const ReadTextFile = (input_path: string) =>
+	Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+
+		return yield* file_system.readFileString(input_path);
+	});
+
 export const ReadPlannedArtifacts = (plan: ReleasePlan, artifact_dir: string) =>
 	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
@@ -122,6 +134,46 @@ export const WriteJsonFile = (output_path: string, value: unknown) =>
 
 		yield* file_system.makeDirectory(parent_dir, { recursive: true });
 		yield* file_system.writeFileString(output_path, content);
+	});
+
+export const WriteTextFile = (output_path: string, content: string) =>
+	Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+		const path = yield* Path.Path;
+		const parent_dir = path.dirname(output_path);
+
+		yield* file_system.makeDirectory(parent_dir, { recursive: true });
+		yield* file_system.writeFileString(output_path, content);
+	});
+
+export const AppendTextFile = (output_path: string, content: string) =>
+	Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+		const path = yield* Path.Path;
+		const parent_dir = path.dirname(output_path);
+
+		yield* file_system.makeDirectory(parent_dir, { recursive: true });
+		yield* file_system.writeFileString(output_path, content, { flag: "a" });
+	});
+
+export const GenerateReleaseNotes = (
+	repo_root: string,
+	plan: ReleasePlan,
+	repository_url: string,
+) =>
+	Effect.gen(function* () {
+		const tag_output = yield* RunCommand("git", ["tag", "--list"], repo_root);
+		const tags = tag_output.stdout.split(/\r?\n/).filter(Boolean);
+		const previous_tag = select_previous_release_tag(plan, tags);
+		const range = previous_tag ? `${previous_tag}..${plan.commit}` : plan.commit;
+		const commit_output = yield* RunCommand(
+			"git",
+			["log", "--format=%H%x09%s", range],
+			repo_root,
+		);
+		const commits = parse_release_commits(commit_output.stdout);
+
+		return plan_release_notes({ plan, tags, commits, repository_url });
 	});
 
 export const WriteGithubOutput = (output_path: string, plan: ReleasePlan) =>
@@ -183,4 +235,22 @@ function make_package_versions(version: string): PackageVersions {
 		"language-server": version,
 		vsix: version,
 	};
+}
+
+function parse_release_commits(output: string): ReadonlyArray<ReleaseCommit> {
+	return output
+		.split(/\r?\n/)
+		.filter(Boolean)
+		.map((line) => {
+			const separator = line.indexOf("\t");
+
+			if (separator < 1) {
+				throw new Error(`Unable to parse release commit: ${line}`);
+			}
+
+			return {
+				sha: line.slice(0, separator),
+				subject: line.slice(separator + 1),
+			};
+		});
 }
