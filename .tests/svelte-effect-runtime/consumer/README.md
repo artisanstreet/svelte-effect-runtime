@@ -26,15 +26,19 @@ SvelteKit 2 profile omits the unsupported `paths.origin` option. Browser parity 
 direct adapter URLs under both profiles, so remote-function and CSRF checks remain active.
 
 The compatibility matrix pins two reviewable profiles. `kit-2-stable` uses SvelteKit 2.69.3 and its
-peer-compatible adapter-node 5.5.7. `kit-3-primary` uses the repository's SvelteKit 3.0.0-next.6 and
-adapter-node 6.0.0-next.3. The Kit 3 adapter patch normalizes its Windows transform filter and awaits
-SvelteKit 3's asynchronous Node request adapter; Kit 2 uses the unpatched adapter 5 release. Every
-target in a profile receives the same framework and adapter versions.
+peer-compatible adapter-node 5.5.7. `kit-3-primary` uses the official SvelteKit 3.0.0-next.8 and
+adapter-node 6.0.0-next.3 pair. Every target receives unpatched framework artifacts, and the Kit 3
+profile verifies that adapter output contains client assets and resolves its emitted static root to
+the application build directory. Adapter-node 6.0.0-next.3 cannot produce a runnable Kit 3 build on
+Windows because its Rolldown entrypoint matchers mishandle path separators; the native target fails
+before SER is involved. Windows matrix and default selection therefore use `kit-2-stable`, while an
+explicit Kit 3 selection reports [upstream issue #16365](https://github.com/sveltejs/kit/issues/16365)
+instead of applying a local framework patch. Linux and macOS continue to run the Kit 3 profile.
 
 `corepack pnpm run check:conformance:matrix` installs, synchronizes, type-checks, SER-checks, and
-builds packed native, stable, and candidate consumers under both profiles, preserving its evidence
-under `.dist/conformance-matrix` so it cannot overwrite a browser run. A full server and browser run
-selects one profile with `SVELTEKIT_PROFILE=kit-2-stable` or
+builds packed native, stable, and candidate consumers under every profile available on the current
+platform, preserving its evidence under `.dist/conformance-matrix` so it cannot overwrite a browser
+run. A full server and browser run selects one profile with `SVELTEKIT_PROFILE=kit-2-stable` or
 `SVELTEKIT_PROFILE=kit-3-primary` before `test:conformance`; an exact 2.x or 3.x
 `SVELTEKIT_VERSION` remains available for upgrade diagnosis and selects the compatible adapter
 generation automatically. Matrix automation and scheduling in CI remain issue #29.

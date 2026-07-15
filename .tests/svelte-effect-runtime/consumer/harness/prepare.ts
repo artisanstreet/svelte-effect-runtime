@@ -29,6 +29,12 @@ type PackageManifest = {
 	readonly version: string;
 };
 
+type ConformanceLayout = {
+	readonly is_matrix: boolean;
+	readonly metadata_path: "matrix.json" | "targets.json";
+	readonly root_directory: "conformance" | "conformance-matrix";
+};
+
 class CommandFailure extends Error {
 	readonly output: CommandOutput;
 
@@ -60,13 +66,10 @@ async function main(): Promise<void> {
 	const candidate_source =
 		process.env.SER_CANDIDATE_TARGET ??
 		"artifact:.dist/svelte-effect-runtime/svelte-effect-runtime-4.0.0.tgz";
+	const layout = resolve_conformance_layout(process.env);
 	const profiles = resolve_sveltekit_profiles(process.env);
 	const targets = make_targets(stable_source, candidate_source);
-	const conformance_root = join(
-		repo_root,
-		".dist",
-		profiles.length === 1 ? "conformance" : "conformance-matrix",
-	);
+	const conformance_root = join(repo_root, ".dist", layout.root_directory);
 	const artifacts_root = join(conformance_root, "artifacts");
 	const artifact_evidence_root = join(conformance_root, "evidence", "prepare", "artifacts");
 	const artifacts = new Map<TargetName, ResolvedArtifact>();
@@ -117,7 +120,11 @@ async function main(): Promise<void> {
 
 	/** Install and verify every target under each requested compatibility profile. */
 	for (const profile of profiles) {
-		const applications_root = get_applications_root(conformance_root, profile, profiles.length);
+		const applications_root = get_applications_root(
+			conformance_root,
+			profile,
+			layout.is_matrix,
+		);
 		const evidence_root = join(
 			conformance_root,
 			"evidence",
@@ -154,13 +161,20 @@ async function main(): Promise<void> {
 		);
 	}
 
-	const metadata_path = profiles.length === 1 ? "targets.json" : "matrix.json";
-	const metadata = profiles.length === 1 ? matrix_metadata[0] : { profiles: matrix_metadata };
+	const metadata = layout.is_matrix ? { profiles: matrix_metadata } : matrix_metadata[0];
 
 	await writeFile(
-		join(conformance_root, metadata_path),
+		join(conformance_root, layout.metadata_path),
 		`${JSON.stringify(metadata, null, 2)}\n`,
 	);
+}
+
+export function resolve_conformance_layout(environment: NodeJS.ProcessEnv): ConformanceLayout {
+	const is_matrix = environment.SVELTEKIT_MATRIX === "all";
+	const metadata_path = is_matrix ? "matrix.json" : "targets.json";
+	const root_directory = is_matrix ? "conformance-matrix" : "conformance";
+
+	return { is_matrix, metadata_path, root_directory };
 }
 
 async function resolve_artifact(
@@ -422,7 +436,7 @@ async function prepare_application(
 		await cp(target_adapter_dir, application_dir, { force: true, recursive: true });
 	}
 
-	await prepare_adapter_workspace(repository_root, application_dir, workspace_path, profile);
+	await prepare_adapter_workspace(workspace_path);
 
 	const config_source = await readFile(config_path, "utf8");
 	const rendered_config = render_fixture_sveltekit_config(
@@ -523,22 +537,23 @@ async function prepare_application(
 		"build",
 	);
 
-	if (profile.adapter_patch_name) {
-		await verify_patched_adapter_output(application_dir);
+	if (profile.adapter_output_directory_module) {
+		await verify_adapter_output(application_dir, profile.adapter_output_directory_module);
 	}
 }
 
-async function verify_patched_adapter_output(application_dir: string): Promise<void> {
+async function verify_adapter_output(
+	application_dir: string,
+	directory_module_name: string,
+): Promise<void> {
 	const build_dir = join(application_dir, "build");
 	const client_version = join(application_dir, "build", "client", "_app", "version.json");
-	const directory_module = join(build_dir, "dir.js");
+	const directory_module = join(build_dir, directory_module_name);
 
 	try {
 		await Promise.all([readFile(client_version), readFile(directory_module)]);
 	} catch {
-		throw new Error(
-			`Patched adapter output must contain ${client_version} and ${directory_module}.`,
-		);
+		throw new Error(`Adapter output must contain ${client_version} and ${directory_module}.`);
 	}
 
 	const directory_exports = Object.values(await import(pathToFileURL(directory_module).href));
@@ -547,53 +562,29 @@ async function verify_patched_adapter_output(application_dir: string): Promise<v
 	);
 
 	if (!resolves_to_build) {
-		throw new Error(`Patched adapter output must resolve its static root to ${build_dir}.`);
+		throw new Error(`Adapter output must resolve its static root to ${build_dir}.`);
 	}
 }
 
-async function prepare_adapter_workspace(
-	repository_root: string,
-	application_dir: string,
-	workspace_path: string,
-	profile: SvelteKitProfile,
-): Promise<void> {
-	const patched_dependencies = profile.adapter_patch_name
-		? [
-				"",
-				"patchedDependencies:",
-				`    "@sveltejs/adapter-node@${profile.adapter_node_version}": patches/${profile.adapter_patch_name}`,
-			]
-		: [];
+async function prepare_adapter_workspace(workspace_path: string): Promise<void> {
 	const workspace = [
 		"allowBuilds:",
 		"    esbuild: true",
 		"    msgpackr-extract: true",
 		"",
 		"packages: []",
-		...patched_dependencies,
 		"",
 	].join("\n");
 
 	await writeFile(workspace_path, workspace);
-
-	if (!profile.adapter_patch_name) {
-		return;
-	}
-
-	const adapter_patch_source = join(repository_root, "patches", profile.adapter_patch_name);
-	const application_patch_dir = join(application_dir, "patches");
-	const application_patch = join(application_patch_dir, profile.adapter_patch_name);
-
-	await mkdir(application_patch_dir, { recursive: true });
-	await cp(adapter_patch_source, application_patch);
 }
 
 function get_applications_root(
 	conformance_root: string,
 	profile: SvelteKitProfile,
-	profile_count: number,
+	is_matrix: boolean,
 ): string {
-	if (profile_count === 1) {
+	if (!is_matrix) {
 		return join(conformance_root, "applications");
 	}
 
