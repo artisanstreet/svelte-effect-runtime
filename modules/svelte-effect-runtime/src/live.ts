@@ -394,7 +394,7 @@ function propagate_live_metadata_through_pipe<A, E, R>(
 		value: (...args: readonly unknown[]) => {
 			const result = pipe(...args);
 
-			if (!Stream.isStream(result) || is_live_operator(args[0])) {
+			if (!Stream.isStream(result) || args.some(is_live_operator)) {
 				return result;
 			}
 

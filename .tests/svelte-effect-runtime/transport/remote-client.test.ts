@@ -15,6 +15,7 @@ import { normalize_native_error } from "../../../modules/svelte-effect-runtime/s
 import { to_form_data } from "../../../modules/svelte-effect-runtime/src/remote/client/form-data.ts";
 import { InvalidPrerenderFactoryError } from "../../../modules/svelte-effect-runtime/src/errors.ts";
 import { Live, make_remote_live_stream } from "../../../modules/svelte-effect-runtime/src/live.ts";
+import { remote_live_stream } from "../../../modules/svelte-effect-runtime/src/internal/live.ts";
 import { error as svelte_error, isRedirect, redirect as svelte_redirect } from "@sveltejs/kit";
 import { reset_dispatcher } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
 import { ToEffect } from "../../../modules/svelte-effect-runtime/src/yieldable.ts";
@@ -590,6 +591,30 @@ test("remote live query adapter returns a stream with separate controls", async 
 	await get_server_dispatcher().run(derived_query.pipe(Live.reconnect));
 
 	assert_equals(reconnect_called, true);
+});
+
+test("remote live control streams stay unbranded after earlier pipe stages", async () => {
+	const native = () => ({
+		connected: true,
+		[Symbol.asyncIterator]: async function* () {
+			yield "first";
+		},
+	});
+	const query = create_remote_live_query_adapter<undefined, string>(
+		native,
+		(value) => value,
+		"",
+	)(undefined);
+	const status = query.pipe(
+		Stream.map((value) => value.toUpperCase()),
+		Live.status,
+	);
+	const values = await get_server_dispatcher().run(
+		Stream.runCollect(status.pipe(Stream.take(1))),
+	);
+
+	assert_equals(values, [{ _tag: "Idle" }]);
+	assert_equals(remote_live_stream in status, false);
 });
 
 test("remote live query yields cached initial values before subscribing to updates", async () => {
