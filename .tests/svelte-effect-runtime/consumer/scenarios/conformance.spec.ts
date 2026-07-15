@@ -7,9 +7,9 @@ import {
 	type Playwright,
 	type TestInfo,
 } from "@playwright/test";
-import { conformance_proxy_port, conformance_proxy_protocol } from "../../unit/harness/model.ts";
 import type { Observation, Scenario, TargetName } from "../../unit/harness/model.ts";
 import { normalize_observation } from "../../unit/harness/normalization.ts";
+import { get_conformance_target_url } from "../../unit/harness/model.ts";
 import { compare_observations } from "../../unit/harness/comparison.ts";
 import { make_evidence } from "../../unit/harness/evidence.ts";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -154,15 +154,15 @@ type LiveFinalizationObservation = {
 const targets: ReadonlyArray<TargetEndpoint> = [
 	{
 		name: "native",
-		url: `${conformance_proxy_protocol}://ser-conformance-native.localhost:${conformance_proxy_port}`,
+		url: get_conformance_target_url("native"),
 	},
 	{
 		name: "stable",
-		url: `${conformance_proxy_protocol}://ser-conformance-stable.localhost:${conformance_proxy_port}`,
+		url: get_conformance_target_url("stable"),
 	},
 	{
 		name: "candidate",
-		url: `${conformance_proxy_protocol}://ser-conformance-candidate.localhost:${conformance_proxy_port}`,
+		url: get_conformance_target_url("candidate"),
 	},
 ];
 

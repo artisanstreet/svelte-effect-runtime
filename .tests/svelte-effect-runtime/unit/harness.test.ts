@@ -3,7 +3,11 @@ import { resolve_git_revision } from "../consumer/harness/prepare.ts";
 import { make_evidence } from "./harness/evidence.ts";
 import { normalize_observation, normalize_value } from "./harness/normalization.ts";
 import { get_target, make_targets, parse_target_source } from "./harness/target.ts";
-import { get_conformance_browsers } from "./harness/model.ts";
+import {
+	get_conformance_browsers,
+	get_conformance_proxy_url,
+	get_conformance_target_url,
+} from "./harness/model.ts";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
@@ -23,6 +27,13 @@ describe("conformance browser selection", () => {
 });
 
 describe("conformance target selection", () => {
+	test("drives production servers directly while retaining named proxy origins", () => {
+		expect(get_conformance_target_url("native")).toBe("http://127.0.0.1:41801");
+		expect(get_conformance_proxy_url("native")).toBe(
+			"https://ser-conformance-native.localhost:41730",
+		);
+	});
+
 	test("keeps native as oracle while stable and candidate remain independent artifacts", () => {
 		const targets = make_targets(
 			"package:svelte-effect-runtime@4.0.0",

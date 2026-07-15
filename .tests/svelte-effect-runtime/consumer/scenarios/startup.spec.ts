@@ -1,4 +1,4 @@
-import { conformance_proxy_port, conformance_proxy_protocol } from "../../unit/harness/model.ts";
+import { get_conformance_proxy_url } from "../../unit/harness/model.ts";
 import { make_evidence } from "../../unit/harness/evidence.ts";
 import type { TargetName } from "../../unit/harness/model.ts";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -20,7 +20,7 @@ test("production adapter servers start and answer through named HTTPS origins", 
 	request,
 }, test_info) => {
 	for (const target of targets) {
-		const target_url = `${conformance_proxy_protocol}://ser-conformance-${target}.localhost:${conformance_proxy_port}`;
+		const target_url = get_conformance_proxy_url(target);
 		const response = await request.get(`${target_url}/api/context`);
 
 		expect(response.status()).toBe(200);
