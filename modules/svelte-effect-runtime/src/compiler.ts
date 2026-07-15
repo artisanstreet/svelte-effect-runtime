@@ -345,6 +345,12 @@ async function rewrite_server_imports(code: string, id: string): Promise<string>
 				})
 			: [],
 	);
+	const has_exported_ser_prerender = has_exported_ser_prerender_call(
+		source_file,
+		prerender_binding_names,
+		prerender_namespace_names,
+		ts,
+	);
 	const has_sveltekit_prerender_import = source_file.statements.some(
 		(statement) =>
 			ts.isImportDeclaration(statement) &&
@@ -365,10 +371,7 @@ async function rewrite_server_imports(code: string, id: string): Promise<string>
 	);
 	let changed = false;
 
-	if (
-		(ser_prerender_imports.length > 0 || prerender_namespace_names.size > 0) &&
-		!has_sveltekit_prerender_import
-	) {
+	if (has_exported_ser_prerender && !has_sveltekit_prerender_import) {
 		if (has_top_level_prerender_binding) {
 			throw new Error(
 				`[svelte-effect-runtime] ${filename}: Prerender remote modules reserve the top-level "prerender" binding for SvelteKit. Rename the existing binding.`,
@@ -473,6 +476,37 @@ function is_ser_prerender_callee(
 		namespace_names.has(expression.expression.text) &&
 		expression.name.text === "Prerender"
 	);
+}
+
+function has_exported_ser_prerender_call(
+	source_file: import("typescript").SourceFile,
+	binding_names: ReadonlySet<string>,
+	namespace_names: ReadonlySet<string>,
+	ts: typeof import("typescript"),
+): boolean {
+	let found = false;
+
+	const visit = (node: import("typescript").Node) => {
+		if (found) {
+			return;
+		}
+
+		if (
+			ts.isCallExpression(node) &&
+			is_ser_prerender_callee(node.expression, binding_names, namespace_names, ts) &&
+			is_exported_variable_initializer(node, ts)
+		) {
+			found = true;
+
+			return;
+		}
+
+		ts.forEachChild(node, visit);
+	};
+
+	visit(source_file);
+
+	return found;
 }
 
 function is_exported_variable_initializer(

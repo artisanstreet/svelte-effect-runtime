@@ -453,6 +453,23 @@ test("vite server import rewrite retains prerender for namespace imports", async
 	);
 });
 
+test("vite server import rewrite ignores unused Prerender bindings", async () => {
+	const source = [
+		`import { Prerender } from "svelte-effect-runtime";`,
+		`import * as SER from "svelte-effect-runtime";`,
+		`const prerender = "local";`,
+		`export const GetBuildInfo = SER.Query(() => Effect.succeed("ready"));`,
+	].join("\n");
+	const result = await run_server_import_transform(source, "C:/src/lib/build.remote.ts");
+
+	assert_string_includes(result, `const prerender = "local";`);
+	assert_string_includes(
+		result,
+		`export const GetBuildInfo = SER.Query(() => Effect.succeed("ready"));`,
+	);
+	assert_not_match(result, /from "\$app\/server"/);
+});
+
 test("vite server import rewrite handles wrapped Prerender initializers", async () => {
 	const source = [
 		`import { Prerender } from "svelte-effect-runtime";`,
