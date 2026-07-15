@@ -251,6 +251,32 @@ export function plan_release(input: PlanReleaseInput): ReleasePlan {
 	});
 }
 
+export function validate_resume_source_plan(
+	resume_plan: ReleasePlan,
+	source_plan: ReleasePlan,
+): ReleasePlan {
+	if (resume_plan.mode !== "resume" || !resume_plan.publish) {
+		throw new Error("The current release plan must be a publishing resume.");
+	}
+
+	if (
+		(source_plan.mode !== "release" && source_plan.mode !== "resume") ||
+		!source_plan.publish ||
+		source_plan.dry_run
+	) {
+		throw new Error("Resume artifacts must come from a prior publishing release plan.");
+	}
+
+	const current_identity = release_plan_identity(resume_plan);
+	const source_identity = release_plan_identity(source_plan);
+
+	if (current_identity !== source_identity) {
+		throw new Error("Resume source does not match the current version, commit, or artifacts.");
+	}
+
+	return source_plan;
+}
+
 function resolve_synchronized_version(label: "current" | "previous", versions: PackageVersions) {
 	const entries = release_package_ids.map((id) => [id, versions[id]] as const);
 	const invalid_entry = entries.find(([, version]) => {
@@ -309,6 +335,22 @@ function make_plan(
 	};
 
 	return Object.freeze(plan);
+}
+
+function release_plan_identity(plan: ReleasePlan): string {
+	return JSON.stringify({
+		commit: plan.commit,
+		version: plan.version,
+		tag: plan.tag,
+		channels: plan.channels,
+		packages: plan.packages.map((pkg) => ({
+			id: pkg.id,
+			artifact_name: pkg.artifact_name,
+			build_dependencies: pkg.build_dependencies,
+			publish_dependencies: pkg.publish_dependencies,
+			channels: pkg.channels,
+		})),
+	});
 }
 
 function capitalize(value: string): string {

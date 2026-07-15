@@ -4,6 +4,7 @@ import {
 	plan_release,
 	release_channels,
 	release_package_definitions,
+	validate_resume_source_plan,
 	type PackageVersions,
 	type ReleaseRepositoryState,
 } from "../../../build/release/policy.ts";
@@ -229,6 +230,48 @@ test("resume requires the exact candidate version and commit", () => {
 			resume: { version: "4.0.0", commit },
 		}),
 	).toThrow(/does not match current version/i);
+});
+
+test("resume restores only a prior publishing plan with the exact candidate identity", () => {
+	const release_plan = plan_release({
+		event: "workflow_dispatch",
+		ref: "refs/heads/candidate",
+		commit,
+		current_versions,
+		mode: "release",
+		repository_state: candidate_state,
+	});
+	const resume_plan = plan_release({
+		event: "workflow_dispatch",
+		ref: "refs/heads/candidate",
+		commit,
+		current_versions,
+		mode: "resume",
+		repository_state: { ...candidate_state, greatest_release_version: "4.1.0" },
+		resume: { version: "4.1.0", commit },
+	});
+	const dry_run_plan = plan_release({
+		event: "workflow_dispatch",
+		ref: "refs/heads/candidate",
+		commit,
+		current_versions,
+		mode: "dry-run",
+		repository_state: candidate_state,
+	});
+
+	expect(validate_resume_source_plan(resume_plan, release_plan)).toBe(release_plan);
+	expect(() => validate_resume_source_plan(release_plan, release_plan)).toThrow(
+		/current release plan must be a publishing resume/i,
+	);
+	expect(() => validate_resume_source_plan(resume_plan, dry_run_plan)).toThrow(
+		/prior publishing release plan/i,
+	);
+	expect(() =>
+		validate_resume_source_plan(resume_plan, {
+			...release_plan,
+			commit: "0".repeat(40),
+		}),
+	).toThrow(/does not match the current version, commit, or artifacts/i);
 });
 
 test("non-dispatch events reject release mode and resume claims", () => {

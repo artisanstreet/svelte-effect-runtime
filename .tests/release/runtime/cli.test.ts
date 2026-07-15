@@ -150,6 +150,22 @@ test("candidate plan parsing accepts only explicit release, dry-run, or resume m
 	});
 });
 
+test("resume validation parsing requires both canonical plan paths", () => {
+	const request = parse_cli_request([
+		"validate-resume",
+		"--plan",
+		"release-plan.json",
+		"--source-plan",
+		"source-plan.json",
+	]);
+
+	expect(request).toEqual({
+		command: "validate-resume",
+		plan: "release-plan.json",
+		source_plan: "source-plan.json",
+	});
+});
+
 test("release repository state comes from immutable tags and candidate ancestry", async () => {
 	const temp_root = await mkdtemp(join(tmpdir(), "ser-release-git-state-"));
 

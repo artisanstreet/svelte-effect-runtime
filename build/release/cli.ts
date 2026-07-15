@@ -24,7 +24,12 @@ import {
 	type PromotionState,
 } from "./promotion.ts";
 import { ProviderAdaptersLive } from "./provider-adapters.ts";
-import { candidate_release_ref, plan_release, type ReleasePlan } from "./policy.ts";
+import {
+	candidate_release_ref,
+	plan_release,
+	validate_resume_source_plan,
+	type ReleasePlan,
+} from "./policy.ts";
 import { RepoRoot } from "../node-utils.ts";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Effect, Schema } from "effect";
@@ -61,6 +66,11 @@ const NotesRequestSchema = Schema.Struct({
 	repository_url: NonEmptyStringSchema,
 	output: NonEmptyStringSchema,
 });
+const ValidateResumeRequestSchema = Schema.Struct({
+	command: Schema.Literals(["validate-resume"] as const),
+	plan: NonEmptyStringSchema,
+	source_plan: NonEmptyStringSchema,
+});
 const InspectRequestSchema = Schema.Struct({
 	command: Schema.Literals(["inspect"] as const),
 	plan: NonEmptyStringSchema,
@@ -94,6 +104,7 @@ export type CliRequest =
 	| typeof PlanRequestSchema.Type
 	| typeof ManifestRequestSchema.Type
 	| typeof ValidateRequestSchema.Type
+	| typeof ValidateResumeRequestSchema.Type
 	| typeof NotesRequestSchema.Type
 	| typeof InspectRequestSchema.Type
 	| typeof PromoteRequestSchema.Type;
@@ -111,6 +122,7 @@ const command_flags = {
 	]),
 	manifest: new Set(["plan", "artifact-dir", "output"]),
 	validate: new Set(["plan", "manifest", "artifact-dir"]),
+	"validate-resume": new Set(["plan", "source-plan"]),
 	notes: new Set(["plan", "repository-url", "output"]),
 	inspect: new Set([
 		"plan",
@@ -149,12 +161,13 @@ export function parse_cli_request(
 		command !== "plan" &&
 		command !== "manifest" &&
 		command !== "validate" &&
+		command !== "validate-resume" &&
 		command !== "notes" &&
 		command !== "inspect" &&
 		command !== "promote"
 	) {
 		throw new Error(
-			`Expected release command plan, manifest, validate, notes, inspect, or promote; received ${command ?? "none"}.`,
+			`Expected release command plan, manifest, validate, validate-resume, notes, inspect, or promote; received ${command ?? "none"}.`,
 		);
 	}
 
@@ -175,6 +188,14 @@ export function parse_cli_request(
 			plan: flags.plan,
 			manifest: flags.manifest,
 			artifact_dir: flags["artifact-dir"],
+		});
+	}
+
+	if (command === "validate-resume") {
+		return Schema.decodeUnknownSync(ValidateResumeRequestSchema)({
+			command,
+			plan: flags.plan,
+			source_plan: flags["source-plan"],
 		});
 	}
 
@@ -310,6 +331,15 @@ export const RunReleaseCli = (request: CliRequest) =>
 		}
 
 		const plan = yield* ReadCanonicalReleasePlan(request.plan, repo_root);
+
+		if (request.command === "validate-resume") {
+			const source_plan = yield* ReadCanonicalReleasePlan(request.source_plan);
+
+			return yield* Effect.try({
+				try: () => validate_resume_source_plan(plan, source_plan),
+				catch: (cause) => cause,
+			});
+		}
 
 		if (request.command === "notes") {
 			const notes = yield* GenerateReleaseNotes(repo_root, plan, request.repository_url);
