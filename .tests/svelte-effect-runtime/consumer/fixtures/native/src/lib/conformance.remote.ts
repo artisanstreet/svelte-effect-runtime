@@ -98,7 +98,11 @@ export const GetLifecycle = query.live(async function* () {
 
 	try {
 		yield "connected";
-		await new Promise(() => {});
+
+		while (true) {
+			await new Promise((resolve) => setTimeout(resolve, 100));
+			yield "connected";
+		}
 	} finally {
 		lifecycle_events.push("finalized");
 	}
