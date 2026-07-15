@@ -146,7 +146,7 @@ function make_expression_diagnostics(
 	const is_attribute = attribute_name !== undefined;
 	const parsed_expression = parse_markup_expression(expression_text, effect_binding_paths);
 
-	if (!parsed_expression || !contains_effect_reference(parsed_expression, effect_binding_paths)) {
+	if (!parsed_expression) {
 		return [];
 	}
 
@@ -155,6 +155,11 @@ function make_expression_diagnostics(
 		? contains_callback_yield_star(parsed_expression)
 		: contains_yield_star(parsed_expression);
 	const is_hidden_event_yield = is_event_attribute && is_callback && has_yield_star;
+	const has_effect_reference = contains_effect_reference(parsed_expression, effect_binding_paths);
+
+	if (!has_effect_reference && !is_hidden_event_yield) {
+		return [];
+	}
 
 	if (
 		!contains_unyielded_effect_reference(parsed_expression, effect_binding_paths) &&
@@ -346,8 +351,9 @@ function parse_markup_expression(
 	const has_member_candidate = effect_member_names.some((member_name) =>
 		expression_text.includes(member_name),
 	);
+	const has_yield_candidate = /\byield\s*\*/.test(expression_text);
 
-	if (!has_binding_candidate || !has_member_candidate) {
+	if ((!has_binding_candidate || !has_member_candidate) && !has_yield_candidate) {
 		return undefined;
 	}
 
