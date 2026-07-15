@@ -6,8 +6,8 @@ import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve_sveltekit_profiles } from "./sveltekit-profiles.ts";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { SvelteKitProfile } from "./sveltekit-profiles.ts";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { Schema } from "effect";
 
@@ -519,6 +519,33 @@ async function prepare_application(
 		target.name,
 		"build",
 	);
+
+	if (profile.adapter_patch_name) {
+		await verify_patched_adapter_output(application_dir);
+	}
+}
+
+async function verify_patched_adapter_output(application_dir: string): Promise<void> {
+	const build_dir = join(application_dir, "build");
+	const client_version = join(application_dir, "build", "client", "_app", "version.json");
+	const directory_module = join(build_dir, "dir.js");
+
+	try {
+		await Promise.all([readFile(client_version), readFile(directory_module)]);
+	} catch {
+		throw new Error(
+			`Patched adapter output must contain ${client_version} and ${directory_module}.`,
+		);
+	}
+
+	const directory_exports = Object.values(await import(pathToFileURL(directory_module).href));
+	const resolves_to_build = directory_exports.some(
+		(directory) => typeof directory === "string" && resolve(directory) === resolve(build_dir),
+	);
+
+	if (!resolves_to_build) {
+		throw new Error(`Patched adapter output must resolve its static root to ${build_dir}.`);
+	}
 }
 
 async function prepare_adapter_workspace(
