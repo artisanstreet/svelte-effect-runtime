@@ -5,7 +5,7 @@ runs:
     using: composite
     steps:
         - name: Setup Vite+
-          uses: voidzero-dev/setup-vp@10c4be84517f21333b81092e67a344be1b09a202
+          uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb
           with:
               version: 0.2.4
               node-version: 24
