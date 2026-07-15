@@ -1251,11 +1251,16 @@ test("compiler entrypoint defers compiler-only imports until transform hooks", a
 		"utf8",
 	);
 	const static_import_pattern = /^import\s+.*["']\.\/runtime\/transform\.ts["'];/m;
+	const static_diagnostics_import_pattern = /^import\s+.*["']\.\/diagnostics\.ts["'];/m;
 	const static_typescript_import_pattern = /^import\s+.*["']typescript["'];/m;
 	const static_magic_string_import_pattern = /^import\s+.*["']magic-string["'];/m;
 
 	if (static_import_pattern.test(source)) {
 		throw new Error("vite entrypoint should not statically import transformer");
+	}
+
+	if (static_diagnostics_import_pattern.test(source)) {
+		throw new Error("vite entrypoint should not statically import diagnostics");
 	}
 
 	if (static_typescript_import_pattern.test(source)) {
@@ -1267,6 +1272,7 @@ test("compiler entrypoint defers compiler-only imports until transform hooks", a
 	}
 
 	assert_string_includes(source, `await import(`);
+	assert_string_includes(source, `"./diagnostics.ts"`);
 	assert_string_includes(source, `"./runtime/transform.ts"`);
 	assert_string_includes(source, `"./compiler/remote-client.ts"`);
 });

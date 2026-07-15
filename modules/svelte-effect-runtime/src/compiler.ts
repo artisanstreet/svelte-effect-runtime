@@ -3,7 +3,6 @@ import {
 	is_sveltekit_remote_runtime_index,
 	make_missing_sveltekit_remote_runtime_message,
 } from "./compiler/sveltekit-remote-bridge.ts";
-import { find_svelte_effect_diagnostics } from "./diagnostics.ts";
 import type { Plugin } from "vite";
 
 /**
@@ -81,12 +80,13 @@ function make_diagnostics_plugin(component_filter: SvelteComponentModuleFilter):
 	return {
 		name: "svelte-effect-runtime:diagnostics",
 
-		transform(code: string, id: string) {
+		async transform(code: string, id: string) {
 			if (!component_filter.is_module(id) || !may_have_effect_diagnostics(code)) {
 				return undefined;
 			}
 
 			const clean_id = id.split("?")[0] ?? id;
+			const { find_svelte_effect_diagnostics } = await import("./diagnostics.ts");
 			const diagnostics = find_svelte_effect_diagnostics(code, clean_id);
 
 			for (const diagnostic of diagnostics) {

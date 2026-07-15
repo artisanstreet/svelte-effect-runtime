@@ -384,7 +384,7 @@ test(live_query_scenario.promise, async ({ browser, playwright }, test_info) => 
 	await assert_native_parity(live_query_scenario, { browser, playwright }, test_info, {
 		stable: {
 			"$.availability":
-				"The stable 4.0.0 live query does not complete SSR for the shared Stream fixture; issue #35 records the adjacent candidate packaging failure.",
+				"The stable 4.0.0 live query does not complete SSR for the shared Stream fixture; issue #46 tracks the candidate runtime defect now exposed by the package fix.",
 			"$.done": "The stable live route is unavailable before browser state can be observed.",
 			"$.initial_active_connections":
 				"The stable live route is unavailable before connection state can be observed.",
@@ -403,7 +403,7 @@ test(live_query_scenario.promise, async ({ browser, playwright }, test_info) => 
 		},
 		candidate: {
 			"$.availability":
-				"The candidate live route fails while evaluating its ESM page chunk; issue #35 records the failure.",
+				"The candidate reaches live runtime SSR but loses the cached initial value across same-key consumers; issue #46 records the failure.",
 			"$.done":
 				"The candidate live route is unavailable before browser state can be observed.",
 			"$.initial_active_connections":
