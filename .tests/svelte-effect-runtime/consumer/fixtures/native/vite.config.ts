@@ -8,7 +8,7 @@ export default defineConfig({
 		sveltekit({
 			adapter: adapter(),
 			paths: {
-				origin: "__CONFORMANCE_ORIGIN__",
+				__CONFORMANCE_PATHS_ORIGIN__: "__CONFORMANCE_ORIGIN__",
 			},
 			compilerOptions: {
 				experimental: {

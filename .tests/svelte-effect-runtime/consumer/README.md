@@ -21,8 +21,9 @@ console events, and network observations are written under `.dist/conformance`.
 Portless owns and registers every production server on a fixed loopback application port. Browser
 drivers use the named HTTPS origins, while Playwright readiness probes use side-effect-free direct
 endpoints so startup cannot open a live query. The fixed ports are normalized from recorded
-observations. The fixtures avoid SvelteKit's build-time `paths.origin`, which would recursively
-route native remote SSR.
+observations. SvelteKit 3 fixtures compile with the canonical direct adapter origin, while the
+SvelteKit 2 profile omits the unsupported `paths.origin` option. Browser parity still drives the
+direct adapter URLs under both profiles, so remote-function and CSRF checks remain active.
 
 The compatibility matrix pins two reviewable profiles. `kit-2-stable` uses SvelteKit 2.69.3 and its
 peer-compatible adapter-node 5.5.7. `kit-3-primary` uses the repository's SvelteKit 3.0.0-next.6 and
