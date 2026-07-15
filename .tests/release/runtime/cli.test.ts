@@ -43,7 +43,7 @@ test("CLI parsing rejects unknown, incomplete, and unsafe release configuration"
 			"--output",
 			"plan.json",
 		]),
-	).toThrow(/resume requires both/i);
+	).toThrow(/resume requires --resume-version, --resume-commit, and --resume-run-id/i);
 	expect(() =>
 		parse_cli_request([
 			"plan",
@@ -137,6 +137,8 @@ test("candidate plan parsing accepts only explicit release, dry-run, or resume m
 		"4.1.0",
 		"--resume-commit",
 		"a".repeat(40),
+		"--resume-run-id",
+		"123456789",
 		"--output",
 		"plan.json",
 	]);
@@ -147,6 +149,7 @@ test("candidate plan parsing accepts only explicit release, dry-run, or resume m
 		mode: "resume",
 		resume_version: "4.1.0",
 		resume_commit: "a".repeat(40),
+		resume_run_id: "123456789",
 	});
 });
 

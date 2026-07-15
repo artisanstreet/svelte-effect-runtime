@@ -32,7 +32,9 @@ export const static_policy_test_files = Object.freeze([
 	".tests/release/runtime/policy.test.ts",
 	".tests/release/runtime/promotion.test.ts",
 	".tests/release/runtime/registry-state.test.ts",
+	".tests/release/runtime/report.test.ts",
 	".tests/release/runtime/release-notes.test.ts",
+	".tests/release/runtime/workflow-policy.test.ts",
 ]);
 
 export const capability_lanes: ReadonlyArray<CapabilityLane> = Object.freeze([

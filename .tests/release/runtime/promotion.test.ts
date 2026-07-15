@@ -75,7 +75,7 @@ test("fresh promotion honors dependencies and finalizes only after exact artifac
 });
 
 test("resume skips matching npm and GitHub artifacts", async () => {
-	const fixture = make_fixture();
+	const fixture = make_fixture("resume");
 	const runtime = fixture.manifest.artifacts.find(
 		(artifact) => artifact.package_id === "runtime",
 	);
@@ -103,6 +103,24 @@ test("resume skips matching npm and GitHub artifacts", async () => {
 	expect(fixture.state.calls).not.toContain(`github:asset:${second_asset.name}`);
 	expect(fixture.state.calls).not.toContain("github:tag");
 	expect(fixture.state.calls).not.toContain("github:draft");
+});
+
+test("fresh release rejects durable provider state and directs an exact resume", async () => {
+	const fixture = make_fixture();
+	const runtime = fixture.manifest.artifacts.find(
+		(artifact) => artifact.package_id === "runtime",
+	);
+
+	if (!runtime) {
+		throw new Error("Test fixture did not include the runtime artifact.");
+	}
+
+	fixture.state.npm.add(runtime.package_name);
+
+	await expect(
+		RunWithFake(PromoteRelease(fixture.plan, fixture.manifest, fixture.options), fixture),
+	).rejects.toThrow(/fresh release found existing provider state.*resume/i);
+	expect(fixture.state.calls).toEqual(["credentials"]);
 });
 
 test("integrity mismatch fails before any external write", async () => {
@@ -155,8 +173,8 @@ test("provider outage is bounded and leaves an inspectable partial state", async
 	expect(inspected.retry_guidance).toMatch(/resume the exact 4\.1\.0 release/i);
 });
 
-function make_fixture() {
-	const plan = make_publish_plan();
+function make_fixture(mode: "release" | "resume" = "release") {
+	const plan = make_publish_plan(mode);
 	const manifest = create_artifact_manifest(
 		plan,
 		plan.packages.map((pkg) => ({
@@ -196,7 +214,7 @@ function make_fixture() {
 	};
 }
 
-function make_publish_plan(): ReleasePlan {
+function make_publish_plan(mode: "release" | "resume" = "release"): ReleasePlan {
 	const versions = {
 		runtime: version,
 		grammars: version,
@@ -208,13 +226,14 @@ function make_publish_plan(): ReleasePlan {
 		ref: "refs/heads/candidate",
 		commit,
 		current_versions: versions,
-		mode: "release",
+		mode,
 		repository_state: {
 			candidate_head: commit,
 			candidate_is_on_master: true,
-			greatest_release_version: previous_version,
-			current_tag_exists: false,
+			greatest_release_version: mode === "resume" ? version : previous_version,
+			current_tag_exists: mode === "resume",
 		},
+		...(mode === "resume" ? { resume: { version, commit } } : {}),
 	});
 }
 

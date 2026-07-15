@@ -91,6 +91,14 @@ export const PromoteRelease = (
 		const preflight = yield* PreflightPromotion(context);
 		const preflight_state = make_promotion_state(context, preflight);
 
+		if (plan.mode === "release" && has_durable_provider_state(preflight)) {
+			return yield* Effect.fail(
+				new Error(
+					"Fresh release found existing provider state; resume the exact candidate instead.",
+				),
+			);
+		}
+
 		if (preflight_state.overall === "complete") {
 			return preflight_state;
 		}
@@ -188,6 +196,22 @@ const PreflightPromotion = (context: PromotionContext) =>
 			github,
 		};
 	});
+
+function has_durable_provider_state(snapshot: {
+	readonly npm: Readonly<Record<string, ProviderState>>;
+	readonly openvsx: ProviderState;
+	readonly github: GithubInspection;
+}): boolean {
+	return (
+		[
+			...Object.values(snapshot.npm),
+			snapshot.openvsx,
+			...Object.values(snapshot.github.assets),
+		].some((state) => state._tag === "Matching") ||
+		snapshot.github.tag._tag === "Matching" ||
+		snapshot.github.release._tag === "Matching"
+	);
+}
 
 const PrepareGithub = (context: PromotionContext) =>
 	Effect.gen(function* () {

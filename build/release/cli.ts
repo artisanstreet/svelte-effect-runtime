@@ -37,6 +37,7 @@ import { pathToFileURL } from "node:url";
 
 const NonEmptyStringSchema = Schema.String.pipe(Schema.check(Schema.isMinLength(1)));
 const CommitSchema = Schema.String.pipe(Schema.check(Schema.isPattern(/^[0-9a-fA-F]{40}$/)));
+const RunIdSchema = Schema.String.pipe(Schema.check(Schema.isPattern(/^[1-9]\d*$/)));
 const PlanRequestSchema = Schema.Struct({
 	command: Schema.Literals(["plan"] as const),
 	event: Schema.Literals(["pull_request", "push", "workflow_dispatch"] as const),
@@ -45,6 +46,7 @@ const PlanRequestSchema = Schema.Struct({
 	mode: Schema.optional(Schema.Literals(["dry-run", "release", "resume"] as const)),
 	resume_version: Schema.optional(NonEmptyStringSchema),
 	resume_commit: Schema.optional(CommitSchema),
+	resume_run_id: Schema.optional(RunIdSchema),
 	output: NonEmptyStringSchema,
 	github_output: Schema.optional(NonEmptyStringSchema),
 });
@@ -117,6 +119,7 @@ const command_flags = {
 		"mode",
 		"resume-version",
 		"resume-commit",
+		"resume-run-id",
 		"output",
 		"github-output",
 	]),
@@ -249,15 +252,19 @@ export function parse_cli_request(
 		mode: flags.mode,
 		resume_version: flags["resume-version"],
 		resume_commit: flags["resume-commit"],
+		resume_run_id: flags["resume-run-id"],
 		output: flags.output,
 		github_output: flags["github-output"] ?? environment.GITHUB_OUTPUT,
 	});
 	const has_resume_version = request.resume_version !== undefined;
 	const has_resume_commit = request.resume_commit !== undefined;
-	const has_resume = has_resume_version && has_resume_commit;
+	const has_resume_run_id = request.resume_run_id !== undefined;
+	const has_resume = has_resume_version && has_resume_commit && has_resume_run_id;
 
-	if (has_resume_version !== has_resume_commit) {
-		throw new Error("Resume requires both --resume-version and --resume-commit.");
+	if (has_resume_version !== has_resume_commit || has_resume_version !== has_resume_run_id) {
+		throw new Error(
+			"Resume requires --resume-version, --resume-commit, and --resume-run-id together.",
+		);
 	}
 
 	if (request.event !== "workflow_dispatch") {
@@ -279,7 +286,9 @@ export function parse_cli_request(
 	}
 
 	if (request.mode === "resume" && !has_resume) {
-		throw new Error("Resume mode requires both --resume-version and --resume-commit.");
+		throw new Error(
+			"Resume mode requires --resume-version, --resume-commit, and --resume-run-id.",
+		);
 	}
 
 	if (request.mode !== "resume" && has_resume) {
