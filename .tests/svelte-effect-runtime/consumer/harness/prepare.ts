@@ -3,6 +3,7 @@ import { get_conformance_target_url } from "../../unit/harness/model.ts";
 import { get_target, make_targets } from "../../unit/harness/target.ts";
 import { read_packed_artifact_version } from "./artifact-manifest.ts";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { render_fixture_sveltekit_config } from "./fixture-config.ts";
 import { resolve_sveltekit_profiles } from "./sveltekit-profiles.ts";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { SvelteKitProfile } from "./sveltekit-profiles.ts";
@@ -424,9 +425,10 @@ async function prepare_application(
 	await prepare_adapter_workspace(repository_root, application_dir, workspace_path, profile);
 
 	const config_source = await readFile(config_path, "utf8");
-	const rendered_config = config_source.replace(
-		"__CONFORMANCE_ORIGIN__",
+	const rendered_config = render_fixture_sveltekit_config(
+		config_source,
 		get_conformance_target_url(target.name),
+		profile,
 	);
 
 	if (rendered_config.includes("__")) {
