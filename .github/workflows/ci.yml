@@ -34,8 +34,9 @@ on:
 permissions: {}
 
 concurrency:
-    group: ${{ github.event_name == 'workflow_dispatch' && format('ser-manual-{0}', github.run_id) || format('ser-ci-{0}', github.ref) }}
-    cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+    group: ${{ github.event_name == 'workflow_dispatch' && inputs.mode != 'dry-run' && 'ser-release' || format('ser-ci-{0}', github.ref) }}
+    cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'dry-run' }}
+    queue: ${{ github.event_name == 'workflow_dispatch' && inputs.mode != 'dry-run' && 'max' || 'single' }}
 
 jobs:
     plan:
@@ -77,27 +78,33 @@ jobs:
             - name: Plan candidate construction
               id: plan_candidate
               if: github.event_name == 'workflow_dispatch' && inputs.mode != 'resume'
+              env:
+                  RELEASE_MODE: ${{ inputs.mode }}
               run: >-
                   vp node build/release/cli.ts plan
                   --event workflow_dispatch
                   --ref "${{ github.ref }}"
                   --commit "${{ github.sha }}"
-                  --mode "${{ inputs.mode }}"
+                  --mode "$RELEASE_MODE"
                   --output release-plan.json
                   --github-output "$GITHUB_OUTPUT"
 
             - name: Plan exact resume
               id: plan_resume
               if: github.event_name == 'workflow_dispatch' && inputs.mode == 'resume'
+              env:
+                  RESUME_COMMIT: ${{ inputs.resume_commit }}
+                  RESUME_RUN_ID: ${{ inputs.resume_run_id }}
+                  RESUME_VERSION: ${{ inputs.resume_version }}
               run: >-
                   vp node build/release/cli.ts plan
                   --event workflow_dispatch
                   --ref "${{ github.ref }}"
                   --commit "${{ github.sha }}"
                   --mode resume
-                  --resume-version "${{ inputs.resume_version }}"
-                  --resume-commit "${{ inputs.resume_commit }}"
-                  --resume-run-id "${{ inputs.resume_run_id }}"
+                  --resume-version "$RESUME_VERSION"
+                  --resume-commit "$RESUME_COMMIT"
+                  --resume-run-id "$RESUME_RUN_ID"
                   --output release-plan.json
                   --github-output "$GITHUB_OUTPUT"
 
@@ -648,22 +655,33 @@ jobs:
                   if-no-files-found: error
                   retention-days: 90
 
-    promote:
-        name: Promote release
+    release_gate:
+        name: Authorize release
         if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate' && (inputs.mode == 'release' || inputs.mode == 'resume')
         needs:
             - plan
             - candidate_verified
         runs-on: blacksmith-4vcpu-ubuntu-2404
-        timeout-minutes: 30
-        environment: release
-        concurrency:
-            group: ser-release
-            queue: max
+        timeout-minutes: 5
+        environment: release-approval
+        permissions:
+            contents: read
+        steps:
+            - name: Record authorization boundary
+              run: test "${{ github.ref }}" = "refs/heads/candidate"
+
+    github_prepare:
+        name: Prepare GitHub release
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate' && (inputs.mode == 'release' || inputs.mode == 'resume')
+        needs:
+            - plan
+            - candidate_verified
+            - release_gate
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 15
         permissions:
             actions: read
             contents: write
-            id-token: write
         steps:
             - name: Checkout selected commit
               uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
@@ -689,15 +707,19 @@ jobs:
                   --output release-candidate/rechecked-plan.json
             - name: Recheck resumed candidate pointer
               if: inputs.mode == 'resume'
+              env:
+                  RESUME_COMMIT: ${{ inputs.resume_commit }}
+                  RESUME_RUN_ID: ${{ inputs.resume_run_id }}
+                  RESUME_VERSION: ${{ inputs.resume_version }}
               run: >-
                   vp node build/release/cli.ts plan
                   --event workflow_dispatch
                   --ref "${{ github.ref }}"
                   --commit "${{ github.sha }}"
                   --mode resume
-                  --resume-version "${{ inputs.resume_version }}"
-                  --resume-commit "${{ inputs.resume_commit }}"
-                  --resume-run-id "${{ inputs.resume_run_id }}"
+                  --resume-version "$RESUME_VERSION"
+                  --resume-commit "$RESUME_COMMIT"
+                  --resume-run-id "$RESUME_RUN_ID"
                   --output release-candidate/rechecked-plan.json
             - name: Revalidate exact candidate bytes
               run: >-
@@ -705,11 +727,9 @@ jobs:
                   --plan release-candidate/rechecked-plan.json
                   --manifest release-candidate/artifact-manifest.json
                   --artifact-dir release-candidate/artifacts
-            - name: Promote exact artifacts
+            - name: Create the exact tag and draft release
               env:
                   GH_TOKEN: ${{ github.token }}
-                  NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-                  OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
               run: >-
                   vp node build/release/cli.ts promote
                   --plan release-candidate/rechecked-plan.json
@@ -718,8 +738,249 @@ jobs:
                   --notes release-candidate/release-notes.md
                   --repository "${{ github.repository }}"
                   --state-output release-state.json
+                  --phase github-prepare
                   --dry-run false
-            - name: Upload promotion evidence
+            - name: Upload GitHub preparation evidence
+              if: always()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              with:
+                  name: promotion-phase-github-prepare-${{ github.run_id }}
+                  path: release-state.json
+                  if-no-files-found: warn
+                  retention-days: 90
+
+    npm_publish:
+        name: Publish npm
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate' && (inputs.mode == 'release' || inputs.mode == 'resume')
+        needs:
+            - plan
+            - github_prepare
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        permissions:
+            actions: read
+            contents: read
+            id-token: write
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Download candidate bundle
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
+                  path: release-candidate
+            - name: Publish exact npm tarballs
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: >-
+                  vp node build/release/cli.ts promote
+                  --plan release-candidate/release-plan.json
+                  --manifest release-candidate/artifact-manifest.json
+                  --artifact-dir release-candidate/artifacts
+                  --notes release-candidate/release-notes.md
+                  --repository "${{ github.repository }}"
+                  --state-output release-state.json
+                  --phase npm
+                  --dry-run false
+            - name: Upload npm evidence
+              if: always()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              with:
+                  name: promotion-phase-npm-${{ github.run_id }}
+                  path: release-state.json
+                  if-no-files-found: warn
+                  retention-days: 90
+
+    github_assets:
+        name: Publish GitHub assets
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate' && (inputs.mode == 'release' || inputs.mode == 'resume')
+        needs:
+            - plan
+            - github_prepare
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 15
+        permissions:
+            actions: read
+            contents: write
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Download candidate bundle
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
+                  path: release-candidate
+            - name: Upload exact GitHub assets
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: >-
+                  vp node build/release/cli.ts promote
+                  --plan release-candidate/release-plan.json
+                  --manifest release-candidate/artifact-manifest.json
+                  --artifact-dir release-candidate/artifacts
+                  --notes release-candidate/release-notes.md
+                  --repository "${{ github.repository }}"
+                  --state-output release-state.json
+                  --phase github-assets
+                  --dry-run false
+            - name: Upload GitHub asset evidence
+              if: always()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              with:
+                  name: promotion-phase-github-assets-${{ github.run_id }}
+                  path: release-state.json
+                  if-no-files-found: warn
+                  retention-days: 90
+
+    openvsx_publish:
+        name: Publish OpenVSX
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate' && (inputs.mode == 'release' || inputs.mode == 'resume')
+        needs:
+            - plan
+            - npm_publish
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 15
+        environment:
+            name: release
+            deployment: false
+        permissions:
+            actions: read
+            contents: read
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Download candidate bundle
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
+                  path: release-candidate
+            - name: Publish exact VSIX to OpenVSX
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
+              run: >-
+                  vp node build/release/cli.ts promote
+                  --plan release-candidate/release-plan.json
+                  --manifest release-candidate/artifact-manifest.json
+                  --artifact-dir release-candidate/artifacts
+                  --notes release-candidate/release-notes.md
+                  --repository "${{ github.repository }}"
+                  --state-output release-state.json
+                  --phase openvsx
+                  --dry-run false
+            - name: Upload OpenVSX evidence
+              if: always()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              with:
+                  name: promotion-phase-openvsx-${{ github.run_id }}
+                  path: release-state.json
+                  if-no-files-found: warn
+                  retention-days: 90
+
+    github_finalize:
+        name: Finalize GitHub release
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate' && (inputs.mode == 'release' || inputs.mode == 'resume')
+        needs:
+            - plan
+            - npm_publish
+            - github_assets
+            - openvsx_publish
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 15
+        permissions:
+            actions: read
+            contents: write
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Download candidate bundle
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
+                  path: release-candidate
+            - name: Finalize verified GitHub release
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: >-
+                  vp node build/release/cli.ts promote
+                  --plan release-candidate/release-plan.json
+                  --manifest release-candidate/artifact-manifest.json
+                  --artifact-dir release-candidate/artifacts
+                  --notes release-candidate/release-notes.md
+                  --repository "${{ github.repository }}"
+                  --state-output release-state.json
+                  --phase github-finalize
+                  --dry-run false
+            - name: Upload finalization evidence
+              if: always()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              with:
+                  name: promotion-phase-github-finalize-${{ github.run_id }}
+                  path: release-state.json
+                  if-no-files-found: warn
+                  retention-days: 90
+
+    promotion_evidence:
+        name: Inspect promotion state
+        if: always() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate' && (inputs.mode == 'release' || inputs.mode == 'resume')
+        needs:
+            - plan
+            - candidate_verified
+            - github_prepare
+            - npm_publish
+            - github_assets
+            - openvsx_publish
+            - github_finalize
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        timeout-minutes: 10
+        permissions:
+            actions: read
+            contents: read
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Download candidate bundle
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
+                  path: release-candidate
+            - name: Inspect exact publication state
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: >-
+                  vp node build/release/cli.ts inspect
+                  --plan release-candidate/release-plan.json
+                  --manifest release-candidate/artifact-manifest.json
+                  --artifact-dir release-candidate/artifacts
+                  --notes release-candidate/release-notes.md
+                  --repository "${{ github.repository }}"
+                  --output release-state.json
+            - name: Upload consolidated promotion evidence
               if: always()
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
               with:
@@ -736,7 +997,7 @@ jobs:
             - staging_verified
             - candidate_verified
             - dry_run
-            - promote
+            - promotion_evidence
         runs-on: blacksmith-4vcpu-ubuntu-2404
         timeout-minutes: 10
         permissions:
@@ -757,12 +1018,26 @@ jobs:
               with:
                   name: promotion-state-${{ github.run_id }}
                   path: release-report
+            - name: Download provider timing evidence
+              if: github.event_name == 'workflow_dispatch' && inputs.mode != 'dry-run'
+              continue-on-error: true
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  pattern: promotion-phase-*-${{ github.run_id }}
+                  path: release-report/phases
             - name: Download release plan
               continue-on-error: true
               uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
               with:
                   name: release-plan-${{ github.run_id }}
                   path: release-report/plan
+            - name: Download candidate identity
+              if: github.event_name == 'workflow_dispatch'
+              continue-on-error: true
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
+                  path: release-report/candidate
             - name: Report timing and release state
               env:
                   GH_TOKEN: ${{ github.token }}
@@ -770,6 +1045,8 @@ jobs:
                   vp node build/ci/report.ts
                   --state release-report/release-state.json
                   --plan release-report/plan/release-plan.json
+                  --manifest release-report/candidate/artifact-manifest.json
+                  --phases release-report/phases
                   --output release-report/timing.json
             - name: Upload timing evidence
               if: always()

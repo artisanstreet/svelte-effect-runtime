@@ -1,4 +1,4 @@
-import { compare_semantic_versions, validate_semantic_version } from "./semantic-version.ts";
+import { compare_semantic_versions, is_semantic_version } from "./semantic-version.ts";
 import { Schema } from "effect";
 
 export const release_channels = Object.freeze(["npm", "openvsx", "github-release"] as const);
@@ -77,7 +77,6 @@ export const release_package_definitions: ReadonlyArray<ReleasePackageDefinition
 );
 
 export type ReleaseEvent = "pull_request" | "push" | "workflow_dispatch";
-export type ReleaseIntent = "verify" | "publish" | "resume";
 export type ReleaseMode = "dry-run" | "release" | "resume";
 
 export type ReleaseRepositoryState = {
@@ -100,21 +99,55 @@ export type PlanReleaseInput = {
 	};
 };
 
-export type ReleasePlan = {
-	event: ReleaseEvent;
-	ref: string;
-	commit: string;
-	mode: ReleaseMode | undefined;
-	version: string;
-	previous_version: string | undefined;
-	tag: string;
-	intent: ReleaseIntent;
-	publish: boolean;
-	dry_run: boolean;
-	version_changed: boolean;
-	channels: ReadonlyArray<ReleaseChannel>;
-	packages: ReadonlyArray<PlannedReleasePackage>;
+type ReleasePlanBase = {
+	readonly event: ReleaseEvent;
+	readonly ref: string;
+	readonly commit: string;
+	readonly version: string;
+	readonly tag: string;
+	readonly channels: ReadonlyArray<ReleaseChannel>;
+	readonly packages: ReadonlyArray<PlannedReleasePackage>;
 };
+
+export type ReleasePlan = ReleasePlanBase &
+	(
+		| {
+				readonly _tag: "Verify";
+				readonly mode: undefined;
+				readonly previous_version: undefined;
+				readonly intent: "verify";
+				readonly publish: false;
+				readonly dry_run: false;
+				readonly version_changed: false;
+		  }
+		| {
+				readonly _tag: "DryRun";
+				readonly mode: "dry-run";
+				readonly previous_version: string | undefined;
+				readonly intent: "verify";
+				readonly publish: false;
+				readonly dry_run: true;
+				readonly version_changed: true;
+		  }
+		| {
+				readonly _tag: "Publish";
+				readonly mode: "release";
+				readonly previous_version: string | undefined;
+				readonly intent: "publish";
+				readonly publish: true;
+				readonly dry_run: false;
+				readonly version_changed: true;
+		  }
+		| {
+				readonly _tag: "Resume";
+				readonly mode: "resume";
+				readonly previous_version: string | undefined;
+				readonly intent: "resume";
+				readonly publish: true;
+				readonly dry_run: false;
+				readonly version_changed: boolean;
+		  }
+	);
 
 export const candidate_release_ref = "refs/heads/candidate";
 
@@ -148,6 +181,7 @@ export function plan_release(input: PlanReleaseInput): ReleasePlan {
 		}
 
 		return make_plan(input, {
+			_tag: "Verify",
 			version,
 			previous_version: undefined,
 			version_changed: false,
@@ -205,14 +239,28 @@ export function plan_release(input: PlanReleaseInput): ReleasePlan {
 			);
 		}
 
+		if (mode === "release") {
+			return make_plan(input, {
+				_tag: "Publish",
+				version,
+				previous_version,
+				version_changed: true,
+				packages,
+				intent: "publish",
+				publish: true,
+				dry_run: false,
+			});
+		}
+
 		return make_plan(input, {
+			_tag: "DryRun",
 			version,
 			previous_version,
-			version_changed,
+			version_changed: true,
 			packages,
-			intent: mode === "release" ? "publish" : "verify",
-			publish: mode === "release",
-			dry_run: mode === "dry-run",
+			intent: "verify",
+			publish: false,
+			dry_run: true,
 		});
 	}
 
@@ -241,6 +289,7 @@ export function plan_release(input: PlanReleaseInput): ReleasePlan {
 	}
 
 	return make_plan(input, {
+		_tag: "Resume",
 		version,
 		previous_version,
 		version_changed,
@@ -279,15 +328,7 @@ export function validate_resume_source_plan(
 
 function resolve_synchronized_version(label: "current" | "previous", versions: PackageVersions) {
 	const entries = release_package_ids.map((id) => [id, versions[id]] as const);
-	const invalid_entry = entries.find(([, version]) => {
-		try {
-			validate_semantic_version(version);
-
-			return false;
-		} catch {
-			return true;
-		}
-	});
+	const invalid_entry = entries.find(([, version]) => !is_semantic_version(version));
 
 	if (invalid_entry) {
 		throw new Error(
@@ -308,33 +349,70 @@ function resolve_synchronized_version(label: "current" | "previous", versions: P
 
 function make_plan(
 	input: PlanReleaseInput,
-	policy: {
-		version: string;
-		previous_version: string | undefined;
-		version_changed: boolean;
-		packages: ReadonlyArray<PlannedReleasePackage>;
-		intent: ReleaseIntent;
-		publish: boolean;
-		dry_run: boolean;
-	},
+	policy:
+		| {
+				readonly _tag: "Verify";
+				readonly version: string;
+				readonly previous_version: undefined;
+				readonly version_changed: false;
+				readonly packages: ReadonlyArray<PlannedReleasePackage>;
+				readonly intent: "verify";
+				readonly publish: false;
+				readonly dry_run: false;
+		  }
+		| {
+				readonly _tag: "DryRun";
+				readonly version: string;
+				readonly previous_version: string | undefined;
+				readonly version_changed: true;
+				readonly packages: ReadonlyArray<PlannedReleasePackage>;
+				readonly intent: "verify";
+				readonly publish: false;
+				readonly dry_run: true;
+		  }
+		| {
+				readonly _tag: "Publish";
+				readonly version: string;
+				readonly previous_version: string | undefined;
+				readonly version_changed: true;
+				readonly packages: ReadonlyArray<PlannedReleasePackage>;
+				readonly intent: "publish";
+				readonly publish: true;
+				readonly dry_run: false;
+		  }
+		| {
+				readonly _tag: "Resume";
+				readonly version: string;
+				readonly previous_version: string | undefined;
+				readonly version_changed: boolean;
+				readonly packages: ReadonlyArray<PlannedReleasePackage>;
+				readonly intent: "resume";
+				readonly publish: true;
+				readonly dry_run: false;
+		  },
 ): ReleasePlan {
-	const plan: ReleasePlan = {
+	const base = {
 		event: input.event,
 		ref: input.ref,
 		commit: input.commit,
-		mode: input.mode,
 		version: policy.version,
-		previous_version: policy.previous_version,
 		tag: `v${policy.version}`,
-		intent: policy.intent,
-		publish: policy.publish,
-		dry_run: policy.dry_run,
-		version_changed: policy.version_changed,
 		channels: Object.freeze([...release_channels]),
 		packages: policy.packages,
 	};
+	if (policy._tag === "Verify") {
+		return Object.freeze({ ...base, ...policy, mode: undefined });
+	}
 
-	return Object.freeze(plan);
+	if (policy._tag === "DryRun") {
+		return Object.freeze({ ...base, ...policy, mode: "dry-run" });
+	}
+
+	if (policy._tag === "Publish") {
+		return Object.freeze({ ...base, ...policy, mode: "release" });
+	}
+
+	return Object.freeze({ ...base, ...policy, mode: "resume" });
 }
 
 function release_plan_identity(plan: ReleasePlan): string {

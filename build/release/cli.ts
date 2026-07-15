@@ -1,9 +1,4 @@
 import {
-	create_artifact_manifest,
-	validate_artifact_manifest,
-	type ArtifactManifest,
-} from "./artifact-manifest.ts";
-import {
 	AppendTextFile,
 	GenerateReleaseNotes,
 	ReadArtifactManifest,
@@ -21,19 +16,25 @@ import {
 	InspectPromotion,
 	PromoteRelease,
 	type PromotionOptions,
+	type PromotionPhase,
 	type PromotionState,
 } from "./promotion.ts";
-import { ProviderAdaptersLive } from "./provider-adapters.ts";
+import {
+	create_artifact_manifest,
+	validate_artifact_manifest,
+	type ArtifactManifest,
+} from "./artifact-manifest.ts";
 import {
 	candidate_release_ref,
 	plan_release,
 	validate_resume_source_plan,
 	type ReleasePlan,
 } from "./policy.ts";
-import { RepoRoot } from "../node-utils.ts";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Effect, Schema } from "effect";
+import { ProviderAdaptersLive } from "./provider-adapters.ts";
+import { RepoRoot } from "../node-utils.ts";
 import { pathToFileURL } from "node:url";
+import { Effect, Schema } from "effect";
 
 const NonEmptyStringSchema = Schema.String.pipe(Schema.check(Schema.isMinLength(1)));
 const CommitSchema = Schema.String.pipe(Schema.check(Schema.isPattern(/^[0-9a-fA-F]{40}$/)));
@@ -99,6 +100,15 @@ const PromoteRequestSchema = Schema.Struct({
 	request_timeout_ms: Schema.Number,
 	command_timeout_ms: Schema.Number,
 	dry_run: Schema.Boolean,
+	phase: Schema.Literals([
+		"all",
+		"preflight",
+		"github-prepare",
+		"npm",
+		"openvsx",
+		"github-assets",
+		"github-finalize",
+	] as const),
 });
 
 export type CliEnvironment = Readonly<Record<string, string | undefined>>;
@@ -151,6 +161,7 @@ const command_flags = {
 		"request-timeout-ms",
 		"command-timeout-ms",
 		"dry-run",
+		"phase",
 	]),
 } as const;
 
@@ -241,6 +252,7 @@ export function parse_cli_request(
 			request_timeout_ms: parse_integer_flag(flags, "request-timeout-ms", 15_000, 1),
 			command_timeout_ms: parse_integer_flag(flags, "command-timeout-ms", 120_000, 1),
 			dry_run: parse_boolean_flag(flags, "dry-run", false),
+			phase: parse_promotion_phase(flags.phase),
 		});
 	}
 
@@ -339,7 +351,10 @@ export const RunReleaseCli = (request: CliRequest) =>
 			return plan;
 		}
 
-		const plan = yield* ReadCanonicalReleasePlan(request.plan, repo_root);
+		const plan = yield* ReadCanonicalReleasePlan(
+			request.plan,
+			uses_live_fresh_start_state(request) ? repo_root : undefined,
+		);
 
 		if (request.command === "validate-resume") {
 			const source_plan = yield* ReadCanonicalReleasePlan(request.source_plan);
@@ -370,6 +385,14 @@ export const RunReleaseCli = (request: CliRequest) =>
 
 		const manifest = yield* ReadArtifactManifest(request.manifest);
 		const validated = validate_artifact_manifest(plan, manifest, files);
+		const manifest_content = yield* ReadTextFile(request.manifest);
+		const canonical_manifest_content = `${JSON.stringify(validated, null, "\t")}\n`;
+
+		if (manifest_content !== canonical_manifest_content) {
+			return yield* Effect.fail(
+				new Error("Artifact manifest file is not the canonical verified manifest."),
+			);
+		}
 
 		if (request.command === "validate") {
 			return validated;
@@ -434,13 +457,46 @@ function make_promotion_options(
 	return {
 		repository: request.repository,
 		artifact_dir: request.artifact_dir,
+		manifest_path: request.manifest,
 		notes,
 		max_attempts: request.max_attempts,
 		probe_delay_ms: request.probe_delay_ms,
 		request_timeout_ms: request.request_timeout_ms,
 		command_timeout_ms: request.command === "promote" ? request.command_timeout_ms : 120_000,
 		dry_run: request.command === "promote" ? request.dry_run : false,
+		phase: request.command === "promote" ? request.phase : "preflight",
 	};
+}
+
+function uses_live_fresh_start_state(request: Exclude<CliRequest, { command: "plan" }>): boolean {
+	if (request.command === "inspect") {
+		return false;
+	}
+
+	if (request.command === "promote") {
+		return request.phase === "all" || request.phase === "github-prepare";
+	}
+
+	return true;
+}
+
+function parse_promotion_phase(value: string | undefined): PromotionPhase {
+	const phase = value ?? "all";
+	const phases: ReadonlyArray<PromotionPhase> = [
+		"all",
+		"preflight",
+		"github-prepare",
+		"npm",
+		"openvsx",
+		"github-assets",
+		"github-finalize",
+	];
+
+	if (!phases.includes(phase as PromotionPhase)) {
+		throw new Error(`Unknown promotion phase ${phase}.`);
+	}
+
+	return phase as PromotionPhase;
 }
 
 function parse_integer_flag(

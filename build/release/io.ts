@@ -1,9 +1,4 @@
 import {
-	ArtifactManifestSchema,
-	type ArtifactInput,
-	type ArtifactManifest,
-} from "./artifact-manifest.ts";
-import {
 	plan_release,
 	release_package_ids,
 	type PackageVersions,
@@ -11,13 +6,18 @@ import {
 	type ReleaseRepositoryState,
 } from "./policy.ts";
 import {
+	ArtifactManifestSchema,
+	type ArtifactInput,
+	type ArtifactManifest,
+} from "./artifact-manifest.ts";
+import {
 	plan_release_notes,
 	select_previous_release_tag,
 	type ReleaseCommit,
 } from "./release-notes.ts";
-import { RunCommand } from "../node-utils.ts";
 import { compare_semantic_versions, parse_release_tag } from "./semantic-version.ts";
 import { Effect, FileSystem, Path, Schema } from "effect";
+import { RunCommand } from "../node-utils.ts";
 
 const PackageManifestSchema = Schema.Struct({ version: Schema.String });
 const ReleaseEventSchema = Schema.Literals(["pull_request", "push", "workflow_dispatch"] as const);

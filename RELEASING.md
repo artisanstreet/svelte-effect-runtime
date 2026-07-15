@@ -46,9 +46,11 @@ select the `candidate` branch.
 2. Review `Candidate verified`, the candidate manifest, smoke evidence, and the
    timing summary.
 3. Run `release` for the same `candidate` commit. Verification and artifact
-   construction finish before the protected `release` environment requests
-   approval. After approval, the pipeline publishes the verified bytes to npm,
-   OpenVSX, and GitHub Releases.
+   construction finish before the protected `release-approval` environment
+   requests approval. After approval, separate least-privilege jobs publish the
+   verified bytes to npm with short-lived OIDC, OpenVSX with only the
+   secret-bearing `release` environment, and GitHub Releases with only repository
+   contents authority.
 
 The pipeline creates the tag only after the candidate passes verification. A
 draft GitHub release remains visible during partial publication and becomes final

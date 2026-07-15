@@ -6,7 +6,10 @@ export type TimingReport = {
 	readonly schema_version: 1;
 	readonly run_url: string | undefined;
 	readonly commit: string;
+	readonly candidate_commit: string | undefined;
+	readonly master_ancestry: "verified" | "not-applicable" | "unavailable";
 	readonly version: string | undefined;
+	readonly artifacts: ReadonlyArray<ArtifactEvidence>;
 	readonly workflow_queue_ms: number | undefined;
 	readonly approval_wait_ms: number | undefined;
 	readonly promotion_runner_queue_ms: number | undefined;
@@ -28,9 +31,12 @@ export type TimingReportInput = {
 	readonly fallback_commit: string;
 	readonly run: GithubRun | undefined;
 	readonly jobs: ReadonlyArray<GithubJob> | undefined;
+	readonly release_deployment: ReleaseDeploymentEvidence | undefined;
 	readonly recent_runs: ReadonlyArray<GithubWorkflowRun> | undefined;
 	readonly plan: ReleasePlanEvidence | undefined;
 	readonly promotion: PromotionEvidence | undefined;
+	readonly artifacts: ReadonlyArray<ArtifactEvidence> | undefined;
+	readonly phase_provider_ms: ReadonlyArray<number> | undefined;
 };
 
 export type GithubRun = {
@@ -47,6 +53,29 @@ export type GithubJob = {
 
 export type GithubWorkflowRun = {
 	readonly conclusion: string | null | undefined;
+};
+
+export type GithubDeployment = {
+	readonly id: number;
+	readonly created_at: string;
+	readonly statuses_url: string;
+};
+
+export type GithubDeploymentStatus = {
+	readonly state: string;
+	readonly created_at: string;
+	readonly log_url: string | null | undefined;
+};
+
+export type ReleaseDeploymentEvidence = {
+	readonly created_at: string;
+	readonly in_progress_at: string;
+};
+
+export type ArtifactEvidence = {
+	readonly name: string;
+	readonly sha256: string;
+	readonly sha512_sri: string;
 };
 
 export type ReleasePlanEvidence = {
@@ -82,6 +111,18 @@ const GithubWorkflowRunSchema = Schema.Struct({ conclusion: Schema.NullOr(Schema
 const GithubWorkflowRunsSchema = Schema.Struct({
 	workflow_runs: Schema.Array(GithubWorkflowRunSchema),
 });
+const GithubDeploymentSchema = Schema.Struct({
+	id: Schema.Number,
+	created_at: NonEmptyStringSchema,
+	statuses_url: NonEmptyStringSchema,
+});
+const GithubDeploymentsSchema = Schema.Array(GithubDeploymentSchema);
+const GithubDeploymentStatusSchema = Schema.Struct({
+	state: NonEmptyStringSchema,
+	created_at: NonEmptyStringSchema,
+	log_url: Schema.NullOr(Schema.String),
+});
+const GithubDeploymentStatusesSchema = Schema.Array(GithubDeploymentStatusSchema);
 const ReleasePlanEvidenceSchema = Schema.Struct({
 	commit: NonEmptyStringSchema,
 	version: NonEmptyStringSchema,
@@ -99,6 +140,18 @@ const PromotionEvidenceSchema = Schema.Struct({
 	pending_channels: Schema.Array(Schema.String),
 	channels: Schema.Record(Schema.String, PromotionChannelSchema),
 });
+const ArtifactManifestEvidenceSchema = Schema.Struct({
+	artifacts: Schema.Array(
+		Schema.Struct({
+			name: NonEmptyStringSchema,
+			sha256: NonEmptyStringSchema,
+			sha512_sri: NonEmptyStringSchema,
+		}),
+	),
+});
+const ProviderTimingEvidenceSchema = Schema.Struct({
+	total_provider_ms: Schema.Number,
+});
 
 export function calculate_timing_report(input: TimingReportInput): TimingReport {
 	const run_created_ms = input.run ? parse_time(input.run.created_at) : undefined;
@@ -111,20 +164,49 @@ export function calculate_timing_report(input: TimingReportInput): TimingReport 
 		: undefined;
 	const promotion = input.promotion;
 	const plan = input.plan;
+	const release_gate = input.jobs?.find((job) => job.name === "Authorize release");
+	const first_promotion_job = input.jobs
+		?.filter((job) =>
+			["Prepare GitHub release", "Publish npm", "Publish OpenVSX"].includes(job.name),
+		)
+		.map((job) => ({ job, started_ms: optional_time(job.started_at) }))
+		.filter((entry): entry is { job: GithubJob; started_ms: number } =>
+			Number.isFinite(entry.started_ms),
+		)
+		.sort((left, right) => left.started_ms - right.started_ms)[0];
+	const deployment_created_ms = input.release_deployment
+		? parse_time(input.release_deployment.created_at)
+		: undefined;
+	const deployment_started_ms = input.release_deployment
+		? parse_time(input.release_deployment.in_progress_at)
+		: undefined;
+	const release_gate_completed_ms = optional_time(release_gate?.completed_at);
 
 	return Object.freeze({
 		schema_version: 1,
 		run_url: input.run?.html_url,
 		commit: promotion?.commit ?? plan?.commit ?? input.fallback_commit,
+		candidate_commit: plan?.mode ? plan.commit : undefined,
+		master_ancestry: plan?.mode ? "verified" : plan ? "not-applicable" : "unavailable",
 		version: promotion?.version ?? plan?.version,
+		artifacts: Object.freeze([...(input.artifacts ?? [])]),
 		workflow_queue_ms:
 			run_created_ms !== undefined && run_started_ms !== undefined
 				? Math.max(0, run_started_ms - run_created_ms)
 				: undefined,
-		approval_wait_ms: undefined,
-		promotion_runner_queue_ms: undefined,
+		approval_wait_ms:
+			deployment_created_ms !== undefined && deployment_started_ms !== undefined
+				? Math.max(0, deployment_started_ms - deployment_created_ms)
+				: undefined,
+		promotion_runner_queue_ms:
+			release_gate_completed_ms !== undefined && first_promotion_job
+				? Math.max(0, first_promotion_job.started_ms - release_gate_completed_ms)
+				: undefined,
 		active_compute_ms,
-		provider_ms: promotion?.total_provider_ms,
+		provider_ms:
+			input.phase_provider_ms && input.phase_provider_ms.length > 0
+				? input.phase_provider_ms.reduce((total, duration) => total + duration, 0)
+				: promotion?.total_provider_ms,
 		total_wall_ms:
 			run_created_ms !== undefined ? Math.max(0, input.now_ms - run_created_ms) : undefined,
 		completed_channels: Object.freeze([...(promotion?.completed_channels ?? [])]),
@@ -144,11 +226,19 @@ export function format_timing_summary(report: TimingReport): string {
 		report.recent_failures !== undefined && report.recent_runs !== undefined
 			? `${report.recent_failures}/${report.recent_runs}`
 			: "unavailable";
+	const artifact_rows = report.artifacts.map(
+		(artifact) =>
+			`| \`${artifact.name}\` | \`${artifact.sha256}\` | \`${artifact.sha512_sri}\` |`,
+	);
 
 	return [
 		"## SER pipeline evidence",
 		"",
 		`**Commit:** \`${report.commit}\``,
+		"",
+		`**Candidate commit:** ${report.candidate_commit ? `\`${report.candidate_commit}\`` : "not applicable"}`,
+		"",
+		`**Master ancestry:** ${report.master_ancestry}`,
 		"",
 		`**Version:** ${report.version ?? "not a candidate run"}`,
 		"",
@@ -166,6 +256,9 @@ export function format_timing_summary(report: TimingReport): string {
 		`**Completed channels:** ${report.completed_channels.join(", ") || "none"}`,
 		"",
 		`**Pending channels:** ${report.pending_channels.join(", ") || "none"}`,
+		...(artifact_rows.length > 0
+			? ["", "| Artifact | SHA-256 | SHA-512 SRI |", "| --- | --- | --- |", ...artifact_rows]
+			: []),
 		...(channel_rows.length > 0
 			? ["", "| Channel | Result |", "| --- | --- |", ...channel_rows]
 			: []),
@@ -195,6 +288,30 @@ export function decode_promotion_evidence(input: unknown): PromotionEvidence {
 	};
 }
 
+export function select_release_deployment(
+	deployments: ReadonlyArray<GithubDeployment>,
+	statuses_by_deployment: Readonly<Record<number, ReadonlyArray<GithubDeploymentStatus>>>,
+	run_id: string,
+): ReleaseDeploymentEvidence | undefined {
+	const run_marker = `/actions/runs/${run_id}/`;
+
+	for (const deployment of deployments) {
+		const statuses = statuses_by_deployment[deployment.id] ?? [];
+		const in_progress = statuses.find(
+			(status) => status.state === "in_progress" && status.log_url?.includes(run_marker),
+		);
+
+		if (in_progress) {
+			return {
+				created_at: deployment.created_at,
+				in_progress_at: in_progress.created_at,
+			};
+		}
+	}
+
+	return undefined;
+}
+
 const Main = Effect.gen(function* () {
 	const file_system = yield* FileSystem.FileSystem;
 	const path = yield* Path.Path;
@@ -209,30 +326,55 @@ const Main = Effect.gen(function* () {
 		Authorization: `Bearer ${token}`,
 		"X-GitHub-Api-Version": "2022-11-28",
 	};
-	const [run, jobs, recent_runs, plan, promotion] = yield* Effect.all(
-		[
-			FetchGithubJson(`${api_url}/repos/${repository}/actions/runs/${run_id}`, headers).pipe(
-				DecodeOptional(GithubRunSchema),
-			),
-			FetchGithubJson(
-				`${api_url}/repos/${repository}/actions/runs/${run_id}/jobs?per_page=100`,
-				headers,
-			).pipe(
-				DecodeOptional(GithubJobsSchema),
-				Effect.map((result) => result?.jobs),
-			),
-			FetchGithubJson(
-				`${api_url}/repos/${repository}/actions/workflows/ci.yml/runs?per_page=20`,
-				headers,
-			).pipe(
-				DecodeOptional(GithubWorkflowRunsSchema),
-				Effect.map((result) => result?.workflow_runs),
-			),
-			ReadOptionalPlan(request.plan),
-			ReadOptionalPromotion(request.state),
-		] as const,
-		{ concurrency: "unbounded" },
-	);
+	const [run, jobs, recent_runs, deployments, plan, promotion, artifacts, phase_provider_ms] =
+		yield* Effect.all(
+			[
+				FetchGithubJson(
+					`${api_url}/repos/${repository}/actions/runs/${run_id}`,
+					headers,
+				).pipe(DecodeOptional(GithubRunSchema)),
+				FetchGithubJson(
+					`${api_url}/repos/${repository}/actions/runs/${run_id}/jobs?per_page=100`,
+					headers,
+				).pipe(
+					DecodeOptional(GithubJobsSchema),
+					Effect.map((result) => result?.jobs),
+				),
+				FetchGithubJson(
+					`${api_url}/repos/${repository}/actions/workflows/ci.yml/runs?per_page=20`,
+					headers,
+				).pipe(
+					DecodeOptional(GithubWorkflowRunsSchema),
+					Effect.map((result) => result?.workflow_runs),
+				),
+				FetchGithubJson(
+					`${api_url}/repos/${repository}/deployments?sha=${fallback_commit}&environment=release-approval&per_page=20`,
+					headers,
+				).pipe(DecodeOptional(GithubDeploymentsSchema)),
+				ReadOptionalPlan(request.plan),
+				ReadOptionalPromotion(request.state),
+				ReadOptionalArtifacts(request.manifest),
+				ReadProviderTimings(request.phases),
+			] as const,
+			{ concurrency: "unbounded" },
+		);
+	const statuses_by_deployment = deployments
+		? yield* Effect.all(
+				Object.fromEntries(
+					deployments.map((deployment) => [
+						deployment.id,
+						FetchGithubJson(deployment.statuses_url, headers).pipe(
+							DecodeOptional(GithubDeploymentStatusesSchema),
+							Effect.map((statuses) => statuses ?? []),
+						),
+					]),
+				),
+				{ concurrency: "unbounded" },
+			)
+		: {};
+	const release_deployment = deployments
+		? select_release_deployment(deployments, statuses_by_deployment, run_id)
+		: undefined;
 	const report = calculate_timing_report({
 		now_ms: Date.now(),
 		repository,
@@ -240,9 +382,12 @@ const Main = Effect.gen(function* () {
 		fallback_commit,
 		run,
 		jobs,
+		release_deployment,
 		recent_runs,
 		plan,
 		promotion,
+		artifacts,
+		phase_provider_ms,
 	});
 	const output_content = `${JSON.stringify(report, null, "\t")}\n`;
 	const output_dir = path.dirname(request.output);
@@ -308,6 +453,48 @@ const ReadOptionalPlan = (input_path: string) =>
 		),
 	);
 
+const ReadOptionalArtifacts = (input_path: string) =>
+	ReadOptionalUnknownJson(input_path).pipe(
+		Effect.flatMap((value) =>
+			value === undefined
+				? Effect.succeed(undefined)
+				: Schema.decodeUnknownEffect(ArtifactManifestEvidenceSchema)(value).pipe(
+						Effect.map((manifest) => manifest.artifacts),
+						Effect.catch(() => Effect.succeed(undefined)),
+					),
+		),
+	);
+
+const ReadProviderTimings = (input_path: string) =>
+	Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+		const path = yield* Path.Path;
+		const exists = yield* file_system.exists(input_path);
+
+		if (!exists) {
+			return undefined;
+		}
+
+		const entries = yield* file_system.readDirectory(input_path);
+		const timings = yield* Effect.all(
+			entries.map((entry) =>
+				ReadOptionalUnknownJson(path.join(input_path, entry, "release-state.json")).pipe(
+					Effect.flatMap((value) =>
+						value === undefined
+							? Effect.succeed(undefined)
+							: Schema.decodeUnknownEffect(ProviderTimingEvidenceSchema)(value).pipe(
+									Effect.map((state) => state.total_provider_ms),
+									Effect.catch(() => Effect.succeed(undefined)),
+								),
+					),
+				),
+			),
+			{ concurrency: "unbounded" },
+		);
+
+		return timings.filter((timing): timing is number => timing !== undefined);
+	});
+
 const ReadOptionalUnknownJson = (input_path: string) =>
 	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
@@ -328,6 +515,8 @@ const ReadOptionalUnknownJson = (input_path: string) =>
 function parse_request(args: ReadonlyArray<string>): {
 	state: string;
 	plan: string;
+	manifest: string;
+	phases: string;
 	output: string;
 } {
 	const flags = Object.fromEntries(
@@ -344,13 +533,15 @@ function parse_request(args: ReadonlyArray<string>): {
 	);
 	const state = flags.state;
 	const plan = flags.plan;
+	const manifest = flags.manifest;
+	const phases = flags.phases;
 	const output = flags.output;
 
-	if (!state || !plan || !output) {
-		throw new Error("Report requires --state, --plan, and --output.");
+	if (!state || !plan || !manifest || !phases || !output) {
+		throw new Error("Report requires --state, --plan, --manifest, --phases, and --output.");
 	}
 
-	return { state, plan, output };
+	return { state, plan, manifest, phases, output };
 }
 
 function make_retry_command(
@@ -384,6 +575,10 @@ function parse_time(value: string): number | undefined {
 	const parsed = Date.parse(value);
 
 	return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function optional_time(value: string | null | undefined): number | undefined {
+	return value ? parse_time(value) : undefined;
 }
 
 function format_duration(duration_ms: number | undefined): string {

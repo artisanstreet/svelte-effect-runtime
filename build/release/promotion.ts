@@ -4,35 +4,64 @@ import {
 	ProviderInspection,
 	ProviderMutation,
 } from "./provider-adapters.ts";
-import { decide_probe, type ProviderState } from "./registry-state.ts";
 import type { ArtifactManifest, ArtifactManifestEntry } from "./artifact-manifest.ts";
 import type { ReleaseChannel, ReleasePackageId, ReleasePlan } from "./policy.ts";
+import { decide_probe, type ProviderState } from "./registry-state.ts";
 import { Duration, Effect, Path } from "effect";
+import { createHash } from "node:crypto";
 
 export type PromotionOptions = {
 	readonly repository: string;
 	readonly artifact_dir: string;
+	readonly manifest_path: string;
 	readonly notes: string;
 	readonly max_attempts: number;
 	readonly probe_delay_ms: number;
 	readonly request_timeout_ms: number;
 	readonly command_timeout_ms: number;
 	readonly dry_run: boolean;
+	readonly phase: PromotionPhase;
 };
 
-export type ArtifactPublicationState = {
-	readonly status: "planned" | "complete" | "pending" | "failed";
-	readonly url?: string;
-	readonly digest?: string;
-	readonly diagnostic?: string;
-};
+export type PromotionPhase =
+	| "all"
+	| "preflight"
+	| "github-prepare"
+	| "npm"
+	| "openvsx"
+	| "github-assets"
+	| "github-finalize";
 
-export type ChannelPublicationState = {
-	readonly status: "planned" | "complete" | "pending" | "failed";
-	readonly url?: string;
-	readonly provider_ms: number;
-	readonly artifacts: Readonly<Record<string, ArtifactPublicationState>>;
-};
+export type ArtifactPublicationState =
+	| { readonly status: "planned" }
+	| {
+			readonly status: "complete";
+			readonly url: string;
+			readonly digest: string;
+	  }
+	| {
+			readonly status: "pending";
+			readonly url: string;
+			readonly diagnostic: string;
+	  }
+	| {
+			readonly status: "failed";
+			readonly url: string;
+			readonly diagnostic: string;
+	  };
+
+export type ChannelPublicationState =
+	| {
+			readonly status: "planned";
+			readonly provider_ms: 0;
+			readonly artifacts: Readonly<Record<string, ArtifactPublicationState>>;
+	  }
+	| {
+			readonly status: "complete" | "pending" | "failed";
+			readonly url: string;
+			readonly provider_ms: number;
+			readonly artifacts: Readonly<Record<string, ArtifactPublicationState>>;
+	  };
 
 export type PromotionState = {
 	readonly schema_version: 1;
@@ -86,12 +115,16 @@ export const PromoteRelease = (
 			return make_dry_run_state(context);
 		}
 
-		yield* mutation.require_credentials.pipe(map_provider_error("credential preflight"));
-
 		const preflight = yield* PreflightPromotion(context);
 		const preflight_state = make_promotion_state(context, preflight);
 
-		if (plan.mode === "release" && has_durable_provider_state(preflight)) {
+		if (
+			(options.phase === "all" ||
+				options.phase === "preflight" ||
+				options.phase === "github-prepare") &&
+			plan.mode === "release" &&
+			has_durable_provider_state(preflight)
+		) {
 			return yield* Effect.fail(
 				new Error(
 					"Fresh release found existing provider state; resume the exact candidate instead.",
@@ -100,6 +133,10 @@ export const PromoteRelease = (
 		}
 
 		if (preflight_state.overall === "complete") {
+			return preflight_state;
+		}
+
+		if (options.phase === "preflight") {
 			return preflight_state;
 		}
 
@@ -114,21 +151,58 @@ export const PromoteRelease = (
 			);
 		}
 
-		yield* PrepareGithub(context);
+		if (options.phase === "all") {
+			yield* Effect.forEach(
+				context.plan.channels,
+				(channel) =>
+					mutation
+						.require_credentials(channel)
+						.pipe(map_provider_error(`${channel} credential preflight`)),
+				{ discard: true },
+			);
+			yield* PrepareGithub(context);
+			yield* Effect.all([PublishNpm(context), PublishGithubAssets(context)], {
+				concurrency: "unbounded",
+			});
+			yield* PublishOpenVsxArtifact(context);
+			yield* FinalizeGithub(context);
+		} else {
+			yield* mutation
+				.require_credentials(phase_channel(options.phase))
+				.pipe(map_provider_error(`${phase_channel(options.phase)} credential preflight`));
 
-		/**
-		 * npm publication follows its dependency graph while release assets upload independently.
-		 */
-		yield* Effect.all([PublishNpmAndOpenVsx(context), PublishGithubAssets(context)], {
-			concurrency: "unbounded",
-		});
+			if (options.phase === "github-prepare") {
+				yield* PrepareGithub(context);
+			}
 
-		yield* FinalizeGithub(context);
+			if (options.phase === "npm") {
+				require_github_tag(preflight);
+				yield* PublishNpm(context);
+			}
+
+			if (options.phase === "openvsx") {
+				require_npm_complete(context, preflight);
+				yield* PublishOpenVsxArtifact(context);
+			}
+
+			if (options.phase === "github-assets") {
+				require_github_prepared(preflight);
+				yield* PublishGithubAssets(context);
+			}
+
+			if (options.phase === "github-finalize") {
+				require_all_publications_complete(context, preflight);
+				yield* FinalizeGithub(context);
+			}
+		}
 
 		const snapshot = yield* InspectAll(context);
 		const state = make_promotion_state(context, snapshot);
 
-		if (state.overall !== "complete") {
+		if (
+			(options.phase === "all" || options.phase === "github-finalize") &&
+			state.overall !== "complete"
+		) {
 			return yield* Effect.fail(
 				new Error(`Promotion finished with incomplete state: ${state.retry_guidance}`),
 			);
@@ -140,7 +214,7 @@ export const PromoteRelease = (
 export function format_promotion_summary(state: PromotionState): string {
 	const channel_rows = (["npm", "openvsx", "github-release"] as const).map((channel) => {
 		const result = state.channels[channel];
-		const destination = result.url ? `[open](${result.url})` : "—";
+		const destination = result.status === "planned" ? "—" : `[open](${result.url})`;
 
 		return `| ${channel} | ${result.status} | ${result.provider_ms} ms | ${destination} |`;
 	});
@@ -213,6 +287,72 @@ function has_durable_provider_state(snapshot: {
 	);
 }
 
+function phase_channel(phase: Exclude<PromotionPhase, "all" | "preflight">): ReleaseChannel {
+	if (phase === "npm") {
+		return "npm";
+	}
+
+	if (phase === "openvsx") {
+		return "openvsx";
+	}
+
+	return "github-release";
+}
+
+function require_github_prepared(snapshot: { readonly github: GithubInspection }): void {
+	const { tag, release } = snapshot.github;
+
+	validate_github_inspection(snapshot.github, false);
+
+	if (tag._tag !== "Matching" || release._tag !== "Matching" || release.draft !== true) {
+		throw new Error("Promotion phase requires the verified GitHub tag and draft release.");
+	}
+}
+
+function require_github_tag(snapshot: { readonly github: GithubInspection }): void {
+	const { tag } = snapshot.github;
+
+	assert_github_identity(tag, "GitHub tag");
+
+	if (tag._tag !== "Matching") {
+		throw new Error("npm promotion requires the verified GitHub tag.");
+	}
+}
+
+function require_npm_complete(
+	context: PromotionContext,
+	snapshot: {
+		readonly npm: Readonly<Record<string, ProviderState>>;
+	},
+): void {
+	for (const package_id of npm_package_ids) {
+		const artifact = require_artifact(context, package_id);
+		const state = snapshot.npm[artifact.name];
+
+		if (state?._tag !== "Matching") {
+			throw new Error(`OpenVSX promotion requires matching npm artifact ${artifact.name}.`);
+		}
+	}
+}
+
+function require_all_publications_complete(
+	context: PromotionContext,
+	snapshot: {
+		readonly npm: Readonly<Record<string, ProviderState>>;
+		readonly openvsx: ProviderState;
+		readonly github: GithubInspection;
+	},
+): void {
+	require_npm_complete(context, snapshot);
+	require_github_prepared(snapshot);
+
+	if (snapshot.openvsx._tag !== "Matching") {
+		throw new Error("GitHub finalization requires the matching OpenVSX artifact.");
+	}
+
+	validate_github_inspection(snapshot.github, true);
+}
+
 const PrepareGithub = (context: PromotionContext) =>
 	Effect.gen(function* () {
 		const mutation = yield* ProviderMutation;
@@ -252,14 +392,13 @@ const PrepareGithub = (context: PromotionContext) =>
 		);
 	});
 
-const PublishNpmAndOpenVsx = (context: PromotionContext) =>
+const PublishNpm = (context: PromotionContext) =>
 	Effect.gen(function* () {
 		yield* Effect.all(
 			[PublishNpmArtifact(context, "runtime"), PublishNpmArtifact(context, "grammars")],
 			{ concurrency: "unbounded" },
 		);
 		yield* PublishNpmArtifact(context, "language-server");
-		yield* PublishOpenVsxArtifact(context);
 	});
 
 const PublishNpmArtifact = (context: PromotionContext, package_id: ReleasePackageId) =>
@@ -316,6 +455,7 @@ const PublishGithubAssets = (context: PromotionContext) =>
 	Effect.gen(function* () {
 		const mutation = yield* ProviderMutation;
 		const inspection = yield* InspectGithubBeforeMutation(context);
+		const assets = github_release_assets(context);
 
 		validate_github_inspection(inspection, false);
 
@@ -326,7 +466,7 @@ const PublishGithubAssets = (context: PromotionContext) =>
 		}
 
 		yield* Effect.all(
-			context.manifest.artifacts.map((artifact) => {
+			assets.map((artifact) => {
 				const state = inspection.assets[artifact.name];
 
 				if (!state) {
@@ -340,14 +480,12 @@ const PublishGithubAssets = (context: PromotionContext) =>
 				}
 
 				return Effect.gen(function* () {
-					const path = yield* Path.Path;
-
 					yield* TrackProvider(
 						context,
 						"github-release",
 						mutation.upload_github_asset({
 							...github_mutation_request(context),
-							path: path.join(context.options.artifact_dir, artifact.name),
+							path: artifact.path,
 						}),
 					).pipe(map_provider_error(`GitHub upload of ${artifact.name}`));
 				});
@@ -360,7 +498,7 @@ const PublishGithubAssets = (context: PromotionContext) =>
 			(current) => {
 				validate_github_inspection(current, false);
 
-				return context.manifest.artifacts.every(
+				return assets.every(
 					(artifact) => current.assets[artifact.name]?._tag === "Matching",
 				);
 			},
@@ -468,7 +606,7 @@ const InspectGithub = (context: PromotionContext) =>
 				tag: context.plan.tag,
 				commit: context.plan.commit,
 				notes: context.options.notes,
-				assets: context.manifest.artifacts.map((artifact) => ({
+				assets: github_release_assets(context).map((artifact) => ({
 					name: artifact.name,
 					expected_digest: artifact.sha256,
 				})),
@@ -741,6 +879,32 @@ function require_artifact(
 	return artifact;
 }
 
+function github_manifest_asset(context: PromotionContext) {
+	const bytes = new TextEncoder().encode(`${JSON.stringify(context.manifest, null, "\t")}\n`);
+	const name = context.options.manifest_path.replaceAll("\\", "/").split("/").at(-1);
+
+	if (!name) {
+		throw new Error("Promotion manifest path must name a file.");
+	}
+
+	return {
+		name,
+		path: context.options.manifest_path,
+		sha256: createHash("sha256").update(bytes).digest("hex"),
+	};
+}
+
+function github_release_assets(context: PromotionContext) {
+	return [
+		...context.manifest.artifacts.map((artifact) => ({
+			name: artifact.name,
+			path: `${context.options.artifact_dir}/${artifact.name}`,
+			sha256: artifact.sha256,
+		})),
+		github_manifest_asset(context),
+	];
+}
+
 const publish_artifact_request = (context: PromotionContext, artifact: ArtifactManifestEntry) =>
 	Effect.gen(function* () {
 		const path = yield* Path.Path;
@@ -771,18 +935,20 @@ function github_is_unavailable(inspection: GithubInspection): boolean {
 }
 
 function make_dry_run_state(context: PromotionContext): PromotionState {
-	const artifacts = Object.fromEntries(
-		context.manifest.artifacts.map((artifact) => [artifact.name, { status: "planned" }]),
-	) as Readonly<Record<string, ArtifactPublicationState>>;
 	const channels = Object.fromEntries(
-		context.plan.channels.map((channel) => [
-			channel,
-			{
-				status: "planned",
-				provider_ms: 0,
-				artifacts: filter_channel_artifacts(context, channel, artifacts),
-			},
-		]),
+		context.plan.channels.map((channel) => {
+			const names =
+				channel === "github-release"
+					? github_release_assets(context).map((artifact) => artifact.name)
+					: context.plan.packages
+							.filter((pkg) => pkg.channels.includes(channel))
+							.map((pkg) => pkg.artifact_name);
+			const artifacts = Object.fromEntries(
+				names.map((name) => [name, { status: "planned" } as const]),
+			);
+
+			return [channel, { status: "planned", provider_ms: 0, artifacts }] as const;
+		}),
 	) as Readonly<Record<ReleaseChannel, ChannelPublicationState>>;
 
 	return {
@@ -795,7 +961,7 @@ function make_dry_run_state(context: PromotionContext): PromotionState {
 		channels,
 		completed_channels: [],
 		pending_channels: [...context.plan.channels],
-		retry_guidance: "Dry run completed without external inspection or mutation.",
+		retry_guidance: "Dry run completed without external provider inspection or mutation.",
 		total_provider_ms: 0,
 	};
 }
@@ -876,9 +1042,13 @@ function make_provider_channel_state(
 		: values.every((state) => state.status === "complete")
 			? "complete"
 			: "pending";
-	const url = values.find((state) => state.url)?.url;
+	const first = values[0];
 
-	return { status, ...(url ? { url } : {}), provider_ms, artifacts };
+	if (!first || first.status === "planned") {
+		throw new Error("Provider channel inspection produced no external state.");
+	}
+
+	return { status, url: first.url, provider_ms, artifacts };
 }
 
 function make_github_channel_state(
@@ -899,7 +1069,7 @@ function make_github_channel_state(
 	const has_asset_failure = Object.values(artifact_states).some(
 		(state) => state.status === "failed",
 	);
-	const all_assets_match = context.manifest.artifacts.every(
+	const all_assets_match = github_release_assets(context).every(
 		(artifact) => artifact_states[artifact.name]?.status === "complete",
 	);
 	const complete =
@@ -946,18 +1116,6 @@ function provider_artifact_state(state: ProviderState): ArtifactPublicationState
 				? `Authentication failed with HTTP ${state.status}.`
 				: state.reason,
 	};
-}
-
-function filter_channel_artifacts(
-	context: PromotionContext,
-	channel: ReleaseChannel,
-	artifacts: Readonly<Record<string, ArtifactPublicationState>>,
-): Readonly<Record<string, ArtifactPublicationState>> {
-	return Object.fromEntries(
-		context.plan.packages
-			.filter((pkg) => pkg.channels.includes(channel))
-			.map((pkg) => [pkg.artifact_name, artifacts[pkg.artifact_name]]),
-	);
 }
 
 function arrays_equal<A>(left: ReadonlyArray<A>, right: ReadonlyArray<A>): boolean {

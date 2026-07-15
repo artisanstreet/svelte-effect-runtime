@@ -1,11 +1,15 @@
 import { compare, valid } from "semver";
 
 export function validate_semantic_version(value: string): string {
-	if (value.startsWith("v") || valid(value) === null) {
+	if (!is_semantic_version(value)) {
 		throw new Error(`Invalid semantic version: ${value}.`);
 	}
 
 	return value;
+}
+
+export function is_semantic_version(value: string): boolean {
+	return !value.startsWith("v") && valid(value) !== null;
 }
 
 export function compare_semantic_versions(left: string, right: string): number {

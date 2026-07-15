@@ -1,8 +1,8 @@
 import { capability_lane_ids, get_capability_lane } from "./capabilities.ts";
 import { CommandName, RepoRoot, RunCommand } from "../node-utils.ts";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
 import { pathToFileURL } from "node:url";
+import { Effect } from "effect";
 
 export const RunCapabilityLane = (lane_id: string) =>
 	Effect.gen(function* () {

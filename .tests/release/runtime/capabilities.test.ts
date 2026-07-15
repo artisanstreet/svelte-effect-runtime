@@ -4,8 +4,8 @@ import {
 	get_capability_lane,
 	static_policy_test_files,
 } from "../../../build/ci/capabilities.ts";
-import { readdir } from "node:fs/promises";
 import { relative, resolve } from "node:path";
+import { readdir } from "node:fs/promises";
 import { expect, test } from "vitest";
 
 const expected_lane_names = [

@@ -1,4 +1,5 @@
 import {
+	has_npm_publish_auth,
 	type GithubInspection,
 	ProviderInspection,
 	ProviderMutation,
@@ -13,8 +14,8 @@ import { plan_release, type ReleasePlan } from "../../../build/release/policy.ts
 import type { ProviderState } from "../../../build/release/registry-state.ts";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
-import { basename } from "node:path";
 import { expect, test } from "vitest";
+import { basename } from "node:path";
 
 type FakeState = {
 	readonly calls: Array<string>;
@@ -60,7 +61,11 @@ test("fresh promotion honors dependencies and finalizes only after exact artifac
 
 	expect(state.overall).toBe("complete");
 	expect(state.completed_channels).toEqual(["npm", "openvsx", "github-release"]);
-	expect(calls[0]).toBe("credentials");
+	expect(calls.slice(0, 3)).toEqual([
+		"credentials:npm",
+		"credentials:openvsx",
+		"credentials:github-release",
+	]);
 	expect(calls.indexOf("github:tag")).toBeLessThan(calls.indexOf("github:draft"));
 	expect(calls.indexOf("github:draft")).toBeLessThan(calls.indexOf(`npm:${runtime}`));
 	expect(calls.indexOf(`npm:${runtime}`)).toBeLessThan(calls.indexOf(`npm:${language_server}`));
@@ -72,6 +77,7 @@ test("fresh promotion honors dependencies and finalizes only after exact artifac
 			calls.includes(`github:asset:${artifact.name}`),
 		),
 	).toBe(true);
+	expect(calls).toContain("github:asset:artifact-manifest.json");
 });
 
 test("resume skips matching npm and GitHub artifacts", async () => {
@@ -120,7 +126,7 @@ test("fresh release rejects durable provider state and directs an exact resume",
 	await expect(
 		RunWithFake(PromoteRelease(fixture.plan, fixture.manifest, fixture.options), fixture),
 	).rejects.toThrow(/fresh release found existing provider state.*resume/i);
-	expect(fixture.state.calls).toEqual(["credentials"]);
+	expect(fixture.state.calls).toEqual([]);
 });
 
 test("integrity mismatch fails before any external write", async () => {
@@ -138,7 +144,7 @@ test("integrity mismatch fails before any external write", async () => {
 	await expect(
 		RunWithFake(PromoteRelease(fixture.plan, fixture.manifest, fixture.options), fixture),
 	).rejects.toThrow(/integrity mismatch/i);
-	expect(fixture.state.calls).toEqual(["credentials"]);
+	expect(fixture.state.calls).toEqual([]);
 });
 
 test("tag mismatch fails before publication", async () => {
@@ -149,7 +155,7 @@ test("tag mismatch fails before publication", async () => {
 	await expect(
 		RunWithFake(PromoteRelease(fixture.plan, fixture.manifest, fixture.options), fixture),
 	).rejects.toThrow(/GitHub tag mismatch/i);
-	expect(fixture.state.calls).toEqual(["credentials"]);
+	expect(fixture.state.calls).toEqual([]);
 });
 
 test("provider outage is bounded and leaves an inspectable partial state", async () => {
@@ -160,7 +166,7 @@ test("provider outage is bounded and leaves an inspectable partial state", async
 	await expect(
 		RunWithFake(PromoteRelease(fixture.plan, fixture.manifest, fixture.options), fixture),
 	).rejects.toThrow(/remained unavailable after 3 attempts/i);
-	expect(fixture.state.calls).toEqual(["credentials"]);
+	expect(fixture.state.calls).toEqual([]);
 	expect(fixture.state.inspections.filter((entry) => entry.startsWith("npm:")).length).toBe(3);
 
 	const inspected = await RunWithFake(
@@ -171,6 +177,79 @@ test("provider outage is bounded and leaves an inspectable partial state", async
 	expect(inspected.overall).toBe("partial");
 	expect(inspected.pending_channels).toContain("npm");
 	expect(inspected.retry_guidance).toMatch(/resume the exact 4\.1\.0 release/i);
+});
+
+test("channel phases expose only their own mutation capability and preserve dependencies", async () => {
+	const fixture = make_fixture();
+	const phases = [
+		"github-prepare",
+		"npm",
+		"openvsx",
+		"github-assets",
+		"github-finalize",
+	] as const;
+	const expected_credentials = [
+		"credentials:github-release",
+		"credentials:npm",
+		"credentials:openvsx",
+		"credentials:github-release",
+		"credentials:github-release",
+	];
+
+	for (const [index, phase] of phases.entries()) {
+		const before = fixture.state.calls.length;
+
+		await RunWithFake(
+			PromoteRelease(fixture.plan, fixture.manifest, {
+				...fixture.options,
+				phase,
+			}),
+			fixture,
+		);
+
+		const phase_calls = fixture.state.calls.slice(before);
+
+		expect(phase_calls[0]).toBe(expected_credentials[index]);
+		expect(
+			phase_calls
+				.filter((call) => call.startsWith("credentials:"))
+				.every((call) => call === expected_credentials[index]),
+		).toBe(true);
+	}
+
+	expect(fixture.state.github_release).toBe("published");
+});
+
+test("npm phase needs the exact public tag but does not require GitHub draft credentials", async () => {
+	const fixture = make_fixture();
+
+	fixture.state.github_tag = "matching";
+
+	await RunWithFake(
+		PromoteRelease(fixture.plan, fixture.manifest, {
+			...fixture.options,
+			phase: "npm",
+		}),
+		fixture,
+	);
+
+	expect(fixture.state.calls[0]).toBe("credentials:npm");
+	expect(fixture.state.calls.some((call) => call.startsWith("npm:"))).toBe(true);
+	expect(fixture.state.github_release).toBe("absent");
+});
+
+test("npm authentication accepts trusted publishing OIDC or an explicit token fallback", () => {
+	expect(
+		has_npm_publish_auth({
+			ACTIONS_ID_TOKEN_REQUEST_URL: "https://example.test/oidc",
+			ACTIONS_ID_TOKEN_REQUEST_TOKEN: "request-token",
+		}),
+	).toBe(true);
+	expect(has_npm_publish_auth({ NPM_TOKEN: "npm-token" })).toBe(true);
+	expect(has_npm_publish_auth({ NODE_AUTH_TOKEN: "node-token" })).toBe(true);
+	expect(
+		has_npm_publish_auth({ ACTIONS_ID_TOKEN_REQUEST_URL: "https://example.test/oidc" }),
+	).toBe(false);
 });
 
 function make_fixture(mode: "release" | "resume" = "release") {
@@ -196,12 +275,14 @@ function make_fixture(mode: "release" | "resume" = "release") {
 	const options: PromotionOptions = {
 		repository: "usebarekey/svelte-effect-runtime",
 		artifact_dir: "artifacts",
+		manifest_path: "artifacts/artifact-manifest.json",
 		notes: "Release 4.1.0",
 		max_attempts: 3,
 		probe_delay_ms: 0,
 		request_timeout_ms: 100,
 		command_timeout_ms: 100,
 		dry_run: false,
+		phase: "all",
 	};
 
 	return {
@@ -281,9 +362,10 @@ function make_mutation_layer(
 	artifacts: ReadonlyArray<{ readonly name: string; readonly package_name: string }>,
 ) {
 	return Layer.succeed(ProviderMutation, {
-		require_credentials: Effect.sync(() => {
-			state.calls.push("credentials");
-		}),
+		require_credentials: (channel) =>
+			Effect.sync(() => {
+				state.calls.push(`credentials:${channel}`);
+			}),
 		create_github_tag: () =>
 			Effect.sync(() => {
 				state.calls.push("github:tag");

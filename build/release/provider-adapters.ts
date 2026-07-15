@@ -1,7 +1,8 @@
-import { classify_provider_state, type ProviderState } from "./registry-state.ts";
-import { RunCommand } from "../node-utils.ts";
-import { NodeServices } from "@effect/platform-node";
 import { Context, Duration, Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { classify_provider_state, type ProviderState } from "./registry-state.ts";
+import { NodeServices } from "@effect/platform-node";
+import type { ReleaseChannel } from "./policy.ts";
+import { RunCommand } from "../node-utils.ts";
 
 export type InspectArtifactRequest = {
 	readonly package_name: string;
@@ -79,11 +80,14 @@ export type GithubMutationRequest = {
 	readonly commit: string;
 	readonly notes: string;
 	readonly timeout_ms: number;
+	readonly release_exists?: boolean;
 };
 
 export type GithubAssetMutationRequest = GithubMutationRequest & {
 	readonly path: string;
 };
+
+export type ProviderEnvironment = Readonly<Record<string, string | undefined>>;
 
 export class ProviderInspection extends Context.Service<
 	ProviderInspection,
@@ -103,7 +107,7 @@ export class ProviderInspection extends Context.Service<
 export class ProviderMutation extends Context.Service<
 	ProviderMutation,
 	{
-		readonly require_credentials: Effect.Effect<void, unknown>;
+		readonly require_credentials: (channel: ReleaseChannel) => Effect.Effect<void, unknown>;
 		readonly create_github_tag: (
 			request: GithubMutationRequest,
 		) => Effect.Effect<void, unknown>;
@@ -202,20 +206,19 @@ export const ProviderMutationLive = Layer.effect(
 			Run("gh", args, process.cwd(), request.timeout_ms);
 
 		return {
-			require_credentials: Effect.sync(() => {
-				const missing = [
-					!process.env.NPM_TOKEN?.trim() && "NPM_TOKEN",
-					!(process.env.OPEN_VSX_TOKEN?.trim() || process.env.OVSX_PAT?.trim()) &&
-						"OPEN_VSX_TOKEN or OVSX_PAT",
-					!process.env.GH_TOKEN?.trim() && "GH_TOKEN",
-				].filter(Boolean);
+			require_credentials: (channel) =>
+				Effect.sync(() => {
+					const available =
+						channel === "npm"
+							? has_npm_publish_auth(process.env)
+							: channel === "openvsx"
+								? Boolean(process.env.OVSX_PAT ?? process.env.OPEN_VSX_TOKEN)
+								: Boolean(process.env.GH_TOKEN);
 
-				if (missing.length > 0) {
-					throw new Error(
-						`Missing required promotion credentials: ${missing.join(", ")}.`,
-					);
-				}
-			}),
+					if (!available) {
+						throw new Error(`Missing required ${channel} promotion credential.`);
+					}
+				}),
 			create_github_tag: (request) =>
 				RunGithub(request, [
 					"api",
@@ -228,49 +231,77 @@ export const ProviderMutationLive = Layer.effect(
 					`sha=${request.commit}`,
 				]),
 			upsert_draft_github_release: (request) =>
-				RunGithub(request, [
-					"release",
-					"create",
-					request.tag,
-					"--draft",
-					"--verify-tag",
-					"--title",
-					request.tag,
-					"--notes",
-					request.notes,
-					"--repo",
-					request.repository,
-				]),
-			publish_npm: (request) =>
-				Effect.scoped(
-					Effect.gen(function* () {
-						const temp_dir = yield* file_system.makeTempDirectoryScoped({
-							prefix: "ser-npm-publish-",
-						});
-						const npmrc_path = path.join(temp_dir, ".npmrc");
-
-						yield* file_system.writeFileString(
-							npmrc_path,
-							"//registry.npmjs.org/:_authToken=${NPM_TOKEN}\n",
-						);
-						yield* Run(
-							"corepack",
-							[
-								"pnpm",
-								"publish",
-								request.path,
-								"--access",
-								"public",
-								"--provenance",
-								"--no-git-checks",
-								"--userconfig",
-								npmrc_path,
+				RunGithub(
+					request,
+					request.release_exists
+						? [
+								"release",
+								"edit",
+								request.tag,
+								"--draft",
+								"--title",
+								request.tag,
+								"--notes",
+								request.notes,
+								"--repo",
+								request.repository,
+							]
+						: [
+								"release",
+								"create",
+								request.tag,
+								"--draft",
+								"--verify-tag",
+								"--title",
+								request.tag,
+								"--notes",
+								request.notes,
+								"--repo",
+								request.repository,
 							],
-							request.cwd,
-							request.timeout_ms,
-						);
-					}),
 				),
+			publish_npm: (request) =>
+				Effect.gen(function* () {
+					const npm_command = process.platform === "win32" ? "npm.cmd" : "npm";
+					const token_variable = process.env.NPM_TOKEN
+						? "NPM_TOKEN"
+						: process.env.NODE_AUTH_TOKEN
+							? "NODE_AUTH_TOKEN"
+							: undefined;
+					const publish_args = [
+						"publish",
+						request.path,
+						"--access",
+						"public",
+						"--provenance",
+					];
+
+					if (!token_variable) {
+						yield* Run(npm_command, publish_args, request.cwd, request.timeout_ms);
+
+						return;
+					}
+
+					yield* Effect.scoped(
+						Effect.gen(function* () {
+							const temp_dir = yield* file_system.makeTempDirectoryScoped({
+								prefix: "ser-npm-publish-",
+							});
+							const npmrc_path = path.join(temp_dir, ".npmrc");
+
+							yield* file_system.writeFileString(
+								npmrc_path,
+								`//registry.npmjs.org/:_authToken=\${${token_variable}}\n`,
+							);
+							yield* Run(
+								npm_command,
+								[...publish_args, "--userconfig", npmrc_path],
+								request.cwd,
+								request.timeout_ms,
+							);
+						}),
+					);
+				}),
 			publish_openvsx: (request) =>
 				WithTemporaryEnvironment(
 					"OVSX_PAT",
@@ -305,6 +336,16 @@ export const ProviderMutationLive = Layer.effect(
 );
 
 export const ProviderAdaptersLive = Layer.merge(ProviderInspectionLive, ProviderMutationLive);
+
+export function has_npm_publish_auth(environment: ProviderEnvironment): boolean {
+	const has_token = Boolean(environment.NPM_TOKEN?.trim() || environment.NODE_AUTH_TOKEN?.trim());
+	const has_oidc = Boolean(
+		environment.ACTIONS_ID_TOKEN_REQUEST_URL?.trim() &&
+		environment.ACTIONS_ID_TOKEN_REQUEST_TOKEN?.trim(),
+	);
+
+	return has_token || has_oidc;
+}
 
 const InspectNpm = (request: InspectArtifactRequest) =>
 	Effect.gen(function* () {

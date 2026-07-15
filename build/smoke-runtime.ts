@@ -1,6 +1,6 @@
 import { CommandName, RepoRoot, RemovePath, RunCommand } from "./node-utils.ts";
-import { Console, Effect, FileSystem, Path } from "effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import { Console, Effect, FileSystem, Path } from "effect";
 
 const app_html = `<!doctype html>
 <html lang="en">

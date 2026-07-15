@@ -11,13 +11,13 @@ import {
 	type ArtifactInput,
 } from "../../../build/release/artifact-manifest.ts";
 import { plan_release, type PackageVersions } from "../../../build/release/policy.ts";
-import { NodeServices } from "@effect/platform-node";
-import { Effect, Layer } from "effect";
-import { strToU8, zipSync } from "fflate";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { NodeServices } from "@effect/platform-node";
+import { strToU8, zipSync } from "fflate";
+import { Effect, Layer } from "effect";
 import { expect, test } from "vitest";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 const versions: PackageVersions = {
 	runtime: "4.1.0",
