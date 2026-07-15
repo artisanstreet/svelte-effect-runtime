@@ -10,7 +10,7 @@ import {
 	ReadCanonicalReleasePlan,
 	ReadPackageVersions,
 	ReadPlannedArtifacts,
-	ReadPreviousPackageVersions,
+	ReadReleaseRepositoryState,
 	ReadTextFile,
 	WriteGithubOutput,
 	WriteJsonFile,
@@ -24,7 +24,7 @@ import {
 	type PromotionState,
 } from "./promotion.ts";
 import { ProviderAdaptersLive } from "./provider-adapters.ts";
-import { plan_release, type ReleasePlan } from "./policy.ts";
+import { candidate_release_ref, plan_release, type ReleasePlan } from "./policy.ts";
 import { RepoRoot } from "../node-utils.ts";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Effect, Schema } from "effect";
@@ -32,15 +32,12 @@ import { pathToFileURL } from "node:url";
 
 const NonEmptyStringSchema = Schema.String.pipe(Schema.check(Schema.isMinLength(1)));
 const CommitSchema = Schema.String.pipe(Schema.check(Schema.isPattern(/^[0-9a-fA-F]{40}$/)));
-const BeforeCommitSchema = Schema.String.pipe(
-	Schema.check(Schema.isPattern(/^[0-9a-fA-F]{40,64}$/)),
-);
 const PlanRequestSchema = Schema.Struct({
 	command: Schema.Literals(["plan"] as const),
 	event: Schema.Literals(["pull_request", "push", "workflow_dispatch"] as const),
 	ref: NonEmptyStringSchema,
 	commit: CommitSchema,
-	before: Schema.optional(BeforeCommitSchema),
+	mode: Schema.optional(Schema.Literals(["dry-run", "release", "resume"] as const)),
 	resume_version: Schema.optional(NonEmptyStringSchema),
 	resume_commit: Schema.optional(CommitSchema),
 	output: NonEmptyStringSchema,
@@ -106,7 +103,7 @@ const command_flags = {
 		"event",
 		"ref",
 		"commit",
-		"before",
+		"mode",
 		"resume-version",
 		"resume-commit",
 		"output",
@@ -228,7 +225,7 @@ export function parse_cli_request(
 		event: flags.event ?? environment.GITHUB_EVENT_NAME,
 		ref: flags.ref ?? environment.GITHUB_REF,
 		commit: flags.commit ?? environment.GITHUB_SHA,
-		before: flags.before ?? environment.GITHUB_EVENT_BEFORE,
+		mode: flags.mode,
 		resume_version: flags["resume-version"],
 		resume_commit: flags["resume-commit"],
 		output: flags.output,
@@ -236,17 +233,36 @@ export function parse_cli_request(
 	});
 	const has_resume_version = request.resume_version !== undefined;
 	const has_resume_commit = request.resume_commit !== undefined;
+	const has_resume = has_resume_version && has_resume_commit;
 
 	if (has_resume_version !== has_resume_commit) {
 		throw new Error("Resume requires both --resume-version and --resume-commit.");
 	}
 
-	if (has_resume_version && request.event !== "workflow_dispatch") {
-		throw new Error("Resume is only available for workflow_dispatch events.");
+	if (request.event !== "workflow_dispatch") {
+		if (request.mode || has_resume) {
+			throw new Error(
+				"Release mode and resume values are only available for workflow_dispatch events.",
+			);
+		}
+
+		return request;
 	}
 
-	if (request.event === "push" && request.ref === "refs/heads/master" && !request.before) {
-		throw new Error("A protected-branch push requires --before or GITHUB_EVENT_BEFORE.");
+	if (!request.mode) {
+		throw new Error("A workflow_dispatch plan requires --mode dry-run, release, or resume.");
+	}
+
+	if (request.ref !== candidate_release_ref) {
+		throw new Error(`A workflow_dispatch plan is only allowed from ${candidate_release_ref}.`);
+	}
+
+	if (request.mode === "resume" && !has_resume) {
+		throw new Error("Resume mode requires both --resume-version and --resume-commit.");
+	}
+
+	if (request.mode !== "resume" && has_resume) {
+		throw new Error("Resume values require --mode resume.");
 	}
 
 	return request;
@@ -258,14 +274,11 @@ export const RunReleaseCli = (request: CliRequest) =>
 
 		if (request.command === "plan") {
 			const current_versions = yield* ReadPackageVersions(repo_root);
-			const is_protected_push =
-				request.event === "push" && request.ref === "refs/heads/master";
-			const previous_versions = is_protected_push
-				? yield* ReadPreviousPackageVersions(
-						repo_root,
-						yield* RequirePreviousCommit(request.before),
-					)
-				: undefined;
+			const current_version = current_versions.runtime;
+			const repository_state =
+				request.event === "workflow_dispatch"
+					? yield* ReadReleaseRepositoryState(repo_root, request.commit, current_version)
+					: undefined;
 			const plan = yield* Effect.try({
 				try: () =>
 					plan_release({
@@ -273,7 +286,8 @@ export const RunReleaseCli = (request: CliRequest) =>
 						ref: request.ref,
 						commit: request.commit,
 						current_versions,
-						...(previous_versions ? { previous_versions } : {}),
+						...(request.mode ? { mode: request.mode } : {}),
+						...(repository_state ? { repository_state } : {}),
 						...(request.resume_version && request.resume_commit
 							? {
 									resume: {
@@ -295,7 +309,7 @@ export const RunReleaseCli = (request: CliRequest) =>
 			return plan;
 		}
 
-		const plan = yield* ReadCanonicalReleasePlan(request.plan);
+		const plan = yield* ReadCanonicalReleasePlan(request.plan, repo_root);
 
 		if (request.command === "notes") {
 			const notes = yield* GenerateReleaseNotes(repo_root, plan, request.repository_url);
@@ -364,11 +378,6 @@ const PersistPromotionState = (state: PromotionState, request: typeof PromoteReq
 			yield* AppendTextFile(request.summary_output, format_promotion_summary(state));
 		}
 	});
-
-const RequirePreviousCommit = (before: string | undefined) =>
-	before
-		? Effect.succeed(before)
-		: Effect.fail(new Error("A protected-branch push requires its previous commit."));
 
 const Main = Effect.gen(function* () {
 	const request = yield* Effect.try({

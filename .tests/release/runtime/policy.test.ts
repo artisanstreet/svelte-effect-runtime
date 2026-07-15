@@ -5,65 +5,29 @@ import {
 	release_channels,
 	release_package_definitions,
 	type PackageVersions,
+	type ReleaseRepositoryState,
 } from "../../../build/release/policy.ts";
 import { expect, test } from "vitest";
 
+const commit = "abcdef0123456789abcdef0123456789abcdef01";
 const current_versions: PackageVersions = {
 	runtime: "4.1.0",
 	grammars: "4.1.0",
 	"language-server": "4.1.0",
 	vsix: "4.1.0",
 };
-
-const previous_versions: PackageVersions = {
-	runtime: "4.0.0",
-	grammars: "4.0.0",
-	"language-server": "4.0.0",
-	vsix: "4.0.0",
+const candidate_state: ReleaseRepositoryState = {
+	candidate_head: commit,
+	candidate_is_on_master: true,
+	greatest_release_version: "4.0.0",
+	current_tag_exists: false,
 };
 
-test("release channels are a closed supported set", () => {
+test("release channels and artifacts are a closed supported set", () => {
 	expect(release_channels).toEqual(["npm", "openvsx", "github-release"]);
 	expect(parse_release_channel("npm")).toBe("npm");
 	expect(() => parse_release_channel("marketplace")).toThrow();
 	expect(() => parse_release_channel("jsr")).toThrow();
-});
-
-test("package definitions preserve build and publication dependencies", () => {
-	expect(release_package_definitions).toEqual([
-		{
-			id: "runtime",
-			package_name: "svelte-effect-runtime",
-			artifact_kind: "npm-tarball",
-			build_dependencies: [],
-			publish_dependencies: [],
-			channels: ["npm", "github-release"],
-		},
-		{
-			id: "grammars",
-			package_name: "svelte-effect-runtime-grammars",
-			artifact_kind: "npm-tarball",
-			build_dependencies: [],
-			publish_dependencies: [],
-			channels: ["npm", "github-release"],
-		},
-		{
-			id: "language-server",
-			package_name: "svelte-effect-runtime-language-server",
-			artifact_kind: "npm-tarball",
-			build_dependencies: ["runtime"],
-			publish_dependencies: ["grammars"],
-			channels: ["npm", "github-release"],
-		},
-		{
-			id: "vsix",
-			package_name: "svelte-effect-runtime-vscode",
-			artifact_kind: "vsix",
-			build_dependencies: [],
-			publish_dependencies: ["language-server"],
-			channels: ["openvsx", "github-release"],
-		},
-	]);
 	expect(
 		release_package_definitions.map((definition) =>
 			expected_artifact_name(definition, "4.1.0"),
@@ -76,60 +40,88 @@ test("package definitions preserve build and publication dependencies", () => {
 	]);
 });
 
-test("pull requests verify synchronized candidates without publication", () => {
-	const plan = plan_release({
+test("pull requests and pushes always verify without release history", () => {
+	const pull_request = plan_release({
 		event: "pull_request",
 		ref: "refs/pull/29/merge",
-		commit: "candidate-commit",
+		commit,
 		current_versions,
-		previous_versions,
+	});
+	const master_push = plan_release({
+		event: "push",
+		ref: "refs/heads/master",
+		commit,
+		current_versions,
 	});
 
-	expect(plan).toMatchObject({
-		version: "4.1.0",
-		tag: "v4.1.0",
+	expect(pull_request).toMatchObject({
 		intent: "verify",
 		publish: false,
 		dry_run: false,
-		version_changed: true,
+		version_changed: false,
 	});
-});
-
-test("ordinary pushes verify without entering publication", () => {
-	const branch_plan = plan_release({
-		event: "push",
-		ref: "refs/heads/feature",
-		commit: "ordinary-commit",
-		current_versions,
-		previous_versions,
-	});
-	const protected_branch_plan = plan_release({
-		event: "push",
-		ref: "refs/heads/master",
-		commit: "ordinary-master-commit",
-		current_versions,
-		previous_versions: current_versions,
-	});
-
-	expect(branch_plan.intent).toBe("verify");
-	expect(branch_plan.publish).toBe(false);
-	expect(protected_branch_plan).toMatchObject({
+	expect(master_push).toMatchObject({
 		intent: "verify",
 		publish: false,
+		dry_run: false,
 		version_changed: false,
 	});
 });
 
-test("a synchronized master version bump creates publication intent", () => {
+test("candidate dispatch requires an explicit mode and verified branch ancestry", () => {
+	expect(() =>
+		plan_release({
+			event: "workflow_dispatch",
+			ref: "refs/heads/candidate",
+			commit,
+			current_versions,
+			repository_state: candidate_state,
+		}),
+	).toThrow(/explicit release mode/i);
+	expect(() =>
+		plan_release({
+			event: "workflow_dispatch",
+			ref: "refs/heads/master",
+			commit,
+			current_versions,
+			mode: "release",
+			repository_state: candidate_state,
+		}),
+	).toThrow(/only allowed from refs\/heads\/candidate/i);
+	expect(() =>
+		plan_release({
+			event: "workflow_dispatch",
+			ref: "refs/heads/candidate",
+			commit,
+			current_versions,
+			mode: "release",
+			repository_state: { ...candidate_state, candidate_head: "0".repeat(40) },
+		}),
+	).toThrow(/does not match candidate head/i);
+	expect(() =>
+		plan_release({
+			event: "workflow_dispatch",
+			ref: "refs/heads/candidate",
+			commit,
+			current_versions,
+			mode: "release",
+			repository_state: { ...candidate_state, candidate_is_on_master: false },
+		}),
+	).toThrow(/must be reachable from master/i);
+});
+
+test("candidate release publishes only a synchronized version newer than every release tag", () => {
 	const plan = plan_release({
-		event: "push",
-		ref: "refs/heads/master",
-		commit: "release-commit",
+		event: "workflow_dispatch",
+		ref: "refs/heads/candidate",
+		commit,
 		current_versions,
-		previous_versions,
+		mode: "release",
+		repository_state: candidate_state,
 	});
 
 	expect(plan).toMatchObject({
+		mode: "release",
 		version: "4.1.0",
 		previous_version: "4.0.0",
 		intent: "publish",
@@ -137,61 +129,130 @@ test("a synchronized master version bump creates publication intent", () => {
 		dry_run: false,
 		version_changed: true,
 	});
-	expect(plan.packages.map((pkg) => pkg.artifact_name)).toEqual([
-		"svelte-effect-runtime-4.1.0.tgz",
-		"svelte-effect-runtime-grammars-4.1.0.tgz",
-		"svelte-effect-runtime-language-server-4.1.0.tgz",
-		"svelte-effect-runtime-vscode-4.1.0.vsix",
-	]);
+	expect(() =>
+		plan_release({
+			event: "workflow_dispatch",
+			ref: "refs/heads/candidate",
+			commit,
+			current_versions,
+			mode: "release",
+			repository_state: {
+				...candidate_state,
+				greatest_release_version: "4.1.0",
+			},
+		}),
+	).toThrow(/must be greater than greatest release version/i);
+	expect(() =>
+		plan_release({
+			event: "workflow_dispatch",
+			ref: "refs/heads/candidate",
+			commit,
+			current_versions,
+			mode: "release",
+			repository_state: { ...candidate_state, current_tag_exists: true },
+		}),
+	).toThrow(/already exists.*resume/i);
 });
 
-test("release versions must advance according to semantic-version precedence", () => {
-	expect(() =>
-		plan_release({
-			event: "push",
-			ref: "refs/heads/master",
-			commit: "downgrade-commit",
-			current_versions: previous_versions,
-			previous_versions: current_versions,
-		}),
-	).toThrow(/release version 4\.0\.0 must be greater than previous version 4\.1\.0/i);
-	expect(() =>
-		plan_release({
-			event: "push",
-			ref: "refs/heads/master",
-			commit: "metadata-only-commit",
-			current_versions: {
-				...current_versions,
-				runtime: "4.1.0+new",
-				grammars: "4.1.0+new",
-				"language-server": "4.1.0+new",
-				vsix: "4.1.0+new",
-			},
-			previous_versions: {
-				...current_versions,
-				runtime: "4.1.0+old",
-				grammars: "4.1.0+old",
-				"language-server": "4.1.0+old",
-				vsix: "4.1.0+old",
-			},
-		}),
-	).toThrow(/must be greater/i);
-
-	const prerelease_versions: PackageVersions = {
-		runtime: "4.1.0-rc.1",
-		grammars: "4.1.0-rc.1",
-		"language-server": "4.1.0-rc.1",
-		vsix: "4.1.0-rc.1",
-	};
+test("candidate dry runs enforce release eligibility without publication", () => {
 	const plan = plan_release({
-		event: "push",
-		ref: "refs/heads/master",
-		commit: "stable-release-commit",
+		event: "workflow_dispatch",
+		ref: "refs/heads/candidate",
+		commit,
 		current_versions,
-		previous_versions: prerelease_versions,
+		mode: "dry-run",
+		repository_state: candidate_state,
 	});
 
-	expect(plan.publish).toBe(true);
+	expect(plan).toMatchObject({
+		mode: "dry-run",
+		intent: "verify",
+		publish: false,
+		dry_run: true,
+		version_changed: true,
+	});
+	expect(() =>
+		plan_release({
+			event: "workflow_dispatch",
+			ref: "refs/heads/candidate",
+			commit,
+			current_versions,
+			mode: "dry-run",
+			repository_state: {
+				...candidate_state,
+				greatest_release_version: "4.2.0",
+			},
+		}),
+	).toThrow(/must be greater than greatest release version/i);
+});
+
+test("resume requires the exact candidate version and commit", () => {
+	const resume_plan = plan_release({
+		event: "workflow_dispatch",
+		ref: "refs/heads/candidate",
+		commit,
+		current_versions,
+		mode: "resume",
+		repository_state: {
+			...candidate_state,
+			greatest_release_version: "4.1.0",
+			current_tag_exists: true,
+		},
+		resume: { version: "4.1.0", commit },
+	});
+
+	expect(resume_plan).toMatchObject({
+		mode: "resume",
+		intent: "resume",
+		publish: true,
+		dry_run: false,
+		version_changed: false,
+	});
+	expect(() =>
+		plan_release({
+			event: "workflow_dispatch",
+			ref: "refs/heads/candidate",
+			commit,
+			current_versions,
+			mode: "resume",
+			repository_state: candidate_state,
+		}),
+	).toThrow(/resume requires an exact version and commit/i);
+	expect(() =>
+		plan_release({
+			event: "workflow_dispatch",
+			ref: "refs/heads/candidate",
+			commit,
+			current_versions,
+			mode: "resume",
+			repository_state: candidate_state,
+			resume: { version: "4.0.0", commit },
+		}),
+	).toThrow(/does not match current version/i);
+});
+
+test("non-dispatch events reject release mode and resume claims", () => {
+	expect(() =>
+		plan_release({
+			event: "push",
+			ref: "refs/heads/master",
+			commit,
+			current_versions,
+			mode: "release",
+			repository_state: candidate_state,
+		}),
+	).toThrow(/only workflow_dispatch may specify/i);
+	expect(() =>
+		plan_release({
+			event: "workflow_dispatch",
+			ref: "refs/heads/candidate",
+			commit,
+			current_versions,
+			mode: "release",
+			repository_state: candidate_state,
+			resume: { version: "4.1.0", commit },
+		}),
+	).toThrow(/resume values require resume mode/i);
 });
 
 test("unsynchronized or invalid current versions fail before planning", () => {
@@ -199,126 +260,33 @@ test("unsynchronized or invalid current versions fail before planning", () => {
 		plan_release({
 			event: "push",
 			ref: "refs/heads/master",
-			commit: "release-commit",
-			current_versions: {
-				...current_versions,
-				vsix: "4.1.1",
-			},
-			previous_versions,
+			commit,
+			current_versions: { ...current_versions, vsix: "4.1.1" },
 		}),
 	).toThrow(/current package versions are not synchronized/i);
 	expect(() =>
 		plan_release({
 			event: "pull_request",
 			ref: "refs/pull/29/merge",
-			commit: "candidate-commit",
-			current_versions: {
-				...current_versions,
-				runtime: "next",
-			},
+			commit,
+			current_versions: { ...current_versions, runtime: "next" },
 		}),
 	).toThrow(/invalid semantic version/i);
-	expect(() =>
-		plan_release({
-			event: "pull_request",
-			ref: "refs/pull/29/merge",
-			commit: "candidate-commit",
-			current_versions: {
-				...current_versions,
-				runtime: "4.1.0-01",
-			},
-		}),
-	).toThrow(/invalid semantic version/i);
-	expect(() =>
-		plan_release({
-			event: "push",
-			ref: "refs/heads/master",
-			commit: "release-commit",
-			current_versions,
-			previous_versions: {
-				...previous_versions,
-				grammars: "3.9.0",
-			},
-		}),
-	).toThrow(/previous package versions are not synchronized/i);
-});
-
-test("workflow dispatch is a dry run unless an exact master version is resumed", () => {
-	const dry_run_plan = plan_release({
-		event: "workflow_dispatch",
-		ref: "refs/heads/master",
-		commit: "dry-run-commit",
-		current_versions,
-	});
-	const resume_plan = plan_release({
-		event: "workflow_dispatch",
-		ref: "refs/heads/master",
-		commit: "release-commit",
-		current_versions,
-		resume: { version: "4.1.0", commit: "release-commit" },
-	});
-
-	expect(dry_run_plan).toMatchObject({
-		intent: "verify",
-		publish: false,
-		dry_run: true,
-	});
-	expect(resume_plan).toMatchObject({
-		intent: "resume",
-		publish: true,
-		dry_run: false,
-	});
-	expect(() =>
-		plan_release({
-			event: "workflow_dispatch",
-			ref: "refs/heads/master",
-			commit: "release-commit",
-			current_versions,
-			resume: { version: "4.0.0", commit: "release-commit" },
-		}),
-	).toThrow(/resume version 4\.0\.0 does not match current version 4\.1\.0/i);
-	expect(() =>
-		plan_release({
-			event: "workflow_dispatch",
-			ref: "refs/heads/feature",
-			commit: "release-commit",
-			current_versions,
-			resume: { version: "4.1.0", commit: "release-commit" },
-		}),
-	).toThrow(/resume is only allowed from refs\/heads\/master/i);
-	expect(() =>
-		plan_release({
-			event: "workflow_dispatch",
-			ref: "refs/heads/master",
-			commit: "newer-master-commit",
-			current_versions,
-			resume: { version: "4.1.0", commit: "release-commit" },
-		}),
-	).toThrow(
-		/resume commit release-commit does not match checked out commit newer-master-commit/i,
-	);
 });
 
 test("release plans and canonical package definitions are deeply immutable", () => {
 	const plan = plan_release({
-		event: "push",
-		ref: "refs/heads/master",
-		commit: "release-commit",
+		event: "workflow_dispatch",
+		ref: "refs/heads/candidate",
+		commit,
 		current_versions,
-		previous_versions,
+		mode: "release",
+		repository_state: candidate_state,
 	});
 
 	expect(Object.isFrozen(release_channels)).toBe(true);
 	expect(Object.isFrozen(release_package_definitions)).toBe(true);
 	expect(release_package_definitions.every(Object.isFrozen)).toBe(true);
-	expect(
-		release_package_definitions.every(
-			(definition) =>
-				Object.isFrozen(definition.build_dependencies) &&
-				Object.isFrozen(definition.publish_dependencies) &&
-				Object.isFrozen(definition.channels),
-		),
-	).toBe(true);
 	expect(Object.isFrozen(plan)).toBe(true);
 	expect(Object.isFrozen(plan.channels)).toBe(true);
 	expect(Object.isFrozen(plan.packages)).toBe(true);

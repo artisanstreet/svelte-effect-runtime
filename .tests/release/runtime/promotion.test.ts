@@ -203,19 +203,18 @@ function make_publish_plan(): ReleasePlan {
 		"language-server": version,
 		vsix: version,
 	};
-	const previous_versions = {
-		runtime: previous_version,
-		grammars: previous_version,
-		"language-server": previous_version,
-		vsix: previous_version,
-	};
-
 	return plan_release({
-		event: "push",
-		ref: "refs/heads/master",
+		event: "workflow_dispatch",
+		ref: "refs/heads/candidate",
 		commit,
 		current_versions: versions,
-		previous_versions,
+		mode: "release",
+		repository_state: {
+			candidate_head: commit,
+			candidate_is_on_master: true,
+			greatest_release_version: previous_version,
+			current_tag_exists: false,
+		},
 	});
 }
 

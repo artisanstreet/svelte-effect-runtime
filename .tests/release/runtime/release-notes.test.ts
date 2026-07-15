@@ -15,9 +15,16 @@ const current_versions: PackageVersions = {
 
 const plan = plan_release({
 	event: "workflow_dispatch",
-	ref: "refs/heads/master",
+	ref: "refs/heads/candidate",
 	commit: "abcdef0123456789",
 	current_versions,
+	mode: "dry-run",
+	repository_state: {
+		candidate_head: "abcdef0123456789",
+		candidate_is_on_master: true,
+		greatest_release_version: undefined,
+		current_tag_exists: false,
+	},
 });
 
 const commits: ReadonlyArray<ReleaseCommit> = [
@@ -83,13 +90,20 @@ test("the greatest valid semantic version below the plan wins regardless of tag 
 test("semantic tag ordering follows ASCII precedence instead of the host locale", () => {
 	const prerelease_plan = plan_release({
 		event: "workflow_dispatch",
-		ref: "refs/heads/master",
+		ref: "refs/heads/candidate",
 		commit: "abcdef0123456789",
 		current_versions: {
 			runtime: "4.1.0-zz",
 			grammars: "4.1.0-zz",
 			"language-server": "4.1.0-zz",
 			vsix: "4.1.0-zz",
+		},
+		mode: "dry-run",
+		repository_state: {
+			candidate_head: "abcdef0123456789",
+			candidate_is_on_master: true,
+			greatest_release_version: undefined,
+			current_tag_exists: false,
 		},
 	});
 

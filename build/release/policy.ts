@@ -78,14 +78,22 @@ export const release_package_definitions: ReadonlyArray<ReleasePackageDefinition
 
 export type ReleaseEvent = "pull_request" | "push" | "workflow_dispatch";
 export type ReleaseIntent = "verify" | "publish" | "resume";
+export type ReleaseMode = "dry-run" | "release" | "resume";
+
+export type ReleaseRepositoryState = {
+	candidate_head: string;
+	candidate_is_on_master: boolean;
+	greatest_release_version: string | undefined;
+	current_tag_exists: boolean;
+};
 
 export type PlanReleaseInput = {
 	event: ReleaseEvent;
 	ref: string;
 	commit: string;
 	current_versions: PackageVersions;
-	previous_versions?: PackageVersions;
-	dry_run?: boolean;
+	mode?: ReleaseMode;
+	repository_state?: ReleaseRepositoryState;
 	resume?: {
 		version: string;
 		commit: string;
@@ -96,6 +104,7 @@ export type ReleasePlan = {
 	event: ReleaseEvent;
 	ref: string;
 	commit: string;
+	mode: ReleaseMode | undefined;
 	version: string;
 	previous_version: string | undefined;
 	tag: string;
@@ -107,7 +116,7 @@ export type ReleasePlan = {
 	packages: ReadonlyArray<PlannedReleasePackage>;
 };
 
-const protected_release_ref = "refs/heads/master";
+export const candidate_release_ref = "refs/heads/candidate";
 
 export function parse_release_channel(input: unknown): ReleaseChannel {
 	return Schema.decodeUnknownSync(ReleaseChannelSchema)(input);
@@ -124,13 +133,6 @@ export function expected_artifact_name(
 
 export function plan_release(input: PlanReleaseInput): ReleasePlan {
 	const version = resolve_synchronized_version("current", input.current_versions);
-	const previous_version = input.previous_versions
-		? resolve_synchronized_version("previous", input.previous_versions)
-		: undefined;
-	const versions_differ = previous_version !== undefined && previous_version !== version;
-	const version_changed = versions_differ
-		? compare_semantic_versions(version, previous_version) > 0
-		: false;
 	const packages = Object.freeze(
 		release_package_definitions.map((definition) =>
 			Object.freeze({
@@ -140,47 +142,66 @@ export function plan_release(input: PlanReleaseInput): ReleasePlan {
 		),
 	);
 
-	if (versions_differ && !version_changed) {
+	if (input.event !== "workflow_dispatch") {
+		if (input.mode || input.repository_state || input.resume) {
+			throw new Error("Only workflow_dispatch may specify release mode or repository state.");
+		}
+
+		return make_plan(input, {
+			version,
+			previous_version: undefined,
+			version_changed: false,
+			packages,
+			intent: "verify",
+			publish: false,
+			dry_run: false,
+		});
+	}
+
+	const mode = input.mode;
+	const repository_state = input.repository_state;
+
+	if (!mode) {
+		throw new Error("A candidate workflow dispatch requires an explicit release mode.");
+	}
+
+	if (input.ref !== candidate_release_ref) {
 		throw new Error(
-			`Release version ${version} must be greater than previous version ${previous_version}.`,
+			`A release workflow dispatch is only allowed from ${candidate_release_ref}.`,
 		);
 	}
 
-	/**
-	 * A manual run is non-mutating unless it explicitly resumes the exact current version.
-	 */
-	if (input.event === "workflow_dispatch") {
-		const resume = input.resume;
+	if (!repository_state) {
+		throw new Error("A candidate workflow dispatch requires verified repository state.");
+	}
 
-		if (!resume) {
-			return make_plan(input, {
-				version,
-				previous_version,
-				version_changed,
-				packages,
-				intent: "verify",
-				publish: false,
-				dry_run: true,
-			});
+	if (repository_state.candidate_head !== input.commit) {
+		throw new Error(
+			`Checked out commit ${input.commit} does not match candidate head ${repository_state.candidate_head}.`,
+		);
+	}
+
+	if (!repository_state.candidate_is_on_master) {
+		throw new Error(`Candidate commit ${input.commit} must be reachable from master.`);
+	}
+
+	if (mode !== "resume" && input.resume) {
+		throw new Error("Resume values require resume mode.");
+	}
+
+	const previous_version = repository_state.greatest_release_version;
+	const version_changed = previous_version
+		? compare_semantic_versions(version, previous_version) > 0
+		: true;
+
+	if (mode !== "resume") {
+		if (repository_state.current_tag_exists) {
+			throw new Error(`Release tag v${version} already exists; use resume mode.`);
 		}
 
-		if (input.ref !== protected_release_ref) {
-			throw new Error(`Resume is only allowed from ${protected_release_ref}.`);
-		}
-
-		if (input.dry_run === true) {
-			throw new Error("A release resume cannot also be a dry run.");
-		}
-
-		if (resume.version !== version) {
+		if (!version_changed) {
 			throw new Error(
-				`Resume version ${resume.version} does not match current version ${version}.`,
-			);
-		}
-
-		if (resume.commit !== input.commit) {
-			throw new Error(
-				`Resume commit ${resume.commit} does not match checked out commit ${input.commit}.`,
+				`Release version ${version} must be greater than greatest release version ${previous_version}.`,
 			);
 		}
 
@@ -189,31 +210,34 @@ export function plan_release(input: PlanReleaseInput): ReleasePlan {
 			previous_version,
 			version_changed,
 			packages,
-			intent: "resume",
-			publish: true,
-			dry_run: false,
+			intent: mode === "release" ? "publish" : "verify",
+			publish: mode === "release",
+			dry_run: mode === "dry-run",
 		});
 	}
 
-	/**
-	 * Protected-branch pushes publish only a synchronized version change.
-	 */
-	if (input.event === "push" && input.ref === protected_release_ref) {
-		if (previous_version === undefined) {
-			throw new Error("A protected-branch push requires previous package versions.");
-		}
+	const resume = input.resume;
 
-		if (version_changed) {
-			return make_plan(input, {
-				version,
-				previous_version,
-				version_changed,
-				packages,
-				intent: "publish",
-				publish: true,
-				dry_run: false,
-			});
-		}
+	if (!resume) {
+		throw new Error("Resume requires an exact version and commit.");
+	}
+
+	if (resume.version !== version) {
+		throw new Error(
+			`Resume version ${resume.version} does not match current version ${version}.`,
+		);
+	}
+
+	if (resume.commit !== input.commit) {
+		throw new Error(
+			`Resume commit ${resume.commit} does not match checked out commit ${input.commit}.`,
+		);
+	}
+
+	if (previous_version && compare_semantic_versions(version, previous_version) < 0) {
+		throw new Error(
+			`Resume version ${version} cannot precede greatest release version ${previous_version}.`,
+		);
 	}
 
 	return make_plan(input, {
@@ -221,9 +245,9 @@ export function plan_release(input: PlanReleaseInput): ReleasePlan {
 		previous_version,
 		version_changed,
 		packages,
-		intent: "verify",
-		publish: false,
-		dry_run: input.dry_run ?? false,
+		intent: "resume",
+		publish: true,
+		dry_run: false,
 	});
 }
 
@@ -272,6 +296,7 @@ function make_plan(
 		event: input.event,
 		ref: input.ref,
 		commit: input.commit,
+		mode: input.mode,
 		version: policy.version,
 		previous_version: policy.previous_version,
 		tag: `v${policy.version}`,

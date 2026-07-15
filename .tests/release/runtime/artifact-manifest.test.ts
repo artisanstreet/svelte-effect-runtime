@@ -13,13 +13,6 @@ const current_versions: PackageVersions = {
 	vsix: "4.1.0",
 };
 
-const previous_versions: PackageVersions = {
-	runtime: "4.0.0",
-	grammars: "4.0.0",
-	"language-server": "4.0.0",
-	vsix: "4.0.0",
-};
-
 const encoder = new TextEncoder();
 const files: ReadonlyArray<ArtifactInput> = [
 	{
@@ -41,11 +34,17 @@ const files: ReadonlyArray<ArtifactInput> = [
 ];
 
 const plan = plan_release({
-	event: "push",
-	ref: "refs/heads/master",
+	event: "workflow_dispatch",
+	ref: "refs/heads/candidate",
 	commit: "release-commit",
 	current_versions,
-	previous_versions,
+	mode: "release",
+	repository_state: {
+		candidate_head: "release-commit",
+		candidate_is_on_master: true,
+		greatest_release_version: "4.0.0",
+		current_tag_exists: false,
+	},
 });
 
 test("manifest creation binds canonical artifact identities and bytes to the release plan", () => {

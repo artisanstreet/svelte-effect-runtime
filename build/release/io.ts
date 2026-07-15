@@ -8,6 +8,7 @@ import {
 	release_package_ids,
 	type PackageVersions,
 	type ReleasePlan,
+	type ReleaseRepositoryState,
 } from "./policy.ts";
 import {
 	plan_release_notes,
@@ -15,15 +16,18 @@ import {
 	type ReleaseCommit,
 } from "./release-notes.ts";
 import { RunCommand } from "../node-utils.ts";
+import { compare_semantic_versions, parse_release_tag } from "./semantic-version.ts";
 import { Effect, FileSystem, Path, Schema } from "effect";
 
 const PackageManifestSchema = Schema.Struct({ version: Schema.String });
 const ReleaseEventSchema = Schema.Literals(["pull_request", "push", "workflow_dispatch"] as const);
 const ReleaseIntentSchema = Schema.Literals(["verify", "publish", "resume"] as const);
+const ReleaseModeSchema = Schema.Literals(["dry-run", "release", "resume"] as const);
 const SerializedReleasePlanSchema = Schema.Struct({
 	event: ReleaseEventSchema,
 	ref: Schema.String,
 	commit: Schema.String,
+	mode: Schema.optional(ReleaseModeSchema),
 	version: Schema.String,
 	previous_version: Schema.optional(Schema.String),
 	tag: Schema.String,
@@ -59,35 +63,65 @@ export const ReadPackageVersions = (repo_root: string) =>
 		return Object.fromEntries(entries) as PackageVersions;
 	});
 
-export const ReadPreviousPackageVersions = (repo_root: string, before: string) =>
+export const ReadReleaseRepositoryState = (repo_root: string, commit: string, version: string) =>
 	Effect.gen(function* () {
-		const entries = yield* Effect.all(
-			release_package_ids.map((package_id) =>
-				Effect.gen(function* () {
-					const manifest_path = package_manifest_paths[package_id];
-					const output = yield* RunCommand(
-						"git",
-						["show", `${before}:${manifest_path}`],
-						repo_root,
-					);
-					const manifest = yield* DecodeJson(output.stdout, PackageManifestSchema);
-
-					return [package_id, manifest.version] as const;
-				}),
-			),
+		const [candidate_output, master_output, tag_output] = yield* Effect.all(
+			[
+				RunCommand(
+					"git",
+					["rev-parse", "--verify", "refs/remotes/origin/candidate^{commit}"],
+					repo_root,
+				),
+				RunCommand(
+					"git",
+					[
+						"for-each-ref",
+						`--contains=${commit}`,
+						"--format=%(refname)",
+						"refs/remotes/origin/master",
+					],
+					repo_root,
+				),
+				RunCommand("git", ["tag", "--list", "v*"], repo_root),
+			] as const,
+			{ concurrency: "unbounded" },
 		);
+		const tags = tag_output.stdout.split(/\r?\n/).filter(Boolean);
+		const versions = tags
+			.map(parse_release_tag)
+			.filter((release_version): release_version is string => release_version !== undefined)
+			.sort(compare_semantic_versions);
+		const greatest_release_version = versions.at(-1);
+		const candidate_head = candidate_output.stdout.trim();
+		const candidate_is_on_master = master_output.stdout
+			.split(/\r?\n/)
+			.includes("refs/remotes/origin/master");
 
-		return Object.fromEntries(entries) as PackageVersions;
+		return {
+			candidate_head,
+			candidate_is_on_master,
+			greatest_release_version,
+			current_tag_exists: tags.includes(`v${version}`),
+		} satisfies ReleaseRepositoryState;
 	});
 
-export const ReadCanonicalReleasePlan = (plan_path: string) =>
+export const ReadCanonicalReleasePlan = (plan_path: string, repo_root?: string) =>
 	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 		const content = yield* file_system.readFileString(plan_path);
 		const serialized = yield* DecodeJson(content, SerializedReleasePlanSchema);
+		const mode = resolve_serialized_mode(serialized);
+		const repository_state =
+			mode && repo_root
+				? yield* ReadReleaseRepositoryState(
+						repo_root,
+						serialized.commit,
+						serialized.version,
+					)
+				: undefined;
 
 		return yield* Effect.try({
-			try: () => canonicalize_release_plan(serialized),
+			try: () => canonicalize_release_plan(serialized, repository_state),
 			catch: (cause) => cause,
 		});
 	});
@@ -198,23 +232,34 @@ const DecodeJson = <S extends Schema.Top>(content: string, schema: S) =>
 
 function canonicalize_release_plan(
 	serialized: typeof SerializedReleasePlanSchema.Type,
+	verified_repository_state?: ReleaseRepositoryState,
 ): ReleasePlan {
 	const current_versions = make_package_versions(serialized.version);
-	const previous_versions = serialized.previous_version
-		? make_package_versions(serialized.previous_version)
-		: undefined;
+	const mode = resolve_serialized_mode(serialized);
+	const repository_state =
+		verified_repository_state ??
+		(mode
+			? {
+					candidate_head: serialized.commit,
+					candidate_is_on_master: true,
+					greatest_release_version: serialized.previous_version,
+					current_tag_exists: false,
+				}
+			: undefined);
 	const plan = plan_release({
 		event: serialized.event,
 		ref: serialized.ref,
 		commit: serialized.commit,
 		current_versions,
-		...(previous_versions ? { previous_versions } : {}),
-		...(serialized.dry_run ? { dry_run: true } : {}),
-		...(serialized.intent === "resume"
+		...(mode ? { mode } : {}),
+		...(repository_state ? { repository_state } : {}),
+		...(mode === "resume"
 			? { resume: { version: serialized.version, commit: serialized.commit } }
 			: {}),
 	});
 	const claims_match =
+		plan.mode === serialized.mode &&
+		plan.previous_version === serialized.previous_version &&
 		plan.tag === serialized.tag &&
 		plan.intent === serialized.intent &&
 		plan.publish === serialized.publish &&
@@ -226,6 +271,24 @@ function canonicalize_release_plan(
 	}
 
 	return plan;
+}
+
+function resolve_serialized_mode(
+	serialized: typeof SerializedReleasePlanSchema.Type,
+): typeof ReleaseModeSchema.Type | undefined {
+	if (serialized.intent === "resume") {
+		return "resume";
+	}
+
+	if (serialized.publish) {
+		return "release";
+	}
+
+	if (serialized.dry_run) {
+		return "dry-run";
+	}
+
+	return undefined;
 }
 
 function make_package_versions(version: string): PackageVersions {
