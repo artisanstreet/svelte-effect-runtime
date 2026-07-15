@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { finished } from "node:stream/promises";
+import type { EventEmitter } from "node:events";
 import { createWriteStream } from "node:fs";
 import { spawn } from "node:child_process";
 import { join, resolve } from "node:path";
@@ -28,10 +29,7 @@ export async function record_server_output(options: ServerOutputOptions): Promis
 		windowsHide: true,
 	});
 	const started_at = new Date().toISOString();
-	const child_exit = new Promise<number>((resolve_exit, reject_exit) => {
-		child.once("error", reject_exit);
-		child.once("exit", (code) => resolve_exit(code ?? 1));
-	});
+	const child_exit = wait_for_child_close(child);
 	const initial_metadata = {
 		arguments: options.arguments_,
 		child_pid: child.pid ?? null,
@@ -76,6 +74,13 @@ export async function record_server_output(options: ServerOutputOptions): Promis
 		stderr.end();
 		await Promise.all([finished(stdout), finished(stderr)]);
 	}
+}
+
+export function wait_for_child_close(child: EventEmitter): Promise<number> {
+	return new Promise<number>((resolve_close, reject_close) => {
+		child.once("error", reject_close);
+		child.once("close", (code: number | null) => resolve_close(code ?? 1));
+	});
 }
 
 function parse_options(arguments_: readonly string[]): ServerOutputOptions {

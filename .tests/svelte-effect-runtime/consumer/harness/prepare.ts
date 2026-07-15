@@ -290,6 +290,7 @@ async function pack_git_artifact(
 	corepack: string,
 ): Promise<Omit<ResolvedArtifact, "path" | "sha256">> {
 	const checkout_dir = join(target_dir, "checkout");
+	const revision = await resolve_git_revision(repository_root, source.reference);
 
 	ensure_contained(target_dir, checkout_dir);
 	await rm(checkout_dir, { force: true, recursive: true });
@@ -303,14 +304,12 @@ async function pack_git_artifact(
 	);
 	await run_phase(
 		"git",
-		["checkout", "--detach", source.reference],
+		["checkout", "--detach", revision],
 		checkout_dir,
 		evidence_root,
 		target.name,
 		"artifact-checkout",
 	);
-
-	const revision = await run_command("git", ["rev-parse", "HEAD"], checkout_dir);
 
 	await run_phase(
 		corepack,
@@ -353,8 +352,21 @@ async function pack_git_artifact(
 	return {
 		source: `git:${source.reference}`,
 		version: manifest.version,
-		commit: revision.stdout.trim(),
+		commit: revision,
 	};
+}
+
+export async function resolve_git_revision(
+	repository_root: string,
+	reference: string,
+): Promise<string> {
+	const revision = await run_command(
+		"git",
+		["rev-parse", "--verify", `${reference}^{commit}`],
+		repository_root,
+	);
+
+	return revision.stdout.trim();
 }
 
 async function prepare_application(
@@ -685,4 +697,8 @@ function quote_windows_argument(argument: string): string {
 	return `"${argument.replaceAll('"', '\\"')}"`;
 }
 
-await main();
+const entrypoint = process.argv[1] ? resolve(process.argv[1]) : undefined;
+
+if (entrypoint === resolve(fileURLToPath(import.meta.url))) {
+	await main();
+}

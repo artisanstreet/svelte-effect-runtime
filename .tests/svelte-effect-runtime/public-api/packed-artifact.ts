@@ -27,11 +27,18 @@ export type CommandResult = {
 	readonly stdout: string;
 };
 
+export type DirectoryLockOptions = {
+	readonly retry_ms: number;
+	readonly stale_after_ms: number;
+	readonly timeout_ms: number;
+};
+
 const StringRecord = Schema.Record(Schema.String, Schema.String);
 const PackageManifestSchema = Schema.Struct({
 	name: Schema.String,
 	version: Schema.String,
 });
+const DirectoryLockOwnerSchema = Schema.Struct({ pid: Schema.Number });
 const repo_root = fileURLToPath(new URL("../../..", import.meta.url));
 const contract_root = join(repo_root, ".tmp", "packed-contracts");
 const artifact_root = join(contract_root, "artifacts");
@@ -299,11 +306,31 @@ async function collect_files(path: string): Promise<readonly string[]> {
 }
 
 async function acquire_build_lock(): Promise<void> {
-	const timeout_at = Date.now() + 180_000;
+	await acquire_directory_lock(build_lock, {
+		retry_ms: 100,
+		stale_after_ms: 180_000,
+		timeout_ms: 180_000,
+	});
+}
+
+export async function acquire_directory_lock(
+	lock_path: string,
+	options: DirectoryLockOptions,
+): Promise<void> {
+	const timeout_at = Date.now() + options.timeout_ms;
+	const owner_path = join(lock_path, "owner.json");
 
 	while (Date.now() < timeout_at) {
 		try {
-			await mkdir(build_lock);
+			await mkdir(lock_path);
+
+			try {
+				await writeFile(owner_path, `${JSON.stringify({ pid: process.pid })}\n`);
+			} catch (error) {
+				await rm(lock_path, { force: true, recursive: true });
+
+				throw error;
+			}
 
 			return;
 		} catch (error) {
@@ -311,29 +338,105 @@ async function acquire_build_lock(): Promise<void> {
 				throw error;
 			}
 
-			let information;
-
-			try {
-				information = await stat(build_lock);
-			} catch (error) {
-				if (is_not_found_error(error)) {
-					continue;
-				}
-
-				throw error;
-			}
-
-			if (Date.now() - information.mtimeMs > 180_000) {
-				await rm(build_lock, { force: true, recursive: true });
-
+			if (await reclaim_abandoned_directory_lock(lock_path, options.stale_after_ms)) {
 				continue;
 			}
 
-			await delay(100);
+			await delay(options.retry_ms);
 		}
 	}
 
-	throw new Error(`Timed out waiting for the packed-artifact build lock at ${build_lock}.`);
+	throw new Error(`Timed out waiting for the directory lock at ${lock_path}.`);
+}
+
+async function reclaim_abandoned_directory_lock(
+	lock_path: string,
+	stale_after_ms: number,
+): Promise<boolean> {
+	const recovery_lock_path = `${lock_path}.recovery`;
+
+	try {
+		await mkdir(recovery_lock_path);
+	} catch (error) {
+		if (is_file_exists_error(error)) {
+			return false;
+		}
+
+		throw error;
+	}
+
+	try {
+		if (!(await is_abandoned_directory_lock(lock_path, stale_after_ms))) {
+			return false;
+		}
+
+		await rm(lock_path, { force: true, recursive: true });
+
+		return true;
+	} finally {
+		await rm(recovery_lock_path, { force: true, recursive: true });
+	}
+}
+
+async function is_abandoned_directory_lock(
+	lock_path: string,
+	stale_after_ms: number,
+): Promise<boolean> {
+	let information;
+
+	try {
+		information = await stat(lock_path);
+	} catch (error) {
+		if (is_not_found_error(error)) {
+			return false;
+		}
+
+		throw error;
+	}
+
+	if (Date.now() - information.mtimeMs <= stale_after_ms) {
+		return false;
+	}
+
+	let owner_source;
+
+	try {
+		owner_source = await readFile(join(lock_path, "owner.json"), "utf8");
+	} catch (error) {
+		if (is_not_found_error(error)) {
+			return true;
+		}
+
+		throw error;
+	}
+
+	let owner;
+
+	try {
+		owner = Schema.decodeUnknownSync(DirectoryLockOwnerSchema)(JSON.parse(owner_source));
+	} catch {
+		return true;
+	}
+
+	return !is_process_running(owner.pid);
+}
+
+function is_process_running(pid: number): boolean {
+	try {
+		process.kill(pid, 0);
+
+		return true;
+	} catch (error) {
+		if (has_error_code(error, "ESRCH")) {
+			return false;
+		}
+
+		if (has_error_code(error, "EPERM")) {
+			return true;
+		}
+
+		throw error;
+	}
 }
 
 async function path_exists(path: string): Promise<boolean> {
@@ -356,4 +459,8 @@ function is_file_exists_error(error: unknown): error is NodeJS.ErrnoException {
 
 function is_not_found_error(error: unknown): error is NodeJS.ErrnoException {
 	return error instanceof Error && "code" in error && error.code === "ENOENT";
+}
+
+function has_error_code(error: unknown, code: string): error is NodeJS.ErrnoException {
+	return error instanceof Error && "code" in error && error.code === code;
 }

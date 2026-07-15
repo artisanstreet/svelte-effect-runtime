@@ -43,7 +43,16 @@ export function find_differences(
 	if (is_plain_record(oracle) && is_plain_record(subject)) {
 		const keys = [...new Set([...Object.keys(oracle), ...Object.keys(subject)])].sort();
 
-		return keys.flatMap((key) => find_differences(oracle[key], subject[key], `${path}.${key}`));
+		return keys.flatMap((key) => {
+			const oracle_has_key = Object.hasOwn(oracle, key);
+			const subject_has_key = Object.hasOwn(subject, key);
+
+			if (oracle_has_key !== subject_has_key) {
+				return [{ path: `${path}.${key}`, oracle: oracle[key], subject: subject[key] }];
+			}
+
+			return find_differences(oracle[key], subject[key], `${path}.${key}`);
+		});
 	}
 
 	return [{ path, oracle, subject }];

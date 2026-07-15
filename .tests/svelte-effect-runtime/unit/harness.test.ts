@@ -1,8 +1,13 @@
 import { compare_observations, find_differences } from "./harness/comparison.ts";
+import { resolve_git_revision } from "../consumer/harness/prepare.ts";
 import { make_evidence } from "./harness/evidence.ts";
 import { normalize_observation, normalize_value } from "./harness/normalization.ts";
 import { get_target, make_targets, parse_target_source } from "./harness/target.ts";
 import { get_conformance_browsers } from "./harness/model.ts";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { describe, expect, test } from "vitest";
 
 describe("conformance browser selection", () => {
@@ -100,6 +105,16 @@ describe("conformance observations", () => {
 		]);
 	});
 
+	test("reports missing object properties even when the present value is undefined", () => {
+		expect(find_differences({ value: undefined }, {})).toEqual([
+			{
+				path: "$.value",
+				oracle: undefined,
+				subject: undefined,
+			},
+		]);
+	});
+
 	test("preserves and compares opaque built-in observations", () => {
 		const oracle_date = new Date("2024-01-02T03:04:05.000Z");
 		const subject_date = new Date("2025-01-02T03:04:05.000Z");
@@ -115,6 +130,48 @@ describe("conformance observations", () => {
 			{ path: "$", oracle: oracle_map, subject: subject_map },
 		]);
 	});
+});
+
+test("Git targets resolve remote-tracking references before cloning", async () => {
+	const repository = await mkdtemp(join(tmpdir(), "ser-git-reference-"));
+	const checkout = join(repository, "checkout");
+
+	try {
+		run_git(repository, ["init"]);
+		run_git(repository, ["config", "user.email", "conformance@example.test"]);
+		run_git(repository, ["config", "user.name", "SER Conformance"]);
+		await writeFile(join(repository, "fixture.txt"), "fixture\n");
+		run_git(repository, ["add", "fixture.txt"]);
+		run_git(repository, ["commit", "-m", "test fixture"]);
+
+		const revision = run_git(repository, ["rev-parse", "HEAD"]);
+
+		run_git(repository, ["update-ref", "refs/remotes/origin/effect-native-ser", revision]);
+		run_git(repository, ["clone", "--shared", "--no-checkout", repository, checkout]);
+
+		const direct_checkout = spawnSync(
+			"git",
+			["checkout", "--detach", "origin/effect-native-ser"],
+			{
+				cwd: checkout,
+				encoding: "utf8",
+				windowsHide: true,
+			},
+		);
+		const resolved_revision = await resolve_git_revision(
+			repository,
+			"origin/effect-native-ser",
+		);
+
+		expect(direct_checkout.status).not.toBe(0);
+		expect(resolved_revision).toBe(revision);
+
+		run_git(checkout, ["checkout", "--detach", resolved_revision]);
+
+		expect(run_git(checkout, ["rev-parse", "HEAD"])).toBe(resolved_revision);
+	} finally {
+		await rm(repository, { force: true, recursive: true });
+	}
 });
 
 test("evidence paths cannot escape the run directory", () => {
@@ -146,3 +203,17 @@ test("evidence paths cannot escape the run directory", () => {
 		),
 	).toThrow("Invalid evidence path segment: ..");
 });
+
+function run_git(cwd: string, arguments_: readonly string[]): string {
+	const result = spawnSync("git", arguments_, {
+		cwd,
+		encoding: "utf8",
+		windowsHide: true,
+	});
+
+	if (result.status !== 0) {
+		throw new Error(`git ${arguments_.join(" ")} failed.\n${result.stdout}${result.stderr}`);
+	}
+
+	return result.stdout.trim();
+}
