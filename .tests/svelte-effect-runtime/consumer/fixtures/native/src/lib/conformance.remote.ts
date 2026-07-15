@@ -1,6 +1,13 @@
-import { command, form, getRequestEvent, prerender, query } from "$app/server";
+import { command, form, getRequestEvent, query, requested } from "$app/server";
+import {
+	get_live_state,
+	next_live_value,
+	record_live_finalization,
+	record_live_start,
+} from "$lib/server/live-state.server";
+import { wait_for_gate } from "$lib/server/gates.server";
 import { lifecycle_events } from "$lib/lifecycle";
-import { invalid } from "@sveltejs/kit";
+import { error, invalid, redirect } from "@sveltejs/kit";
 import { Schema } from "effect";
 
 const ItemSchema = Schema.Struct({
@@ -23,8 +30,16 @@ const KeyedItemSchema = Schema.toStandardSchemaV1(
 	}),
 );
 
-let command_count = 0;
+const TransformedItemSchema = Schema.Struct({
+	amount: Schema.FiniteFromString.pipe(Schema.mutableKey),
+	label: Schema.NonEmptyString.pipe(Schema.mutableKey),
+});
+
+const TransformedItemStandardSchema = Schema.toStandardSchemaV1(TransformedItemSchema);
+
 let query_count = 0;
+let refresh_query_count = 0;
+let mutation_value = 0;
 
 export const GetProfile = query(
 	Schema.toStandardSchemaV1(Schema.Struct({ id: Schema.String })),
@@ -55,6 +70,23 @@ export const GetLive = query.live(async function* () {
 	yield "live:first";
 });
 
+export const GetSharedLive = query.live(
+	Schema.toStandardSchemaV1(Schema.String),
+	async function* (key) {
+		record_live_start();
+
+		try {
+			yield `${key}:${get_live_state().value}`;
+
+			while (true) {
+				yield `${key}:${await next_live_value()}`;
+			}
+		} finally {
+			record_live_finalization();
+		}
+	},
+);
+
 export const GetLifecycle = query.live(async function* () {
 	lifecycle_events.push("started");
 
@@ -74,14 +106,54 @@ export const GetSerialized = query(() => ({
 	set: new Set(["alpha", "beta"]),
 }));
 
+export const GetRefreshable = query(Schema.toStandardSchemaV1(Schema.String), (key) => ({
+	key,
+	invocation: ++refresh_query_count,
+}));
+
+export const GetSlowQuery = query(Schema.toStandardSchemaV1(Schema.String), async (key) => {
+	await wait_for_gate("query");
+
+	return `slow:${key}`;
+});
+
+export const GetQueryFailure = query(Schema.toStandardSchemaV1(Schema.String), (kind) => {
+	error(409, { message: `query:${kind}:conflict` });
+});
+
+export const GetMutation = query(() => ({ value: mutation_value }));
+
 export const Increment = command(Schema.toStandardSchemaV1(Schema.Number), (amount) => {
 	const event = getRequestEvent();
+	const command_count = Number(event.cookies.get("command") ?? "0") + amount;
 
-	command_count += amount;
 	event.cookies.set("command", String(command_count), { path: "/" });
 
 	return `command:${command_count}`;
 });
+
+export const Mutate = command(Schema.toStandardSchemaV1(Schema.Number), async (amount) => {
+	const event = getRequestEvent();
+
+	mutation_value += amount;
+	await requested(GetMutation, 1).refreshAll();
+
+	return {
+		method: event.request.method,
+		request_id: event.locals.request_id,
+		value: mutation_value,
+	};
+});
+
+export const SlowCommand = command(async () => {
+	await wait_for_gate("command");
+
+	return "command:released";
+});
+
+export const RedirectCommand = command(() => redirect(303, "/redirected?source=command"));
+
+export const FailCommand = command(() => error(409, { message: "command:conflict" }));
 
 export const CreateItem = form(ItemStandardSchema, (data, issue) => {
 	if (data.items[0]?.label === "blocked") {
@@ -103,4 +175,18 @@ export const CreateKeyedItem = form(KeyedItemSchema, (data, issue) => {
 	};
 });
 
-export const GetSnapshot = prerender(() => "snapshot:ready", { dynamic: true });
+export const CreateTransformedItem = form(TransformedItemStandardSchema, async (data) => {
+	if (data.label === "slow") {
+		await wait_for_gate("form");
+	}
+
+	if (data.label === "redirect") {
+		redirect(303, "/redirected?source=form");
+	}
+
+	return {
+		amount: data.amount,
+		amount_type: typeof data.amount,
+		message: `transformed:${data.amount}:${data.label}`,
+	};
+});

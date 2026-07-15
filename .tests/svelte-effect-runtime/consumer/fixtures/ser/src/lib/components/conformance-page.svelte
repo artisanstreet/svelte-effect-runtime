@@ -6,9 +6,9 @@
 		GetLive,
 		GetProfile,
 		GetSerialized,
-		GetSnapshot,
 		Increment,
 	} from "$lib/conformance.remote";
+	import NativePrerenderSummary from "$lib/components/native-prerender-summary.svelte";
 	import { Effect } from "effect";
 
 	const ProfileResource = GetProfile({ id: "alpha" });
@@ -18,10 +18,6 @@
 	const BatchedSecond = GetBatched("beta");
 	const LiveResource = GetLive();
 	const SerializedResource = GetSerialized();
-	const SnapshotResource = GetSnapshot();
-	const SnapshotEffect = Effect.isEffect(SnapshotResource)
-		? SnapshotResource
-		: Effect.promise(() => Promise.resolve(SnapshotResource));
 
 	let command_result = $state("idle");
 	let profile = $state(yield* ProfileResource);
@@ -33,7 +29,6 @@
 	const batched_second = yield* BatchedSecond;
 	const live_value = yield* LiveResource;
 	const serialized = yield* SerializedResource;
-	const snapshot = yield* SnapshotEffect;
 
 	CreateItem.enhance(({ submit }) =>
 		Effect.gen(function* () {
@@ -42,7 +37,11 @@
 	);
 
 	const RefreshProfile = Effect.gen(function* () {
-		profile = yield* ProfileResource.refresh();
+		yield* ProfileResource.refresh();
+
+		if (ProfileResource.ready) {
+			profile = ProfileResource.current;
+		}
 	});
 
 	const RunCommand = Effect.gen(function* () {
@@ -53,6 +52,10 @@
 		signal_count = yield* Effect.succeed(signal_count + 1);
 	});
 </script>
+
+{#snippet rendered(value)}
+	<p data-testid="render">{value}</p>
+{/snippet}
 
 <svelte:head>
 	<title>SER conformance runtime</title>
@@ -65,7 +68,7 @@
 	<p data-testid="dedupe">{deduped_first.invocation}:{deduped_second.invocation}</p>
 	<p data-testid="batch">{batched_first}|{batched_second}</p>
 	<p data-testid="live">{live_value}</p>
-	<p data-testid="snapshot">{snapshot}</p>
+	<NativePrerenderSummary />
 	<p data-testid="serialized">
 		{serialized.date instanceof Date}:
 		{serialized.map instanceof Map}:
@@ -109,5 +112,6 @@
 		<p data-testid="declaration">{declared}</p>
 	{/if}
 	{@html yield* Effect.succeed('<strong data-testid="html">html:ready</strong>')}
+	{@render rendered(yield* Effect.succeed("render:ready"))}
 	<button data-testid="signal" onclick={yield* AdvanceSignal}>Signal {signal_count}</button>
 </main>

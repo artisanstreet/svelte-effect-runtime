@@ -2,7 +2,20 @@ import { compare_observations } from "./harness/comparison.ts";
 import { make_evidence } from "./harness/evidence.ts";
 import { normalize_observation } from "./harness/normalization.ts";
 import { get_target, make_targets, parse_target_source } from "./harness/target.ts";
+import { get_conformance_browsers } from "./harness/model.ts";
 import { describe, expect, test } from "vitest";
+
+describe("conformance browser selection", () => {
+	test("keeps Firefox in broad lanes where Portless TLS is supported", () => {
+		expect(get_conformance_browsers("fast", "linux")).toEqual(["chromium"]);
+		expect(get_conformance_browsers("broad", "linux")).toEqual([
+			"chromium",
+			"firefox",
+			"webkit",
+		]);
+		expect(get_conformance_browsers("broad", "win32")).toEqual(["chromium", "webkit"]);
+	});
+});
 
 describe("conformance target selection", () => {
 	test("keeps native as oracle while stable and candidate remain independent artifacts", () => {

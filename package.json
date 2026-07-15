@@ -11,6 +11,7 @@
 		"check": "corepack pnpm run check:build-tools && corepack pnpm run check:grammars && corepack pnpm run check:runtime && corepack pnpm run check:lsp && corepack pnpm run check:vsix && vp check --no-lint package.json pnpm-workspace.yaml vite.config.ts build modules/svelte-effect-runtime modules/svelte-effect-runtime-grammars modules/svelte-effect-runtime-language-server modules/svelte-effect-runtime-vsix .tests",
 		"check:build-tools": "vp exec tsc -p build/tsconfig.json --noEmit",
 		"check:conformance": "vp node .tests/svelte-effect-runtime/consumer/harness/prepare.ts",
+		"check:conformance:matrix": "corepack pnpm exec cross-env SVELTEKIT_MATRIX=all vp node .tests/svelte-effect-runtime/consumer/harness/prepare.ts",
 		"check:grammars": "corepack pnpm --dir modules/svelte-effect-runtime-grammars run check",
 		"check:lsp": "corepack pnpm --dir modules/svelte-effect-runtime-language-server run check",
 		"check:runtime": "corepack pnpm --dir modules/svelte-effect-runtime run check",

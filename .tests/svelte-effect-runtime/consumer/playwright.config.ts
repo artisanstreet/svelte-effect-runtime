@@ -1,5 +1,9 @@
 import { defineConfig, devices, type PlaywrightTestProject } from "@playwright/test";
-import { conformance_proxy_port, conformance_target_ports } from "../unit/harness/model.ts";
+import {
+	conformance_proxy_port,
+	conformance_target_ports,
+	get_conformance_browsers,
+} from "../unit/harness/model.ts";
 import { fileURLToPath } from "node:url";
 import { delimiter, dirname, resolve } from "node:path";
 
@@ -21,7 +25,7 @@ const portless_env = {
 };
 const lane = process.env.CONFORMANCE_LANE ?? "fast";
 const target_names = ["native", "stable", "candidate"] as const;
-const browsers = lane === "broad" ? ["chromium", "firefox", "webkit"] : ["chromium"];
+const browsers = get_conformance_browsers(lane, process.platform);
 const projects: PlaywrightTestProject[] = browsers.map((browser_name) => ({
 	name: browser_name,
 	use: {

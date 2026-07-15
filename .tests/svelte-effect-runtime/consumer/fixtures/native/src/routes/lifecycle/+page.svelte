@@ -1,7 +1,5 @@
 <script lang="ts">
-	import { GetLifecycle } from "$lib/conformance.remote";
-
-	const lifecycle = GetLifecycle();
+	import LifecyclePage from "$lib/components/lifecycle-page.svelte";
 </script>
 
-<p data-testid="lifecycle">{await lifecycle}</p>
+<LifecyclePage />

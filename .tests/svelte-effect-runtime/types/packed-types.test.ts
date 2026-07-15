@@ -1,7 +1,3 @@
-import { cp, mkdir, writeFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-import { join } from "node:path";
-import { expect, test } from "vitest";
 import {
 	assert_command_succeeded,
 	ensure_packed_artifact,
@@ -9,13 +5,18 @@ import {
 	read_primary_dependency_versions,
 	run_command,
 } from "../public-api/packed-artifact.ts";
+import { cp, mkdir, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { expect, test } from "vitest";
+import { join } from "node:path";
+import "./source-types.ts";
 
 const fixture_root = fileURLToPath(new URL("./fixtures", import.meta.url));
-const negative_fixtures = [
-	"query-handler-negative.ts",
-	"query-input-negative.ts",
-	"runtime-layer-negative.ts",
-] as const;
+const negative_fixtures = {
+	"query-handler-negative.ts": { code: "TS2769", line: 4 },
+	"query-input-negative.ts": { code: "TS2554", line: 6 },
+	"runtime-layer-negative.ts": { code: "TS2353", line: 3 },
+} as const;
 
 let workspace_promise: Promise<string> | undefined;
 
@@ -29,14 +30,18 @@ test("packed declarations preserve positive public inference contracts", async (
 
 test("packed declarations reject invalid handlers, missing inputs, and non-Layer runtimes", async () => {
 	const workspace = await prepare_types_workspace();
-	const tsconfig_path = await write_tsconfig(workspace, negative_fixtures);
+	const tsconfig_path = await write_tsconfig(workspace, Object.keys(negative_fixtures));
 	const result = run_command("corepack", ["pnpm", "exec", "tsc", "-p", tsconfig_path], workspace);
 	const diagnostics = `${result.stdout}${result.stderr}`;
 
 	expect(result.status).not.toBe(0);
 
-	for (const fixture of negative_fixtures) {
-		expect(diagnostics, `missing diagnostic for ${fixture}`).toContain(fixture);
+	for (const [fixture, expected] of Object.entries(negative_fixtures)) {
+		const diagnostic = new RegExp(
+			`${fixture.replaceAll(".", "\\.")}\\(${expected.line},\\d+\\): error ${expected.code}:`,
+		);
+
+		expect(diagnostics, `wrong diagnostic for ${fixture}`).toMatch(diagnostic);
 	}
 }, 180_000);
 

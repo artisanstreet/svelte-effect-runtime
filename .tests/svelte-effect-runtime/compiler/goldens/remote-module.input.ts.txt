@@ -1,0 +1,8 @@
+import * as __remote from "__sveltekit/remote";
+
+export const GetPost = __remote.query("abc/GetPost");
+export const GetPosts = __remote.query_batch("abc/GetPosts");
+export const GetClock = __remote.query_live("abc/GetClock");
+export const SavePost = __remote.command("abc/SavePost");
+export const EditPost = __remote.form("abc/EditPost");
+export const GetNavigation = __remote.prerender("abc/GetNavigation");

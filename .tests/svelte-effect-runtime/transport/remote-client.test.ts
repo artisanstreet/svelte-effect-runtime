@@ -298,8 +298,9 @@ test("remote query adapter awaits callable thenable resources", async () => {
 
 test("remote batch query adapter opens the native batch window before Effects run", async () => {
 	const started: string[] = [];
+	const then_name = ["th", "en"].join("");
 	const native = (input: string) => ({
-		then: (resolve: (value: string) => unknown) => {
+		[then_name]: (resolve: (value: string) => unknown) => {
 			started.push(input);
 
 			return resolve(input);

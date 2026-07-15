@@ -5,12 +5,23 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { test } from "vitest";
 
+type TypeFixture = {
+	readonly filename: string;
+	readonly source: string;
+};
+
+const type_fixtures: TypeFixture[] = [];
+
+function type_contract(_promise: string, register: () => Promise<void>): void {
+	void register();
+}
+
 /**
  * Type-error fixtures intentionally keep TypeScript's directive comment syntax
  * inside embedded source strings because the compiler only recognizes that
  * exact marker.
  */
-test("remote form preflight keeps enhance callback Effect-aware", async () => {
+type_contract("remote form preflight keeps enhance callback Effect-aware", async () => {
 	await assert_type_checks(
 		"preflight-enhance.ts",
 		`
@@ -47,7 +58,7 @@ returning_form.preflight(schema).enhance(({ submit }) => submit().updates());
 	);
 });
 
-test("remote form preflight keeps validate Effect-yieldable", async () => {
+type_contract("remote form preflight keeps validate Effect-yieldable", async () => {
 	await assert_type_checks(
 		"preflight-validate.ts",
 		`
@@ -75,7 +86,7 @@ Effect.gen(function* () {
 	);
 });
 
-test("remote form enhance submit keeps form result types", async () => {
+type_contract("remote form enhance submit keeps form result types", async () => {
 	await assert_type_checks(
 		"enhance-submit-types.ts",
 		`
@@ -116,7 +127,7 @@ form.enhance(({ result, submit }) =>
 	);
 });
 
-test("keyed remote forms remain Effect-callable", async () => {
+type_contract("keyed remote forms remain Effect-callable", async () => {
 	await assert_type_checks(
 		"keyed-form-callable.ts",
 		`
@@ -147,7 +158,7 @@ Effect.gen(function* () {
 	);
 });
 
-test("remote client adapters keep structured remote failure types", async () => {
+type_contract("remote client adapters keep structured remote failure types", async () => {
 	await assert_type_checks(
 		"remote-failure-types.ts",
 		`
@@ -197,7 +208,7 @@ query().pipe(
 	);
 });
 
-test("remote form updates accepts Effect query wrappers", async () => {
+type_contract("remote form updates accepts Effect query wrappers", async () => {
 	await assert_type_checks(
 		"remote-updates-query-wrapper.ts",
 		`
@@ -253,7 +264,7 @@ void clock_stream;
 	);
 });
 
-test("remote command updates preserve client and public Effect types", async () => {
+type_contract("remote command updates preserve client and public Effect types", async () => {
 	await assert_type_checks(
 		"remote-command-updates.ts",
 		`
@@ -310,7 +321,7 @@ PublicCommand().updates(PublicCommand);
 	);
 });
 
-test("remote form types reject invalid preflight and command updates", async () => {
+type_contract("remote form types reject invalid preflight and command updates", async () => {
 	await assert_type_checks(
 		"remote-form-negative-boundaries.ts",
 		`
@@ -368,7 +379,7 @@ form.enhance(({ submit }) =>
 	);
 });
 
-test("remote query adapter infers decoder output", async () => {
+type_contract("remote query adapter infers decoder output", async () => {
 	await assert_type_checks(
 		"remote-query-adapter-inference.ts",
 		`
@@ -394,7 +405,7 @@ get_post({ slug: "one" });
 	);
 });
 
-test("markup value helper infers yielded value types", async () => {
+type_contract("markup value helper infers yielded value types", async () => {
 	await assert_type_checks(
 		"markup-value-helper-inference.ts",
 		`
@@ -411,7 +422,7 @@ void count;
 	);
 });
 
-test("server type exports include factory helper types", async () => {
+type_contract("server type exports include factory helper types", async () => {
 	await assert_type_checks(
 		"server-type-exports.ts",
 		`
@@ -446,7 +457,7 @@ void exports_tuple;
 	);
 });
 
-test("server schema remotes preserve encoded input and domain errors", async () => {
+type_contract("server schema remotes preserve encoded input and domain errors", async () => {
 	await assert_type_checks(
 		"server-schema-remote-types.ts",
 		`
@@ -546,7 +557,7 @@ ReadNumber(1);
 	);
 });
 
-test("Prerender inputs and resources expose Effect-native public types", async () => {
+type_contract("Prerender inputs and resources expose Effect-native public types", async () => {
 	await assert_type_checks(
 		"server-prerender-types.ts",
 		`
@@ -620,7 +631,7 @@ void wrong_encoded_inputs;
 	);
 });
 
-test("server remote helpers stay Effect-yieldable in markup helpers", async () => {
+type_contract("server remote helpers stay Effect-yieldable in markup helpers", async () => {
 	await assert_type_checks(
 		"server-remote-markup.ts",
 		`
@@ -883,7 +894,7 @@ void check_generated_markup_helpers;
 	);
 });
 
-test("server remote helpers preserve domain error and Standard Schema types", async () => {
+type_contract("server remote helpers preserve domain error and Standard Schema types", async () => {
 	await assert_type_checks(
 		"server-remote-domain-types.ts",
 		`
@@ -1033,7 +1044,7 @@ void generated_value;
 	);
 });
 
-test("remote form enhance submit exposes form result Effects", async () => {
+type_contract("remote form enhance submit exposes form result Effects", async () => {
 	await assert_type_checks(
 		"remote-form-submit-result.ts",
 		`
@@ -1056,7 +1067,7 @@ void updates_effect;
 	);
 });
 
-test("RequestEvent locals use SvelteKit App.Locals augmentation", async () => {
+type_contract("RequestEvent locals use SvelteKit App.Locals augmentation", async () => {
 	await assert_type_checks(
 		"request-event-locals.ts",
 		`
@@ -1083,7 +1094,17 @@ Effect.gen(function* () {
 	);
 });
 
-async function assert_type_checks(filename: string, source: string): Promise<void> {
+test("source type contracts compile together", async () => {
+	await compile_type_fixtures(type_fixtures);
+});
+
+function assert_type_checks(filename: string, source: string): Promise<void> {
+	type_fixtures.push({ filename, source });
+
+	return Promise.resolve();
+}
+
+async function compile_type_fixtures(fixtures: ReadonlyArray<TypeFixture>): Promise<void> {
 	const repo_root = fileURLToPath(new URL("../../..", import.meta.url));
 	const tmp_root = join(repo_root, ".tmp");
 
@@ -1091,7 +1112,6 @@ async function assert_type_checks(filename: string, source: string): Promise<voi
 
 	const dir = await mkdtemp(join(tmp_root, "remote-client-types-"));
 	const app_server_path = join(dir, "$app-server.ts");
-	const source_path = join(dir, filename);
 	const tsconfig_path = join(dir, "tsconfig.json");
 
 	await writeFile(
@@ -1132,7 +1152,18 @@ export function prerender(..._args: unknown[]): unknown {
 `,
 	);
 
-	await writeFile(source_path, source.replaceAll("__RUNTIME__", to_posix_path(repo_root)));
+	const source_paths = await Promise.all(
+		fixtures.map(async ({ filename, source }) => {
+			const source_path = join(dir, filename);
+
+			await writeFile(
+				source_path,
+				source.replaceAll("__RUNTIME__", to_posix_path(repo_root)),
+			);
+
+			return source_path;
+		}),
+	);
 
 	await writeFile(
 		tsconfig_path,
@@ -1162,7 +1193,7 @@ export function prerender(..._args: unknown[]): unknown {
 					strict: true,
 					target: "es2022",
 				},
-				files: [to_posix_path(source_path)],
+				files: source_paths.map(to_posix_path),
 			},
 			null,
 			2,

@@ -12,6 +12,21 @@ export const capability_names = [
 
 export const conformance_proxy_port = 41_730;
 
+export const conformance_proxy_protocol = "https";
+
+export type ConformanceBrowser = "chromium" | "firefox" | "webkit";
+
+export function get_conformance_browsers(
+	lane: string,
+	platform: NodeJS.Platform,
+): ReadonlyArray<ConformanceBrowser> {
+	if (lane !== "broad") {
+		return ["chromium"];
+	}
+
+	return platform === "win32" ? ["chromium", "webkit"] : ["chromium", "firefox", "webkit"];
+}
+
 export type Capability = (typeof capability_names)[number];
 
 export type TargetName = "native" | "stable" | "candidate";

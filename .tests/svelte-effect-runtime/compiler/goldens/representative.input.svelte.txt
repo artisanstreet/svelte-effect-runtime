@@ -1,0 +1,44 @@
+<script lang="ts" effect>
+	import { Effect } from "effect";
+
+	const values = [1, 2];
+	const page = yield* Effect.succeed("ready");
+	let count = $state(yield* Effect.succeed(1));
+	const doubled = $derived(yield* Effect.succeed(count * 2));
+	const Increment = Effect.gen(function* () {
+		count += 1;
+	});
+</script>
+
+{#snippet rendered(value)}
+	<span>{value}</span>
+{/snippet}
+
+<p>{yield* Effect.succeed(`${page}:${doubled}`)}</p>
+{#if yield* Effect.succeed(count > 0)}
+	<strong>shown</strong>
+{:else if yield* Effect.succeed(false)}
+	<strong>alternate</strong>
+{/if}
+{#each yield* Effect.succeed(values) as value (value)}
+	<span>{value}</span>
+{/each}
+{#await yield* Effect.succeed(page)}
+	<span>pending</span>
+{:then result}
+	<span>{result}</span>
+{:catch error}
+	<span>{error.message}</span>
+{/await}
+{#key yield* Effect.succeed(page)}
+	<span>{page}</span>
+{/key}
+{#if true}
+	{@const declared = yield* Effect.succeed(doubled)}
+	{const bare = yield* Effect.succeed(declared)}
+	{let mutable = $derived(yield* Effect.succeed(bare))}
+	<span>{mutable}</span>
+{/if}
+{@html yield* Effect.succeed("<em>html</em>")}
+{@render rendered(yield* Effect.succeed(doubled))}
+<button onclick={yield* Increment}>increment</button>

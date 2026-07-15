@@ -1,8 +1,5 @@
-<script lang="ts" effect>
-	import { GetLifecycle } from "$lib/conformance.remote";
-
-	const Lifecycle = GetLifecycle();
-	const lifecycle = yield* Lifecycle;
+<script lang="ts">
+	import LifecyclePage from "$lib/components/lifecycle-page.svelte";
 </script>
 
-<p data-testid="lifecycle">{lifecycle}</p>
+<LifecyclePage />

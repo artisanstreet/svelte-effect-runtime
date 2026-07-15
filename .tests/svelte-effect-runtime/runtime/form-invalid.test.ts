@@ -1,13 +1,27 @@
+import { reset_test_request_event, set_test_request_event } from "../unit/fixtures/app-server.ts";
 import { make_invalid_proxy } from "../../../modules/svelte-effect-runtime/src/server/invalid.ts";
+import { reset_server_runtime } from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
+import { Handler } from "../../../modules/svelte-effect-runtime/src/server.ts";
 import { assert_equals } from "../unit/helpers/assert.ts";
+import { afterEach, test } from "vitest";
 import { Effect } from "effect";
-import { test } from "vitest";
+
+afterEach(() => {
+	reset_test_request_event();
+	reset_server_runtime();
+});
 
 test("Form invalid paths preserve numeric array indices", async () => {
 	const invalid = make_invalid_proxy<{
 		readonly items: readonly { readonly label: string }[];
 	}>();
-	const failure = await Effect.runPromise(Effect.flip(invalid.items[0].label("Blocked")));
+	const handler = Handler<() => Promise<unknown>>(() =>
+		Effect.flip(invalid.items[0].label("Blocked")),
+	);
+
+	set_test_request_event({});
+
+	const failure = await handler();
 
 	assert_equals(failure, {
 		_tag: "FormError",
@@ -17,7 +31,11 @@ test("Form invalid paths preserve numeric array indices", async () => {
 
 test("Form invalid paths keep non-canonical numeric object keys as strings", async () => {
 	const invalid = make_invalid_proxy<{ readonly "01": string }>();
-	const failure = await Effect.runPromise(Effect.flip(invalid["01"]("Invalid")));
+	const handler = Handler<() => Promise<unknown>>(() => Effect.flip(invalid["01"]("Invalid")));
+
+	set_test_request_event({});
+
+	const failure = await handler();
 
 	assert_equals(failure, {
 		_tag: "FormError",

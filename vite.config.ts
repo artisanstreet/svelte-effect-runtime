@@ -18,6 +18,22 @@ const ignored_paths = [
 	"pnpm-lock.yaml",
 ];
 
+const ser_syntax_lint_ignored_paths = [
+	...ignored_paths,
+	".tests/svelte-effect-runtime/consumer/fixtures/ser/src/lib/components/command-page.svelte",
+	".tests/svelte-effect-runtime/consumer/fixtures/ser/src/lib/components/conformance-page.svelte",
+	".tests/svelte-effect-runtime/consumer/fixtures/ser/src/lib/components/forms-page.svelte",
+	".tests/svelte-effect-runtime/consumer/fixtures/ser/src/lib/components/lifecycle-page.svelte",
+	".tests/svelte-effect-runtime/consumer/fixtures/ser/src/lib/components/live-page.svelte",
+	".tests/svelte-effect-runtime/consumer/fixtures/ser/src/lib/components/native-prerender-query.svelte",
+	".tests/svelte-effect-runtime/consumer/fixtures/ser/src/lib/components/native-prerender-summary.svelte",
+	".tests/svelte-effect-runtime/consumer/fixtures/ser/src/lib/components/query-page.svelte",
+	".tests/svelte-effect-runtime/consumer/fixtures/ser/src/routes/prerender/+page.svelte",
+	".tests/svelte-effect-runtime/consumer/fixtures/stable/src/lib/components/conformance-page.svelte",
+	".tests/svelte-effect-runtime/signals/fixtures/ser-lifecycle.svelte",
+	".tests/svelte-effect-runtime/signals/fixtures/ser-reactivity.svelte",
+];
+
 export default {
 	fmt: {
 		ignorePatterns: ignored_paths,
@@ -25,7 +41,7 @@ export default {
 		useTabs: true,
 	},
 	lint: {
-		ignorePatterns: ignored_paths,
+		ignorePatterns: ser_syntax_lint_ignored_paths,
 	},
 	resolve: {
 		alias: [
