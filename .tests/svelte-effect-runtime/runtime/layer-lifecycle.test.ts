@@ -1,4 +1,8 @@
-import { reset_test_request_event, set_test_request_event } from "../unit/fixtures/app-server.ts";
+import {
+	make_test_request_event,
+	reset_test_request_event,
+	set_test_request_event,
+} from "../unit/fixtures/app-server.ts";
 import {
 	get_dispatcher,
 	reset_dispatcher,
@@ -85,7 +89,7 @@ test("ServerRuntime shares one scoped Layer service across concurrent Handlers a
 	});
 
 	ServerRuntime.make(ServerProbeLive);
-	set_test_request_event({ url: new URL("http://localhost/runtime") });
+	set_test_request_event(make_test_request_event("http://localhost/runtime"));
 
 	const identities = await Promise.all([handler(), handler()]);
 
@@ -120,10 +124,10 @@ test("concurrent Handler requests retain their own RequestEvent while execution 
 		return retained_event.url.pathname;
 	});
 
-	set_test_request_event({ url: new URL("http://localhost/first") });
+	set_test_request_event(make_test_request_event("http://localhost/first"));
 	const first_result = handler();
 
-	set_test_request_event({ url: new URL("http://localhost/second") });
+	set_test_request_event(make_test_request_event("http://localhost/second"));
 	const second_result = handler();
 
 	release_second();
@@ -156,7 +160,7 @@ test("ServerRuntime shutdown interrupts in-flight Handler work and runs its scop
 	const handler = Handler<NativeHandler>(() => Effect.scoped(PendingRequest));
 
 	ServerRuntime.make();
-	set_test_request_event({ url: new URL("http://localhost/pending") });
+	set_test_request_event(make_test_request_event("http://localhost/pending"));
 
 	const request = handler();
 

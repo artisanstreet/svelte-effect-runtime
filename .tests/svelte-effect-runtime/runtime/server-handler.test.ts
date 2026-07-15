@@ -102,6 +102,52 @@ test("Handler captures and provides the request event before running the callbac
 	assert_equals(await handler(), "/first");
 });
 
+test("Handler interrupts Effect callbacks when request signals abort", async () => {
+	type NativeHandler = () => Promise<never>;
+
+	const controller = new AbortController();
+	let finalization_timeout: ReturnType<typeof setTimeout> | undefined;
+	let signal_finalized = () => {};
+	let signal_started = () => {};
+	const finalized = new Promise<void>((resolve) => {
+		signal_finalized = resolve;
+	});
+	const started = new Promise<void>((resolve) => {
+		signal_started = resolve;
+	});
+	const HandlerEffect = Effect.gen(function* () {
+		yield* Effect.sync(signal_started);
+
+		return yield* Effect.never;
+	}).pipe(Effect.ensuring(Effect.sync(signal_finalized)));
+	const handler = Handler<NativeHandler>(() => HandlerEffect);
+
+	set_test_request_event(
+		make_request_event("http://localhost/request-aborted", controller.signal),
+	);
+
+	const execution = handler();
+
+	await started;
+	controller.abort();
+
+	const timed_out = new Promise<false>((resolve) => {
+		finalization_timeout = setTimeout(() => resolve(false), 250);
+	});
+	const finalized_after_abort = await Promise.race([finalized.then(() => true), timed_out]);
+
+	clearTimeout(finalization_timeout);
+
+	if (!finalized_after_abort) {
+		reset_server_runtime();
+	}
+
+	const [outcome] = await Promise.allSettled([execution]);
+
+	assert_truthy(finalized_after_abort);
+	assert_equals(outcome.status, "rejected");
+});
+
 test("Handler runs through the configured ServerRuntime Layer", async () => {
 	type NativeHandler = () => Promise<string>;
 
@@ -337,7 +383,7 @@ void check_types;
 	);
 });
 
-function make_request_event(url: string) {
+function make_request_event(url: string, signal?: AbortSignal) {
 	return {
 		cookies: {
 			delete() {},
@@ -361,7 +407,7 @@ function make_request_event(url: string) {
 		locals: {},
 		params: {},
 		platform: undefined,
-		request: new Request(url),
+		request: new Request(url, { signal }),
 		route: { id: null },
 		setHeaders() {},
 		tracing: {

@@ -54,7 +54,9 @@ export function Handler<NativeHandler extends (...arguments_: never[]) => unknow
 			event,
 		);
 
-		return await runtime.runPromise(EffectWithRequestEvent);
+		return await runtime.runPromise(EffectWithRequestEvent, {
+			signal: event.request.signal,
+		});
 	};
 
 	return native_handler as unknown as NativeHandler;

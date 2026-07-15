@@ -50,6 +50,16 @@ export function getRequestEvent(): unknown {
 	return current_request_event;
 }
 
+export function make_test_request_event(url = "http://localhost/"): {
+	request: Request;
+	url: URL;
+} {
+	return {
+		request: new Request(url),
+		url: new URL(url),
+	};
+}
+
 export function set_test_request_event(event: unknown): void {
 	current_request_event = event;
 }

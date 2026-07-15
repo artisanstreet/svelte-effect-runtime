@@ -377,12 +377,6 @@ test(request_interruption_scenario.promise, async ({ browser, playwright }, test
 			"$.events[1]":
 				"The stable 4.0.0 Handler leaves server work running after the HTTP client aborts; issue #33 records the minimized failure.",
 		},
-		candidate: {
-			"$.events.length":
-				"The Effect-native candidate omits the finalization event after the HTTP client aborts; issue #33 records the minimized failure.",
-			"$.events[1]":
-				"The Effect-native candidate leaves Handler work running after the HTTP client aborts; issue #33 records the minimized failure.",
-		},
 	});
 });
 
