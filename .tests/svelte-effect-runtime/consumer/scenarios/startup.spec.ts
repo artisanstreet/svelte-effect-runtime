@@ -1,19 +1,37 @@
 import { get_conformance_proxy_url } from "../../unit/harness/model.ts";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { make_evidence } from "../../unit/harness/evidence.ts";
 import type { TargetName } from "../../unit/harness/model.ts";
-import { mkdir, writeFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import { dirname, resolve } from "node:path";
 import { Schema } from "effect";
 
 const targets = ["native", "stable", "candidate"] as const satisfies readonly TargetName[];
 const repo_root = resolve(import.meta.dirname, "../../../../");
+const candidate_build_root = resolve(repo_root, ".dist/conformance/applications/candidate/build");
 const StartupBody = Schema.Struct({
 	client: Schema.Literal("missing"),
 	request_id: Schema.Literal("ssr"),
 	route: Schema.Literal("/api/context"),
 	session: Schema.Literal("missing"),
 	url: Schema.Literal("/api/context"),
+});
+
+test("packed candidate runtime excludes compiler-only CommonJS dependencies", async () => {
+	const entries = await readdir(candidate_build_root, { recursive: true });
+	const javascript_files = entries.filter((entry) => entry.endsWith(".js"));
+	const leaking_files: string[] = [];
+
+	for (const entry of javascript_files) {
+		const path = resolve(candidate_build_root, entry);
+		const source = await readFile(path, "utf8");
+
+		if (source.includes("__filename") || source.includes("getNodeSystem")) {
+			leaking_files.push(entry);
+		}
+	}
+
+	expect(leaking_files).toEqual([]);
 });
 
 test("production adapter servers start and answer through named HTTPS origins", async ({
