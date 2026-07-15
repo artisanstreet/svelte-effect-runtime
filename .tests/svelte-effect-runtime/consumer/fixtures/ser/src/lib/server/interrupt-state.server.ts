@@ -3,14 +3,12 @@ import { Effect } from "effect";
 const interrupt_events: string[] = [];
 
 export const RecordInterruptEvent = (event: string) =>
-	Effect.gen(function* () {
+	Effect.sync(() => {
 		interrupt_events.push(event);
 	});
 
-export const ResetInterruptEvents = Effect.gen(function* () {
+export const ResetInterruptEvents = Effect.sync(() => {
 	interrupt_events.length = 0;
 });
 
-export const GetInterruptEvents = Effect.gen(function* () {
-	return [...interrupt_events];
-});
+export const GetInterruptEvents = Effect.sync(() => [...interrupt_events]);

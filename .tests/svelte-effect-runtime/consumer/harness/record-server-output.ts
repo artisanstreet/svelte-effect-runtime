@@ -30,6 +30,9 @@ export async function record_server_output(options: ServerOutputOptions): Promis
 	});
 	const started_at = new Date().toISOString();
 	const child_exit = wait_for_child_close(child);
+
+	child_exit.catch(() => undefined);
+
 	const initial_metadata = {
 		arguments: options.arguments_,
 		child_pid: child.pid ?? null,
@@ -39,14 +42,10 @@ export async function record_server_output(options: ServerOutputOptions): Promis
 		started_at,
 	};
 
-	child.stdout.on("data", (chunk: Buffer) => {
-		stdout.write(chunk);
-		process.stdout.write(chunk);
-	});
-	child.stderr.on("data", (chunk: Buffer) => {
-		stderr.write(chunk);
-		process.stderr.write(chunk);
-	});
+	child.stdout.pipe(stdout);
+	child.stdout.pipe(process.stdout, { end: false });
+	child.stderr.pipe(stderr);
+	child.stderr.pipe(process.stderr, { end: false });
 
 	const forward_sigint = () => child.kill("SIGINT");
 	const forward_sigterm = () => child.kill("SIGTERM");
@@ -70,8 +69,14 @@ export async function record_server_output(options: ServerOutputOptions): Promis
 	} finally {
 		process.removeListener("SIGINT", forward_sigint);
 		process.removeListener("SIGTERM", forward_sigterm);
-		stdout.end();
-		stderr.end();
+		if (!stdout.writableEnded) {
+			stdout.end();
+		}
+
+		if (!stderr.writableEnded) {
+			stderr.end();
+		}
+
 		await Promise.all([finished(stdout), finished(stderr)]);
 	}
 }

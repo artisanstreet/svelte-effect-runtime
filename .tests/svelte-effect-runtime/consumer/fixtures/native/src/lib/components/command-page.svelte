@@ -37,6 +37,7 @@
 	async function run_failing_command() {
 		try {
 			await FailCommand();
+			command_failure = "unexpected-success";
 		} catch (error: unknown) {
 			command_failure = normalize_error(error);
 		}

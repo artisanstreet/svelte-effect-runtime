@@ -1,5 +1,8 @@
 import { assert_equals, assert_string_includes } from "./helpers/assert.ts";
-import { wait_for_child_close } from "../consumer/harness/record-server-output.ts";
+import {
+	record_server_output,
+	wait_for_child_close,
+} from "../consumer/harness/record-server-output.ts";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { EventEmitter } from "node:events";
@@ -15,6 +18,10 @@ const ProcessMetadata = Schema.Struct({
 	exit_code: Schema.Number,
 	finished_at: Schema.String,
 	started_at: Schema.String,
+});
+const InitialProcessMetadata = Schema.Struct({
+	command: Schema.String,
+	exit_code: Schema.Null,
 });
 
 test("server output recorder waits for stdio close after process exit", async () => {
@@ -33,6 +40,32 @@ test("server output recorder waits for stdio close after process exit", async ()
 	child.emit("close", 0);
 
 	await expect(completion).resolves.toBe(0);
+});
+
+test("server output recorder rejects launch failures after writing initial evidence", async () => {
+	const workspace = await mkdtemp(join(tmpdir(), "ser-server-output-launch-"));
+	const evidence_dir = join(workspace, "evidence");
+	const command = join(workspace, "missing-command");
+
+	try {
+		await expect(
+			record_server_output({
+				arguments_: [],
+				command,
+				cwd: workspace,
+				evidence_dir,
+			}),
+		).rejects.toThrow();
+
+		const metadata_source = await readFile(join(evidence_dir, "process.json"), "utf8");
+		const metadata = Schema.decodeUnknownSync(InitialProcessMetadata)(
+			JSON.parse(metadata_source),
+		);
+
+		expect(metadata).toMatchObject({ command, exit_code: null });
+	} finally {
+		await rm(workspace, { force: true, recursive: true });
+	}
 });
 
 test("server output recorder tees both streams and preserves the child exit status", async () => {
