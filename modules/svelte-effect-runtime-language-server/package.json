@@ -19,10 +19,11 @@
 		"access": "public"
 	},
 	"scripts": {
-		"build": "corepack pnpm run clean && corepack pnpm run prepare:runtime && vp node ../../build/lsp.ts",
+		"build": "corepack pnpm --dir ../svelte-effect-runtime run build && corepack pnpm run build:prepared",
+		"build:prepared": "corepack pnpm run clean && corepack pnpm run prepare:runtime && vp node ../../build/lsp.ts",
 		"check": "vp exec tsc -p tsconfig.json --noEmit",
 		"clean": "vp node ../../build/clean.ts svelte-effect-runtime-language-server",
-		"prepare:runtime": "corepack pnpm --dir ../svelte-effect-runtime run build && vp node ../../build/assets.ts svelte-effect-runtime-language-server",
+		"prepare:runtime": "vp node ../../build/assets.ts svelte-effect-runtime-language-server",
 		"start": "node ./.dist/server.cjs --stdio"
 	},
 	"dependencies": {
