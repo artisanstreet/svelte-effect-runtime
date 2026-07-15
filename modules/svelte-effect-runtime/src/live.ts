@@ -1,10 +1,13 @@
+import {
+	RemoteLiveYield,
+	remote_live_stream,
+	type RemoteLiveStreamCarrier,
+} from "$/internal/live.ts";
 import { create_remote_transport_error } from "$/remote/shared.ts";
 import { InvalidLiveQueryFactoryError } from "$/errors.ts";
 import type { RemoteFailure } from "$/remote/shared.ts";
 import { Effect, Stream } from "effect";
-
-/** Brands remote live streams without relying on class identity. */
-const remote_live_stream: unique symbol = Symbol.for("ser.remote-live-stream") as never;
+import { stringify } from "devalue";
 
 const live_metadata: unique symbol = Symbol.for("ser.remote-live-metadata") as never;
 
@@ -145,14 +148,12 @@ type NativeLiveResource<A> = {
 	readonly [Symbol.asyncIterator]?: () => AsyncIterator<A>;
 };
 
-type NativeThenableLiveResource<A> = NativeLiveResource<A> & AsyncIterable<A> & PromiseLike<A>;
-
 type LiveMetadata<A = unknown, ErrorType = never> = {
 	readonly resource: NativeLiveResource<A>;
 	readonly on_error: (error: unknown) => RemoteFailure<ErrorType>;
 };
 
-type LiveMetadataCarrier = {
+type LiveMetadataCarrier = RemoteLiveStreamCarrier & {
 	readonly [live_metadata]?: LiveMetadata<unknown, unknown>;
 };
 
@@ -163,9 +164,10 @@ type PipeableStream<A, E, R> = Stream.Stream<A, E, R> & {
 export function make_remote_live_stream<A, ErrorType = never>(
 	resource: unknown,
 	on_error: (error: unknown) => RemoteFailure<ErrorType>,
+	encode_snapshot: (value: unknown) => string = stringify,
 ): RemoteLiveStream<A, ErrorType> {
 	const live_resource = as_native_live_resource<A>(resource);
-	const stream = make_live_stream(live_resource, on_error);
+	const stream = make_live_stream(live_resource, on_error, encode_snapshot);
 	const metadata: LiveMetadata<A, ErrorType> = {
 		resource: live_resource,
 		on_error,
@@ -177,31 +179,48 @@ export function make_remote_live_stream<A, ErrorType = never>(
 function make_live_stream<A, ErrorType>(
 	resource: NativeLiveResource<A> & AsyncIterable<A>,
 	on_error: (error: unknown) => RemoteFailure<ErrorType>,
+	encode_snapshot: (value: unknown) => string,
 ): Stream.Stream<A, RemoteFailure<ErrorType>, never> {
-	const source = is_thenable_live_resource(resource)
-		? make_cached_live_iterable(resource)
-		: resource;
+	const stream = Stream.fromAsyncIterable(resource, on_error);
+	const then = resource.then;
 
-	return Stream.fromAsyncIterable(source, on_error);
+	if (typeof then !== "function") {
+		return stream;
+	}
+
+	const initial_stream = Stream.fromAsyncIterable(
+		make_cached_live_iterable(resource, then, encode_snapshot),
+		on_error,
+	);
+
+	return Stream.unwrap(
+		RemoteLiveYield.pipe(
+			Effect.map((is_generated_yield) => (is_generated_yield ? initial_stream : stream)),
+		),
+	);
 }
 
-function make_cached_live_iterable<A>(resource: NativeThenableLiveResource<A>): AsyncIterable<A> {
+function make_cached_live_iterable<A>(
+	resource: NativeLiveResource<A> & AsyncIterable<A>,
+	then: PromiseLike<A>["then"],
+	encode_snapshot: (value: unknown) => string,
+): AsyncIterable<A> {
 	return {
 		async *[Symbol.asyncIterator]() {
-			const initial_value = await resource;
-			let is_first_update = true;
+			const initial_value = await resolve_live_initial_value(resource, then);
+			let is_first_snapshot = true;
 
 			yield initial_value;
 
 			for await (const value of resource) {
-				/** Native iterators seed their latest value after the cached initial value. */
-				if (is_first_update && Object.is(value, initial_value)) {
-					is_first_update = false;
+				/** Native iterators usually replay their current snapshot before later updates. */
+				if (is_first_snapshot) {
+					is_first_snapshot = false;
 
-					continue;
+					if (is_same_live_snapshot(initial_value, value, encode_snapshot)) {
+						continue;
+					}
 				}
-
-				is_first_update = false;
 
 				yield value;
 			}
@@ -209,10 +228,32 @@ function make_cached_live_iterable<A>(resource: NativeThenableLiveResource<A>): 
 	};
 }
 
-function is_thenable_live_resource<A>(
-	resource: NativeLiveResource<A> & AsyncIterable<A>,
-): resource is NativeThenableLiveResource<A> {
-	return typeof resource.then === "function";
+function is_same_live_snapshot(
+	left: unknown,
+	right: unknown,
+	encode_snapshot: (value: unknown) => string,
+): boolean {
+	if (Object.is(left, right)) {
+		return true;
+	}
+
+	try {
+		const left_encoded = encode_snapshot(left);
+		const right_encoded = encode_snapshot(right);
+
+		return left_encoded === right_encoded;
+	} catch {
+		return false;
+	}
+}
+
+function resolve_live_initial_value<A>(
+	resource: NativeLiveResource<A>,
+	then: PromiseLike<A>["then"],
+): Promise<A> {
+	return new Promise<A>((resolve, reject) => {
+		void then.call(resource, resolve, reject);
+	});
 }
 
 export function make_failed_remote_live_stream<A, ErrorType = never>(
@@ -353,13 +394,20 @@ function propagate_live_metadata_through_pipe<A, E, R>(
 		value: (...args: readonly unknown[]) => {
 			const result = pipe(...args);
 
-			if (Stream.isStream(result)) {
-				return attach_live_metadata(result, metadata);
+			if (!Stream.isStream(result) || is_live_operator(args[0])) {
+				return result;
 			}
 
-			return result;
+			return attach_live_metadata(result, metadata);
 		},
 	});
+}
+
+function is_live_operator(value: unknown): boolean {
+	return (
+		typeof value === "function" &&
+		(value as { readonly [live_operator]?: true })[live_operator] === true
+	);
 }
 
 function get_live_metadata<A, E>(stream: RemoteLiveStream<A, E>): LiveMetadata<A, E> | undefined;

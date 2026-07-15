@@ -51,13 +51,14 @@ import {
 	make_remote_live_wrapper,
 	make_remote_wrapper,
 } from "./wrappers.ts";
-import { make_failed_remote_live_stream, make_remote_live_stream } from "$/live.ts";
 import { FailWithRemoteError, MakeEffectFromPromise, MakeEffectFromSync } from "$/remote/effect.ts";
+import { make_failed_remote_live_stream, make_remote_live_stream } from "$/live.ts";
 import { is_running_remote_effect_handler } from "./remote-handler-context.ts";
 import { is_handler, is_unchecked, normalize_validator } from "./schema.ts";
 import { copy_property_descriptors } from "$/internal/descriptors.ts";
 import { normalize_remote_helper_error } from "$/remote/server.ts";
 import { create_remote_transport_error } from "$/remote/shared.ts";
+import { get_remote_live_snapshot_encoder } from "./transport.ts";
 import type { RemoteFormInput } from "@sveltejs/kit";
 import { Effect, Result, type Schema } from "effect";
 
@@ -310,6 +311,7 @@ function to_effect_live_query<Input, Output, ErrorType = never>(
 	native: NativeQueryLike<Input>,
 ): EffectRemoteLiveQueryFunction<Input, Output, ErrorType> {
 	const wrapped = ((input: Input) => {
+		const snapshot_encoder = get_remote_live_snapshot_encoder();
 		const resource_attempt = Result.try(() => native(input));
 
 		if (Result.isFailure(resource_attempt)) {
@@ -324,6 +326,7 @@ function to_effect_live_query<Input, Output, ErrorType = never>(
 		return make_remote_live_stream<Output, ErrorType>(
 			resource,
 			create_remote_transport_error,
+			snapshot_encoder,
 		) as EffectRemoteLiveQuery<Output, ErrorType>;
 	}) as unknown as EffectRemoteLiveQueryFunction<Input, Output, ErrorType>;
 

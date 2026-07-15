@@ -10,18 +10,19 @@ import {
 	reset_server_runtime,
 } from "../../../modules/svelte-effect-runtime/src/server/runtime.ts";
 import { create_serialized_remote_failure_envelope } from "../../../modules/svelte-effect-runtime/src/remote/shared.ts";
+import { make_remote_live_snapshot_encoder } from "../../../modules/svelte-effect-runtime/src/server/live-snapshot.ts";
 import { normalize_native_error } from "../../../modules/svelte-effect-runtime/src/remote/failures.ts";
 import { to_form_data } from "../../../modules/svelte-effect-runtime/src/remote/client/form-data.ts";
 import { InvalidPrerenderFactoryError } from "../../../modules/svelte-effect-runtime/src/errors.ts";
+import { Live, make_remote_live_stream } from "../../../modules/svelte-effect-runtime/src/live.ts";
 import { error as svelte_error, isRedirect, redirect as svelte_redirect } from "@sveltejs/kit";
 import { reset_dispatcher } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
 import { ToEffect } from "../../../modules/svelte-effect-runtime/src/yieldable.ts";
-import { Live } from "../../../modules/svelte-effect-runtime/src/live.ts";
-import { Cause, Effect, Exit, Fiber, Schema, Stream } from "effect";
-import { pathToFileURL } from "node:url";
+import { Cause, Effect, Exit, Fiber, Schema, Stream, pipe } from "effect";
+import { assert_equals, assert_throws } from "../unit/helpers/assert.ts";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import { assert_equals, assert_throws } from "../unit/helpers/assert.ts";
+import { pathToFileURL } from "node:url";
 import { afterAll, test } from "vitest";
 import { stringify } from "devalue";
 
@@ -593,33 +594,132 @@ test("remote live query adapter returns a stream with separate controls", async 
 
 test("remote live query yields cached initial values before subscribing to updates", async () => {
 	let iterator_subscriptions = 0;
+	let pipe_calls = 0;
+	let composition_iterator_subscriptions = 0;
 
-	const resource = Object.assign(Promise.resolve("first"), {
+	const resource = Object.assign(Promise.resolve({ value: "first" }), {
 		connected: true,
 		done: false,
 		error: undefined,
 		[Symbol.asyncIterator]: async function* () {
 			iterator_subscriptions += 1;
 
-			yield "first";
-			yield "second";
+			yield { value: "first" };
+			yield { value: "second" };
 		},
 	});
 	const native = () => resource;
-	const query = create_remote_live_query_adapter<undefined, string>(native, (value) => value, "");
+	const query = create_remote_live_query_adapter<undefined, { readonly value: string }>(
+		native,
+		(value) => value,
+		"",
+	);
 	const left_query = query(undefined);
-	const right_query = query(undefined).pipe(Stream.map((value) => value.toUpperCase()));
-	const InitialValues = Effect.all([ToEffect(left_query), ToEffect(right_query)]);
+	const right_query = query(undefined).pipe(Stream.map((value) => value.value.toUpperCase()));
+	const stateful_query = query(undefined).pipe((stream) => {
+		const call = ++pipe_calls;
+
+		return stream.pipe(Stream.map((value) => ({ call, value })));
+	});
+	const InitialValues = Effect.all([
+		ToEffect(left_query),
+		ToEffect(right_query),
+		ToEffect(stateful_query),
+	]);
 
 	const initial_values = await get_server_dispatcher().run(InitialValues);
 
-	assert_equals(initial_values, ["first", "FIRST"]);
+	assert_equals(initial_values, [
+		{ value: "first" },
+		"FIRST",
+		{ call: 1, value: { value: "first" } },
+	]);
 	assert_equals(iterator_subscriptions, 0);
+	assert_equals(pipe_calls, 1);
+
+	const composition_resource = Object.assign(Promise.resolve("cached"), {
+		[Symbol.asyncIterator]: async function* () {
+			composition_iterator_subscriptions += 1;
+
+			yield "iterator";
+		},
+	});
+	const composition_query = make_remote_live_stream<string>(composition_resource, (error) => {
+		throw error;
+	});
+	const data_first_query = Stream.map(composition_query, (value) => `data:${value}`);
+	const standalone_query = pipe(
+		composition_query,
+		Stream.map((value) => `standalone:${value}`),
+	);
+	const CompositionValues = Effect.all([ToEffect(data_first_query), ToEffect(standalone_query)]);
+	const composition_values = await get_server_dispatcher().run(CompositionValues);
+
+	assert_equals(composition_values, ["data:cached", "standalone:cached"]);
+	assert_equals(composition_iterator_subscriptions, 0);
 
 	const updates = await get_server_dispatcher().run(Stream.runCollect(left_query));
 
-	assert_equals(updates, ["first", "second"]);
+	assert_equals(updates, [{ value: "first" }, { value: "second" }]);
 	assert_equals(iterator_subscriptions, 1);
+
+	const next_value = await get_server_dispatcher().run(ToEffect(left_query.pipe(Stream.drop(1))));
+
+	assert_equals(next_value, { value: "second" });
+	assert_equals(iterator_subscriptions, 2);
+
+	const changed_resource = Object.assign(Promise.resolve({ value: "first" }), {
+		[Symbol.asyncIterator]: async function* () {
+			yield { value: "changed" };
+			yield { value: "second" };
+		},
+	});
+	const changed_query = create_remote_live_query_adapter<undefined, { readonly value: string }>(
+		() => changed_resource,
+		(value) => value,
+		"",
+	)(undefined);
+	const changed_value = await get_server_dispatcher().run(
+		ToEffect(changed_query.pipe(Stream.drop(1))),
+	);
+
+	assert_equals(changed_value, { value: "changed" });
+});
+
+test("remote live query compares replay snapshots with SvelteKit transport encoders", async () => {
+	class Money {
+		readonly #amount: number;
+
+		constructor(amount: number) {
+			this.#amount = amount;
+		}
+
+		get amount(): number {
+			return this.#amount;
+		}
+	}
+
+	const resource = Object.assign(Promise.resolve(new Money(1)), {
+		[Symbol.asyncIterator]: async function* () {
+			yield new Money(1);
+			yield new Money(2);
+		},
+	});
+	const encode_snapshot = make_remote_live_snapshot_encoder({
+		Money: {
+			encode: (candidate) => (candidate instanceof Money ? candidate.amount : false),
+		},
+	});
+	const query = make_remote_live_stream<Money>(
+		resource,
+		(error) => {
+			throw error;
+		},
+		encode_snapshot,
+	);
+	const next_value = await get_server_dispatcher().run(ToEffect(query.pipe(Stream.drop(1))));
+
+	assert_equals(next_value.amount, 2);
 });
 
 test("remote live status reports failed resources before closed resources", async () => {

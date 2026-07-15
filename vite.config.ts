@@ -49,6 +49,15 @@ export default {
 	resolve: {
 		alias: [
 			{
+				find: "@sveltejs/kit/internal/server",
+				replacement: vite_path(
+					new URL(
+						"./node_modules/@sveltejs/kit/src/exports/internal/server.js",
+						import.meta.url,
+					),
+				),
+			},
+			{
 				find: "@sveltejs/kit",
 				replacement: vite_path(
 					new URL("./node_modules/@sveltejs/kit/src/exports/index.js", import.meta.url),

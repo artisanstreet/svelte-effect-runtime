@@ -31,6 +31,7 @@
 		"./src/dispatcher.ts",
 		"./src/generators.ts",
 		"./src/server.ts",
+		"./src/server/sveltekit-internal.d.ts",
 		"./src/compiler.ts",
 		"./src/remote/shared.ts",
 		"./src/remote/server.ts",

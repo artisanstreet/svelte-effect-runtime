@@ -1121,6 +1121,10 @@ async function compile_type_fixtures(fixtures: ReadonlyArray<TypeFixture>): Prom
 	const dir = await mkdtemp(join(tmp_root, "remote-client-types-"));
 	const app_server_path = join(dir, "$app-server.ts");
 	const tsconfig_path = join(dir, "tsconfig.json");
+	const sveltekit_internal_path = join(
+		repo_root,
+		"modules/svelte-effect-runtime/src/server/sveltekit-internal.d.ts",
+	);
 
 	await writeFile(
 		app_server_path,
@@ -1201,7 +1205,7 @@ export function prerender(..._args: unknown[]): unknown {
 					strict: true,
 					target: "es2022",
 				},
-				files: source_paths.map(to_posix_path),
+				files: [to_posix_path(sveltekit_internal_path), ...source_paths.map(to_posix_path)],
 			},
 			null,
 			2,
