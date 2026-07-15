@@ -871,13 +871,72 @@ test("remote command invocation and pending accounting stay lazy", async () => {
 	assert_equals(command.pending, 0);
 });
 
+test("remote command adapter preserves the native pending getter", async () => {
+	let native_pending = 0;
+	let release = () => {};
+	let signal_invoke_started = () => {};
+
+	const gate = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	const invoke_started = new Promise<void>((resolve) => {
+		signal_invoke_started = resolve;
+	});
+	const native = () => {
+		native_pending += 1;
+		signal_invoke_started();
+
+		return gate.finally(() => {
+			native_pending -= 1;
+		});
+	};
+
+	Object.defineProperty(native, "pending", {
+		get: () => native_pending,
+	});
+
+	const command = create_remote_command_adapter<void, void>(native, (value) => value);
+	const CommandProgram = Effect.gen(function* () {
+		const fiber = yield* Effect.forkChild(command(undefined));
+
+		yield* Effect.promise(() => invoke_started);
+
+		const pending = command.pending;
+
+		yield* Effect.sync(release);
+		yield* Fiber.join(fiber);
+
+		return pending;
+	});
+	const pending = await get_server_dispatcher().run(CommandProgram);
+
+	assert_equals(pending, 1);
+	assert_equals(command.pending, 0);
+});
+
 test("remote command updates are applied immediately and stay scoped to one invocation", async () => {
 	const events: string[] = [];
 	const update_targets: unknown[][] = [];
-	const posts = create_remote_query_adapter<void, string[]>(
-		() => Promise.resolve(["one"]),
+	const native_posts = Promise.resolve(["one"]);
+	const native_posts_query = () => native_posts;
+	const native_feed = Object.assign(Promise.resolve("one"), {
+		async *[Symbol.asyncIterator]() {
+			yield "one";
+		},
+	});
+	const native_feed_query = () => native_feed;
+	const posts_query = create_remote_query_adapter<void, string[]>(
+		native_posts_query,
 		(value) => value,
 	);
+	const feed_query = create_remote_live_query_adapter<void, string>(
+		native_feed_query,
+		(value) => value,
+	);
+	const posts = posts_query(undefined);
+	const feed = feed_query(undefined);
+	const mapped_feed = feed.pipe(Stream.map((value) => value));
+	const override = () => {};
 	const native = (input: string) => {
 		events.push(`invoke:${input}`);
 
@@ -899,7 +958,14 @@ test("remote command updates are applied immediately and stay scoped to one invo
 		return result;
 	};
 	const command = create_remote_command_adapter<string, string>(native, (value) => value);
-	const UpdatedCommand = command("first").updates(posts);
+	const UpdatedCommand = command("first").updates(
+		posts_query,
+		posts,
+		feed_query,
+		feed,
+		mapped_feed,
+		override,
+	);
 	const PlainCommand = command("second");
 
 	assert_equals(events, []);
@@ -912,7 +978,24 @@ test("remote command updates are applied immediately and stay scoped to one invo
 		"invoke:second",
 		"settled:second",
 	]);
-	assert_equals(update_targets, [[posts]]);
+	assert_equals(update_targets, [
+		[native_posts_query, native_posts, native_feed_query, native_feed, native_feed, override],
+	]);
+});
+
+test("remote command transport failures preserve the native diagnostic as their cause", async () => {
+	const native_error = new Error(
+		"Redirects are not allowed in commands. Return a result instead and use goto on the client",
+	);
+	const native = () => Promise.reject(native_error);
+	const command = create_remote_command_adapter<void, never>(native, (value) => value);
+
+	const exit = await get_server_dispatcher().run(Effect.exit(command(undefined)));
+	const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
+
+	assert_equals((error as { _tag?: string })._tag, "RemoteTransportError");
+	assert_equals((error as { cause?: unknown }).cause, native_error);
+	assert_equals(((error as { cause?: Error }).cause as Error).message, native_error.message);
 });
 
 test("remote command interruption releases its pending acquisition", async () => {
@@ -2172,6 +2255,11 @@ test("remote form adapter preserves enhance submit updates as an Effect", async 
 	let updates_called = false;
 	let submit_effect: unknown;
 	let form_result: { id: string } | undefined;
+	const native_posts = Promise.resolve(["one"]);
+	const posts = create_remote_query_adapter<void, string[]>(
+		() => native_posts,
+		(value) => value,
+	)(undefined);
 
 	const native = {
 		method: "POST",
@@ -2189,7 +2277,7 @@ test("remote form adapter preserves enhance submit updates as an Effect", async 
 					};
 
 					promise.updates = (...args: unknown[]) => {
-						updates_called = args[0] === "refresh";
+						updates_called = args[0] === native_posts;
 						form_result = { id: "updated" };
 
 						return Promise.resolve(true);
@@ -2214,7 +2302,7 @@ test("remote form adapter preserves enhance submit updates as an Effect", async 
 			}
 		)
 			.submit()
-			.updates("refresh");
+			.updates(posts);
 	});
 
 	assert_equals(Effect.isEffect(submit_effect), true);

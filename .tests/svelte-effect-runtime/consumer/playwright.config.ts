@@ -2,6 +2,7 @@ import {
 	conformance_proxy_port,
 	conformance_target_ports,
 	get_conformance_browsers,
+	get_conformance_target_url,
 } from "../unit/harness/model.ts";
 import { defineConfig, devices, type PlaywrightTestProject } from "@playwright/test";
 import { make_evidence } from "../unit/harness/evidence.ts";
@@ -85,7 +86,7 @@ export default defineConfig({
 			command: `node "${server_output_recorder}" --evidence-dir "${resolve(repo_root, dirname(make_evidence(".dist/conformance/evidence", "playwright-startup", "server-start", target, "start", "readiness.json").path))}" -- node "${portless_cli}" --name ser-conformance-${target} --force --app-port ${conformance_target_ports[target]} -- node build`,
 			cwd: resolve(applications_root, target),
 			env: portless_env,
-			url: `http://127.0.0.1:${conformance_target_ports[target]}/api/context`,
+			url: `${get_conformance_target_url(target)}/api/context`,
 			reuseExistingServer: false,
 			stdout: "pipe",
 			stderr: "pipe",

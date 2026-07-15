@@ -420,6 +420,14 @@ function get_live_metadata(
 	return (stream as LiveMetadataCarrier)[live_metadata];
 }
 
+export function get_native_remote_live_resource(value: unknown): unknown | undefined {
+	if (!Stream.isStream(value)) {
+		return undefined;
+	}
+
+	return get_live_metadata(value)?.resource;
+}
+
 function read_live_status(resource: NativeLiveResource<unknown>): LiveStatus {
 	if (resource.error !== undefined) {
 		return {

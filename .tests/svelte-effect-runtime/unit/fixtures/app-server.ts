@@ -7,9 +7,14 @@ type RemoteFactory = (...args: unknown[]) => unknown;
 let current_request_event: unknown;
 let current_command_factory: RemoteFactory | undefined;
 let current_prerender_factory: RemoteFactory | undefined;
+let current_query_factory: RemoteFactory | undefined;
 
-export function query(): never {
-	return fail("query");
+export function query(...args: unknown[]): unknown {
+	if (!current_query_factory) {
+		return fail("query");
+	}
+
+	return current_query_factory(...args);
 }
 
 export namespace query {
@@ -66,6 +71,14 @@ export function set_test_request_event(event: unknown): void {
 
 export function reset_test_request_event(): void {
 	current_request_event = undefined;
+}
+
+export function set_test_query(factory: RemoteFactory): void {
+	current_query_factory = factory;
+}
+
+export function reset_test_query(): void {
+	current_query_factory = undefined;
 }
 
 export function set_test_command(factory: RemoteFactory): void {

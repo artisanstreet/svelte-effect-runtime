@@ -11,7 +11,6 @@
 	const MutationResource = GetMutation();
 
 	let command_failure = $state("idle");
-	let command_pending = $state("idle");
 	let command_redirect = $state("idle");
 	let command_result = $state("idle");
 	let mutation = $state(yield* MutationResource);
@@ -19,20 +18,16 @@
 	const MutateValue = Effect.gen(function* () {
 		const Call = Mutate(1);
 
-		command_pending = String(Mutate.pending);
 		const result = yield* Call.updates(MutationResource);
 		mutation = yield* MutationResource;
 
 		command_result = `${result.method}:${result.request_id}:${result.value}`;
-		command_pending = String(Mutate.pending);
 	});
 
 	const RunSlowCommand = Effect.gen(function* () {
 		const Call = SlowCommand();
 
-		command_pending = String(SlowCommand.pending);
 		command_result = yield* Call;
-		command_pending = String(SlowCommand.pending);
 	});
 
 	const RunFailingCommand = Effect.gen(function* () {
@@ -68,16 +63,19 @@
 			const body = Reflect.get(error, "body");
 			const body_message =
 				body && typeof body === "object" ? Reflect.get(body, "message") : undefined;
+			const cause = Reflect.get(error, "cause");
+			const cause_message =
+				cause && typeof cause === "object" ? Reflect.get(cause, "message") : undefined;
 			const message = Reflect.get(error, "message");
 			const status = Reflect.get(error, "status");
 
-			return `${typeof status === "number" ? status : 0}:${typeof body_message === "string" ? body_message : typeof message === "string" ? message : "unknown"}`;
+			return `${typeof status === "number" ? status : 0}:${typeof body_message === "string" ? body_message : typeof message === "string" ? message : typeof cause_message === "string" ? cause_message : "unknown"}`;
 		});
 </script>
 
 <p data-testid="mutation">{mutation.value}</p>
 <p data-testid="command-result">{command_result}</p>
-<p data-testid="command-pending">{command_pending}</p>
+<p data-testid="command-pending">{SlowCommand.pending}</p>
 <p data-testid="command-failure">{command_failure}</p>
 <p data-testid="command-redirect">{command_redirect}</p>
 <button data-testid="mutate" onclick={yield* MutateValue}>Mutate</button>

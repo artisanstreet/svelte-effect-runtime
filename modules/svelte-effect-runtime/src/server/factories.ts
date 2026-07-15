@@ -52,6 +52,10 @@ import {
 	make_remote_wrapper,
 } from "./wrappers.ts";
 import { FailWithRemoteError, MakeEffectFromPromise, MakeEffectFromSync } from "$/remote/effect.ts";
+import {
+	attach_native_remote_query_update,
+	resolve_native_remote_query_updates,
+} from "$/remote/query-update.ts";
 import { make_failed_remote_live_stream, make_remote_live_stream } from "$/live.ts";
 import { is_running_remote_effect_handler } from "./remote-handler-context.ts";
 import { is_handler, is_unchecked, normalize_validator } from "./schema.ts";
@@ -178,7 +182,7 @@ const MakeServerCommandEffect = <Input, Output, ErrorType>(
 			const result = native(input);
 
 			if (updates_args && has_command_updates(result)) {
-				return result.updates(...updates_args);
+				return result.updates(...resolve_native_remote_query_updates(updates_args));
 			}
 
 			return result;
@@ -247,12 +251,14 @@ function to_effect_remote_resource<
 			() => (started_result ?? Promise.resolve(resource)) as Promise<Output>,
 		) as Resource;
 
+		attach_native_remote_query_update(ResourceEffect, resource);
 		attach_resource(resource, ResourceEffect);
 
 		return ResourceEffect;
 	}) as unknown as (input: Input) => Resource;
 
 	copy_property_descriptors(native, wrapped);
+	attach_native_remote_query_update(wrapped, native);
 
 	return wrapped;
 }
@@ -323,14 +329,19 @@ function to_effect_live_query<Input, Output, ErrorType = never>(
 
 		const resource = resource_attempt.success;
 
-		return make_remote_live_stream<Output, ErrorType>(
+		const stream = make_remote_live_stream<Output, ErrorType>(
 			resource,
 			create_remote_transport_error,
 			snapshot_encoder,
 		) as EffectRemoteLiveQuery<Output, ErrorType>;
+
+		attach_native_remote_query_update(stream, resource);
+
+		return stream;
 	}) as unknown as EffectRemoteLiveQueryFunction<Input, Output, ErrorType>;
 
 	copy_property_descriptors(native, wrapped);
+	attach_native_remote_query_update(wrapped, native);
 
 	return wrapped;
 }

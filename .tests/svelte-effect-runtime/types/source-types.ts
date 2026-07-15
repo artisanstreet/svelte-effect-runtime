@@ -269,7 +269,7 @@ type_contract("remote command updates preserve client and public Effect types", 
 		"remote-command-updates.ts",
 		`
 import { Effect, Schema, Stream } from "effect";
-import { Command, Query } from "__RUNTIME__/modules/svelte-effect-runtime/src/mod.ts";
+import { Command, Query, type RemoteLiveStream } from "__RUNTIME__/modules/svelte-effect-runtime/src/mod.ts";
 import {
   create_remote_command_adapter,
   create_remote_query_adapter,
@@ -301,6 +301,11 @@ const PublicCommand = Command(() => Effect.succeed("done"));
 declare const NativePosts: RemoteQueryFunction<{ id: string }, string[]>;
 const ClientPostsResource = client_posts();
 const PublicPostsResource = PublicPosts();
+const PublicClockResource = PublicClockById({ id: "clock" });
+declare const PublicFailingClockResource: RemoteLiveStream<
+  string,
+  { readonly _tag: "ClockError" }
+>;
 const PublicUpdated: Effect.Effect<string, RemoteFailure<never>> =
   PublicCommand().updates(PublicPosts);
 const ClientResourceUpdated: Effect.Effect<string, RemoteFailure<never>> =
@@ -309,6 +314,8 @@ const PublicResourceUpdated: Effect.Effect<string, RemoteFailure<never>> =
   PublicCommand().updates(PublicPostsResource);
 const PublicParameterizedUpdated: Effect.Effect<string, RemoteFailure<never>> =
   PublicCommand().updates(PublicPostsById, PublicClockById);
+const PublicLiveResourceUpdated: Effect.Effect<string, RemoteFailure<never>> =
+  PublicCommand().updates(PublicClockResource, PublicFailingClockResource);
 const NativeUpdated: Effect.Effect<string, RemoteFailure<never>> =
   PublicCommand().updates(NativePosts);
 
@@ -318,6 +325,7 @@ Effect.gen(function* () {
   yield* PublicUpdated;
   yield* PublicResourceUpdated;
   yield* PublicParameterizedUpdated;
+  yield* PublicLiveResourceUpdated;
   yield* NativeUpdated;
 });
 

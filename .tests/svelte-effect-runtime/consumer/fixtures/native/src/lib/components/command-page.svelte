@@ -10,7 +10,6 @@
 	const mutation_resource = GetMutation();
 
 	let command_failure = $state("idle");
-	let command_pending = $state("idle");
 	let command_redirect = $state("idle");
 	let command_result = $state("idle");
 	let mutation = $state(await mutation_resource);
@@ -18,20 +17,16 @@
 	async function mutate() {
 		const call = Mutate(1);
 
-		command_pending = String(Mutate.pending);
 		const result = await call.updates(mutation_resource);
 		mutation = await mutation_resource;
 
 		command_result = `${result.method}:${result.request_id}:${result.value}`;
-		command_pending = String(Mutate.pending);
 	}
 
 	async function run_slow_command() {
 		const call = SlowCommand();
 
-		command_pending = String(SlowCommand.pending);
 		command_result = await call;
-		command_pending = String(SlowCommand.pending);
 	}
 
 	async function run_failing_command() {
@@ -59,17 +54,18 @@
 
 		const value = error as {
 			body?: { message?: string };
+			cause?: { message?: string };
 			message?: string;
 			status?: number;
 		};
 
-		return `${value.status ?? 0}:${value.body?.message ?? value.message ?? "unknown"}`;
+		return `${value.status ?? 0}:${value.body?.message ?? value.message ?? value.cause?.message ?? "unknown"}`;
 	}
 </script>
 
 <p data-testid="mutation">{mutation.value}</p>
 <p data-testid="command-result">{command_result}</p>
-<p data-testid="command-pending">{command_pending}</p>
+<p data-testid="command-pending">{SlowCommand.pending}</p>
 <p data-testid="command-failure">{command_failure}</p>
 <p data-testid="command-redirect">{command_redirect}</p>
 <button data-testid="mutate" onclick={mutate}>Mutate</button>
