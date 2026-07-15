@@ -4,8 +4,9 @@
 		GetRefreshable,
 		GetSlowQuery,
 	} from "$lib/conformance.remote";
-	import NativePrerenderQuery from "$lib/components/native-prerender-query.svelte";
 	import { Effect } from "effect";
+
+	import NativePrerenderQuery from "$lib/components/native-prerender-query.svelte";
 
 	const RefreshableResource = GetRefreshable("cache");
 

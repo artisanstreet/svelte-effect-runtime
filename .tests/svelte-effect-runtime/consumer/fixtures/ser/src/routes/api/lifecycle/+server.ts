@@ -1,7 +1,7 @@
 import { GetLifecycleEvents, ResetLifecycleEvents } from "$lib/lifecycle";
 import { Handler } from "svelte-effect-runtime/server";
-import { Effect } from "effect";
 import type { RequestHandler } from "./$types";
+import { Effect } from "effect";
 
 export const GET = Handler<RequestHandler>(function* () {
 	const events = yield* GetLifecycleEvents;

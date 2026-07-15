@@ -8,8 +8,9 @@
 		GetSerialized,
 		Increment,
 	} from "$lib/conformance.remote";
-	import NativePrerenderSummary from "$lib/components/native-prerender-summary.svelte";
 	import { Effect } from "effect";
+
+	import NativePrerenderSummary from "$lib/components/native-prerender-summary.svelte";
 
 	const ProfileResource = GetProfile({ id: "alpha" });
 	const DedupedFirst = GetDeduped("same");

@@ -1,5 +1,5 @@
-import { wait_for_gate } from "$lib/server/gates.server";
 import type { RequestEvent, RequestHandler } from "./$types";
+import { wait_for_gate } from "$lib/server/gates.server";
 
 function observe_request(event: RequestEvent): Record<string, string> {
 	return {
