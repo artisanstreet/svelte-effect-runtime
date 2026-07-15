@@ -97,9 +97,9 @@ export const GetSharedLive = Query.live(Schema.String, (key) =>
 
 export const GetLifecycle = Query.live(() =>
 	Stream.make("connected").pipe(
-		Stream.concat(Stream.never),
+		Stream.concat(Stream.tick("100 millis").pipe(Stream.map(() => "connected"))),
+		Stream.onStart(RecordLifecycleEvent("started")),
 		Stream.ensuring(RecordLifecycleEvent("finalized")),
-		Stream.tap(() => RecordLifecycleEvent("started")),
 	),
 );
 

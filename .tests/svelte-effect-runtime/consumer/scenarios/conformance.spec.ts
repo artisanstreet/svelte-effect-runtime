@@ -3,6 +3,7 @@ import {
 	test,
 	type APIRequestContext,
 	type Browser,
+	type BrowserContext,
 	type Page,
 	type Playwright,
 	type TestInfo,
@@ -148,7 +149,8 @@ type KeyedFormObservation = {
 };
 
 type LiveFinalizationObservation = {
-	readonly events: ReadonlyArray<string>;
+	readonly active_before_close: boolean;
+	readonly finalized_after_close: boolean;
 };
 
 const targets: ReadonlyArray<TargetEndpoint> = [
@@ -475,20 +477,7 @@ test(handler_control_scenario.promise, async ({ browser, playwright }, test_info
 });
 
 test(live_finalization_scenario.promise, async ({ browser, playwright }, test_info) => {
-	await assert_native_parity(live_finalization_scenario, { browser, playwright }, test_info, {
-		stable: {
-			"$.events.length":
-				"The stable 4.0.0 live transport retains the disconnected stream; issue #30 records the failure.",
-			"$.events[1]":
-				"The stable 4.0.0 live transport omits finalization after page close; issue #30 records the failure.",
-		},
-		candidate: {
-			"$.events.length":
-				"The candidate live transport retains the disconnected stream; issue #30 records the failure.",
-			"$.events[1]":
-				"The candidate live transport omits finalization after page close; issue #30 records the failure.",
-		},
-	});
+	await assert_native_parity(live_finalization_scenario, { browser, playwright }, test_info);
 });
 
 async function observe_browser_contracts({
@@ -819,40 +808,75 @@ async function observe_live_finalization({
 	target,
 }: ApplicationDriver): Promise<LiveFinalizationObservation> {
 	const request = await make_request_context(playwright, target);
-	const context = await browser.newContext({
-		baseURL: target.url,
-		ignoreHTTPSErrors: true,
-	});
-	const page = await context.newPage();
-
-	await request.delete("/api/lifecycle");
-	await page.goto("/lifecycle", { waitUntil: "commit" });
-	await expect(page.getByTestId("lifecycle")).toHaveText("connected");
-	await expect
-		.poll(() => read_lifecycle_events(request), {
-			message: `${target.name} stream must start`,
-		})
-		.toContain("started");
-	await context.close();
+	let context: BrowserContext | undefined;
+	let context_open = false;
 
 	try {
+		context = await browser.newContext({
+			baseURL: target.url,
+			ignoreHTTPSErrors: true,
+		});
+		context_open = true;
+
+		const page = await context.newPage();
+
+		await request.delete("/api/lifecycle");
+		await page.goto("/lifecycle", { waitUntil: "commit" });
+		await expect(page.getByTestId("lifecycle")).toHaveText("connected");
 		await expect
-			.poll(() => read_lifecycle_events(request), {
-				message: `${target.name} stream must finalize`,
-				timeout: 5_000,
+			.poll(async () => has_active_lifecycle(await read_lifecycle_events(request)), {
+				message: `${target.name} stream must start`,
 			})
-			.toContain("finalized");
-	} catch (error: unknown) {
-		if (target.name === "native") {
-			throw error;
+			.toBe(true);
+
+		const before_close = await read_lifecycle_events(request);
+		const finalizations_before_close = count_lifecycle_event(before_close, "finalized");
+
+		await context.close();
+		context_open = false;
+
+		try {
+			await expect
+				.poll(
+					async () =>
+						count_lifecycle_event(await read_lifecycle_events(request), "finalized"),
+					{
+						message: `${target.name} stream must finalize`,
+						timeout: 5_000,
+					},
+				)
+				.toBeGreaterThan(finalizations_before_close);
+		} catch (error: unknown) {
+			if (target.name === "native") {
+				throw error;
+			}
 		}
+
+		const after_close = await read_lifecycle_events(request);
+		const finalizations_after_close = count_lifecycle_event(after_close, "finalized");
+
+		return {
+			active_before_close: has_active_lifecycle(before_close),
+			finalized_after_close: finalizations_after_close > finalizations_before_close,
+		};
+	} finally {
+		const close_context = context_open
+			? (context?.close() ?? Promise.resolve())
+			: Promise.resolve();
+
+		await Promise.all([close_context, request.dispose()]);
 	}
+}
 
-	const events = await read_lifecycle_events(request);
+function has_active_lifecycle(events: ReadonlyArray<string>): boolean {
+	const starts = count_lifecycle_event(events, "started");
+	const finalizations = count_lifecycle_event(events, "finalized");
 
-	await request.dispose();
+	return starts > finalizations;
+}
 
-	return { events };
+function count_lifecycle_event(events: ReadonlyArray<string>, event: string): number {
+	return events.filter((entry) => entry === event).length;
 }
 
 async function assert_native_parity<Value>(
