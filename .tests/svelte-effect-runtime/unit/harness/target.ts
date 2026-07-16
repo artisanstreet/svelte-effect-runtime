@@ -1,10 +1,8 @@
 import type { Target, TargetName, TargetSource } from "./model.ts";
 
-const default_stable_specifier = "svelte-effect-runtime@4.0.0";
-
 export function make_targets(
-	stable_source = `package:${default_stable_specifier}`,
-	candidate_source = "artifact:.dist/svelte-effect-runtime/svelte-effect-runtime-4.0.0.tgz",
+	stable_source: string,
+	candidate_source: string,
 ): ReadonlyArray<Target> {
 	const targets: ReadonlyArray<Target> = [
 		{
@@ -25,6 +23,10 @@ export function make_targets(
 	];
 
 	return targets;
+}
+
+export function make_candidate_artifact_source(version: string): string {
+	return `artifact:.dist/svelte-effect-runtime/svelte-effect-runtime-${version}.tgz`;
 }
 
 export function parse_target_source(value: string): TargetSource {
