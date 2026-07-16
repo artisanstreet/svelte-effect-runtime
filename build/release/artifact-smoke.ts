@@ -24,6 +24,14 @@ export type ConsumerSmokeRequest = {
 	readonly artifact_paths: ReadonlyArray<string>;
 };
 
+export type ConsumerPackageManifest = {
+	readonly name: string;
+	readonly private: true;
+	readonly type: "module";
+	readonly packageManager: "pnpm@11.10.0";
+	readonly dependencies: Readonly<Record<string, string>>;
+};
+
 export type VsixInspection = {
 	readonly name: string;
 	readonly version: string;
@@ -107,7 +115,7 @@ export const SmokeReleaseArtifacts = (request: ArtifactSmokeRequest) =>
 		});
 		const consumer_artifacts = manifest.artifacts
 			.filter((artifact) => artifact.kind === "npm-tarball")
-			.map((artifact) => path.join(request.artifact_dir, artifact.name));
+			.map((artifact) => path.resolve(request.artifact_dir, artifact.name));
 
 		yield* consumer.verify({ version: plan.version, artifact_paths: consumer_artifacts });
 
@@ -160,14 +168,62 @@ export function inspect_vsix_artifact(bytes: Uint8Array, version: string): VsixI
 	};
 }
 
-export function make_consumer_install_args(
-	artifact_paths: ReadonlyArray<string>,
-): ReadonlyArray<string> {
-	if (artifact_paths.length !== 3 || artifact_paths.some((path) => !path.endsWith(".tgz"))) {
+export function make_consumer_package_manifest(
+	request: ConsumerSmokeRequest,
+): ConsumerPackageManifest {
+	if (
+		request.artifact_paths.length !== 3 ||
+		request.artifact_paths.some((path) => !path.endsWith(".tgz"))
+	) {
 		throw new Error("Artifact consumer requires exactly three npm tarballs.");
 	}
 
-	return ["pnpm", "add", "--ignore-scripts", ...artifact_paths];
+	const artifact_specs = Object.fromEntries(
+		[
+			"svelte-effect-runtime",
+			"svelte-effect-runtime-grammars",
+			"svelte-effect-runtime-language-server",
+		].map((package_name) => {
+			const artifact_name = `${package_name}-${request.version}.tgz`;
+			const artifact_path = request.artifact_paths.find((candidate) =>
+				candidate.replaceAll("\\", "/").endsWith(`/${artifact_name}`),
+			);
+
+			if (!artifact_path) {
+				throw new Error(`Artifact consumer is missing ${artifact_name}.`);
+			}
+
+			return [package_name, `file:${artifact_path}`];
+		}),
+	);
+	const grammar_spec = artifact_specs["svelte-effect-runtime-grammars"];
+
+	if (!grammar_spec) {
+		throw new Error("Artifact consumer is missing the grammar package specifier.");
+	}
+
+	return {
+		name: "ser-release-artifact-consumer",
+		private: true,
+		type: "module",
+		packageManager: "pnpm@11.10.0",
+		dependencies: artifact_specs,
+	};
+}
+
+export function make_consumer_workspace_config(request: ConsumerSmokeRequest): string {
+	const manifest = make_consumer_package_manifest(request);
+	const grammar_spec = manifest.dependencies["svelte-effect-runtime-grammars"];
+
+	if (!grammar_spec) {
+		throw new Error("Artifact consumer is missing the grammar package specifier.");
+	}
+
+	return [
+		"overrides:",
+		`  ${JSON.stringify(`svelte-effect-runtime-grammars@${request.version}`)}: ${JSON.stringify(grammar_spec)}`,
+		"",
+	].join("\n");
 }
 
 export function parse_artifact_smoke_request(args: ReadonlyArray<string>): ArtifactSmokeRequest {
@@ -213,12 +269,8 @@ const VerifyConsumerArtifacts = (request: ConsumerSmokeRequest) =>
 			const consumer_dir = yield* MakeTempDirScoped("ser-artifact-consumer-");
 			const corepack = yield* CommandName("corepack");
 			const node = yield* CommandName("node");
-			const package_manifest = {
-				name: "ser-release-artifact-consumer",
-				private: true,
-				type: "module",
-				packageManager: "pnpm@11.10.0",
-			};
+			const package_manifest = make_consumer_package_manifest(request);
+			const workspace_config = make_consumer_workspace_config(request);
 
 			yield* file_system.writeFileString(
 				path.join(consumer_dir, "package.json"),
@@ -228,12 +280,13 @@ const VerifyConsumerArtifacts = (request: ConsumerSmokeRequest) =>
 				path.join(consumer_dir, "artifact-smoke.mjs"),
 				consumer_smoke_source,
 			);
-			yield* RunCommand(
-				corepack,
-				make_consumer_install_args(request.artifact_paths),
-				consumer_dir,
-				{ inherit: true },
+			yield* file_system.writeFileString(
+				path.join(consumer_dir, "pnpm-workspace.yaml"),
+				workspace_config,
 			);
+			yield* RunCommand(corepack, ["pnpm", "install", "--ignore-scripts"], consumer_dir, {
+				inherit: true,
+			});
 			yield* RunCommand(node, ["artifact-smoke.mjs"], consumer_dir, { inherit: true });
 		}),
 	);

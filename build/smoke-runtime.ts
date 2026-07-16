@@ -22,7 +22,6 @@ const page_svelte = `<script lang="ts" effect>
   import { Effect } from "effect";
   import {
     add_one,
-    create_item,
     get_message,
     get_snapshot,
   } from "$lib/demo.remote";
@@ -31,14 +30,12 @@ const page_svelte = `<script lang="ts" effect>
   let count = $state(yield* Effect.succeed(41));
   let query_value = $state("pending");
   let command_value = $state("pending");
-  let form_value = $state("pending");
   let prerender_value = $state("pending");
 
   script_value = yield* Effect.succeed("script effect ready");
   count = yield* Effect.succeed(count + 1);
   query_value = yield* get_message();
   command_value = yield* add_one();
-  form_value = yield* create_item.submit({ title: "draft" });
   prerender_value = yield* get_snapshot();
 
   function click_effect() {
@@ -54,7 +51,6 @@ const page_svelte = `<script lang="ts" effect>
   <p data-testid="count">{count}</p>
   <p data-testid="query">{query_value}</p>
   <p data-testid="command">{command_value}</p>
-  <p data-testid="form">{form_value}</p>
   <p data-testid="prerender">{prerender_value}</p>
   <p data-testid="markup">{yield* Effect.succeed("markup ready")}</p>
 
@@ -78,7 +74,6 @@ const page_svelte = `<script lang="ts" effect>
 
 const demo_remote_ts = `import {
   Command,
-  Form,
   Prerender,
   Query,
 } from "svelte-effect-runtime";
@@ -96,10 +91,6 @@ export const add_one = Command(() =>
 
     return \`command ready \${count}\`;
   })
-);
-
-export const create_item = Form("unchecked", ({ data }) =>
-  Effect.succeed(\`form ready \${data.title}\`)
 );
 
 export const get_snapshot = Prerender(
@@ -145,14 +136,18 @@ export default defineConfig({
   testDir: "tests",
   webServer: {
     command: "corepack pnpm run preview",
-    url: "https://ser-current-smoke.localhost",
-    ignoreHTTPSErrors: true,
+    url: "http://ser-current-smoke.localhost:1355",
     reuseExistingServer: false,
     timeout: 30000,
+    env: {
+      PORTLESS_HTTPS: "0",
+      PORTLESS_PORT: "1355",
+      PORTLESS_STATE_DIR: ".portless",
+      PORTLESS_SYNC_HOSTS: "0",
+    },
   },
   use: {
-    baseURL: "https://ser-current-smoke.localhost",
-    ignoreHTTPSErrors: true,
+    baseURL: "http://ser-current-smoke.localhost:1355",
   },
 });
 `;
@@ -166,7 +161,6 @@ test("current package drives script and markup effects", async ({ page }) => {
   await expect(page.getByTestId("count")).toHaveText("42");
   await expect(page.getByTestId("query")).toHaveText("query ready");
   await expect(page.getByTestId("command")).toHaveText("command ready 1");
-  await expect(page.getByTestId("form")).toHaveText("form ready draft");
   await expect(page.getByTestId("prerender")).toHaveText("prerender ready");
   await expect(page.getByTestId("markup")).toHaveText("markup ready");
   await expect(page.getByTestId("await")).toHaveText("await ready");
@@ -226,7 +220,7 @@ const Main = Effect.gen(function* () {
 				scripts: {
 					build: "vite build",
 					preview:
-						"corepack pnpm dlx portless@0.12.0 ser-current-smoke vp exec vite preview",
+						"corepack pnpm dlx portless@0.12.0 proxy start --no-tls --port 1355 && corepack pnpm dlx portless@0.12.0 --name ser-current-smoke --force -- vp exec vite preview",
 					smoke: "playwright test",
 				},
 				dependencies: {

@@ -2,7 +2,8 @@ import {
 	ArtifactConsumer,
 	SmokeReleaseArtifacts,
 	inspect_vsix_artifact,
-	make_consumer_install_args,
+	make_consumer_package_manifest,
+	make_consumer_workspace_config,
 	parse_artifact_smoke_request,
 	type ConsumerSmokeRequest,
 } from "../../../build/release/artifact-smoke.ts";
@@ -94,7 +95,7 @@ test("VSIX inspection rejects extension identity drift", () => {
 	expect(() => inspect_vsix_artifact(bytes, "4.1.0")).toThrow(/expected 4\.1\.0/i);
 });
 
-test("artifact smoke CLI and consumer install accept only exact inputs", () => {
+test("artifact smoke CLI and consumer manifest accept only exact inputs", () => {
 	expect(
 		parse_artifact_smoke_request([
 			"--plan",
@@ -112,15 +113,37 @@ test("artifact smoke CLI and consumer install accept only exact inputs", () => {
 	expect(() => parse_artifact_smoke_request(["--plan", "plan.json"])).toThrow(
 		/--plan, --manifest, and --artifact-dir/i,
 	);
-	expect(make_consumer_install_args(["runtime.tgz", "grammars.tgz", "lsp.tgz"])).toEqual([
-		"pnpm",
-		"add",
-		"--ignore-scripts",
-		"runtime.tgz",
-		"grammars.tgz",
-		"lsp.tgz",
-	]);
-	expect(() => make_consumer_install_args(["runtime.tgz", "grammars.tgz"])).toThrow(
+	expect(
+		make_consumer_package_manifest({
+			version: "4.0.1",
+			artifact_paths: [
+				"/artifacts/svelte-effect-runtime-4.0.1.tgz",
+				"/artifacts/svelte-effect-runtime-grammars-4.0.1.tgz",
+				"/artifacts/svelte-effect-runtime-language-server-4.0.1.tgz",
+			],
+		}),
+	).toMatchObject({
+		dependencies: {
+			"svelte-effect-runtime": "file:/artifacts/svelte-effect-runtime-4.0.1.tgz",
+			"svelte-effect-runtime-grammars":
+				"file:/artifacts/svelte-effect-runtime-grammars-4.0.1.tgz",
+			"svelte-effect-runtime-language-server":
+				"file:/artifacts/svelte-effect-runtime-language-server-4.0.1.tgz",
+		},
+	});
+	expect(
+		make_consumer_workspace_config({
+			version: "4.0.1",
+			artifact_paths: [
+				"/artifacts/svelte-effect-runtime-4.0.1.tgz",
+				"/artifacts/svelte-effect-runtime-grammars-4.0.1.tgz",
+				"/artifacts/svelte-effect-runtime-language-server-4.0.1.tgz",
+			],
+		}),
+	).toContain(
+		'"svelte-effect-runtime-grammars@4.0.1": "file:/artifacts/svelte-effect-runtime-grammars-4.0.1.tgz"',
+	);
+	expect(() => make_consumer_package_manifest({ version: "4.0.1", artifact_paths: [] })).toThrow(
 		/exactly three npm tarballs/i,
 	);
 });
