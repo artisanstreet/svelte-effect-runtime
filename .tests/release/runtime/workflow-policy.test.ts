@@ -54,6 +54,24 @@ test("workflow policy rejects a master publication path", async () => {
 	expect(violations).toContain("github_prepare must be gated on a manual candidate dispatch.");
 });
 
+test("workflow policy requires candidate history for the dry-run promotion proof", async () => {
+	const workflow = parse(await readFile(".github/workflows/ci.yml", "utf8"));
+	const setup_action = parse(await readFile(".github/actions/setup/action.yml", "utf8"));
+	const checkout = workflow.jobs.dry_run.steps.find(
+		(step: { readonly name?: string }) => step.name === "Checkout selected commit",
+	);
+
+	checkout.with["fetch-depth"] = 1;
+
+	const violations = find_workflow_policy_violations({
+		workflow,
+		setup_action,
+		workflow_files: ["ci.yml"],
+	});
+
+	expect(violations).toContain("Dry-run must fetch candidate history before promotion checks.");
+});
+
 test("workflow policy reads the candidate guard from the job condition", async () => {
 	const workflow = parse(await readFile(".github/workflows/ci.yml", "utf8"));
 	const setup_action = parse(await readFile(".github/actions/setup/action.yml", "utf8"));
