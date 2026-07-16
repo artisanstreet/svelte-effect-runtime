@@ -135,10 +135,14 @@ const playwright_config = `import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "tests",
   webServer: {
-    command: "corepack pnpm run preview",
+    command: "node preview-supervisor.mjs",
     url: "http://ser-current-smoke.localhost:1355",
     reuseExistingServer: false,
     timeout: 30000,
+    gracefulShutdown: {
+      signal: "SIGTERM",
+      timeout: 5000,
+    },
     env: {
       PORTLESS_HTTPS: "0",
       PORTLESS_PORT: "1355",
