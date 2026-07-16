@@ -691,7 +691,14 @@ jobs:
 
     release_gate:
         name: Authorize release
-        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate' && (inputs.mode == 'release' || inputs.mode == 'resume')
+        if: >-
+            always() &&
+            github.event_name == 'workflow_dispatch' &&
+            github.ref == 'refs/heads/candidate' &&
+            !cancelled() &&
+            (inputs.mode == 'release' || inputs.mode == 'resume') &&
+            needs.plan.result == 'success' &&
+            needs.candidate_verified.result == 'success'
         needs:
             - plan
             - candidate_verified

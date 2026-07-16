@@ -51,6 +51,16 @@ test("resume reruns candidate smoke jobs after skipped artifact builds", async (
 	}
 });
 
+test("resume reaches release approval after skipped artifact builds", async () => {
+	const workflow = parse(await readFile(".github/workflows/ci.yml", "utf8"));
+	const condition = workflow.jobs.release_gate.if as string;
+
+	expect(condition).toContain("always()");
+	expect(condition).toContain("!cancelled()");
+	expect(condition).toContain("needs.plan.result == 'success'");
+	expect(condition).toContain("needs.candidate_verified.result == 'success'");
+});
+
 test("resume pins the release plan to the preserved commit", async () => {
 	const workflow = parse(await readFile(".github/workflows/ci.yml", "utf8"));
 	const resume_step = workflow.jobs.plan.steps.find(
