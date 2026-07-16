@@ -265,7 +265,7 @@ export const ProviderMutationLive = Layer.effect(
 			publish_npm: (request) =>
 				Effect.gen(function* () {
 					const npm_command = process.platform === "win32" ? "npm.cmd" : "npm";
-					const package_path = path.resolve(process.cwd(), request.path);
+					const package_path = resolve_provider_artifact_path(path, request.path);
 					const token_variable = process.env.NPM_TOKEN
 						? "NPM_TOKEN"
 						: process.env.NODE_AUTH_TOKEN
@@ -304,17 +304,20 @@ export const ProviderMutationLive = Layer.effect(
 						}),
 					);
 				}),
-			publish_openvsx: (request) =>
-				WithTemporaryEnvironment(
+			publish_openvsx: (request) => {
+				const package_path = resolve_provider_artifact_path(path, request.path);
+
+				return WithTemporaryEnvironment(
 					"OVSX_PAT",
 					process.env.OPEN_VSX_TOKEN ?? process.env.OVSX_PAT ?? "",
 					Run(
 						"corepack",
-						["pnpm", "exec", "ovsx", "publish", request.path],
+						["pnpm", "exec", "ovsx", "publish", package_path],
 						request.cwd,
 						request.timeout_ms,
 					),
-				),
+				);
+			},
 			upload_github_asset: (request) =>
 				RunGithub(request, [
 					"release",
@@ -751,6 +754,14 @@ function npm_url(package_name: string, version: string): string {
 
 function openvsx_url(version: string): string {
 	return `https://open-vsx.org/api/${openvsx_namespace}/${openvsx_extension}/${encodeURIComponent(version)}`;
+}
+
+export function resolve_provider_artifact_path(
+	path_service: { readonly resolve: (...paths: ReadonlyArray<string>) => string },
+	artifact_path: string,
+): string {
+
+	return path_service.resolve(process.cwd(), artifact_path);
 }
 
 function github_api_url(repository: string, resource: string): string {
