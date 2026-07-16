@@ -182,6 +182,16 @@ export function find_workflow_policy_violations(input: WorkflowPolicyInput): Rea
 		violations.push("Dry-run must invoke the zero-write promotion mode.");
 	}
 
+	const dry_run_steps = Array.isArray(dry_run.steps) ? dry_run.steps : [];
+	const dry_run_checkout = dry_run_steps
+		.map(optional_record)
+		.find((step) => step?.name === "Checkout selected commit");
+	const dry_run_checkout_options = optional_record(dry_run_checkout?.with);
+
+	if (dry_run_checkout_options?.["fetch-depth"] !== 0) {
+		violations.push("Dry-run must fetch candidate history before promotion checks.");
+	}
+
 	validate_permissions(jobs, violations);
 	validate_action_pins([workflow, setup_action], violations);
 	validate_artifact_uploads(jobs, violations);
