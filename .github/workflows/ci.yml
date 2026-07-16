@@ -100,7 +100,8 @@ jobs:
                   vp node build/release/cli.ts plan
                   --event workflow_dispatch
                   --ref "${{ github.ref }}"
-                  --commit "${{ github.sha }}"
+                  --commit "$RESUME_COMMIT"
+                  --execution-commit "${{ github.sha }}"
                   --mode resume
                   --resume-version "$RESUME_VERSION"
                   --resume-commit "$RESUME_COMMIT"
@@ -748,7 +749,8 @@ jobs:
                   vp node build/release/cli.ts plan
                   --event workflow_dispatch
                   --ref "${{ github.ref }}"
-                  --commit "${{ github.sha }}"
+                  --commit "$RESUME_COMMIT"
+                  --execution-commit "${{ github.sha }}"
                   --mode resume
                   --resume-version "$RESUME_VERSION"
                   --resume-commit "$RESUME_COMMIT"

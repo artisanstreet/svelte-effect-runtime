@@ -51,6 +51,17 @@ test("resume reruns candidate smoke jobs after skipped artifact builds", async (
 	}
 });
 
+test("resume pins the release plan to the preserved commit", async () => {
+	const workflow = parse(await readFile(".github/workflows/ci.yml", "utf8"));
+	const resume_step = workflow.jobs.plan.steps.find(
+		(step: { readonly name?: string }) => step.name === "Plan exact resume",
+	);
+
+	expect(resume_step.run).toContain('--commit "$RESUME_COMMIT"');
+	expect(resume_step.run).toContain('--execution-commit "${{ github.sha }}"');
+	expect(resume_step.env.RESUME_COMMIT).toBe("${{ inputs.resume_commit }}");
+});
+
 test("workflow policy rejects a master publication path", async () => {
 	const workflow = parse(await readFile(".github/workflows/ci.yml", "utf8"));
 	const setup_action = parse(await readFile(".github/actions/setup/action.yml", "utf8"));

@@ -232,6 +232,27 @@ test("resume requires the exact candidate version and commit", () => {
 	).toThrow(/does not match current version/i);
 });
 
+test("resume separates workflow execution from preserved release identity", () => {
+	const execution_commit = "f".repeat(40);
+	const resume_plan = plan_release({
+		event: "workflow_dispatch",
+		ref: "refs/heads/candidate",
+		commit,
+		execution_commit,
+		current_versions,
+		mode: "resume",
+		repository_state: {
+			...candidate_state,
+			candidate_head: execution_commit,
+			greatest_release_version: "4.1.0",
+			current_tag_exists: true,
+		},
+		resume: { version: "4.1.0", commit },
+	});
+
+	expect(resume_plan).toMatchObject({ mode: "resume", commit });
+});
+
 test("resume restores only a prior publishing plan with the exact candidate identity", () => {
 	const release_plan = plan_release({
 		event: "workflow_dispatch",

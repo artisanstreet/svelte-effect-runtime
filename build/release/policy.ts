@@ -90,6 +90,7 @@ export type PlanReleaseInput = {
 	event: ReleaseEvent;
 	ref: string;
 	commit: string;
+	execution_commit?: string;
 	current_versions: PackageVersions;
 	mode?: ReleaseMode;
 	repository_state?: ReleaseRepositoryState;
@@ -209,9 +210,11 @@ export function plan_release(input: PlanReleaseInput): ReleasePlan {
 		throw new Error("A candidate workflow dispatch requires verified repository state.");
 	}
 
-	if (repository_state.candidate_head !== input.commit) {
+	const execution_commit = input.execution_commit ?? input.commit;
+
+	if (repository_state.candidate_head !== execution_commit) {
 		throw new Error(
-			`Checked out commit ${input.commit} does not match candidate head ${repository_state.candidate_head}.`,
+			`Execution commit ${execution_commit} does not match candidate head ${repository_state.candidate_head}.`,
 		);
 	}
 

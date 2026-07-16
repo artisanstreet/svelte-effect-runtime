@@ -44,6 +44,7 @@ const PlanRequestSchema = Schema.Struct({
 	event: Schema.Literals(["pull_request", "push", "workflow_dispatch"] as const),
 	ref: NonEmptyStringSchema,
 	commit: CommitSchema,
+	execution_commit: Schema.optional(CommitSchema),
 	mode: Schema.optional(Schema.Literals(["dry-run", "release", "resume"] as const)),
 	resume_version: Schema.optional(NonEmptyStringSchema),
 	resume_commit: Schema.optional(CommitSchema),
@@ -126,6 +127,7 @@ const command_flags = {
 		"event",
 		"ref",
 		"commit",
+		"execution-commit",
 		"mode",
 		"resume-version",
 		"resume-commit",
@@ -261,6 +263,7 @@ export function parse_cli_request(
 		event: flags.event ?? environment.GITHUB_EVENT_NAME,
 		ref: flags.ref ?? environment.GITHUB_REF,
 		commit: flags.commit ?? environment.GITHUB_SHA,
+		execution_commit: flags["execution-commit"],
 		mode: flags.mode,
 		resume_version: flags["resume-version"],
 		resume_commit: flags["resume-commit"],
@@ -317,9 +320,14 @@ export const RunReleaseCli = (request: CliRequest) =>
 		if (request.command === "plan") {
 			const current_versions = yield* ReadPackageVersions(repo_root);
 			const current_version = current_versions.runtime;
+			const execution_commit = request.execution_commit ?? request.commit;
 			const repository_state =
 				request.event === "workflow_dispatch"
-					? yield* ReadReleaseRepositoryState(repo_root, request.commit, current_version)
+					? yield* ReadReleaseRepositoryState(
+							repo_root,
+							execution_commit,
+							current_version,
+						)
 					: undefined;
 			const plan = yield* Effect.try({
 				try: () =>
@@ -327,6 +335,9 @@ export const RunReleaseCli = (request: CliRequest) =>
 						event: request.event,
 						ref: request.ref,
 						commit: request.commit,
+						...(request.execution_commit
+							? { execution_commit: request.execution_commit }
+							: {}),
 						current_versions,
 						...(request.mode ? { mode: request.mode } : {}),
 						...(repository_state ? { repository_state } : {}),
