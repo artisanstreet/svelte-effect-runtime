@@ -713,7 +713,14 @@ jobs:
 
     github_prepare:
         name: Prepare GitHub release
-        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate' && (inputs.mode == 'release' || inputs.mode == 'resume')
+        if: >-
+            always() &&
+            github.event_name == 'workflow_dispatch' &&
+            github.ref == 'refs/heads/candidate' &&
+            (inputs.mode == 'release' || inputs.mode == 'resume') &&
+            needs.plan.result == 'success' &&
+            needs.candidate_verified.result == 'success' &&
+            needs.release_gate.result == 'success'
         needs:
             - plan
             - candidate_verified
@@ -793,7 +800,13 @@ jobs:
 
     npm_publish:
         name: Publish npm
-        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate' && (inputs.mode == 'release' || inputs.mode == 'resume')
+        if: >-
+            always() &&
+            github.event_name == 'workflow_dispatch' &&
+            github.ref == 'refs/heads/candidate' &&
+            (inputs.mode == 'release' || inputs.mode == 'resume') &&
+            needs.plan.result == 'success' &&
+            needs.github_prepare.result == 'success'
         needs:
             - plan
             - github_prepare
@@ -840,7 +853,13 @@ jobs:
 
     github_assets:
         name: Publish GitHub assets
-        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate' && (inputs.mode == 'release' || inputs.mode == 'resume')
+        if: >-
+            always() &&
+            github.event_name == 'workflow_dispatch' &&
+            github.ref == 'refs/heads/candidate' &&
+            (inputs.mode == 'release' || inputs.mode == 'resume') &&
+            needs.plan.result == 'success' &&
+            needs.github_prepare.result == 'success'
         needs:
             - plan
             - github_prepare
@@ -886,7 +905,13 @@ jobs:
 
     openvsx_publish:
         name: Publish OpenVSX
-        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate' && (inputs.mode == 'release' || inputs.mode == 'resume')
+        if: >-
+            always() &&
+            github.event_name == 'workflow_dispatch' &&
+            github.ref == 'refs/heads/candidate' &&
+            (inputs.mode == 'release' || inputs.mode == 'resume') &&
+            needs.plan.result == 'success' &&
+            needs.npm_publish.result == 'success'
         needs:
             - plan
             - npm_publish
@@ -936,7 +961,15 @@ jobs:
 
     github_finalize:
         name: Finalize GitHub release
-        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate' && (inputs.mode == 'release' || inputs.mode == 'resume')
+        if: >-
+            always() &&
+            github.event_name == 'workflow_dispatch' &&
+            github.ref == 'refs/heads/candidate' &&
+            (inputs.mode == 'release' || inputs.mode == 'resume') &&
+            needs.plan.result == 'success' &&
+            needs.npm_publish.result == 'success' &&
+            needs.github_assets.result == 'success' &&
+            needs.openvsx_publish.result == 'success'
         needs:
             - plan
             - npm_publish
