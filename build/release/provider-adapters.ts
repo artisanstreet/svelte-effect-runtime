@@ -141,12 +141,14 @@ const GithubAssetSchema = Schema.Struct({
 	digest: Schema.NullOr(Schema.String),
 });
 const GithubReleaseSchema = Schema.Struct({
+	tag_name: Schema.String,
 	html_url: Schema.String,
 	name: Schema.NullOr(Schema.String),
 	body: Schema.NullOr(Schema.String),
 	draft: Schema.Boolean,
 	assets: Schema.Array(GithubAssetSchema),
 });
+const GithubReleaseListSchema = Schema.Array(GithubReleaseSchema);
 
 type JsonResponse = {
 	readonly response: Response;
@@ -448,10 +450,79 @@ const ResolveAnnotatedTag = (request: InspectGithubRequest, tag_sha: string) =>
 	});
 
 const FetchGithubRelease = (request: InspectGithubRequest) =>
-	FetchJson(
-		github_api_url(request.repository, `releases/tags/${encodeURIComponent(request.tag)}`),
-		request.timeout_ms,
+	Effect.gen(function* () {
+		const tag_url = github_api_url(
+			request.repository,
+			`releases/tags/${encodeURIComponent(request.tag)}`,
+		);
+		const by_tag = yield* FetchJson(tag_url, request.timeout_ms);
+
+		if (by_tag.response.status !== 404) {
+			return by_tag;
+		}
+
+		const releases_url = github_api_url(request.repository, "releases?per_page=100");
+
+		return yield* FetchGithubReleaseFromList(request, releases_url, by_tag);
+	});
+
+const FetchGithubReleaseFromList = (
+	request: InspectGithubRequest,
+	url: string,
+	not_found: JsonResponse,
+): Effect.Effect<JsonResponse, unknown> =>
+	Effect.gen(function* () {
+		const releases = yield* FetchJson(url, request.timeout_ms);
+
+		if (releases.response.status !== 200) {
+			return releases;
+		}
+
+		const draft = find_github_release_by_tag(releases.body, request.tag);
+
+		if (draft) {
+			return { response: releases.response, body: draft };
+		}
+
+		const next_page = github_next_page(releases.response.headers);
+
+		if (next_page._tag === "Rejected") {
+			return yield* Effect.fail(new Error(next_page.reason));
+		}
+
+		return next_page._tag === "Next"
+			? yield* FetchGithubReleaseFromList(request, next_page.url, not_found)
+			: not_found;
+	});
+
+export function find_github_release_by_tag(body: unknown, tag: string) {
+	return Schema.decodeUnknownSync(GithubReleaseListSchema)(body).find(
+		(release) => release.tag_name === tag,
 	);
+}
+
+export function github_next_page(headers: Headers) {
+	const link = headers.get("link");
+	const next_entry = link
+		?.split(",")
+		.map((entry) => entry.trim())
+		.find((entry) => entry.endsWith('rel="next"'));
+
+	if (!next_entry) {
+		return { _tag: "Complete" } as const;
+	}
+
+	const next = next_entry.match(/^<([^>]+)>/)?.[1];
+
+	if (!next?.startsWith("https://api.github.com/")) {
+		return {
+			_tag: "Rejected",
+			reason: "GitHub release pagination returned an unsafe next link.",
+		} as const;
+	}
+
+	return { _tag: "Next", url: next } as const;
+}
 
 function make_github_release_state(
 	request: InspectGithubRequest,
