@@ -167,6 +167,20 @@ export function find_workflow_policy_violations(input: WorkflowPolicyInput): Rea
 	require_need(github_assets, "github_prepare", "GitHub asset publication", violations);
 	require_need(openvsx_publish, "npm_publish", "OpenVSX publication", violations);
 
+	for (const [job_id, job] of [
+		["github_prepare", github_prepare],
+		["npm_publish", npm_publish],
+		["github_assets", github_assets],
+		["openvsx_publish", openvsx_publish],
+		["github_finalize", github_finalize],
+	] as const) {
+		if (!String(job.if).includes("always()") || !String(job.if).includes("result == 'success'")) {
+			violations.push(
+				`${job_id} must survive skipped resume ancestors and require successful direct dependencies.`,
+			);
+		}
+	}
+
 	for (const dependency of ["npm_publish", "github_assets", "openvsx_publish"]) {
 		require_need(github_finalize, dependency, "GitHub finalization", violations);
 	}

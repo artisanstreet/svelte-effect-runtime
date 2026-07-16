@@ -61,6 +61,23 @@ test("resume reaches release approval after skipped artifact builds", async () =
 	expect(condition).toContain("needs.candidate_verified.result == 'success'");
 });
 
+test("resume reaches every promotion job after skipped artifact builds", async () => {
+	const workflow = parse(await readFile(".github/workflows/ci.yml", "utf8"));
+
+	for (const job_id of [
+		"github_prepare",
+		"npm_publish",
+		"github_assets",
+		"openvsx_publish",
+		"github_finalize",
+	]) {
+		const condition = workflow.jobs[job_id].if as string;
+
+		expect(condition).toContain("always()");
+		expect(condition).toContain("result == 'success'");
+	}
+});
+
 test("resume pins the release plan to the preserved commit", async () => {
 	const workflow = parse(await readFile(".github/workflows/ci.yml", "utf8"));
 	const resume_step = workflow.jobs.plan.steps.find(
