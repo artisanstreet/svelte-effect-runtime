@@ -1,6 +1,10 @@
 import type { HarnessPhase, Target, TargetName, TargetSource } from "../../unit/harness/model.ts";
 import { get_conformance_proxy_url } from "../../unit/harness/model.ts";
-import { get_target, make_targets } from "../../unit/harness/target.ts";
+import {
+	get_target,
+	make_candidate_artifact_source,
+	make_targets,
+} from "../../unit/harness/target.ts";
 import { read_packed_artifact_version } from "./artifact-manifest.ts";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { render_fixture_sveltekit_config } from "./fixture-config.ts";
@@ -62,10 +66,13 @@ const repo_root = fileURLToPath(new URL("../../../../", import.meta.url));
 
 async function main(): Promise<void> {
 	const corepack = command_name("corepack");
+	const runtime_manifest = await read_manifest(
+		join(repo_root, "modules", "svelte-effect-runtime", "package.json"),
+	);
 	const stable_source = process.env.SER_STABLE_TARGET ?? "package:svelte-effect-runtime@4.0.0";
 	const candidate_source =
 		process.env.SER_CANDIDATE_TARGET ??
-		"artifact:.dist/svelte-effect-runtime/svelte-effect-runtime-4.0.0.tgz";
+		make_candidate_artifact_source(runtime_manifest.version);
 	const layout = resolve_conformance_layout(process.env);
 	const profiles = resolve_sveltekit_profiles(process.env);
 	const targets = make_targets(stable_source, candidate_source);
@@ -80,7 +87,10 @@ async function main(): Promise<void> {
 	await rm(conformance_root, { force: true, recursive: true });
 	await mkdir(conformance_root, { recursive: true });
 
-	if (candidate.source._tag === "Artifact" && is_default_candidate(candidate.source.path)) {
+	if (
+		candidate.source._tag === "Artifact" &&
+		is_default_candidate(candidate.source.path, runtime_manifest.version)
+	) {
 		await run_phase(
 			corepack,
 			["pnpm", "run", "build:runtime"],
@@ -695,10 +705,11 @@ function ensure_contained(root: string, target: string): void {
 	}
 }
 
-function is_default_candidate(path: string): boolean {
-	return (
-		path.replaceAll("\\", "/") === ".dist/svelte-effect-runtime/svelte-effect-runtime-4.0.0.tgz"
-	);
+function is_default_candidate(path: string, version: string): boolean {
+	const source = make_candidate_artifact_source(version);
+	const expected_path = source.slice("artifact:".length);
+
+	return path.replaceAll("\\", "/") === expected_path;
 }
 
 function command_name(command: string): string {

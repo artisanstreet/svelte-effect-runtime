@@ -2,7 +2,12 @@ import { compare_observations, find_differences } from "./harness/comparison.ts"
 import { resolve_git_revision } from "../consumer/harness/prepare.ts";
 import { make_evidence } from "./harness/evidence.ts";
 import { normalize_observation, normalize_value } from "./harness/normalization.ts";
-import { get_target, make_targets, parse_target_source } from "./harness/target.ts";
+import {
+	get_target,
+	make_candidate_artifact_source,
+	make_targets,
+	parse_target_source,
+} from "./harness/target.ts";
 import {
 	get_conformance_browsers,
 	get_conformance_proxy_url,
@@ -60,6 +65,12 @@ describe("conformance target selection", () => {
 			_tag: "Git",
 			reference: "origin/effect-native-ser",
 		});
+	});
+
+	test("derives the candidate artifact from the release version", () => {
+		expect(make_candidate_artifact_source("4.0.1")).toBe(
+			"artifact:.dist/svelte-effect-runtime/svelte-effect-runtime-4.0.1.tgz",
+		);
 	});
 });
 
