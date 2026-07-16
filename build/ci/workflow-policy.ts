@@ -149,6 +149,19 @@ export function find_workflow_policy_violations(input: WorkflowPolicyInput): Rea
 		violations.push("Publication must cross the protected release approval boundary once.");
 	}
 
+	const release_gate_condition = String(release_gate.if);
+
+	if (
+		!release_gate_condition.includes("always()") ||
+		!release_gate_condition.includes("!cancelled()") ||
+		!release_gate_condition.includes("needs.plan.result == 'success'") ||
+		!release_gate_condition.includes("needs.candidate_verified.result == 'success'")
+	) {
+		violations.push(
+			"Release approval must survive skipped resume ancestors and require successful candidate verification.",
+		);
+	}
+
 	require_need(github_prepare, "release_gate", "GitHub preparation", violations);
 	require_need(npm_publish, "github_prepare", "npm publication", violations);
 	require_need(github_assets, "github_prepare", "GitHub asset publication", violations);
