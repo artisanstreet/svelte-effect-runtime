@@ -152,6 +152,137 @@ export default defineConfig({
 });
 `;
 
+const preview_supervisor = `import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { createConnection } from "node:net";
+
+const portless_cli = fileURLToPath(
+  new URL("./node_modules/portless/dist/cli.js", import.meta.url),
+);
+const children = new Set();
+let stopping = false;
+let proxy_ready = false;
+
+function start(arguments_) {
+  const child = spawn(process.execPath, [portless_cli, ...arguments_], {
+    env: process.env,
+    stdio: "inherit",
+  });
+
+  children.add(child);
+  child.once("exit", () => children.delete(child));
+  child.once("error", (error) => {
+    console.error(error);
+    process.exitCode = 1;
+    stop();
+  });
+
+  return child;
+}
+
+function wait_for_proxy(attempts = 100) {
+  return new Promise((resolve, reject) => {
+    const connect = (remaining) => {
+      const socket = createConnection({ host: "127.0.0.1", port: 1355 });
+
+      socket.once("connect", () => {
+        socket.destroy();
+        resolve();
+      });
+      socket.once("error", () => {
+        socket.destroy();
+
+        if (remaining <= 1) {
+          reject(new Error("Timed out waiting for the Portless smoke proxy."));
+
+          return;
+        }
+
+        setTimeout(() => connect(remaining - 1), 100);
+      });
+    };
+
+    connect(attempts);
+  });
+}
+
+function stop() {
+  if (stopping) {
+    return;
+  }
+
+  stopping = true;
+
+  for (const child of children) {
+    child.kill();
+  }
+
+  setTimeout(() => {
+    for (const child of children) {
+      child.kill("SIGKILL");
+    }
+  }, 2_000).unref();
+}
+
+process.once("SIGINT", stop);
+process.once("SIGTERM", stop);
+
+const proxy = start([
+  "proxy",
+  "start",
+  "--foreground",
+  "--no-tls",
+  "--port",
+  "1355",
+  "--skip-trust",
+]);
+
+proxy.once("exit", (code) => {
+  if (!stopping) {
+    if (!proxy_ready) {
+      process.exit(code ?? 1);
+    }
+
+    process.exitCode = code ?? 1;
+    stop();
+  }
+});
+
+try {
+  await wait_for_proxy();
+
+  if (stopping) {
+    process.exit(process.exitCode ?? 1);
+  }
+
+  proxy_ready = true;
+
+  if (proxy.exitCode !== null) {
+    process.exit(proxy.exitCode ?? 1);
+  }
+
+  const preview = start([
+    "--name",
+    "ser-current-smoke",
+    "--force",
+    "--",
+    "vp",
+    "exec",
+    "vite",
+    "preview",
+  ]);
+
+  preview.once("exit", (code) => {
+    process.exitCode = code ?? 1;
+    stop();
+  });
+} catch (error) {
+  console.error(error);
+  process.exitCode = 1;
+  stop();
+}
+`;
+
 const runtime_spec = `import { expect, test } from "@playwright/test";
 
 test("current package drives script and markup effects", async ({ page }) => {
@@ -219,8 +350,7 @@ const Main = Effect.gen(function* () {
 				packageManager: "pnpm@11.10.0",
 				scripts: {
 					build: "vite build",
-					preview:
-						"corepack pnpm dlx portless@0.12.0 proxy start --no-tls --port 1355 && corepack pnpm dlx portless@0.12.0 --name ser-current-smoke --force -- vp exec vite preview",
+					preview: "node preview-supervisor.mjs",
 					smoke: "playwright test",
 				},
 				dependencies: {
@@ -229,6 +359,7 @@ const Main = Effect.gen(function* () {
 					"@sveltejs/kit": "3.0.0-next.1",
 					"@sveltejs/vite-plugin-svelte": "^7.0.0",
 					effect: "^4.0.0-beta.66",
+					portless: "0.12.0",
 					svelte: "^5.56.0",
 					typescript: "^6.0.0",
 					vite: "8.1.3",
@@ -248,6 +379,7 @@ const Main = Effect.gen(function* () {
 			WriteText(smoke_dir, "src/routes/+page.svelte", page_svelte),
 			WriteText(smoke_dir, "vite.config.ts", vite_config),
 			WriteText(smoke_dir, "playwright.config.ts", playwright_config),
+			WriteText(smoke_dir, "preview-supervisor.mjs", preview_supervisor),
 			WriteText(smoke_dir, "tests/runtime.spec.ts", runtime_spec),
 		],
 		{ concurrency: "unbounded" },
