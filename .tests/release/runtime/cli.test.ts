@@ -201,7 +201,7 @@ test("release repository state comes from immutable tags and candidate ancestry"
 		await exec_file("git", ["tag", "v4.0.0", commit], { cwd: temp_root });
 		await exec_file("git", ["tag", "v3.9.0", commit], { cwd: temp_root });
 		await exec_file("git", ["tag", "release-candidate", commit], { cwd: temp_root });
-		const state = await RunEffect(ReadReleaseRepositoryState(temp_root, commit, "4.1.0"));
+		const state = await RunEffect(ReadReleaseRepositoryState(temp_root, "4.1.0"));
 		const plan = plan_release({
 			event: "workflow_dispatch",
 			ref: "refs/heads/candidate",
