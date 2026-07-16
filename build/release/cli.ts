@@ -320,14 +320,9 @@ export const RunReleaseCli = (request: CliRequest) =>
 		if (request.command === "plan") {
 			const current_versions = yield* ReadPackageVersions(repo_root);
 			const current_version = current_versions.runtime;
-			const execution_commit = request.execution_commit ?? request.commit;
 			const repository_state =
 				request.event === "workflow_dispatch"
-					? yield* ReadReleaseRepositoryState(
-							repo_root,
-							execution_commit,
-							current_version,
-						)
+					? yield* ReadReleaseRepositoryState(repo_root, current_version)
 					: undefined;
 			const plan = yield* Effect.try({
 				try: () =>

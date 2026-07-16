@@ -63,20 +63,21 @@ export const ReadPackageVersions = (repo_root: string) =>
 		return Object.fromEntries(entries) as PackageVersions;
 	});
 
-export const ReadReleaseRepositoryState = (repo_root: string, commit: string, version: string) =>
+export const ReadReleaseRepositoryState = (repo_root: string, version: string) =>
 	Effect.gen(function* () {
-		const [candidate_output, master_output, tag_output] = yield* Effect.all(
+		const candidate_output = yield* RunCommand(
+			"git",
+			["rev-parse", "--verify", "refs/remotes/origin/candidate^{commit}"],
+			repo_root,
+		);
+		const candidate_head = candidate_output.stdout.trim();
+		const [master_output, tag_output] = yield* Effect.all(
 			[
-				RunCommand(
-					"git",
-					["rev-parse", "--verify", "refs/remotes/origin/candidate^{commit}"],
-					repo_root,
-				),
 				RunCommand(
 					"git",
 					[
 						"for-each-ref",
-						`--contains=${commit}`,
+						`--contains=${candidate_head}`,
 						"--format=%(refname)",
 						"refs/remotes/origin/master",
 					],
@@ -92,7 +93,6 @@ export const ReadReleaseRepositoryState = (repo_root: string, commit: string, ve
 			.filter((release_version): release_version is string => release_version !== undefined)
 			.sort(compare_semantic_versions);
 		const greatest_release_version = versions.at(-1);
-		const candidate_head = candidate_output.stdout.trim();
 		const candidate_is_on_master = master_output.stdout
 			.split(/\r?\n/)
 			.includes("refs/remotes/origin/master");
@@ -113,11 +113,7 @@ export const ReadCanonicalReleasePlan = (plan_path: string, repo_root?: string) 
 		const mode = resolve_serialized_mode(serialized);
 		const repository_state =
 			mode && repo_root
-				? yield* ReadReleaseRepositoryState(
-						repo_root,
-						serialized.commit,
-						serialized.version,
-					)
+				? yield* ReadReleaseRepositoryState(repo_root, serialized.version)
 				: undefined;
 
 		return yield* Effect.try({
@@ -250,6 +246,9 @@ function canonicalize_release_plan(
 		event: serialized.event,
 		ref: serialized.ref,
 		commit: serialized.commit,
+		...(mode === "resume" && repository_state
+			? { execution_commit: repository_state.candidate_head }
+			: {}),
 		current_versions,
 		...(mode ? { mode } : {}),
 		...(repository_state ? { repository_state } : {}),
