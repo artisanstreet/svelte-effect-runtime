@@ -39,6 +39,18 @@ test("remote transport retains conformance evidence after failures", async () =>
 	});
 });
 
+test("resume reruns candidate smoke jobs after skipped artifact builds", async () => {
+	const workflow = parse(await readFile(".github/workflows/ci.yml", "utf8"));
+
+	for (const job_id of ["candidate_consumer_smoke", "candidate_browser_smoke"]) {
+		const condition = workflow.jobs[job_id].if as string;
+
+		expect(condition).toContain("always()");
+		expect(condition).toContain("needs.plan.result == 'success'");
+		expect(condition).toContain("needs.candidate_assemble.result == 'success'");
+	}
+});
+
 test("workflow policy rejects a master publication path", async () => {
 	const workflow = parse(await readFile(".github/workflows/ci.yml", "utf8"));
 	const setup_action = parse(await readFile(".github/actions/setup/action.yml", "utf8"));

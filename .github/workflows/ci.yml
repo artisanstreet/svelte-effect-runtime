@@ -557,7 +557,12 @@ jobs:
 
     candidate_consumer_smoke:
         name: Candidate / Consumer smoke
-        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate'
+        if: >-
+            always() &&
+            github.event_name == 'workflow_dispatch' &&
+            github.ref == 'refs/heads/candidate' &&
+            needs.plan.result == 'success' &&
+            needs.candidate_assemble.result == 'success'
         needs:
             - plan
             - candidate_assemble
@@ -587,7 +592,12 @@ jobs:
 
     candidate_browser_smoke:
         name: Candidate / Browser smoke
-        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate'
+        if: >-
+            always() &&
+            github.event_name == 'workflow_dispatch' &&
+            github.ref == 'refs/heads/candidate' &&
+            needs.plan.result == 'success' &&
+            needs.candidate_assemble.result == 'success'
         needs:
             - plan
             - candidate_assemble
