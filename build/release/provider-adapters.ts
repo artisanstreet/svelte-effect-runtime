@@ -265,6 +265,7 @@ export const ProviderMutationLive = Layer.effect(
 			publish_npm: (request) =>
 				Effect.gen(function* () {
 					const npm_command = process.platform === "win32" ? "npm.cmd" : "npm";
+					const package_path = path.resolve(process.cwd(), request.path);
 					const token_variable = process.env.NPM_TOKEN
 						? "NPM_TOKEN"
 						: process.env.NODE_AUTH_TOKEN
@@ -272,17 +273,11 @@ export const ProviderMutationLive = Layer.effect(
 							: undefined;
 					const publish_args = [
 						"publish",
-						request.path,
+						package_path,
 						"--access",
 						"public",
 						"--provenance",
 					];
-
-					if (!token_variable) {
-						yield* Run(npm_command, publish_args, request.cwd, request.timeout_ms);
-
-						return;
-					}
 
 					yield* Effect.scoped(
 						Effect.gen(function* () {
@@ -291,14 +286,19 @@ export const ProviderMutationLive = Layer.effect(
 							});
 							const npmrc_path = path.join(temp_dir, ".npmrc");
 
-							yield* file_system.writeFileString(
-								npmrc_path,
-								`//registry.npmjs.org/:_authToken=\${${token_variable}}\n`,
-							);
+							if (token_variable) {
+								yield* file_system.writeFileString(
+									npmrc_path,
+									`//registry.npmjs.org/:_authToken=\${${token_variable}}\n`,
+								);
+							}
+
 							yield* Run(
 								npm_command,
-								[...publish_args, "--userconfig", npmrc_path],
-								request.cwd,
+								token_variable
+									? [...publish_args, "--userconfig", npmrc_path]
+									: publish_args,
+								temp_dir,
 								request.timeout_ms,
 							);
 						}),
