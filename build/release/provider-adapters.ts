@@ -760,7 +760,6 @@ export function resolve_provider_artifact_path(
 	path_service: { readonly resolve: (...paths: ReadonlyArray<string>) => string },
 	artifact_path: string,
 ): string {
-
 	return path_service.resolve(process.cwd(), artifact_path);
 }
 

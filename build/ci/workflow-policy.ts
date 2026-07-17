@@ -174,7 +174,10 @@ export function find_workflow_policy_violations(input: WorkflowPolicyInput): Rea
 		["openvsx_publish", openvsx_publish],
 		["github_finalize", github_finalize],
 	] as const) {
-		if (!String(job.if).includes("always()") || !String(job.if).includes("result == 'success'")) {
+		if (
+			!String(job.if).includes("always()") ||
+			!String(job.if).includes("result == 'success'")
+		) {
 			violations.push(
 				`${job_id} must survive skipped resume ancestors and require successful direct dependencies.`,
 			);
