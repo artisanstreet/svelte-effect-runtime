@@ -1348,7 +1348,7 @@ function collect_source_regions(source: string, ast: AST.Root): SourceRegions {
 	const opaque_ranges: SourceRange[] = [
 		...scripts.map(({ start, end }) => ({ start, end })),
 		...styles,
-		...ast.comments.map(({ start, end }) => ({ start, end })),
+		...(ast.comments ?? []).map(({ start, end }) => ({ start, end })),
 	];
 	const attribute_names = new Map<number, string>();
 	const markup_binding_names = new Set<string>();

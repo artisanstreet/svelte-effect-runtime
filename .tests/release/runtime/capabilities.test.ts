@@ -32,6 +32,9 @@ test("issue 28 capability lanes have stable names and testable commands", () => 
 	expect(get_capability_lane("remote-transport").commands).toContainEqual({
 		args: ["pnpm", "run", "test:conformance:consumer"],
 	});
+	expect(get_capability_lane("remote-transport").commands).toContainEqual({
+		args: ["pnpm", "run", "test:conformance:minimum-kit"],
+	});
 	expect(() => get_capability_lane("release")).toThrow(/unknown capability lane/i);
 });
 
