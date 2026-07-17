@@ -14,7 +14,10 @@ const repo_root = resolve(consumer_dir, "../../..");
 const applications_root = resolve(repo_root, ".dist/conformance/applications");
 const portless_cli = resolve(repo_root, "node_modules/portless/dist/cli.js");
 const server_output_recorder = resolve(consumer_dir, "harness/record-server-output.ts");
-const portless_state_dir = resolve(repo_root, ".dist/conformance/portless");
+const portless_state_dir = resolve(
+	repo_root,
+	`.dist/conformance/portless-${conformance_proxy_port}`,
+);
 const windows_openssl_dir = "C:\\Program Files\\Git\\usr\\bin";
 const executable_path = [process.platform === "win32" && windows_openssl_dir, process.env.PATH]
 	.filter(Boolean)

@@ -10,7 +10,22 @@ export const capability_names = [
 	"unit",
 ] as const;
 
-export const conformance_proxy_port = 41_730;
+export type TargetName = "native" | "stable" | "candidate";
+
+const conformance_port_offset = Number(process.env.CONFORMANCE_PORT_OFFSET ?? 0);
+const maximum_conformance_port_offset = 65_535 - 41_803;
+
+if (
+	!Number.isSafeInteger(conformance_port_offset) ||
+	conformance_port_offset < 0 ||
+	conformance_port_offset > maximum_conformance_port_offset
+) {
+	throw new Error(
+		`CONFORMANCE_PORT_OFFSET must be an integer between 0 and ${maximum_conformance_port_offset}.`,
+	);
+}
+
+export const conformance_proxy_port = 41_730 + conformance_port_offset;
 
 export const conformance_proxy_protocol = "https";
 
@@ -29,13 +44,11 @@ export function get_conformance_browsers(
 
 export type Capability = (typeof capability_names)[number];
 
-export type TargetName = "native" | "stable" | "candidate";
-
-export const conformance_target_ports = {
-	native: 41_801,
-	stable: 41_802,
-	candidate: 41_803,
-} as const satisfies Readonly<Record<TargetName, number>>;
+export const conformance_target_ports: Readonly<Record<TargetName, number>> = Object.freeze({
+	native: 41_801 + conformance_port_offset,
+	stable: 41_802 + conformance_port_offset,
+	candidate: 41_803 + conformance_port_offset,
+});
 
 export function get_conformance_proxy_url(target: TargetName): string {
 	return `${conformance_proxy_protocol}://ser-conformance-${target}.localhost:${conformance_proxy_port}`;

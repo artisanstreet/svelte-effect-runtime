@@ -39,6 +39,23 @@ describe("conformance target selection", () => {
 		);
 	});
 
+	test("rejects offsets that overflow the highest conformance port", () => {
+		const model_url = new URL("./harness/model.ts", import.meta.url).href;
+		const result = spawnSync(
+			process.execPath,
+			["--input-type=module", "--eval", `await import(${JSON.stringify(model_url)});`],
+			{
+				encoding: "utf8",
+				env: { ...process.env, CONFORMANCE_PORT_OFFSET: "23733" },
+			},
+		);
+
+		expect(result.status).not.toBe(0);
+		expect(result.stderr).toContain(
+			"CONFORMANCE_PORT_OFFSET must be an integer between 0 and 23732.",
+		);
+	});
+
 	test("keeps native as oracle while stable and candidate remain independent artifacts", () => {
 		const targets = make_targets(
 			"package:svelte-effect-runtime@4.0.0",
