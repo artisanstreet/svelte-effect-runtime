@@ -7,10 +7,15 @@ import type {
 	PromiseOptions,
 	ValueOptions,
 } from "./types.ts";
-import { RuntimeAlreadyInitializedError, DispatcherDisposedError } from "$/errors.ts";
+import {
+	RuntimeAlreadyInitializedError,
+	DispatcherDisposedError,
+	ScopeDisposedError,
+} from "$/errors.ts";
 import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime";
-import { Cause, Effect, Exit, Fiber, Layer, ManagedRuntime } from "effect";
+import { Cause, Effect, Exit, Fiber, Layer, ManagedRuntime, Scope } from "effect";
 import { InterruptFiber, WatchFiberExit } from "./fibers.ts";
+import { ComponentScope } from "./scope.ts";
 import type { Fiber as FiberType } from "effect/Fiber";
 import { createSubscriber } from "svelte/reactivity";
 import { make_dependency_hasher } from "./deps.ts";
@@ -56,6 +61,8 @@ export class Dispatcher {
 	#hash_deps = make_dependency_hasher();
 	#disposed = false;
 	#next_fiber_id = 0;
+	#root_scope = Scope.makeUnsafe();
+	#component_scopes = new Set<ComponentScope>();
 
 	static make<R = never>(layer?: Layer.Layer<R>): Dispatcher {
 		if (current_dispatcher) {
@@ -74,6 +81,69 @@ export class Dispatcher {
 		this.#runtime =
 			runtime ??
 			(ManagedRuntime.make(Layer.empty) as unknown as ManagedRuntimeType<unknown, unknown>);
+	}
+
+	/**
+	 * Begin a component-owned Effect scope. Pass the returned scope to
+	 * {@link run_scoped} so the work is interrupted and finalized when the
+	 * component is destroyed. Disposal is idempotent.
+	 */
+	begin_scope(): ComponentScope {
+		const scope = ComponentScope.fork(this.#root_scope, (disposed) => {
+			this.#component_scopes.delete(disposed);
+		});
+
+		this.#component_scopes.add(scope);
+
+		return scope;
+	}
+
+	/**
+	 * Forks an effect into a component scope and starts it. The fiber becomes
+	 * a child of the scope, so disposing the scope interrupts it and runs its
+	 * finalizers. Returns an idempotent handle that interrupts the fiber.
+	 *
+	 * Throws {@link ScopeDisposedError} when the scope was already disposed
+	 * and {@link DispatcherDisposedError} when the dispatcher was shut down.
+	 */
+	run_scoped<A, E, R>(scope: ComponentScope, effect: Effect.Effect<A, E, R>): Dispose {
+		if (this.#disposed) {
+			return () => {};
+		}
+
+		if (scope.disposed || !this.#component_scopes.has(scope)) {
+			throw new ScopeDisposedError();
+		}
+
+		const fiber = this.#runtime.runFork(
+			Effect.flatMap(scope.fork_in(effect), (scoped_fiber) =>
+				Effect.asVoid(Fiber.await(scoped_fiber)),
+			) as Effect.Effect<unknown, unknown, unknown>,
+		);
+
+		let disposed = false;
+
+		return (): void => {
+			if (disposed) {
+				return;
+			}
+
+			disposed = true;
+			this.#runtime.runFork(InterruptFiber(fiber));
+		};
+	}
+
+	/**
+	 * Disposes a component scope, interrupting its bound work and running its
+	 * finalizers. Idempotent.
+	 */
+	dispose_scope(scope: ComponentScope): void {
+		if (!this.#component_scopes.has(scope) && scope.disposed) {
+			return;
+		}
+
+		scope.dispose();
+		this.#runtime.runFork(scope.close_effect as Effect.Effect<unknown, unknown, unknown>);
 	}
 
 	emit<A, F>(event: MarkupValueEvent<A, F>): A | F;
@@ -258,6 +328,15 @@ export class Dispatcher {
 
 	dispose(): void {
 		this.#disposed = true;
+
+		for (const scope of this.#component_scopes) {
+			scope.dispose();
+		}
+
+		this.#component_scopes.clear();
+		this.#runtime.runFork(
+			Scope.close(this.#root_scope, Exit.void) as Effect.Effect<unknown, unknown, unknown>,
+		);
 
 		for (const fiber of this.#fibers.values()) {
 			this.#runtime.runFork(InterruptFiber(fiber));

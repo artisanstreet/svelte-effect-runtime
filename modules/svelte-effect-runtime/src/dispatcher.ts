@@ -1,4 +1,5 @@
 export { Code, Dispatcher, get_dispatcher, reset_dispatcher } from "./dispatcher/index.ts";
+export { ComponentScope } from "./dispatcher/scope.ts";
 export type {
 	DispatcherEvent,
 	Dispose,

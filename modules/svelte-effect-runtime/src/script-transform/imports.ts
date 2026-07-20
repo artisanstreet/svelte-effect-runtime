@@ -6,6 +6,7 @@ interface RuntimeImportOptions {
 	needs_dispatcher?: boolean;
 	needs_effect?: boolean;
 	needs_untrack?: boolean;
+	needs_on_destroy?: boolean;
 	needs_yield_success?: boolean;
 	needs_yieldable?: boolean;
 }
@@ -14,12 +15,15 @@ export function make_imports(
 	has_effect_import: boolean,
 	has_dispatcher_import: boolean,
 	has_untrack_import: boolean,
+	has_on_destroy_import: boolean,
 	bindings: RuntimeImportBindings = {
 		cancel: "__SER___cancel",
 		dispatcher: "get_dispatcher",
 		dispatcher_value: "__SER___dispatcher",
 		effect: "Effect",
+		on_destroy: "onDestroy",
 		program: "__SER___program",
+		scope: "__SER___scope",
 		untrack: "untrack",
 		yield_success: "YieldSuccess",
 		yieldable: "ToEffect",
@@ -29,6 +33,7 @@ export function make_imports(
 	const needs_dispatcher = options.needs_dispatcher ?? true;
 	const needs_effect = options.needs_effect ?? true;
 	const needs_untrack = options.needs_untrack ?? true;
+	const needs_on_destroy = options.needs_on_destroy ?? false;
 	const needs_yield_success = options.needs_yield_success ?? false;
 	const needs_yieldable = options.needs_yieldable ?? false;
 
@@ -44,6 +49,11 @@ export function make_imports(
 			? `import { untrack } from "svelte";`
 			: `import { untrack as ${bindings.untrack} } from "svelte";`;
 
+	const on_destroy_import =
+		bindings.on_destroy === "onDestroy"
+			? `import { onDestroy } from "svelte";`
+			: `import { onDestroy as ${bindings.on_destroy} } from "svelte";`;
+
 	const effect_import = has_effect_import
 		? false
 		: bindings.effect === "Effect"
@@ -53,6 +63,7 @@ export function make_imports(
 	return [
 		generator_import,
 		needs_untrack && !has_untrack_import && untrack_import,
+		needs_on_destroy && !has_on_destroy_import && on_destroy_import,
 		needs_effect && effect_import,
 	]
 		.filter(Boolean)

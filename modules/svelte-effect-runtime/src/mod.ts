@@ -230,6 +230,7 @@ export {
 	RequestEventUnavailableError,
 	RuntimeAlreadyInitializedError,
 	RuntimeError,
+	ScopeDisposedError,
 	ServerOnlyImportError,
 	SvelteKitServerExportUnavailableError,
 	UncheckedCommandHandlerMissingError,

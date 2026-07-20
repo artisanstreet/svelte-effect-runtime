@@ -84,6 +84,7 @@ export function transform_script_effect(
 	);
 
 	const has_untrack_import = has_local_import_binding(source_file, "svelte", "untrack");
+	const has_on_destroy_import = has_local_import_binding(source_file, "svelte", "onDestroy");
 
 	const reserve_runtime_import = (name: string) =>
 		top_level_binding_names_set.has(name)
@@ -97,7 +98,9 @@ export function transform_script_effect(
 			: reserve_runtime_import("get_dispatcher"),
 		dispatcher_value: name_allocator.reserve("__SER___dispatcher"),
 		effect: has_effect_import ? "Effect" : reserve_runtime_import("Effect"),
+		on_destroy: has_on_destroy_import ? "onDestroy" : reserve_runtime_import("onDestroy"),
 		program: name_allocator.reserve("__SER___program"),
+		scope: name_allocator.reserve("__SER___scope"),
 		untrack: has_untrack_import ? "untrack" : reserve_runtime_import("untrack"),
 		yield_success: reserve_runtime_import("YieldSuccess"),
 		yieldable: reserve_runtime_import("ToEffect"),
@@ -177,11 +180,13 @@ export function transform_script_effect(
 		has_effect_import,
 		has_dispatcher_import,
 		has_untrack_import,
+		has_on_destroy_import,
 		runtime_bindings,
 		{
 			needs_dispatcher: effect_blocks.length > 0 || uses_dispatcher_promise,
 			needs_effect: effect_blocks.length > 0,
 			needs_untrack: effect_blocks.length > 0,
+			needs_on_destroy: true,
 			needs_yield_success: uses_yield_success_types,
 			needs_yieldable: effect_blocks.length > 0 || uses_dispatcher_promise,
 		},
@@ -198,6 +203,16 @@ export function transform_script_effect(
 	}
 
 	/** Phase 4: append the runtime program and lifecycle wiring. */
+	// Create a component-owned Effect scope and dispose it on destroy so
+	// non-reactive Effect work (promise/run/value) is interrupted and
+	// finalized when the component is unmounted.
+	magic.append(
+		"\n" +
+			`const ${runtime_bindings.dispatcher_value} = ${runtime_bindings.dispatcher}();\n` +
+			`const ${runtime_bindings.scope} = ${runtime_bindings.dispatcher_value}.begin_scope();\n` +
+			`${runtime_bindings.on_destroy}(() => ${runtime_bindings.dispatcher_value}.dispose_scope(${runtime_bindings.scope}));`,
+	);
+
 	if (effect_blocks.length > 0) {
 		const runtime_block = make_runtime_block_with_bindings(effect_blocks, runtime_bindings);
 

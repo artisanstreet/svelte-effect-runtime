@@ -115,6 +115,10 @@ export interface RuntimeImportBindings {
 	cancel: string;
 	/** Binding name used for Svelte's untrack helper. */
 	untrack: string;
+	/** Binding name used for Svelte's onDestroy lifecycle hook. */
+	on_destroy: string;
+	/** Binding name used for the component's Effect scope local. */
+	scope: string;
 	/** Binding name used for the yieldable normalization helper. */
 	yieldable: string;
 	/** Binding name used for yieldable success type extraction. */
