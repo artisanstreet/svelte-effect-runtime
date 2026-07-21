@@ -126,7 +126,9 @@ export function make_markup_helper_bindings(
 		: {
 				component_scope_ref: name_allocator.reserve("ComponentScopeRef"),
 				get_dispatcher: name_allocator.reserve("get_dispatcher"),
-				on_destroy: is_server_target ? undefined : name_allocator.reserve("onDestroy"),
+				...(is_server_target
+					? {}
+					: { on_destroy: name_allocator.reserve("onDestroy") }),
 			};
 
 	return {
