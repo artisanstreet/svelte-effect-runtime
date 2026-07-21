@@ -22,6 +22,7 @@ import {
 	Result,
 	Schema,
 	Semaphore,
+	Scope,
 } from "effect";
 import {
 	language_server_package_version,
@@ -57,10 +58,6 @@ type PackageMapEntry = {
 	readonly url: string;
 };
 
-type PackageMap = {
-	readonly packages?: Record<string, PackageMapEntry>;
-};
-
 const InstalledPackageManifestWithMainSchema = Schema.Struct({
 	main: Schema.optional(Schema.String),
 	name: Schema.optional(Schema.String),
@@ -91,6 +88,9 @@ type ServerPathResolverDependencies =
 type ServerPathResolverLayerDependencies =
 	| ServerInstallRetentionDependencies
 	| ServerPathResolverDependencies;
+
+type ScopedServerPathResolverLayerDependencies =
+	ServerPathResolverLayerDependencies | Scope.Scope;
 
 interface PublishedLanguageServer {
 	install_root: string;
@@ -270,7 +270,7 @@ const InstallAndPublishLanguageServer = (
 ): Effect.Effect<
 	PublishedLanguageServer,
 	unknown,
-	ServerPathResolverLayerDependencies
+	ScopedServerPathResolverLayerDependencies
 > =>
 	Effect.gen(function* () {
 		const output = yield* ExtensionOutput;
@@ -340,7 +340,11 @@ const InstallAndPublishLanguageServer = (
 		);
 
 		if (Result.isFailure(verification)) {
-			yield* RemoveCorruptPublishedLanguageServerInstall(install_root, verification.failure);
+			yield* RemoveCorruptPublishedLanguageServerInstall(
+				install_root,
+				false,
+				verification.failure,
+			);
 
 			if (retry_remaining > 0) {
 				return yield* InstallAndPublishLanguageServer(
@@ -387,6 +391,8 @@ const FindPublishedLanguageServer = (
 			const verification = yield* Effect.result(
 				VerifyLanguageServerInstall(install_root, target_version),
 			);
+			const keep_corrupt_cached_exact_version_install =
+				candidate === encoded_version;
 
 			if (Result.isSuccess(verification)) {
 				return Option.some(verification.success);
@@ -394,6 +400,7 @@ const FindPublishedLanguageServer = (
 
 			yield* RemoveCorruptPublishedLanguageServerInstall(
 				install_root,
+				keep_corrupt_cached_exact_version_install,
 				verification.failure,
 			);
 		}
@@ -411,9 +418,17 @@ const derive_short_install_identity = (install_identity: string) => {
 	return "ser";
 };
 
-const RemoveCorruptPublishedLanguageServerInstall = (install_root: string, error: unknown) =>
+const RemoveCorruptPublishedLanguageServerInstall = (
+	install_root: string,
+	keep_corrupt_cached_exact_version_install: boolean,
+	error: unknown,
+) =>
 	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
+
+		if (keep_corrupt_cached_exact_version_install) {
+			return;
+		}
 
 		if (!ShouldDeleteCorruptPublishedLanguageServerInstall(error)) {
 			return;

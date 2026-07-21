@@ -60,15 +60,11 @@ export const GetProfile = Query(Schema.Struct({ id: Schema.String }), ({ id }) =
 );
 
 export const GetDeduped = Query(Schema.String, (id) =>
-	Effect.gen(function* () {
-		return { id, invocation: ++query_count };
-	}),
+	Effect.succeed({ id, invocation: ++query_count }),
 );
 
 export const GetBatched = Query.batch(Schema.String, (ids) =>
-	Effect.gen(function* () {
-		return (id: string, index: number) => `${index}:${ids[index]}:${id}`;
-	}),
+	Effect.succeed((id: string, index: number) => `${index}:${ids[index]}:${id}`),
 );
 
 export const GetLive = Query.live(() => Stream.make("live:first"));
@@ -104,21 +100,17 @@ export const GetLifecycle = Query.live(() =>
 );
 
 export const GetSerialized = Query(() =>
-	Effect.gen(function* () {
-		return {
-			bigint: 42n,
-			bytes: new Uint8Array([1, 2, 3]),
-			date: new Date("2024-01-02T03:04:05.000Z"),
-			map: new Map([["answer", 42]]),
-			set: new Set(["alpha", "beta"]),
-		};
+	Effect.succeed({
+		bigint: 42n,
+		bytes: new Uint8Array([1, 2, 3]),
+		date: new Date("2024-01-02T03:04:05.000Z"),
+		map: new Map([["answer", 42]]),
+		set: new Set(["alpha", "beta"]),
 	}),
 );
 
 export const GetRefreshable = Query(Schema.String, (key) =>
-	Effect.gen(function* () {
-		return { key, invocation: ++refresh_query_count };
-	}),
+	Effect.succeed({ key, invocation: ++refresh_query_count }),
 );
 
 export const GetSlowQuery = Query(Schema.String, (key) =>
