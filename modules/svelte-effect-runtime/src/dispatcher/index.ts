@@ -63,6 +63,11 @@ export class Dispatcher {
 	#next_fiber_id = 0;
 	#root_scope = Scope.makeUnsafe();
 	#component_scopes = new Set<ComponentScope>();
+	/**
+	 * The component scope that effect execution currently enters. Set by
+	 * generated code via {@link with_scope}; `undefined` outside components.
+	 */
+	#current_scope: ComponentScope | undefined = undefined;
 
 	static make<R = never>(layer?: Layer.Layer<R>): Dispatcher {
 		if (current_dispatcher) {
@@ -99,9 +104,31 @@ export class Dispatcher {
 	}
 
 	/**
+	 * Runs `fn` with `scope` as the current component scope. While active,
+	 * every effect path ({@link promise}, {@link run}, {@link value}) forks
+	 * its work into `scope` so disposing the scope interrupts it and runs its
+	 * finalizers. A disposed scope falls back to unscoped execution.
+	 */
+	with_scope<T>(scope: ComponentScope, fn: () => T): T {
+		if (scope.disposed) {
+			return fn();
+		}
+
+		const previous = this.#current_scope;
+		this.#current_scope = scope;
+
+		try {
+			return fn();
+		} finally {
+			this.#current_scope = previous;
+		}
+	}
+
+	/**
 	 * Forks an effect into a component scope and starts it. The fiber becomes
 	 * a child of the scope, so disposing the scope interrupts it and runs its
-	 * finalizers. Returns an idempotent handle that interrupts the fiber.
+	 * finalizers. Returns an idempotent handle that interrupts the scoped
+	 * fiber directly.
 	 *
 	 * Throws {@link ScopeDisposedError} when the scope was already disposed
 	 * and {@link DispatcherDisposedError} when the dispatcher was shut down.
@@ -115,10 +142,19 @@ export class Dispatcher {
 			throw new ScopeDisposedError();
 		}
 
-		const fiber = this.#runtime.runFork(
-			Effect.flatMap(scope.fork_in(effect), (scoped_fiber) =>
-				Effect.asVoid(Fiber.await(scoped_fiber)),
-			) as Effect.Effect<unknown, unknown, unknown>,
+		/**
+		 * Track the scoped fiber itself: `forkIn` binds it to the component
+		 * scope rather than the awaiting parent, so per-run disposal must
+		 * interrupt the scoped fiber directly.
+		 */
+		let scoped_fiber: FiberType<unknown, unknown> | undefined;
+
+		this.#runtime.runFork(
+			Effect.flatMap(scope.fork_in(effect), (fiber) => {
+				scoped_fiber = fiber;
+
+				return Effect.asVoid(Fiber.await(fiber));
+			}) as Effect.Effect<unknown, unknown, unknown>,
 		);
 
 		let disposed = false;
@@ -129,17 +165,25 @@ export class Dispatcher {
 			}
 
 			disposed = true;
-			this.#runtime.runFork(InterruptFiber(fiber));
+
+			if (scoped_fiber) {
+				this.#runtime.runFork(InterruptFiber(scoped_fiber));
+			}
 		};
 	}
 
 	/**
-	 * Disposes a component scope, interrupting its bound work and running its
-	 * finalizers. Idempotent.
+	 * Disposes a component scope owned by this dispatcher, interrupting its
+	 * bound work and running its finalizers. Idempotent. Rejects scopes owned
+	 * by another dispatcher with {@link ScopeDisposedError}.
 	 */
 	dispose_scope(scope: ComponentScope): void {
-		if (!this.#component_scopes.has(scope) && scope.disposed) {
-			return;
+		if (!this.#component_scopes.has(scope)) {
+			if (scope.disposed) {
+				return;
+			}
+
+			throw new ScopeDisposedError();
 		}
 
 		scope.dispose();
@@ -286,7 +330,13 @@ export class Dispatcher {
 			return yield* Effect.fail(error);
 		});
 
-		return this.#runtime.runPromise(Program as Effect.Effect<A, unknown, unknown>);
+		const scope = this.#current_scope;
+
+		return this.#runtime.runPromise(
+			(scope
+				? Effect.provideService(Program, Scope.Scope, scope.underlying)
+				: Program) as Effect.Effect<A, unknown, unknown>,
+		);
 	}
 
 	#emit_markup_value<A, F>(event: MarkupValueEvent<A, F>): A | F {
@@ -390,7 +440,17 @@ export class Dispatcher {
 
 			return result;
 		});
-		const fiber = this.#runtime.runFork(Program as Effect.Effect<unknown, unknown, unknown>);
+		/**
+		 * Provide the active component scope so scoped acquisition works and
+		 * finalizers run when the scope closes on unmount. Interruption of an
+		 * individual run does not close the component scope; its finalizers
+		 * run at scope disposal, matching the component lifetime.
+		 */
+		const scope = this.#current_scope;
+		const ScopedProgram = scope
+			? Effect.provideService(Program, Scope.Scope, scope.underlying)
+			: Program;
+		const fiber = this.#runtime.runFork(ScopedProgram as Effect.Effect<unknown, unknown, unknown>);
 
 		this.#fibers.set(cache_key, fiber);
 
@@ -426,7 +486,15 @@ export class Dispatcher {
 
 			return result;
 		});
-		const fiber = this.#runtime.runFork(Program as Effect.Effect<unknown, unknown, unknown>);
+		/**
+		 * See #start_value_fiber: the component scope is provided ambiently so
+		 * scoped acquisition works and finalizers run on unmount.
+		 */
+		const scope = this.#current_scope;
+		const ScopedProgram = scope
+			? Effect.provideService(Program, Scope.Scope, scope.underlying)
+			: Program;
+		const fiber = this.#runtime.runFork(ScopedProgram as Effect.Effect<unknown, unknown, unknown>);
 		const ReleaseFiber = Effect.sync(() => {
 			if (!this.#is_current_fiber(cache_key, fiber)) {
 				return;
@@ -551,4 +619,41 @@ export function get_dispatcher(): Dispatcher {
 export function reset_dispatcher(): void {
 	current_dispatcher?.dispose();
 	current_dispatcher = null;
+}
+
+/**
+ * Lazily-created component scope used by generated component code.
+ *
+ * The holder is created synchronously during component init (before any
+ * top-level `await`, where `onDestroy` is not yet available), and the scope
+ * itself is materialized on first use. Disposal is registered separately
+ * through `onDestroy` during component initialisation, so the scope is
+ * reliably closed on unmount.
+ *
+ * @since 4.1.0
+ */
+export class ComponentScopeRef {
+	readonly #get_dispatcher: () => Dispatcher;
+	#scope: ComponentScope | undefined;
+
+	constructor(get_dispatcher_fn: () => Dispatcher) {
+		this.#get_dispatcher = get_dispatcher_fn;
+	}
+
+	/** The component scope, creating it on first access. */
+	get scope(): ComponentScope {
+		this.#scope ??= this.#get_dispatcher().begin_scope();
+
+		return this.#scope;
+	}
+
+	/** Disposes the scope if it was created. Idempotent. */
+	dispose(): void {
+		const scope = this.#scope;
+		this.#scope = undefined;
+
+		if (scope && !scope.disposed) {
+			this.#get_dispatcher().dispose_scope(scope);
+		}
+	}
 }

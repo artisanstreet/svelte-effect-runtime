@@ -66,7 +66,7 @@ export function transform_markup_effect(
 	}
 
 	const effect_context = collect_effect_callback_bindings(source_scan.scripts);
-	const helper_context = make_markup_helper_bindings(source_scan);
+	const helper_context = make_markup_helper_bindings(source_scan, options.target ?? "client");
 
 	/** Parse the sanitized markup with Svelte's AST. */
 	const ast = parse(work.parse_code, { filename, modern: true }) as AST.Root;
@@ -97,7 +97,13 @@ export function transform_markup_effect(
 		magic.overwrite(r.start, r.end, r.text);
 	}
 
-	const helper_insertion = inject_helpers(magic, source_scan, helpers, helper_context.bindings);
+	const helper_insertion = inject_helpers(
+		magic,
+		source_scan,
+		helpers,
+		helper_context.bindings,
+		helper_context.scope_wiring,
+	);
 	const relocations = create_relocations(replacements, helper_insertion);
 
 	return {

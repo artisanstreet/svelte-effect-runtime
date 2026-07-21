@@ -18,6 +18,7 @@ import { contains_top_level_yield_star } from "$/detect.ts";
 import { create_source_map, slice } from "./source.ts";
 import { validate_rune_yield_usage } from "./runes.ts";
 import { lower_statement } from "./lower.ts";
+import type { MarkupTransformTarget } from "$/markup/transform.ts";
 
 import MagicString from "magic-string";
 import ts from "typescript";
@@ -26,6 +27,7 @@ export type { BlockRef, ScriptTransformResult } from "./types.ts";
 
 interface ScriptTransformOptions {
 	emit_types?: boolean;
+	target?: MarkupTransformTarget;
 }
 
 /**
@@ -53,6 +55,8 @@ export function transform_script_effect(
 	options: ScriptTransformOptions = {},
 ): ScriptTransformResult {
 	let temp_counter = 0;
+	const target = options.target ?? "client";
+	const is_server_target = target === "server";
 
 	const source_file = ts.createSourceFile(
 		filename,
@@ -93,6 +97,7 @@ export function transform_script_effect(
 
 	const runtime_bindings: RuntimeImportBindings = {
 		cancel: name_allocator.reserve("__SER___cancel"),
+		component_scope_ref: reserve_runtime_import("ComponentScopeRef"),
 		dispatcher: has_dispatcher_import
 			? "get_dispatcher"
 			: reserve_runtime_import("get_dispatcher"),
@@ -109,6 +114,7 @@ export function transform_script_effect(
 	const context: ScriptLoweringContext = {
 		filename,
 		dispatcher_name: runtime_bindings.dispatcher,
+		scope_name: runtime_bindings.scope,
 		effect_name: runtime_bindings.effect,
 		emit_types,
 		yield_success_name: runtime_bindings.yield_success,
@@ -186,32 +192,35 @@ export function transform_script_effect(
 			needs_dispatcher: effect_blocks.length > 0 || uses_dispatcher_promise,
 			needs_effect: effect_blocks.length > 0,
 			needs_untrack: effect_blocks.length > 0,
-			needs_on_destroy: true,
+			needs_on_destroy: !is_server_target,
 			needs_yield_success: uses_yield_success_types,
 			needs_yieldable: effect_blocks.length > 0 || uses_dispatcher_promise,
+			needs_scope_ref: true,
 		},
 	);
 
 	const last_import = [...source_file.statements].reverse().find(ts.isImportDeclaration);
 
-	if (imports) {
-		if (last_import) {
-			magic.appendRight(last_import.end, "\n" + imports);
-		} else {
-			magic.prepend(imports + "\n");
-		}
+	/**
+	 * The scope holder is created synchronously with the imports so it exists
+	 * before any top-level `await`, and disposal is registered through
+	 * `onDestroy` during component initialisation. Emitting both here keeps
+	 * them ahead of every lowered statement that references the scope.
+	 */
+	const scope_wiring = [
+		`const ${runtime_bindings.scope} = new ${runtime_bindings.component_scope_ref}(${runtime_bindings.dispatcher});`,
+		...(!is_server_target ? [`${runtime_bindings.on_destroy}(() => ${runtime_bindings.scope}.dispose());`] : []),
+	].join("\n");
+
+	const injected = [imports, scope_wiring].filter(Boolean).join("\n");
+
+	if (last_import) {
+		magic.appendRight(last_import.end, "\n" + injected);
+	} else {
+		magic.prepend(injected + "\n");
 	}
 
-	/** Phase 4: append the runtime program and lifecycle wiring. */
-	// Create a component-owned Effect scope and dispose it on destroy so
-	// non-reactive Effect work (promise/run/value) is interrupted and
-	// finalized when the component is unmounted.
-	magic.append(
-		"\n" +
-			`const ${runtime_bindings.dispatcher_value} = ${runtime_bindings.dispatcher}();\n` +
-			`const ${runtime_bindings.scope} = ${runtime_bindings.dispatcher_value}.begin_scope();\n` +
-			`${runtime_bindings.on_destroy}(() => ${runtime_bindings.dispatcher_value}.dispose_scope(${runtime_bindings.scope}));`,
-	);
+	/** Phase 4: append the runtime program blocks. */
 
 	if (effect_blocks.length > 0) {
 		const runtime_block = make_runtime_block_with_bindings(effect_blocks, runtime_bindings);

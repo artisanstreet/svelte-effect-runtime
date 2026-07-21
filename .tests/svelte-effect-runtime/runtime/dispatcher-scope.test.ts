@@ -178,3 +178,183 @@ test("disposing the dispatcher runs finalizers of open component scopes", async 
 
 	await wait_for(() => finalized);
 });
+
+test("run_scoped cleanup interrupts the scoped fiber, not just the awaiter", async () => {
+	const d = make_dispatcher();
+	const scope = d.begin_scope();
+	let finished = false;
+
+	const Program = Effect.flatMap(Effect.sleep(60_000), () =>
+		Effect.sync(() => {
+			finished = true;
+		}),
+	);
+
+	const cleanup = d.run_scoped(scope, Program);
+
+	await sleep(20);
+
+	cleanup();
+
+	// The scoped fiber must be interrupted (never reach completion).
+	await sleep(100);
+
+	if (finished) {
+		throw new Error("scoped fiber should have been interrupted by the cleanup");
+	}
+
+	d.dispose();
+});
+
+test("dispose_scope rejects an open scope owned by another dispatcher", () => {
+	const d1 = make_dispatcher();
+	const d2 = make_dispatcher();
+	const foreign = d1.begin_scope();
+
+	assert_throws(
+		() => d2.dispose_scope(foreign),
+		ScopeDisposedError,
+	);
+
+	// The foreign scope is left untouched and still owned by d1.
+	assert_equals(foreign.disposed, false);
+
+	d1.dispose();
+	d2.dispose();
+});
+
+test("dispose_scope is a no-op for a foreign scope that is already disposed", () => {
+	const d1 = make_dispatcher();
+	const d2 = make_dispatcher();
+	const foreign = d1.begin_scope();
+
+	d1.dispose_scope(foreign);
+	d2.dispose_scope(foreign);
+
+	assert_equals(foreign.disposed, true);
+	d1.dispose();
+	d2.dispose();
+});
+
+test("with_scope routes promise work into the component scope", async () => {
+	const d = make_dispatcher();
+	const scope = d.begin_scope();
+	let finalized = false;
+
+	const promise = d.with_scope(scope, () =>
+		d.promise({
+			id: "scoped-promise",
+			deps: [],
+			factory: () =>
+				(function* () {
+					yield* Effect.acquireRelease(Effect.void, () =>
+						Effect.sync(() => {
+							finalized = true;
+						}),
+					);
+					yield* Effect.sleep(60_000);
+				})(),
+		}),
+	);
+
+	void promise.catch(() => {});
+
+	await sleep(20);
+
+	d.dispose_scope(scope);
+
+	await wait_for(() => finalized);
+
+	d.dispose();
+});
+
+test("with_scope routes run work into the component scope", async () => {
+	const d = make_dispatcher();
+	const scope = d.begin_scope();
+	let finalized = false;
+
+	const Program = Effect.gen(function* () {
+		yield* Effect.addFinalizer(() =>
+			Effect.sync(() => {
+				finalized = true;
+			}),
+		);
+		yield* Effect.sleep(60_000);
+	});
+
+	void d.with_scope(scope, () => d.run(Program)).catch(() => {});
+
+	await sleep(20);
+
+	d.dispose_scope(scope);
+
+	await wait_for(() => finalized);
+
+	d.dispose();
+});
+
+test("with_scope routes value work into the component scope", async () => {
+	const d = make_dispatcher();
+	const scope = d.begin_scope();
+	let finalized = false;
+
+	d.with_scope(scope, () =>
+		d.value({
+			id: "scoped-value",
+			deps: [],
+			fallback: undefined,
+			factory: () =>
+				(function* () {
+					yield* Effect.acquireRelease(Effect.void, () =>
+						Effect.sync(() => {
+							finalized = true;
+						}),
+					);
+					yield* Effect.sleep(60_000);
+				})(),
+		}),
+	);
+
+	await sleep(20);
+
+	d.dispose_scope(scope);
+
+	await wait_for(() => finalized);
+
+	d.dispose();
+});
+
+test("execution outside with_scope is not bound to any component scope", async () => {
+	const d = make_dispatcher();
+	const scope = d.begin_scope();
+	let started = false;
+	let interrupted = false;
+
+	const Program = Effect.gen(function* () {
+		started = true;
+		yield* Effect.sleep(60_000);
+	}).pipe(
+		Effect.onInterrupt(() =>
+			Effect.sync(() => {
+				interrupted = true;
+			}),
+		),
+	);
+
+	/** No with_scope: the run is not owned by the component scope. */
+	void d.run(Program).catch(() => {});
+
+	await wait_for(() => started);
+
+	d.dispose_scope(scope);
+
+	/** The unscoped run must survive the component scope disposal. */
+	await sleep(50);
+
+	if (interrupted) {
+		throw new Error("unscoped run should not be interrupted by the component scope");
+	}
+
+	d.dispose();
+});
+

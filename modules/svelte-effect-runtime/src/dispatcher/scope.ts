@@ -9,7 +9,7 @@ import type { Fiber } from "effect";
  * the scope interrupts that work and runs its finalizers. The generated
  * component teardown disposes the scope on destroy. Disposal is idempotent.
  *
- * @since 3.1.0
+ * @since 4.1.0
  */
 export class ComponentScope {
 	#scope: Scope.Closeable;
@@ -45,9 +45,14 @@ export class ComponentScope {
 	 * is provided ambiently so `Effect.forkIn` registers the fiber as a child.
 	 */
 	fork_in<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<Fiber.Fiber<A, E>, never, R> {
-		return Effect.provideService(
-			Effect.forkIn(effect, this.#scope),
-			Scope.Scope,
+		/**
+		 * The effect must see the scope before it is forked: provide the scope
+		 * inside the forked program so `acquireRelease`-style work resolves it,
+		 * and fork that program into the scope so the fiber is a child whose
+		 * finalizers run when the scope closes.
+		 */
+		return Effect.forkIn(
+			Effect.provideService(effect, Scope.Scope, this.#scope),
 			this.#scope,
 		) as Effect.Effect<Fiber.Fiber<A, E>, never, R>;
 	}

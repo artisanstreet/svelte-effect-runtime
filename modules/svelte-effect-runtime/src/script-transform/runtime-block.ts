@@ -20,7 +20,7 @@ function make_runtime_effect_block(block: EffectBlock, bindings: RuntimeImportBi
 		`  const ${bindings.program} = ${bindings.effect}.gen(function* () {`,
 		body,
 		"  });",
-		`  const ${bindings.cancel} = ${bindings.untrack}(() => ${bindings.dispatcher_value}.fork(${bindings.program}));`,
+		`  const ${bindings.cancel} = ${bindings.untrack}(() => ${bindings.dispatcher_value}.run_scoped(${bindings.scope}.scope, ${bindings.program}));`,
 		`  import.meta.hot?.dispose(${bindings.cancel});`,
 		`  return ${bindings.cancel};`,
 		"});",

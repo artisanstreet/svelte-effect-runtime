@@ -69,6 +69,7 @@ export function transform_svelte_effect(
 		const effect_attribute_end = effect_attribute?.end ?? script.opening_tag_end;
 		const result = transform_script_effect(script.text, filename, {
 			emit_types: script.is_typescript,
+			target: options.target,
 		});
 
 		combined =

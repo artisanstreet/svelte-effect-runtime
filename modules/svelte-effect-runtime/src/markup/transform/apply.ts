@@ -1,8 +1,10 @@
 import type {
 	HelperDeclaration,
 	Insertion,
+	MarkupTransformTarget,
 	MarkupHelperBindings,
 	MarkupRelocation,
+	MarkupScopeWiring,
 	PendingRelocation,
 	Replacement,
 } from "./types.ts";
@@ -29,6 +31,7 @@ export function inject_helpers(
 	source_scan: SvelteEffectSourceScan,
 	helpers: HelperDeclaration[] = [],
 	bindings: MarkupHelperBindings = default_helper_bindings,
+	scope_wiring?: MarkupScopeWiring | undefined,
 ): Insertion | undefined {
 	const import_helpers = unique_import_helpers(helpers);
 	const local_helpers = helpers.filter((helper) => !is_import_helper(helper));
@@ -36,7 +39,7 @@ export function inject_helpers(
 	const helper_segments: Array<{
 		text: string;
 		relocation?: PendingRelocation;
-	}> = [make_dispatcher_import(bindings), ...import_helpers, ...local_helpers]
+	}> = [make_dispatcher_import(bindings, scope_wiring), ...import_helpers, ...local_helpers]
 		.filter((helper): helper is string | HelperDeclaration => helper !== undefined)
 		.map((helper) => (typeof helper === "string" ? { text: helper } : helper));
 
@@ -45,10 +48,22 @@ export function inject_helpers(
 	}
 
 	const helper_block = helper_segments.map((segment) => segment.text).join("\n");
+	const scope_block = scope_wiring ? make_scope_wiring_block(bindings, scope_wiring) : undefined;
 
 	const instance_script = source_scan.instance_script;
 
 	if (instance_script) {
+		/**
+		 * The scope holder must be declared before any user statement so its
+		 * `onDestroy` runs during component initialisation, ahead of any
+		 * top-level `await`.
+		 */
+		const scope_text = scope_block ? `\n${scope_block}\n` : undefined;
+
+		if (scope_text) {
+			magic.appendLeft(instance_script.content_start, scope_text);
+		}
+
 		const text = `\n${helper_block}\n`;
 
 		magic.appendLeft(instance_script.content_end, text);
@@ -56,24 +71,30 @@ export function inject_helpers(
 		return {
 			start: instance_script.content_end,
 			text,
+			extra_insertions: scope_text ? [{ start: instance_script.content_start, text: scope_text }] : [],
 			relocations: make_insertion_relocations(helper_segments, "\n"),
 		};
 	} else {
-		const text = `<script>\n${helper_block}\n</script>\n\n`;
+		const text = `<script>\n${[scope_block, helper_block].filter(Boolean).join("\n")}\n</script>\n\n`;
+		const helper_prefix = `<script>\n${scope_block ? scope_block + "\n" : ""}`;
 
 		magic.prepend(text);
 
 		return {
 			start: 0,
 			text,
-			relocations: make_insertion_relocations(helper_segments, "<script>\n"),
+			relocations: make_insertion_relocations(helper_segments, helper_prefix),
 		};
 	}
 }
 
-export function make_markup_helper_bindings(source_scan: SvelteEffectSourceScan): {
+export function make_markup_helper_bindings(
+	source_scan: SvelteEffectSourceScan,
+	target: MarkupTransformTarget = "client",
+): {
 	bindings: MarkupHelperBindings;
 	name_allocator: { reserve(name: string): string };
+	scope_wiring: MarkupScopeWiring | undefined;
 } {
 	const script_binding_names = source_scan.scripts.flatMap((script) =>
 		collect_script_binding_names(script.text),
@@ -84,13 +105,35 @@ export function make_markup_helper_bindings(source_scan: SvelteEffectSourceScan)
 		...markup_identifier_names,
 	]);
 
+	const bindings = {
+		codes: name_allocator.reserve(default_helper_bindings.codes),
+		dispatcher: name_allocator.reserve(default_helper_bindings.dispatcher),
+		yieldable: name_allocator.reserve(default_helper_bindings.yieldable),
+		scope: default_helper_bindings.scope,
+	};
+
+	const is_server_target = target === "server";
+
+	/**
+	 * The script transform declares the component scope holder when it lowers
+	 * a `<script effect>`. When no script declares one — a markup-only
+	 * component for client/editor targets — reserve the names the injected scope
+	 * wiring needs so markup emit calls still have a scope to enter.
+	 */
+	const scope_present = script_binding_names.includes(default_helper_bindings.scope);
+
+	const scope_wiring = scope_present || is_server_target
+		? undefined
+		: {
+				component_scope_ref: name_allocator.reserve("ComponentScopeRef"),
+				get_dispatcher: name_allocator.reserve("get_dispatcher"),
+				on_destroy: name_allocator.reserve("onDestroy"),
+			};
+
 	return {
-		bindings: {
-			codes: name_allocator.reserve(default_helper_bindings.codes),
-			dispatcher: name_allocator.reserve(default_helper_bindings.dispatcher),
-			yieldable: name_allocator.reserve(default_helper_bindings.yieldable),
-		},
+		bindings,
 		name_allocator,
+		scope_wiring,
 	};
 }
 
@@ -128,17 +171,26 @@ export function create_relocations(
 		cursor = group_end;
 	}
 
+	const insertion_shift_before = (point: number): number => {
+		if (!helper_insertion) {
+			return 0;
+		}
+
+		const helper_shift = helper_insertion.start <= point ? helper_insertion.text.length : 0;
+		const extra_shift = (helper_insertion.extra_insertions ?? [])
+			.filter((insertion) => insertion.start <= point)
+			.reduce((shift, insertion) => shift + insertion.text.length, 0);
+
+		return helper_shift + extra_shift;
+	};
+
 	const replacement_relocations = replacements.flatMap((replacement) => {
 		if (!replacement.relocation) {
 			return [];
 		}
 
 		const replacement_delta_before = replacement_deltas.get(replacement) ?? 0;
-		const helper_insertion_delta =
-			helper_insertion && helper_insertion.start <= replacement.start
-				? helper_insertion.text.length
-				: 0;
-		const delta_before = replacement_delta_before + helper_insertion_delta;
+		const delta_before = replacement_delta_before + insertion_shift_before(replacement.start);
 		const generated_start = replacement.start + delta_before;
 
 		return [
@@ -152,7 +204,12 @@ export function create_relocations(
 		];
 	});
 
-	const helper_generated_start = (helper_insertion?.start ?? 0) + replacement_delta_before_helper;
+	const helper_generated_start =
+		(helper_insertion?.start ?? 0) +
+		replacement_delta_before_helper +
+		(helper_insertion?.extra_insertions ?? [])
+			.filter((insertion) => helper_insertion && insertion.start <= helper_insertion.start)
+			.reduce((shift, insertion) => shift + insertion.text.length, 0);
 	const helper_relocations =
 		helper_insertion?.relocations?.map((relocation) => ({
 			originalStart: relocation.originalStart,
@@ -164,7 +221,10 @@ export function create_relocations(
 	return [...replacement_relocations, ...helper_relocations];
 }
 
-function make_dispatcher_import(bindings: MarkupHelperBindings): string {
+function make_dispatcher_import(
+	bindings: MarkupHelperBindings,
+	scope_wiring?: MarkupScopeWiring | undefined,
+): string {
 	const dispatcher = make_import_specifier(
 		default_helper_bindings.dispatcher,
 		bindings.dispatcher,
@@ -172,7 +232,18 @@ function make_dispatcher_import(bindings: MarkupHelperBindings): string {
 	const codes = make_import_specifier(default_helper_bindings.codes, bindings.codes);
 	const yieldable = make_import_specifier(default_helper_bindings.yieldable, bindings.yieldable);
 
-	return `import { ${dispatcher}, ${codes}, ${yieldable} } from "svelte-effect-runtime/internal/generators";`;
+	/**
+	 * The scope holder's imports ride on the shared generators import so the
+	 * component keeps a single import from the runtime entrypoint.
+	 */
+	const scope_specifiers = scope_wiring
+		? [
+				make_import_specifier("ComponentScopeRef", scope_wiring.component_scope_ref),
+				make_import_specifier("get_dispatcher", scope_wiring.get_dispatcher),
+			]
+		: [];
+
+	return `import { ${[dispatcher, codes, yieldable, ...scope_specifiers].join(", ")} } from "svelte-effect-runtime/internal/generators";`;
 }
 
 function make_import_specifier(imported_name: string, local_name: string): string {
@@ -181,6 +252,19 @@ function make_import_specifier(imported_name: string, local_name: string): strin
 	}
 
 	return `${imported_name} as ${local_name}`;
+}
+
+function make_scope_wiring_block(
+	bindings: MarkupHelperBindings,
+	scope_wiring: MarkupScopeWiring,
+): string {
+	const on_destroy_import = make_import_specifier("onDestroy", scope_wiring.on_destroy);
+
+	return [
+		`import { ${on_destroy_import} } from "svelte";`,
+		`const ${bindings.scope} = new ${scope_wiring.component_scope_ref}(${scope_wiring.get_dispatcher});`,
+		`${scope_wiring.on_destroy}(() => ${bindings.scope}.dispose());`,
+	].join("\n");
 }
 
 function make_insertion_relocations(

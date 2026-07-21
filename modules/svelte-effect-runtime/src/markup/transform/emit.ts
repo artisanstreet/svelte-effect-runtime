@@ -212,7 +212,7 @@ function make_event_handler(
 	return {
 		expr_text: wrapped_expr_text,
 		relocation: make_yield_operand_relocation(expr_text, wrapped_expr_text, helper_bindings),
-		text: `(event) => { ${helper_bindings.dispatcher}.emit({ type: ${helper_bindings.codes}.Markup.Run, fn: function* () { ${wrapped_expr_text}; } }); }`,
+		text: `(event) => { ${helper_bindings.dispatcher}.with_scope(${helper_bindings.scope}.scope, () => ${helper_bindings.dispatcher}.emit({ type: ${helper_bindings.codes}.Markup.Run, fn: function* () { ${wrapped_expr_text}; } })); }`,
 	};
 }
 
@@ -232,7 +232,7 @@ function emit_promise_expression(
 		options !== undefined && `options: ${options}`,
 	].filter((property): property is string => property !== false);
 
-	return `${helper_bindings.dispatcher}.emit({ ${properties.join(", ")} })`;
+	return `${helper_bindings.dispatcher}.with_scope(${helper_bindings.scope}.scope, () => ${helper_bindings.dispatcher}.emit({ ${properties.join(", ")} }))`;
 }
 
 function emit_render_expression(
