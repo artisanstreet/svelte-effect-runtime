@@ -121,13 +121,12 @@ export function make_markup_helper_bindings(
 	 * wiring needs so markup emit calls still have a scope to enter.
 	 */
 	const scope_present = script_binding_names.includes(default_helper_bindings.scope);
-
-	const scope_wiring = scope_present || is_server_target
+	const scope_wiring = scope_present
 		? undefined
 		: {
 				component_scope_ref: name_allocator.reserve("ComponentScopeRef"),
 				get_dispatcher: name_allocator.reserve("get_dispatcher"),
-				on_destroy: name_allocator.reserve("onDestroy"),
+				on_destroy: is_server_target ? undefined : name_allocator.reserve("onDestroy"),
 			};
 
 	return {
@@ -258,12 +257,20 @@ function make_scope_wiring_block(
 	bindings: MarkupHelperBindings,
 	scope_wiring: MarkupScopeWiring,
 ): string {
-	const on_destroy_import = make_import_specifier("onDestroy", scope_wiring.on_destroy);
+	const on_destroy_import = scope_wiring.on_destroy
+		? make_import_specifier("onDestroy", scope_wiring.on_destroy)
+		: undefined;
+	const on_destroy_call = scope_wiring.on_destroy
+		? `${scope_wiring.on_destroy}(() => ${bindings.scope}.dispose());`
+		: undefined;
+	const import_statement = on_destroy_import
+		? `import { ${on_destroy_import} } from "svelte";`
+		: undefined;
 
 	return [
-		`import { ${on_destroy_import} } from "svelte";`,
+		import_statement,
 		`const ${bindings.scope} = new ${scope_wiring.component_scope_ref}(${scope_wiring.get_dispatcher});`,
-		`${scope_wiring.on_destroy}(() => ${bindings.scope}.dispose());`,
+		on_destroy_call,
 	].join("\n");
 }
 

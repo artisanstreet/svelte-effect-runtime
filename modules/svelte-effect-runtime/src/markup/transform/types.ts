@@ -120,7 +120,7 @@ export interface MarkupHelperBindings {
 export interface MarkupScopeWiring {
 	component_scope_ref: string;
 	get_dispatcher: string;
-	on_destroy: string;
+	on_destroy?: string;
 }
 
 export interface MarkupNameAllocator {

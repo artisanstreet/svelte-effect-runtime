@@ -16,6 +16,7 @@ import { ExtensionOutput } from "../extension-services.ts";
 
 const server_install_observation_prefix = ".ser-observed-";
 const server_install_retired_prefix = ".ser-retired-install-";
+const server_install_legacy_staging_signature = `-${server_install_staging_prefix}`;
 
 export type ServerInstallRetentionDependencies =
 	| ExtensionOutput
@@ -87,7 +88,10 @@ const CleanupServerInstallCache = (
 				continue;
 			}
 
-			if (entry.startsWith(server_install_staging_prefix)) {
+			if (
+				entry.startsWith(server_install_staging_prefix) ||
+				entry.includes(server_install_legacy_staging_signature)
+			) {
 				yield* CleanupServerInstallStaging(entry_path, entry, now).pipe(
 					Effect.catch((error) =>
 						is_missing_platform_error(error)

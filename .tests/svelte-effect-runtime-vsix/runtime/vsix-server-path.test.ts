@@ -684,6 +684,314 @@ test("VS Code extension resolves mapped package roots keyed by package name", as
 	assert_false(output_lines.some((line) => line.startsWith("Installing ")));
 });
 
+test("VS Code extension resolves mapped package roots keyed by package name without package name in manifest", async () => {
+	const { make_server_path_resolver_layer, ServerPathResolver } =
+		await import("../../../modules/svelte-effect-runtime-vsix/src/extension/server-path.ts");
+	const install_attempts = { value: 0 };
+	const output_lines: string[] = [];
+	const node_layer = Layer.merge(NodeFileSystem.layer, NodePath.layer);
+	const command_layer = make_installing_command_layer(install_attempts).pipe(
+		Layer.provide(node_layer),
+	);
+	const application_layer = Layer.mergeAll(
+		node_layer,
+		command_layer,
+		make_output_layer(output_lines),
+		make_configuration_layer(),
+		Layer.succeed(PackageManagerInstallFiles, { clean: () => Effect.void }),
+		ServerInstallRetentionPolicyLive,
+	);
+	const package_version = language_server_package_version;
+	const result = await get_server_dispatcher().run(
+		Effect.scoped(
+			Effect.gen(function* () {
+				const file_system = yield* FileSystem.FileSystem;
+				const storage_path = yield* file_system.makeTempDirectoryScoped({
+					prefix: "ser-vsix-cache-",
+				});
+				const cache_root = join(storage_path, "language-server", "installs");
+				const encoded_version = encodeURIComponent(package_version);
+				const mapped_root = join(
+					cache_root,
+					encoded_version,
+					"node_modules",
+					".pnpm",
+					`${language_server_package_name}@${package_version}`,
+					"node_modules",
+					language_server_package_name,
+				);
+				const mapped_url = join(
+					".pnpm",
+					`${language_server_package_name}@${package_version}`,
+					"node_modules",
+					language_server_package_name,
+				);
+
+				yield* file_system.makeDirectory(mapped_root, { recursive: true });
+				yield* file_system.makeDirectory(join(mapped_root, "runtime"), { recursive: true });
+				yield* file_system.makeDirectory(join(mapped_root, ".dist"), { recursive: true });
+				yield* file_system.writeFileString(
+					join(mapped_root, "package.json"),
+					JSON.stringify({ version: package_version }),
+				);
+				yield* file_system.writeFileString(
+					join(mapped_root, "runtime", "package.json"),
+					"{}",
+				);
+				yield* file_system.writeFileString(
+					join(mapped_root, ".dist", "server.cjs"),
+					"module.exports = {};\n",
+				);
+
+				const node_modules_root = join(cache_root, encoded_version, "node_modules");
+				yield* file_system.makeDirectory(node_modules_root, { recursive: true });
+				yield* file_system.writeFileString(
+					join(node_modules_root, ".package-map.json"),
+					JSON.stringify({
+						packages: {
+							[`${language_server_package_name}@${package_version}`]: {
+								url: mapped_url,
+							},
+						},
+					}),
+				);
+
+				yield* file_system.writeFileString(
+					join(cache_root, encoded_version, "package.json"),
+					JSON.stringify({
+						name: "svelte-effect-runtime-language-server-install-cache",
+						private: true,
+						dependencies: {
+							[language_server_package_name]: package_version,
+						},
+					}),
+				);
+
+				yield* Effect.sync(() => {
+					vscode_configuration.global_path = undefined;
+				});
+
+				const resolver_layer = make_server_path_resolver_layer(storage_path);
+				const server_path = yield* Effect.gen(function* () {
+					const resolver = yield* ServerPathResolver;
+
+					return yield* resolver.get;
+				}).pipe(Effect.provide(resolver_layer));
+
+				return { encoded_version, server_path, mapped_root };
+			}),
+		).pipe(Effect.provide(application_layer)),
+	);
+
+	assert_equals(install_attempts.value, 0);
+	assert_equals(result.server_path, join(result.mapped_root, ".dist", "server.cjs"));
+	assert_false(output_lines.some((line) => line.startsWith("Installing ")));
+});
+
+test("VS Code extension ignores malformed mapped package-map paths", async () => {
+	const { make_server_path_resolver_layer, ServerPathResolver } =
+		await import("../../../modules/svelte-effect-runtime-vsix/src/extension/server-path.ts");
+	const install_attempts = { value: 0 };
+	const output_lines: string[] = [];
+	const node_layer = Layer.merge(NodeFileSystem.layer, NodePath.layer);
+	const command_layer = make_installing_command_layer(install_attempts).pipe(
+		Layer.provide(node_layer),
+	);
+	const application_layer = Layer.mergeAll(
+		node_layer,
+		command_layer,
+		make_output_layer(output_lines),
+		make_configuration_layer(),
+		Layer.succeed(PackageManagerInstallFiles, { clean: () => Effect.void }),
+		ServerInstallRetentionPolicyLive,
+	);
+	const package_version = language_server_package_version;
+	const result = await get_server_dispatcher().run(
+		Effect.scoped(
+			Effect.gen(function* () {
+				const file_system = yield* FileSystem.FileSystem;
+				const storage_path = yield* file_system.makeTempDirectoryScoped({
+					prefix: "ser-vsix-cache-",
+				});
+				const cache_root = join(storage_path, "language-server", "installs");
+				const encoded_version = encodeURIComponent(package_version);
+				const mapped_root = join(
+					cache_root,
+					encoded_version,
+					"node_modules",
+					".pnpm",
+					`${language_server_package_name}@${package_version}`,
+					"node_modules",
+					language_server_package_name,
+				);
+				const mapped_url = join(
+					".pnpm",
+					`${language_server_package_name}@${package_version}`,
+					"node_modules",
+					language_server_package_name,
+				);
+
+				yield* file_system.makeDirectory(cache_root, { recursive: true });
+				yield* file_system.makeDirectory(join(cache_root, "runtime"), { recursive: true });
+				yield* file_system.makeDirectory(join(cache_root, ".dist"), { recursive: true });
+				yield* file_system.writeFileString(
+					join(cache_root, "package.json"),
+					JSON.stringify({
+						name: language_server_package_name,
+						version: package_version,
+					}),
+				);
+				yield* file_system.writeFileString(
+					join(cache_root, "runtime", "package.json"),
+					"{}",
+				);
+				yield* file_system.writeFileString(
+					join(cache_root, ".dist", "server.cjs"),
+					"module.exports = {};\n",
+				);
+
+				yield* file_system.makeDirectory(mapped_root, { recursive: true });
+				yield* file_system.makeDirectory(join(mapped_root, "runtime"), { recursive: true });
+				yield* file_system.makeDirectory(join(mapped_root, ".dist"), { recursive: true });
+				yield* file_system.writeFileString(
+					join(mapped_root, "package.json"),
+					JSON.stringify({
+						name: language_server_package_name,
+						version: package_version,
+					}),
+				);
+				yield* file_system.writeFileString(
+					join(mapped_root, "runtime", "package.json"),
+					"{}",
+				);
+				yield* file_system.writeFileString(
+					join(mapped_root, ".dist", "server.cjs"),
+					"module.exports = {};\n",
+				);
+
+				const node_modules_root = join(cache_root, encoded_version, "node_modules");
+				yield* file_system.makeDirectory(node_modules_root, { recursive: true });
+				yield* file_system.writeFileString(
+					join(node_modules_root, ".package-map.json"),
+					JSON.stringify({
+						packages: {
+							malformed: {
+								url: "..",
+							},
+							[`${language_server_package_name}@${package_version}`]: {
+								url: mapped_url,
+							},
+						},
+					}),
+				);
+
+				yield* file_system.writeFileString(
+					join(cache_root, encoded_version, "package.json"),
+					JSON.stringify({
+						name: "svelte-effect-runtime-language-server-install-cache",
+						private: true,
+						dependencies: {
+							[language_server_package_name]: package_version,
+						},
+					}),
+				);
+
+				yield* Effect.sync(() => {
+					vscode_configuration.global_path = undefined;
+				});
+
+				const resolver_layer = make_server_path_resolver_layer(storage_path);
+				const server_path = yield* Effect.gen(function* () {
+					const resolver = yield* ServerPathResolver;
+
+					return yield* resolver.get;
+				}).pipe(Effect.provide(resolver_layer));
+
+				return { encoded_version, server_path, mapped_root };
+			}),
+		).pipe(Effect.provide(application_layer)),
+	);
+
+	assert_equals(install_attempts.value, 0);
+	assert_equals(result.server_path, join(result.mapped_root, ".dist", "server.cjs"));
+	assert_false(output_lines.some((line) => line.startsWith("Installing ")));
+});
+
+test("VS Code extension ignores stale direct package roots when a pnpm store exists", async () => {
+	const { make_server_path_resolver_layer, ServerPathResolver } =
+		await import("../../../modules/svelte-effect-runtime-vsix/src/extension/server-path.ts");
+	const install_attempts = { value: 0 };
+	const output_lines: string[] = [];
+	const node_layer = Layer.merge(NodeFileSystem.layer, NodePath.layer);
+	const command_layer = make_installing_command_layer(install_attempts).pipe(
+		Layer.provide(node_layer),
+	);
+	const application_layer = Layer.mergeAll(
+		node_layer,
+		command_layer,
+		make_output_layer(output_lines),
+		make_configuration_layer(),
+		Layer.succeed(PackageManagerInstallFiles, { clean: () => Effect.void }),
+		ServerInstallRetentionPolicyLive,
+	);
+	const package_version = language_server_package_version;
+	const result = await get_server_dispatcher().run(
+		Effect.scoped(
+			Effect.gen(function* () {
+				const file_system = yield* FileSystem.FileSystem;
+				const storage_path = yield* file_system.makeTempDirectoryScoped({
+					prefix: "ser-vsix-cache-",
+				});
+				const cache_root = join(storage_path, "language-server", "installs");
+				const encoded_version = encodeURIComponent(package_version);
+				const stale_root = join(cache_root, encoded_version, "node_modules", language_server_package_name);
+				const stale_server_path = join(stale_root, ".dist", "server.cjs");
+				const pnpm_root = join(cache_root, encoded_version, "node_modules", ".pnpm");
+
+				yield* file_system.makeDirectory(stale_root, { recursive: true });
+				yield* file_system.makeDirectory(join(stale_root, "runtime"), { recursive: true });
+				yield* file_system.makeDirectory(join(stale_root, ".dist"), { recursive: true });
+				yield* file_system.makeDirectory(pnpm_root, { recursive: true });
+				yield* file_system.writeFileString(
+					join(stale_root, "package.json"),
+					JSON.stringify({
+						name: `${language_server_package_name}-stale`,
+						version: package_version,
+					}),
+				);
+				yield* file_system.writeFileString(join(stale_root, ".dist", "server.cjs"), "module.exports = {};\n");
+				yield* file_system.writeFileString(join(stale_root, "runtime", "package.json"), "{}");
+
+				yield* Effect.sync(() => {
+					vscode_configuration.global_path = undefined;
+				});
+
+				const resolver_layer = make_server_path_resolver_layer(storage_path);
+				const server_path = yield* Effect.gen(function* () {
+					const resolver = yield* ServerPathResolver;
+
+					return yield* resolver.get;
+				}).pipe(Effect.provide(resolver_layer));
+
+				return {
+					cache_root,
+					encoded_version,
+					server_path,
+					stale_server_path,
+				};
+			}),
+		).pipe(Effect.provide(application_layer)),
+	);
+
+	assert_equals(install_attempts.value, 1);
+	assert_false(result.server_path === stale_server_path);
+	assert_truthy(result.server_path.startsWith(join(result.cache_root, `${result.encoded_version}-`)));
+	assert_truthy(
+		result.server_path.endsWith(join("node_modules", language_server_package_name, ".dist", "server.cjs")),
+	);
+	assert_truthy(output_lines.some((line) => line.startsWith("Installing ")));
+});
+
 test("VS Code extension atomically shares one published cache across windows", async () => {
 	const { make_server_path_resolver_layer, ServerPathResolver } =
 		await import("../../../modules/svelte-effect-runtime-vsix/src/extension/server-path.ts");

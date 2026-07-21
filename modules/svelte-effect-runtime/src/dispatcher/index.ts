@@ -58,9 +58,11 @@ export class Dispatcher {
 	#promise_values = new Map<string, Promise<unknown>>();
 	#value_ids = new Map<string, string>();
 	#promise_ids = new Map<string, string>();
+	#scope_ids = new WeakMap<ComponentScope, string>();
 	#hash_deps = make_dependency_hasher();
 	#disposed = false;
 	#next_fiber_id = 0;
+	#next_scope_id = 0;
 	#root_scope = Scope.makeUnsafe();
 	#component_scopes = new Set<ComponentScope>();
 	/**
@@ -241,8 +243,10 @@ export class Dispatcher {
 			return options.fallback;
 		}
 
-		const cache_key = this.#make_value_cache_key(options.id, options.deps);
-		const old_key = this.#value_ids.get(options.id);
+		const scope_id = this.#scope_id(this.#current_scope);
+		const cache_id = this.#make_scoped_id(scope_id, options.id);
+		const cache_key = this.#make_value_cache_key(cache_id, options.deps);
+		const old_key = this.#value_ids.get(cache_id);
 
 		this.#subscribe_value_cells();
 
@@ -254,7 +258,7 @@ export class Dispatcher {
 			this.#clear_pending_value_cell(old_key, old_fiber);
 		}
 
-		this.#value_ids.set(options.id, cache_key);
+		this.#value_ids.set(cache_id, cache_key);
 
 		if (this.#should_start_value_fiber(cache_key, cell)) {
 			this.#start_value_fiber(cache_key, options);
@@ -276,15 +280,17 @@ export class Dispatcher {
 			return Promise.reject(new DispatcherDisposedError());
 		}
 
-		const cache_key = this.#make_promise_cache_key(options.id, options.deps);
-		const old_key = this.#promise_ids.get(options.id);
+		const scope_id = this.#scope_id(this.#current_scope);
+		const cache_id = this.#make_scoped_id(scope_id, options.id);
+		const cache_key = this.#make_promise_cache_key(cache_id, options.deps);
+		const old_key = this.#promise_ids.get(cache_id);
 
 		if (old_key !== undefined && old_key !== cache_key) {
 			this.#interrupt_cached_fiber(old_key);
 			this.#promise_values.delete(old_key);
 		}
 
-		this.#promise_ids.set(options.id, cache_key);
+		this.#promise_ids.set(cache_id, cache_key);
 
 		const existing = this.#promise_values.get(cache_key);
 
@@ -292,7 +298,7 @@ export class Dispatcher {
 			return existing as Promise<A>;
 		}
 
-		const promise = this.#start_promise_fiber(cache_key, options);
+		const promise = this.#start_promise_fiber(cache_key, options, cache_id);
 
 		this.#promise_values.set(cache_key, promise);
 
@@ -417,6 +423,28 @@ export class Dispatcher {
 		return typeof document === "undefined";
 	}
 
+	#scope_id(scope: ComponentScope | undefined): string {
+		if (!scope || scope.disposed) {
+			return "global";
+		}
+
+		const existing = this.#scope_ids.get(scope);
+
+		if (existing) {
+			return existing;
+		}
+
+		const next = String(this.#next_scope_id);
+		this.#next_scope_id += 1;
+		this.#scope_ids.set(scope, next);
+
+		return next;
+	}
+
+	#make_scoped_id(scope_id: string, id: string): string {
+		return `${scope_id}|${id}`;
+	}
+
 	#interrupt_cached_fiber(cache_key: string): FiberType<unknown, unknown> | undefined {
 		const old_fiber = this.#fibers.get(cache_key);
 
@@ -480,7 +508,11 @@ export class Dispatcher {
 		);
 	}
 
-	#start_promise_fiber<A>(cache_key: string, options: PromiseOptions<A>): Promise<A> {
+	#start_promise_fiber<A>(
+		cache_key: string,
+		options: PromiseOptions<A>,
+		cache_id: string,
+	): Promise<A> {
 		const Program = Effect.gen(function* () {
 			const result = yield* Effect.gen(options.factory);
 
@@ -503,8 +535,8 @@ export class Dispatcher {
 			this.#fibers.delete(cache_key);
 			this.#promise_values.delete(cache_key);
 
-			if (this.#promise_ids.get(options.id) === cache_key) {
-				this.#promise_ids.delete(options.id);
+			if (this.#promise_ids.get(cache_id) === cache_key) {
+				this.#promise_ids.delete(cache_id);
 			}
 		});
 		const AwaitFiber = Effect.gen(function* () {
