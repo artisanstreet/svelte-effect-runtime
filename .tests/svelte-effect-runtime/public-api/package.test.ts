@@ -38,7 +38,8 @@ const ServerProbeSchema = Schema.Struct({
 	resolved: Schema.String,
 });
 const MinimumPeerProbeSchema = Schema.Struct({
-	kit_version: Schema.Literal("2.61.0"),
+	bridge_loaded: Schema.Literal(true),
+	kit_version: Schema.Literal("2.69.0"),
 	server_loaded: Schema.Literal(true),
 });
 
@@ -135,7 +136,7 @@ test("packed package resolves every supported public and generated entrypoint", 
 	expect(manifest.version).toMatch(/^\d+\.\d+\.\d+/);
 	expect(manifest.files).toContain(".dist");
 	expect(Object.keys(manifest.exports).sort()).toEqual([...required_entrypoints].sort());
-	expect(manifest.peerDependencies?.["@sveltejs/kit"]).toBe("^2.61.0 || ^3.0.0-next.0");
+	expect(manifest.peerDependencies?.["@sveltejs/kit"]).toBe("^2.69.0 || ^3.0.0-next.0");
 	expect(JSON.stringify([manifest.dependencies, manifest.peerDependencies])).not.toContain(
 		"workspace:",
 	);
@@ -171,7 +172,7 @@ test("packed package resolves every supported public and generated entrypoint", 
 	);
 }, 180_000);
 
-test("packed server entrypoint loads at the minimum supported SvelteKit peer", async () => {
+test("packed compiler bridge loads at the minimum supported SvelteKit peer", async () => {
 	const artifact = await ensure_packed_artifact();
 	const primary_versions = await read_primary_dependency_versions();
 	const workspace = await prepare_workspace("minimum-sveltekit-peer", artifact, {
@@ -180,18 +181,29 @@ test("packed server entrypoint loads at the minimum supported SvelteKit peer", a
 		type: "module",
 		dependencies: {
 			...primary_versions,
-			"@sveltejs/kit": "2.61.0",
+			"@sveltejs/kit": "2.69.0",
 		},
 	});
 
 	await write_app_server_stub(workspace);
 
 	const probe = [
+		"import { readFile } from 'node:fs/promises';",
 		"import { createRequire } from 'node:module';",
+		"import { dirname, join } from 'node:path';",
+		"import { effect } from 'svelte-effect-runtime/compiler';",
 		"const require = createRequire(import.meta.url);",
 		"const kit = require('@sveltejs/kit/package.json');",
+		"const kit_root = dirname(require.resolve('@sveltejs/kit/package.json'));",
+		"const index_path = join(kit_root, 'src', 'runtime', 'client', 'remote-functions', 'index.js');",
+		"const index_source = await readFile(index_path, 'utf8');",
+		"const plugin = effect().find((candidate) => candidate.name === 'svelte-effect-runtime:remote-client');",
+		"if (!plugin || typeof plugin.transform !== 'function') throw new Error('Missing remote client transform');",
+		"const transformed = await plugin.transform.call({}, index_source, index_path);",
+		"const code = typeof transformed === 'string' ? transformed : transformed?.code;",
+		"const bridge_loaded = ['__SER___remote_request', '__SER___serialize_binary_form', '__SER___binary_form_content_type'].every((name) => code?.includes(name));",
 		"await import('svelte-effect-runtime/server');",
-		"console.log(JSON.stringify({ kit_version: kit.version, server_loaded: true }));",
+		"console.log(JSON.stringify({ bridge_loaded, kit_version: kit.version, server_loaded: true }));",
 	].join("\n");
 	const result = run_command(
 		process.execPath,
@@ -199,11 +211,15 @@ test("packed server entrypoint loads at the minimum supported SvelteKit peer", a
 		workspace,
 	);
 
-	assert_command_succeeded("import packed server at minimum SvelteKit peer", result);
+	assert_command_succeeded("load packed compiler bridge at minimum SvelteKit peer", result);
 
 	const observed = Schema.decodeUnknownSync(MinimumPeerProbeSchema)(JSON.parse(result.stdout));
 
-	expect(observed).toEqual({ kit_version: "2.61.0", server_loaded: true });
+	expect(observed).toEqual({
+		bridge_loaded: true,
+		kit_version: "2.69.0",
+		server_loaded: true,
+	});
 }, 180_000);
 
 test("packed root and compiler entrypoints expose the runtime API through Node resolution", async () => {

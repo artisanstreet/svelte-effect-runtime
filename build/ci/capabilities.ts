@@ -47,6 +47,7 @@ export const capability_lanes: ReadonlyArray<CapabilityLane> = Object.freeze([
 		`${ser_test_root}/compiler/markup.test.ts`,
 		`${ser_test_root}/compiler/representative-golden.test.ts`,
 		`${ser_test_root}/compiler/script-transform.test.ts`,
+		`${ser_test_root}/compiler/source-scan-legacy-root.test.ts`,
 		`${ser_test_root}/compiler/source-scan.test.ts`,
 		`${ser_test_root}/compiler/sveltekit-remote-bridge.test.ts`,
 	]),
@@ -75,7 +76,10 @@ export const capability_lanes: ReadonlyArray<CapabilityLane> = Object.freeze([
 			`${ser_test_root}/transport/remote-shared.test.ts`,
 			`${ser_test_root}/unit/live-state.test.ts`,
 		],
-		[["pnpm", "run", "test:conformance:consumer"]],
+		[
+			["pnpm", "run", "test:conformance:consumer"],
+			["pnpm", "run", "test:conformance:minimum-kit"],
+		],
 	),
 	make_lane("public-api", "Capability / Public API", [
 		`${ser_test_root}/public-api/package.test.ts`,
