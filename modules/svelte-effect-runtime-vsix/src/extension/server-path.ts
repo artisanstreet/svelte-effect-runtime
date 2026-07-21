@@ -822,7 +822,7 @@ const ResolveLanguageServerScriptPath = (
 	});
 
 const IsDirectory = (path: string) =>
-	Effect.gen(function* () => {
+	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 		const info = yield* Effect.option(file_system.stat(path));
 
@@ -830,7 +830,7 @@ const IsDirectory = (path: string) =>
 	});
 
 const IsFile = (path: string) =>
-	Effect.gen(function* () => {
+	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 		const info = yield* Effect.option(file_system.stat(path));
 
