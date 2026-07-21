@@ -7,10 +7,15 @@ import type {
 	PromiseOptions,
 	ValueOptions,
 } from "./types.ts";
-import { RuntimeAlreadyInitializedError, DispatcherDisposedError } from "$/errors.ts";
+import {
+	RuntimeAlreadyInitializedError,
+	DispatcherDisposedError,
+	ScopeDisposedError,
+} from "$/errors.ts";
 import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime";
-import { Cause, Effect, Exit, Fiber, Layer, ManagedRuntime } from "effect";
+import { Cause, Effect, Exit, Fiber, Layer, ManagedRuntime, Scope } from "effect";
 import { InterruptFiber, WatchFiberExit } from "./fibers.ts";
+import { ComponentScope } from "./scope.ts";
 import type { Fiber as FiberType } from "effect/Fiber";
 import { createSubscriber } from "svelte/reactivity";
 import { make_dependency_hasher } from "./deps.ts";
@@ -53,9 +58,18 @@ export class Dispatcher {
 	#promise_values = new Map<string, Promise<unknown>>();
 	#value_ids = new Map<string, string>();
 	#promise_ids = new Map<string, string>();
+	#scope_ids = new WeakMap<ComponentScope, string>();
 	#hash_deps = make_dependency_hasher();
 	#disposed = false;
 	#next_fiber_id = 0;
+	#next_scope_id = 0;
+	#root_scope = Scope.makeUnsafe();
+	#component_scopes = new Set<ComponentScope>();
+	/**
+	 * The component scope that effect execution currently enters. Set by
+	 * generated code via {@link with_scope}; `undefined` outside components.
+	 */
+	#current_scope: ComponentScope | undefined = undefined;
 
 	static make<R = never>(layer?: Layer.Layer<R>): Dispatcher {
 		if (current_dispatcher) {
@@ -74,6 +88,108 @@ export class Dispatcher {
 		this.#runtime =
 			runtime ??
 			(ManagedRuntime.make(Layer.empty) as unknown as ManagedRuntimeType<unknown, unknown>);
+	}
+
+	/**
+	 * Begin a component-owned Effect scope. Pass the returned scope to
+	 * {@link run_scoped} so the work is interrupted and finalized when the
+	 * component is destroyed. Disposal is idempotent.
+	 */
+	begin_scope(): ComponentScope {
+		const scope = ComponentScope.fork(this.#root_scope, (disposed) => {
+			this.#component_scopes.delete(disposed);
+		});
+
+		this.#component_scopes.add(scope);
+
+		return scope;
+	}
+
+	/**
+	 * Runs `fn` with `scope` as the current component scope. While active,
+	 * every effect path ({@link promise}, {@link run}, {@link value}) forks
+	 * its work into `scope` so disposing the scope interrupts it and runs its
+	 * finalizers. A disposed scope falls back to unscoped execution.
+	 */
+	with_scope<T>(scope: ComponentScope, fn: () => T): T {
+		if (scope.disposed) {
+			return fn();
+		}
+
+		const previous = this.#current_scope;
+		this.#current_scope = scope;
+
+		try {
+			return fn();
+		} finally {
+			this.#current_scope = previous;
+		}
+	}
+
+	/**
+	 * Forks an effect into a component scope and starts it. The fiber becomes
+	 * a child of the scope, so disposing the scope interrupts it and runs its
+	 * finalizers. Returns an idempotent handle that interrupts the scoped
+	 * fiber directly.
+	 *
+	 * Throws {@link ScopeDisposedError} when the scope was already disposed
+	 * and {@link DispatcherDisposedError} when the dispatcher was shut down.
+	 */
+	run_scoped<A, E, R>(scope: ComponentScope, effect: Effect.Effect<A, E, R>): Dispose {
+		if (this.#disposed) {
+			return () => {};
+		}
+
+		if (scope.disposed || !this.#component_scopes.has(scope)) {
+			throw new ScopeDisposedError();
+		}
+
+		/**
+		 * Track the scoped fiber itself: `forkIn` binds it to the component
+		 * scope rather than the awaiting parent, so per-run disposal must
+		 * interrupt the scoped fiber directly.
+		 */
+		let scoped_fiber: FiberType<unknown, unknown> | undefined;
+
+		this.#runtime.runFork(
+			Effect.flatMap(scope.fork_in(effect), (fiber) => {
+				scoped_fiber = fiber;
+
+				return Effect.asVoid(Fiber.await(fiber));
+			}) as Effect.Effect<unknown, unknown, unknown>,
+		);
+
+		let disposed = false;
+
+		return (): void => {
+			if (disposed) {
+				return;
+			}
+
+			disposed = true;
+
+			if (scoped_fiber) {
+				this.#runtime.runFork(InterruptFiber(scoped_fiber));
+			}
+		};
+	}
+
+	/**
+	 * Disposes a component scope owned by this dispatcher, interrupting its
+	 * bound work and running its finalizers. Idempotent. Rejects scopes owned
+	 * by another dispatcher with {@link ScopeDisposedError}.
+	 */
+	dispose_scope(scope: ComponentScope): void {
+		if (!this.#component_scopes.has(scope)) {
+			if (scope.disposed) {
+				return;
+			}
+
+			throw new ScopeDisposedError();
+		}
+
+		scope.dispose();
+		this.#runtime.runFork(scope.close_effect as Effect.Effect<unknown, unknown, unknown>);
 	}
 
 	emit<A, F>(event: MarkupValueEvent<A, F>): A | F;
@@ -127,8 +243,10 @@ export class Dispatcher {
 			return options.fallback;
 		}
 
-		const cache_key = this.#make_value_cache_key(options.id, options.deps);
-		const old_key = this.#value_ids.get(options.id);
+		const scope_id = this.#scope_id(this.#current_scope);
+		const cache_id = this.#make_scoped_id(scope_id, options.id);
+		const cache_key = this.#make_value_cache_key(cache_id, options.deps);
+		const old_key = this.#value_ids.get(cache_id);
 
 		this.#subscribe_value_cells();
 
@@ -140,7 +258,7 @@ export class Dispatcher {
 			this.#clear_pending_value_cell(old_key, old_fiber);
 		}
 
-		this.#value_ids.set(options.id, cache_key);
+		this.#value_ids.set(cache_id, cache_key);
 
 		if (this.#should_start_value_fiber(cache_key, cell)) {
 			this.#start_value_fiber(cache_key, options);
@@ -162,15 +280,17 @@ export class Dispatcher {
 			return Promise.reject(new DispatcherDisposedError());
 		}
 
-		const cache_key = this.#make_promise_cache_key(options.id, options.deps);
-		const old_key = this.#promise_ids.get(options.id);
+		const scope_id = this.#scope_id(this.#current_scope);
+		const cache_id = this.#make_scoped_id(scope_id, options.id);
+		const cache_key = this.#make_promise_cache_key(cache_id, options.deps);
+		const old_key = this.#promise_ids.get(cache_id);
 
 		if (old_key !== undefined && old_key !== cache_key) {
 			this.#interrupt_cached_fiber(old_key);
 			this.#promise_values.delete(old_key);
 		}
 
-		this.#promise_ids.set(options.id, cache_key);
+		this.#promise_ids.set(cache_id, cache_key);
 
 		const existing = this.#promise_values.get(cache_key);
 
@@ -178,7 +298,7 @@ export class Dispatcher {
 			return existing as Promise<A>;
 		}
 
-		const promise = this.#start_promise_fiber(cache_key, options);
+		const promise = this.#start_promise_fiber(cache_key, options, cache_id);
 
 		this.#promise_values.set(cache_key, promise);
 
@@ -216,7 +336,13 @@ export class Dispatcher {
 			return yield* Effect.fail(error);
 		});
 
-		return this.#runtime.runPromise(Program as Effect.Effect<A, unknown, unknown>);
+		const scope = this.#current_scope;
+
+		return this.#runtime.runPromise(
+			(scope
+				? Effect.provideService(Program, Scope.Scope, scope.underlying)
+				: Program) as Effect.Effect<A, unknown, unknown>,
+		);
 	}
 
 	#emit_markup_value<A, F>(event: MarkupValueEvent<A, F>): A | F {
@@ -259,6 +385,15 @@ export class Dispatcher {
 	dispose(): void {
 		this.#disposed = true;
 
+		for (const scope of this.#component_scopes) {
+			scope.dispose();
+		}
+
+		this.#component_scopes.clear();
+		this.#runtime.runFork(
+			Scope.close(this.#root_scope, Exit.void) as Effect.Effect<unknown, unknown, unknown>,
+		);
+
 		for (const fiber of this.#fibers.values()) {
 			this.#runtime.runFork(InterruptFiber(fiber));
 		}
@@ -288,6 +423,28 @@ export class Dispatcher {
 		return typeof document === "undefined";
 	}
 
+	#scope_id(scope: ComponentScope | undefined): string {
+		if (!scope || scope.disposed) {
+			return "global";
+		}
+
+		const existing = this.#scope_ids.get(scope);
+
+		if (existing) {
+			return existing;
+		}
+
+		const next = String(this.#next_scope_id);
+		this.#next_scope_id += 1;
+		this.#scope_ids.set(scope, next);
+
+		return next;
+	}
+
+	#make_scoped_id(scope_id: string, id: string): string {
+		return `${scope_id}|${id}`;
+	}
+
 	#interrupt_cached_fiber(cache_key: string): FiberType<unknown, unknown> | undefined {
 		const old_fiber = this.#fibers.get(cache_key);
 
@@ -311,7 +468,17 @@ export class Dispatcher {
 
 			return result;
 		});
-		const fiber = this.#runtime.runFork(Program as Effect.Effect<unknown, unknown, unknown>);
+		/**
+		 * Provide the active component scope so scoped acquisition works and
+		 * finalizers run when the scope closes on unmount. Interruption of an
+		 * individual run does not close the component scope; its finalizers
+		 * run at scope disposal, matching the component lifetime.
+		 */
+		const scope = this.#current_scope;
+		const ScopedProgram = scope
+			? Effect.provideService(Program, Scope.Scope, scope.underlying)
+			: Program;
+		const fiber = this.#runtime.runFork(ScopedProgram as Effect.Effect<unknown, unknown, unknown>);
 
 		this.#fibers.set(cache_key, fiber);
 
@@ -341,13 +508,25 @@ export class Dispatcher {
 		);
 	}
 
-	#start_promise_fiber<A>(cache_key: string, options: PromiseOptions<A>): Promise<A> {
+	#start_promise_fiber<A>(
+		cache_key: string,
+		options: PromiseOptions<A>,
+		cache_id: string,
+	): Promise<A> {
 		const Program = Effect.gen(function* () {
 			const result = yield* Effect.gen(options.factory);
 
 			return result;
 		});
-		const fiber = this.#runtime.runFork(Program as Effect.Effect<unknown, unknown, unknown>);
+		/**
+		 * See #start_value_fiber: the component scope is provided ambiently so
+		 * scoped acquisition works and finalizers run on unmount.
+		 */
+		const scope = this.#current_scope;
+		const ScopedProgram = scope
+			? Effect.provideService(Program, Scope.Scope, scope.underlying)
+			: Program;
+		const fiber = this.#runtime.runFork(ScopedProgram as Effect.Effect<unknown, unknown, unknown>);
 		const ReleaseFiber = Effect.sync(() => {
 			if (!this.#is_current_fiber(cache_key, fiber)) {
 				return;
@@ -356,8 +535,8 @@ export class Dispatcher {
 			this.#fibers.delete(cache_key);
 			this.#promise_values.delete(cache_key);
 
-			if (this.#promise_ids.get(options.id) === cache_key) {
-				this.#promise_ids.delete(options.id);
+			if (this.#promise_ids.get(cache_id) === cache_key) {
+				this.#promise_ids.delete(cache_id);
 			}
 		});
 		const AwaitFiber = Effect.gen(function* () {
@@ -472,4 +651,41 @@ export function get_dispatcher(): Dispatcher {
 export function reset_dispatcher(): void {
 	current_dispatcher?.dispose();
 	current_dispatcher = null;
+}
+
+/**
+ * Lazily-created component scope used by generated component code.
+ *
+ * The holder is created synchronously during component init (before any
+ * top-level `await`, where `onDestroy` is not yet available), and the scope
+ * itself is materialized on first use. Disposal is registered separately
+ * through `onDestroy` during component initialisation, so the scope is
+ * reliably closed on unmount.
+ *
+ * @since 4.1.0
+ */
+export class ComponentScopeRef {
+	readonly #get_dispatcher: () => Dispatcher;
+	#scope: ComponentScope | undefined;
+
+	constructor(get_dispatcher_fn: () => Dispatcher) {
+		this.#get_dispatcher = get_dispatcher_fn;
+	}
+
+	/** The component scope, creating it on first access. */
+	get scope(): ComponentScope {
+		this.#scope ??= this.#get_dispatcher().begin_scope();
+
+		return this.#scope;
+	}
+
+	/** Disposes the scope if it was created. Idempotent. */
+	dispose(): void {
+		const scope = this.#scope;
+		this.#scope = undefined;
+
+		if (scope && !scope.disposed) {
+			this.#get_dispatcher().dispose_scope(scope);
+		}
+	}
 }

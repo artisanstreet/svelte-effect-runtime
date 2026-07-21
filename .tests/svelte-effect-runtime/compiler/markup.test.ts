@@ -139,7 +139,7 @@ test("rewrites {yield* expr} as async promise expression", () => {
 	const source = `<span>{yield* renderDate()}</span>`;
 	const result = transform_markup_effect(source, "Test.svelte");
 
-	assert_string_includes(result.code, `await Dispatcher.emit({ type: Code.Markup.Promise`);
+	assert_string_includes(result.code, `await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise`);
 	assert_string_includes(result.code, `renderDate()`);
 	assert_string_includes(result.code, `function* __SER___markup_effect`);
 	if (!result.has_yield) throw new Error("has_yield should be true");
@@ -150,7 +150,10 @@ test("does not confuse helper import text in comments with a real import", () =>
 	const source = `<!-- ${fake_import} --><span>{yield* renderDate()}</span>`;
 	const result = transform_markup_effect(source, "CommentedImport.svelte");
 
-	assert_string_includes(result.code, `<script>\n${fake_import}\nfunction*`);
+	assert_string_includes(
+		result.code,
+		`import { Dispatcher, Code, ToEffect, ComponentScopeRef, get_dispatcher } from "svelte-effect-runtime/internal/generators";\nfunction*`,
+	);
 
 	compile(result.code, {
 		filename: "CommentedImport.svelte",
@@ -163,7 +166,7 @@ test("rewrites {yield* expr} with free identifier deps", () => {
 	const source = `<span>{yield* format(user)}</span>`;
 	const result = transform_markup_effect(source, "Test.svelte");
 
-	assert_string_includes(result.code, `await Dispatcher.emit({ type: Code.Markup.Promise`);
+	assert_string_includes(result.code, `await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise`);
 	assert_string_includes(result.code, `format`);
 	assert_string_includes(result.code, `user`);
 	assert_string_includes(result.code, `[format, user]`);
@@ -177,7 +180,7 @@ test("rewrites yielded markup expressions using Effect import aliases", () => {
 
 	const result = transform_markup_effect(source, "Test.svelte");
 
-	assert_string_includes(result.code, `await Dispatcher.emit({ type: Code.Markup.Promise`);
+	assert_string_includes(result.code, `await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise`);
 	assert_string_includes(result.code, `yield* ToEffect(E.succeed(42))`);
 	assert_string_includes(result.code, `import { Effect as E } from "effect";`);
 
@@ -192,7 +195,7 @@ test("rewrites {#if yield* expr} in condition", () => {
 	const source = `{#if yield* hasAccess()}<p>yes</p>{/if}`;
 	const result = transform_markup_effect(source, "Test.svelte");
 
-	assert_string_includes(result.code, `await Dispatcher.emit({ type: Code.Markup.Promise`);
+	assert_string_includes(result.code, `await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise`);
 	assert_string_includes(result.code, `hasAccess`);
 	assert_string_includes(result.code, `{#if`);
 	if (!result.has_yield) throw new Error("has_yield should be true");
@@ -202,7 +205,7 @@ test("rewrites {:else if yield* expr} in alternate condition", () => {
 	const source = `{#if a}{:else if yield* checkFlag()}<p>flag</p>{/if}`;
 	const result = transform_markup_effect(source, "Test.svelte");
 
-	assert_string_includes(result.code, `await Dispatcher.emit({ type: Code.Markup.Promise`);
+	assert_string_includes(result.code, `await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise`);
 	assert_string_includes(result.code, `checkFlag`);
 	assert_string_includes(result.code, `:else if`);
 	if (!result.has_yield) throw new Error("has_yield should be true");
@@ -212,7 +215,7 @@ test("rewrites {#each yield* expr as item} in list", () => {
 	const source = `{#each yield* getItems() as item}<li>{item}</li>{/each}`;
 	const result = transform_markup_effect(source, "Test.svelte");
 
-	assert_string_includes(result.code, `await Dispatcher.emit({ type: Code.Markup.Promise`);
+	assert_string_includes(result.code, `await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise`);
 	assert_string_includes(result.code, `getItems`);
 	assert_string_includes(result.code, `{#each`);
 	if (!result.has_yield) throw new Error("has_yield should be true");
@@ -240,7 +243,7 @@ test("rewrites {@render yield* fn()} as cached optional snippet call", () => {
 	const source = `{@render yield* getSnippet()}`;
 	const result = transform_markup_effect(source, "Test.svelte");
 
-	assert_string_includes(result.code, `await Dispatcher.emit({ type: Code.Markup.Promise`);
+	assert_string_includes(result.code, `await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise`);
 	assert_string_includes(result.code, `(`);
 	assert_string_includes(result.code, `)()`);
 	if (!result.has_yield) throw new Error("has_yield should be true");
@@ -265,7 +268,7 @@ test("rewrites yield inside render tag arguments without double-calling snippet 
 
 	assert_string_includes(
 		result.code,
-		`{@render child(await Dispatcher.emit({ type: Code.Markup.Promise`,
+		`{@render child(await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise`,
 	);
 	assert_string_includes(result.code, `return (yield* ToEffect(load()));`);
 	if (result.code.includes(`)()}`)) {
@@ -320,7 +323,7 @@ test("rewrites yield in dynamic svelte element tags", () => {
 	const source = `<svelte:element this={yield* tag()}>Dynamic</svelte:element>`;
 	const result = transform_markup_effect(source, "DynamicElement.svelte");
 
-	assert_string_includes(result.code, `this={await Dispatcher.emit`);
+	assert_string_includes(result.code, `this={await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit`);
 	assert_string_includes(result.code, `return (yield* ToEffect(tag()));`);
 
 	compile(result.code, {
@@ -334,7 +337,7 @@ test("rewrites {@const x = yield* expr} in const initializer", () => {
 	const source = `{@const x = yield* compute()}{x}`;
 	const result = transform_markup_effect(source, "Test.svelte");
 
-	assert_string_includes(result.code, `await Dispatcher.emit({ type: Code.Markup.Promise`);
+	assert_string_includes(result.code, `await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise`);
 	assert_string_includes(result.code, `compute`);
 	if (!result.has_yield) throw new Error("has_yield should be true");
 });
@@ -345,7 +348,7 @@ test("rewrites {const x = yield* expr} in declaration initializer", () => {
 
 	assert_string_includes(
 		result.code,
-		`{const x = await Dispatcher.emit({ type: Code.Markup.Promise`,
+		`{const x = await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise`,
 	);
 	assert_string_includes(result.code, `compute`);
 	if (!result.has_yield) throw new Error("has_yield should be true");
@@ -357,7 +360,7 @@ test("rewrites {let x = yield* expr} in declaration initializer", () => {
 
 	assert_string_includes(
 		result.code,
-		`{let x = await Dispatcher.emit({ type: Code.Markup.Promise`,
+		`{let x = await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise`,
 	);
 	assert_string_includes(result.code, `compute`);
 	if (!result.has_yield) throw new Error("has_yield should be true");
@@ -377,7 +380,7 @@ test("preserves declaration rune placement while lowering yield*", () => {
 
 	assert_string_includes(
 		result.code,
-		`$derived(await Dispatcher.emit({ type: Code.Markup.Promise`,
+		`$derived(await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise`,
 	);
 
 	if (result.code.includes("[$derived")) {
@@ -407,7 +410,7 @@ test("client declaration tags lower to awaited promise reads", () => {
 
 	assert_string_includes(
 		result.code,
-		`$derived(await Dispatcher.emit({ type: Code.Markup.Promise`,
+		`$derived(await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise`,
 	);
 
 	if (result.code.includes(`Code.Markup.Value`)) {
@@ -437,7 +440,7 @@ test("editor declaration tags lower to awaited promise reads", () => {
 
 	assert_string_includes(
 		result.code,
-		`$derived(await Dispatcher.emit({ type: Code.Markup.Promise`,
+		`$derived(await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise`,
 	);
 
 	if (result.code.includes(`Code.Markup.Value`)) {
@@ -467,7 +470,7 @@ test("server declaration tags lower to awaited promise reads", () => {
 
 	assert_string_includes(
 		result.code,
-		`$derived(await Dispatcher.emit({ type: Code.Markup.Promise`,
+		`$derived(await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise`,
 	);
 
 	compile(result.code, {
@@ -483,7 +486,7 @@ test("client render tags use awaited promise calls", () => {
 		target: "client",
 	});
 
-	assert_string_includes(result.code, `await Dispatcher.emit`);
+	assert_string_includes(result.code, `await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit`);
 	assert_string_includes(result.code, `Code.Markup.Promise`);
 	assert_string_includes(result.code, `)()`);
 
@@ -500,7 +503,7 @@ test("server render tags use noop snippet fallback during SSR", () => {
 		target: "server",
 	});
 
-	assert_string_includes(result.code, `await Dispatcher.emit`);
+	assert_string_includes(result.code, `await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit`);
 	assert_string_includes(result.code, `ssr_fallback: () => undefined`);
 	assert_string_includes(result.code, `)()`);
 
@@ -533,7 +536,7 @@ test("client common markup contexts compile with async option", () => {
 		target: "client",
 	});
 
-	assert_string_includes(result.code, `await Dispatcher.emit({ type: Code.Markup.Promise`);
+	assert_string_includes(result.code, `await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise`);
 
 	compile(result.code, {
 		filename: "ClientContexts.svelte",
@@ -564,7 +567,7 @@ test("server common markup contexts compile with async option", () => {
 		target: "server",
 	});
 
-	assert_string_includes(result.code, `await Dispatcher.emit({ type: Code.Markup.Promise`);
+	assert_string_includes(result.code, `await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise`);
 	assert_string_includes(result.code, `ssr_fallback: undefined`);
 	assert_string_includes(result.code, `ssr_fallback: []`);
 
@@ -591,9 +594,9 @@ test("lowers multiple yield* expressions inside declaration runes", () => {
 	assert_equals(promise_calls, 2);
 	assert_string_includes(
 		result.code,
-		`$derived((await Dispatcher.emit({ type: Code.Markup.Promise`,
+		`$derived((await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise`,
 	);
-	assert_string_includes(result.code, `+ (await Dispatcher.emit({ type: Code.Markup.Promise`);
+	assert_string_includes(result.code, `+ (await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise`);
 
 	compile(result.code, {
 		filename: "Test.svelte",
@@ -608,7 +611,7 @@ test("rewrites destructured declaration tag initializers", () => {
 
 	assert_string_includes(
 		result.code,
-		`{const { value } = await Dispatcher.emit({ type: Code.Markup.Promise`,
+		`{const { value } = await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise`,
 	);
 	assert_string_includes(result.code, `load`);
 	if (!result.has_yield) throw new Error("has_yield should be true");
@@ -627,7 +630,7 @@ test("rewrites destructured declaration tag defaults", () => {
 
 	assert_string_includes(
 		result.code,
-		`{let { value = await Dispatcher.emit({ type: Code.Markup.Promise`,
+		`{let { value = await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise`,
 	);
 	assert_string_includes(result.code, `fallbackValue`);
 
@@ -677,7 +680,7 @@ test("rewrites {#key yield* expr} in key expression", () => {
 	const source = `{#key yield* getKey()}<p>content</p>{/key}`;
 	const result = transform_markup_effect(source, "Test.svelte");
 
-	assert_string_includes(result.code, `await Dispatcher.emit({ type: Code.Markup.Promise`);
+	assert_string_includes(result.code, `await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise`);
 	assert_string_includes(result.code, `getKey`);
 	if (!result.has_yield) throw new Error("has_yield should be true");
 });
@@ -690,7 +693,7 @@ test("rewrites onclick event effect expressions as run wrappers", () => {
 	assert_string_includes(result.code, `Code.Markup.Run`);
 	assert_string_includes(
 		result.code,
-		`Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* ToEffect(trackEvent()); } });`,
+		`Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* ToEffect(trackEvent()); } }));`,
 	);
 	if (result.code.includes("void Code.Markup.Run")) {
 		throw new Error("event handler wrappers should not emit void");
@@ -707,7 +710,7 @@ test("rewrites event effect expressions with generated event parameter", () => {
 	assert_string_includes(result.code, `event.currentTarget.value`);
 	assert_string_includes(
 		result.code,
-		`Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* ToEffect(validate(event.currentTarget.value)); } });`,
+		`Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* ToEffect(validate(event.currentTarget.value)); } }));`,
 	);
 
 	compile(result.code, {
@@ -838,7 +841,7 @@ test("rewrites native-style form validation handlers only when marked with yield
 	assert_string_includes(result.code, `oninput={(event) =>`);
 	assert_string_includes(
 		result.code,
-		`Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* ToEffect(createPost.validate()); } });`,
+		`Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* ToEffect(createPost.validate()); } }));`,
 	);
 	assert_string_includes(result.code, `from "svelte-effect-runtime/internal/generators"`);
 	if (!result.has_yield) throw new Error("has_yield should be true");
@@ -863,11 +866,11 @@ test("injects dispatcher import when another generated helper import already exi
 	assert_equals(value_imports, 1);
 	assert_string_includes(
 		result.code,
-		`import { Dispatcher, Code, ToEffect } from "svelte-effect-runtime/internal/generators";`,
+		`import { Dispatcher, Code, ToEffect, ComponentScopeRef, get_dispatcher } from "svelte-effect-runtime/internal/generators";`,
 	);
 	assert_string_includes(
 		result.code,
-		`Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* ToEffect(Effect.gen(function* () {`,
+		`Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* ToEffect(Effect.gen(function* () {`,
 	);
 
 	compile(result.code, {
@@ -1447,7 +1450,7 @@ test("allocates helper aliases against brace-less let directives", () => {
 	assert_string_includes(result.code, `Code as Code_1`);
 	assert_string_includes(result.code, `Dispatcher as Dispatcher_1`);
 	assert_string_includes(result.code, `Code_1.Markup.Promise`);
-	assert_string_includes(result.code, `await Dispatcher_1.emit`);
+	assert_string_includes(result.code, `await Dispatcher_1.with_scope(__SER___scope.scope, () => Dispatcher_1.emit`);
 	assert_string_includes(result.code, `<Component let:Code let:Dispatcher>`);
 
 	compile(result.code, {
@@ -1470,7 +1473,7 @@ test("allocates helper aliases against markup rest bindings", () => {
 	assert_string_includes(result.code, `Code as Code_1`);
 	assert_string_includes(result.code, `Dispatcher as Dispatcher_1`);
 	assert_string_includes(result.code, `Code_1.Markup.Promise`);
-	assert_string_includes(result.code, `await Dispatcher_1.emit`);
+	assert_string_includes(result.code, `await Dispatcher_1.with_scope(__SER___scope.scope, () => Dispatcher_1.emit`);
 
 	compile(result.code, {
 		filename: "RestBindings.svelte",

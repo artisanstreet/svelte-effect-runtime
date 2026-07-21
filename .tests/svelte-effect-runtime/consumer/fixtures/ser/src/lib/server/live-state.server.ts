@@ -23,14 +23,13 @@ let live_value = 1;
 
 export const GetLiveState = Effect.gen(function* () {
 	const current_waiters = [...live_waiters].filter((waiter) => waiter.start.epoch === live_epoch);
-
-	return {
+	return yield* Effect.succeed({
 		finalizations: live_finalizations,
 		ready: current_waiters.some((waiter) => waiter.start.start_id === live_latest_start_id),
 		starts: live_starts,
 		value: live_value,
 		waiters: current_waiters.length,
-	};
+	});
 });
 
 export const RecordLiveStart = Effect.gen(function* () {

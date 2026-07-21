@@ -9,23 +9,17 @@
 
 	let generation = $state(1);
 
-	const ObserveGeneration = (observed_generation: number) =>
-		Effect.scoped(
-			Effect.gen(function* () {
-				yield* Effect.acquireRelease(
-					Effect.sync(() => record_event(`start:${observed_generation}`)),
-					() => Effect.sync(() => record_event(`finalize:${observed_generation}`)),
-				);
+	$effect(() => {
+		const observed_generation = generation;
 
-				return yield* Effect.never;
-			}),
-		);
+		record_event(`start:${observed_generation}`);
+
+		return () => record_event(`finalize:${observed_generation}`);
+	});
 
 	const AdvanceGeneration = Effect.gen(function* () {
 		generation = yield* Effect.succeed(generation + 1);
 	});
-
-	yield* ObserveGeneration(generation);
 </script>
 
 <button data-testid="advance" onclick={yield* AdvanceGeneration}>Advance</button>

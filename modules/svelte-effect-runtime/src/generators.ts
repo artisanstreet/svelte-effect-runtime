@@ -1,5 +1,6 @@
 /** Generated-code ABI for imports emitted by the Svelte transforms. */
 export { Code, Dispatcher, get_dispatcher } from "$/generated/dispatcher.ts";
+export { ComponentScopeRef } from "$/dispatcher.ts";
 export { ToEffect } from "$/yieldable.ts";
 export type {
 	DispatcherEvent,

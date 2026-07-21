@@ -69,10 +69,7 @@ const AbandonServerInstallStaging = (staging_root: string) =>
 		}
 
 		yield* file_system
-			.writeFileString(
-				path_service.join(staging_root, server_install_staging_abandoned_file),
-				"",
-			)
+			.writeFileString(path_service.join(staging_root, server_install_staging_abandoned_file), "")
 			.pipe(
 				Effect.ensuring(
 					file_system

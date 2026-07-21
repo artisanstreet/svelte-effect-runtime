@@ -508,6 +508,26 @@ export class DispatcherDisposedError extends RuntimeError {
 }
 
 /**
+ * Thrown when Effect work is bound to a component scope that has already been
+ * disposed.
+ *
+ * @example
+ * ```ts
+ * throw new ScopeDisposedError();
+ * ```
+ *
+ * @since 3.1.0
+ */
+export class ScopeDisposedError extends RuntimeError {
+	constructor() {
+		super(
+			"Effect scope has been disposed; no new Effect work can be bound to a destroyed component's scope.",
+		);
+		this.name = "ScopeDisposedError";
+	}
+}
+
+/**
  * Thrown when an application attempts to configure a runtime after one has
  * already been initialized.
  *

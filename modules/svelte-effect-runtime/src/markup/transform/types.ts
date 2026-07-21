@@ -100,6 +100,8 @@ export interface PendingRelocation {
 export interface Insertion {
 	start: number;
 	text: string;
+	/** Additional insertions applied elsewhere in the file that shift offsets. */
+	extra_insertions?: readonly { start: number; text: string }[];
 	relocations?: PendingRelocation[];
 }
 
@@ -107,6 +109,18 @@ export interface MarkupHelperBindings {
 	codes: string;
 	dispatcher: string;
 	yieldable: string;
+	/** The component scope binding shared with the script transform. */
+	scope: string;
+}
+
+/**
+ * Reserved names for the scope holder the markup transform injects when no
+ * `<script effect>` already declared one (markup-only components).
+ */
+export interface MarkupScopeWiring {
+	component_scope_ref: string;
+	get_dispatcher: string;
+	on_destroy?: string;
 }
 
 export interface MarkupNameAllocator {

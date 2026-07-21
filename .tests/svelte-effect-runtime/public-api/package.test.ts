@@ -86,6 +86,7 @@ const required_root_exports = [
 	"RuntimeError",
 	"ServerOnlyImportError",
 	"ServerRuntime",
+	"ScopeDisposedError",
 	"SvelteKitServerExportUnavailableError",
 	"UncheckedCommandHandlerMissingError",
 	"UncheckedFormHandlerMissingError",

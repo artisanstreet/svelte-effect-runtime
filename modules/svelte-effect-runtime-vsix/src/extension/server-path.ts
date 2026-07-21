@@ -1,7 +1,8 @@
 import {
-	CanUseServerInstall,
+	server_install_staging_prefix,
 	MakeServerInstallRetention,
 	MakeServerInstallStaging,
+	CanUseServerInstall,
 	type ServerInstallRetentionDependencies,
 } from "./server-install-retention/index.ts";
 import {
@@ -21,6 +22,7 @@ import {
 	Result,
 	Schema,
 	Semaphore,
+	Scope,
 } from "effect";
 import {
 	language_server_package_version,
@@ -33,21 +35,41 @@ import { ExtensionConfiguration } from "./settings.ts";
 
 const language_server_cache_directory = "language-server";
 const language_server_install_directory = "installs";
-const language_server_script_path = [
-	"node_modules",
-	language_server_package_name,
-	".dist",
+const language_server_script_fallback = [
+	"./server.cjs",
 	"server.cjs",
-];
-const language_server_runtime_path = [
-	"node_modules",
-	language_server_package_name,
-	"runtime",
-	"package.json",
+	"./server.js",
+	"server.js",
+	"./.dist/server.cjs",
+	".dist/server.cjs",
+	".dist/server.js",
+	"./dist/server.cjs",
+	"dist/server.cjs",
+	"./dist/server.js",
+	"dist/server.js",
+	"./runtime/server.cjs",
+	"runtime/server.cjs",
+	"./runtime/server.js",
+	"runtime/server.js",
 ];
 
-const InstalledPackageManifestSchema = Schema.Struct({
+type PackageMapEntry = {
+	readonly dependencies?: Record<string, string>;
+	readonly url: string;
+};
+
+const InstalledPackageManifestWithMainSchema = Schema.Struct({
+	main: Schema.optional(Schema.String),
+	name: Schema.optional(Schema.String),
 	version: Schema.String,
+});
+type InstalledLanguageServerPackageManifest = {
+	readonly main?: string | undefined;
+	readonly name?: string | undefined;
+	readonly version: string;
+};
+const PackageMapSchema = Schema.Struct({
+	packages: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 });
 
 class ServerPathError extends Data.TaggedError("ServerPathError")<{
@@ -66,6 +88,9 @@ type ServerPathResolverDependencies =
 type ServerPathResolverLayerDependencies =
 	| ServerInstallRetentionDependencies
 	| ServerPathResolverDependencies;
+
+type ScopedServerPathResolverLayerDependencies =
+	ServerPathResolverLayerDependencies | Scope.Scope;
 
 interface PublishedLanguageServer {
 	install_root: string;
@@ -91,7 +116,7 @@ export class ServerPathResolver extends Context.Service<
 
 export function make_server_path_resolver_layer(
 	storage_path: string,
-): Layer.Layer<ServerPathResolver, never, ServerPathResolverLayerDependencies> {
+): Layer.Layer<ServerPathResolver, unknown, ServerPathResolverLayerDependencies> {
 	const resolver_layer = Layer.effect(
 		ServerPathResolver,
 		Effect.gen(function* () {
@@ -100,7 +125,7 @@ export function make_server_path_resolver_layer(
 			const cache_root = get_server_install_cache_root(path_service, storage_path);
 			const retention = yield* MakeServerInstallRetention(cache_root);
 			const semaphore = yield* Semaphore.make(1);
-			const Get = semaphore.withPermits(1)(
+			const Get: Effect.Effect<string, unknown> = semaphore.withPermits(1)(
 				Effect.gen(function* () {
 					let allow_configured_path = true;
 					let resolved = yield* ResolveServerPath(storage_path, allow_configured_path);
@@ -162,7 +187,14 @@ export const GetConfiguredServerPath = Effect.gen(function* () {
 	return yield* ResolveExistingConfiguredServerPath(result.path);
 });
 
-const ResolveServerPath = (storage_path: string, allow_configured_path: boolean) =>
+const ResolveServerPath = (
+	storage_path: string,
+	allow_configured_path: boolean,
+): Effect.Effect<
+	ResolvedLanguageServer,
+	unknown,
+	ServerPathResolverLayerDependencies
+> =>
 	Effect.gen(function* () {
 		const path_service = yield* Path.Path;
 		const cache_root = get_server_install_cache_root(path_service, storage_path);
@@ -192,7 +224,13 @@ const ResolveServerPath = (storage_path: string, allow_configured_path: boolean)
 		return yield* ResolveInstalledLanguageServer(storage_path);
 	});
 
-const ResolveInstalledLanguageServer = (storage_path: string) =>
+const ResolveInstalledLanguageServer = (
+	storage_path: string,
+): Effect.Effect<
+	ResolvedLanguageServer,
+	unknown,
+	ServerPathResolverLayerDependencies
+> =>
 	Effect.gen(function* () {
 		const published = yield* InstallLanguageServer(storage_path);
 
@@ -202,7 +240,9 @@ const ResolveInstalledLanguageServer = (storage_path: string) =>
 		} satisfies ResolvedLanguageServer;
 	});
 
-const InstallLanguageServer = (storage_path: string) =>
+const InstallLanguageServer = (
+	storage_path: string,
+): Effect.Effect<PublishedLanguageServer, unknown, ServerPathResolverLayerDependencies> =>
 	Effect.gen(function* () {
 		const output = yield* ExtensionOutput;
 		const file_system = yield* FileSystem.FileSystem;
@@ -223,7 +263,15 @@ const InstallLanguageServer = (storage_path: string) =>
 		return yield* Effect.scoped(InstallAndPublishLanguageServer(cache_root, target_version));
 	});
 
-const InstallAndPublishLanguageServer = (cache_root: string, target_version: string) =>
+const InstallAndPublishLanguageServer = (
+	cache_root: string,
+	target_version: string,
+	retry_remaining = 1,
+): Effect.Effect<
+	PublishedLanguageServer,
+	unknown,
+	ScopedServerPathResolverLayerDependencies
+> =>
 	Effect.gen(function* () {
 		const output = yield* ExtensionOutput;
 		const file_system = yield* FileSystem.FileSystem;
@@ -231,6 +279,10 @@ const InstallAndPublishLanguageServer = (cache_root: string, target_version: str
 		const encoded_version = encodeURIComponent(target_version);
 		const staging = yield* MakeServerInstallStaging(cache_root, target_version);
 		const staging_root = staging.root;
+		const install_root = path_service.join(
+			cache_root,
+			`${encoded_version}-${derive_short_install_identity(staging.install_identity)}`,
+		);
 
 		yield* file_system.writeFileString(
 			path_service.join(staging_root, "package.json"),
@@ -252,6 +304,9 @@ const InstallAndPublishLanguageServer = (cache_root: string, target_version: str
 		const winner = yield* FindPublishedLanguageServer(cache_root, target_version);
 
 		if (Option.isSome(winner)) {
+			yield* file_system
+				.remove(staging_root, { force: true, recursive: true })
+				.pipe(Effect.catch(() => Effect.void));
 			yield* output.append_line(
 				`Using concurrently installed ${language_server_package_name}@${target_version}.`,
 			);
@@ -259,46 +314,76 @@ const InstallAndPublishLanguageServer = (cache_root: string, target_version: str
 			return winner.value;
 		}
 
-		const install_root = path_service.join(
-			cache_root,
-			`${encoded_version}-${staging.install_identity}`,
-		);
 		const publication = yield* Effect.result(file_system.rename(staging_root, install_root));
 
-		if (Result.isSuccess(publication)) {
-			yield* output.append_line(`Installed with ${package_manager}.`);
+		if (Result.isFailure(publication)) {
+			const published_after_failure = yield* FindPublishedLanguageServer(cache_root, target_version);
 
-			return yield* VerifyLanguageServerInstall(install_root, target_version);
+			if (Option.isSome(published_after_failure)) {
+				yield* output.append_line(
+					`Using concurrently installed ${language_server_package_name}@${target_version}.`,
+				);
+
+				return published_after_failure.value;
+			}
+
+			return yield* new ServerPathError({
+				cause: publication.failure,
+				message: `Could not publish ${language_server_package_name}@${target_version} atomically.`,
+			});
 		}
 
-		const published_after_failure = yield* FindPublishedLanguageServer(
-			cache_root,
-			target_version,
+		yield* output.append_line(`Installed with ${package_manager}.`);
+
+		const verification = yield* Effect.result(
+			VerifyLanguageServerInstall(install_root, target_version),
 		);
 
-		if (Option.isSome(published_after_failure)) {
-			yield* output.append_line(
-				`Using concurrently installed ${language_server_package_name}@${target_version}.`,
+		if (Result.isFailure(verification)) {
+			yield* RemoveCorruptPublishedLanguageServerInstall(
+				install_root,
+				false,
+				verification.failure,
 			);
 
-			return published_after_failure.value;
+			if (retry_remaining > 0) {
+				return yield* InstallAndPublishLanguageServer(
+					cache_root,
+					target_version,
+					retry_remaining - 1,
+				);
+			}
+
+			return yield* Effect.fail(verification.failure);
 		}
 
-		return yield* new ServerPathError({
-			cause: publication.failure,
-			message: `Could not publish ${language_server_package_name}@${target_version} atomically.`,
-		});
+		return verification.success;
 	});
 
-const FindPublishedLanguageServer = (cache_root: string, target_version: string) =>
+const FindPublishedLanguageServer = (
+	cache_root: string,
+	target_version: string,
+): Effect.Effect<
+	Option.Option<PublishedLanguageServer>,
+	unknown,
+	ServerPathResolverLayerDependencies
+> =>
 	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 		const path_service = yield* Path.Path;
 		const encoded_version = encodeURIComponent(target_version);
 		const version_prefix = `${encoded_version}-`;
+		const legacy_staging_prefix = `${version_prefix}${server_install_staging_prefix}`;
+		const modern_staging_prefix = `${version_prefix}-${server_install_staging_prefix}`;
 		const entries = yield* file_system.readDirectory(cache_root);
 		const candidates = entries
-			.filter((entry) => entry === encoded_version || entry.startsWith(version_prefix))
+			.filter(
+				(entry) =>
+					entry === encoded_version ||
+					(entry.startsWith(version_prefix) &&
+						!entry.startsWith(legacy_staging_prefix) &&
+						!entry.startsWith(modern_staging_prefix)),
+			)
 			.toSorted();
 
 		for (const candidate of candidates) {
@@ -306,14 +391,76 @@ const FindPublishedLanguageServer = (cache_root: string, target_version: string)
 			const verification = yield* Effect.result(
 				VerifyLanguageServerInstall(install_root, target_version),
 			);
+			const keep_corrupt_cached_exact_version_install =
+				candidate === encoded_version;
 
 			if (Result.isSuccess(verification)) {
 				return Option.some(verification.success);
 			}
+
+			yield* RemoveCorruptPublishedLanguageServerInstall(
+				install_root,
+				keep_corrupt_cached_exact_version_install,
+				verification.failure,
+			);
 		}
 
 		return Option.none<PublishedLanguageServer>();
 	});
+
+const derive_short_install_identity = (install_identity: string) => {
+	const identity_segments = install_identity.split("-").filter((segment) => segment.length > 0);
+
+	if (identity_segments.length > 0) {
+		return identity_segments[identity_segments.length - 1];
+	}
+
+	return "ser";
+};
+
+const RemoveCorruptPublishedLanguageServerInstall = (
+	install_root: string,
+	keep_corrupt_cached_exact_version_install: boolean,
+	error: unknown,
+) =>
+	Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+
+		if (keep_corrupt_cached_exact_version_install) {
+			return;
+		}
+
+		if (!ShouldDeleteCorruptPublishedLanguageServerInstall(error)) {
+			return;
+		}
+
+		yield* file_system.remove(install_root, {
+			force: true,
+			recursive: true,
+		});
+	});
+
+const ShouldDeleteCorruptPublishedLanguageServerInstall = (error: unknown) => {
+	if (!(error instanceof ServerPathError)) {
+		return false;
+	}
+
+	const fatal_artifact_messages = [
+		"Installed language-server package root is missing:",
+		"Installed language-server package manifest is missing:",
+		"Installed language-server package manifest is malformed:",
+		"Installed language-server script is missing",
+		"Installed language-server runtime manifest is missing:",
+		"Installed language-server artifacts must be regular files.",
+	];
+
+	const version_mismatch = "does not match required";
+
+	return (
+		fatal_artifact_messages.some((message) => error.message.startsWith(message)) ||
+		error.message.includes(version_mismatch)
+	);
+};
 
 const FindProtectedServerInstall = (
 	cache_root: string,
@@ -437,24 +584,15 @@ function get_server_install_cache_root(path_service: Path.Path, storage_path: st
 
 const ReadInstalledPackageVersion = (install_root: string) =>
 	Effect.gen(function* () {
-		const file_system = yield* FileSystem.FileSystem;
-		const path_service = yield* Path.Path;
-		const package_json_path = path_service.join(
-			install_root,
-			"node_modules",
-			language_server_package_name,
-			"package.json",
-		);
-		const ReadManifest = Effect.gen(function* () {
-			const source = yield* file_system.readFileString(package_json_path);
+		const package_root = yield* ResolveLanguageServerPackageRoot(install_root);
 
-			return yield* Schema.decodeUnknownEffect(
-				Schema.fromJsonString(InstalledPackageManifestSchema),
-			)(source);
-		});
-		const manifest = yield* Effect.option(ReadManifest);
+		if (Option.isNone(package_root)) {
+			return Option.none<string>();
+		}
 
-		return Option.map(manifest, (package_manifest) => package_manifest.version);
+		const package_manifest = yield* Effect.option(ResolveLanguageServerPackageManifest(package_root.value));
+
+		return Option.map(package_manifest, (manifest) => manifest.version);
 	});
 
 const ResolveExistingConfiguredServerPath = (configured_path: string) =>
@@ -485,16 +623,28 @@ const VerifyLanguageServerInstall = (install_root: string, target_version: strin
 	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 		const path_service = yield* Path.Path;
-		const script_path = path_service.join(install_root, ...language_server_script_path);
-		const runtime_path = path_service.join(install_root, ...language_server_runtime_path);
-		const can_use_install = yield* CanUseServerInstall(install_root);
+		const package_root = yield* ResolveLanguageServerPackageRoot(install_root);
 		const installed_version = yield* ReadInstalledPackageVersion(install_root);
+		const can_use_install = yield* CanUseServerInstall(install_root);
 
 		if (!can_use_install) {
 			return yield* new ServerPathError({
 				message: `Installed language-server is being retired: ${install_root}.`,
 			});
 		}
+
+		if (Option.isNone(package_root)) {
+			return yield* new ServerPathError({
+				message: `Installed language-server package root is missing: ${install_root}.`,
+			});
+		}
+
+		const package_manifest = yield* ResolveLanguageServerPackageManifest(package_root.value);
+		const script_path = yield* ResolveLanguageServerScriptPath(
+			package_root.value,
+			package_manifest,
+		);
+		const runtime_path = path_service.join(package_root.value, "runtime", "package.json");
 
 		const script_info = yield* file_system.stat(script_path).pipe(
 			Effect.mapError(
@@ -535,3 +685,315 @@ const VerifyLanguageServerInstall = (install_root: string, target_version: strin
 			server_path: script_path,
 		} satisfies PublishedLanguageServer;
 	});
+
+const ResolveLanguageServerPackageRoot = (install_root: string) =>
+	Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+		const path_service = yield* Path.Path;
+		const pnpm_root = path_service.join(install_root, "node_modules", ".pnpm");
+		const pnpm_root_is_directory = yield* IsDirectory(pnpm_root);
+		let resolved_package_root: Option.Option<string> = Option.none<string>();
+
+		if (pnpm_root_is_directory) {
+			const pnpm_entries = yield* file_system.readDirectory(pnpm_root);
+
+			for (const entry of pnpm_entries) {
+				if (!entry.startsWith(`${language_server_package_name}@`)) {
+					continue;
+				}
+
+				const candidate_root = path_service.join(
+					pnpm_root,
+					entry,
+					"node_modules",
+					language_server_package_name,
+				);
+
+				if (yield* IsUsableLanguageServerPackageRoot(candidate_root)) {
+					resolved_package_root = Option.some(candidate_root);
+
+					break;
+				}
+			}
+		}
+
+		if (Option.isSome(resolved_package_root)) {
+			return resolved_package_root;
+		}
+
+		const mapped_package_root = yield* ResolveLanguageServerPackageRootFromPackageMap(
+			install_root,
+		);
+
+		if (Option.isSome(mapped_package_root)) {
+			return mapped_package_root;
+		}
+
+		const direct_root = path_service.join(
+			install_root,
+			"node_modules",
+			language_server_package_name,
+		);
+
+		const direct_root_is_package_root = yield* IsUsableLanguageServerPackageRoot(
+			direct_root,
+			false,
+			language_server_package_name,
+		);
+
+		if (direct_root_is_package_root) {
+			return Option.some(direct_root);
+		}
+
+		return Option.none<string>();
+	});
+
+const ResolveLanguageServerPackageRootFromPackageMap = (install_root: string) =>
+	Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+		const path_service = yield* Path.Path;
+		const package_map_path = path_service.join(
+			install_root,
+			"node_modules",
+			".package-map.json",
+		);
+		const package_map_exists = yield* file_system.exists(package_map_path);
+
+		if (!package_map_exists) {
+			return Option.none<string>();
+		}
+
+		const package_map = yield* Effect.option(
+			file_system.readFileString(package_map_path).pipe(
+				Effect.flatMap((payload) =>
+					Schema.decodeUnknownEffect(Schema.fromJsonString(PackageMapSchema))(payload),
+				),
+			),
+		);
+
+		if (Option.isNone(package_map)) {
+			return Option.none<string>();
+		}
+
+		const package_map_root = path_service.join(install_root, "node_modules");
+
+		for (const [entry_name, entry] of Object.entries(package_map.value.packages ?? {})) {
+			if (!is_valid_package_map_entry(entry)) {
+				continue;
+			}
+
+			const trimmed_url = entry.url.trim();
+			const package_root = path_service.join(package_map_root, trimmed_url);
+			const is_within_package_map_root = IsWithinDirectory(
+				path_service,
+				package_root,
+				package_map_root,
+			);
+
+			if (!is_within_package_map_root) {
+				continue;
+			}
+
+			const is_package_map_entry = is_language_server_package_map_entry(entry_name);
+			const is_usable = yield* IsUsableLanguageServerPackageRoot(
+				package_root,
+				is_package_map_entry,
+			);
+
+			if (!is_usable) {
+				continue;
+			}
+
+			return Option.some(package_root);
+		}
+
+		return Option.none<string>();
+	});
+
+const is_language_server_package_map_entry = (entry_name: string) =>
+	entry_name === language_server_package_name ||
+	entry_name.startsWith(`${language_server_package_name}@`);
+
+const IsWithinDirectory = (
+	path_service: Path.Path,
+	candidate_path: string,
+	parent_path: string,
+) => {
+	const package_map_root = path_service.resolve(parent_path);
+	const relative_path = path_service.relative(package_map_root, path_service.resolve(candidate_path));
+
+	return (
+		relative_path.length > 0 &&
+		relative_path !== "." &&
+		relative_path !== ".." &&
+		!relative_path.startsWith(`..${path_service.sep}`) &&
+		!path_service.isAbsolute(relative_path)
+	);
+};
+
+const is_valid_package_map_entry = (entry: unknown): entry is PackageMapEntry => {
+	if (typeof entry !== "object" || entry === null) {
+		return false;
+	}
+
+	if (!("url" in entry)) {
+		return false;
+	}
+
+	const entry_url = (entry as { readonly url: unknown }).url;
+
+	return typeof entry_url === "string" && entry_url.trim().length > 0;
+};
+
+const IsUsableLanguageServerPackageRoot = (
+	candidate_root: string,
+	accept_unknown_name = false,
+	expected_name?: string,
+) =>
+	Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+		const path_service = yield* Path.Path;
+		const candidate_root_realpath = yield* Effect.option(file_system.realPath(candidate_root));
+		const candidate_root_is_resolved = Option.isSome(candidate_root_realpath);
+
+		if (!candidate_root_is_resolved) {
+			return false;
+		}
+
+		const manifest = yield* Effect.option(ResolveLanguageServerPackageManifest(candidate_root));
+
+		if (Option.isNone(manifest)) {
+			return false;
+		}
+
+		if (manifest.value.name !== undefined) {
+			if (!accept_unknown_name && manifest.value.name !== language_server_package_name) {
+				return false;
+			}
+
+			if (
+				expected_name !== undefined &&
+				manifest.value.name !== expected_name &&
+				manifest.value.name !== language_server_package_name
+			) {
+				return false;
+			}
+
+		} else {
+			if (
+				expected_name !== undefined &&
+				expected_name !== language_server_package_name
+			) {
+				return false;
+			}
+		}
+
+		const script_path = yield* Effect.option(
+			ResolveLanguageServerScriptPath(candidate_root, manifest.value),
+		);
+
+		if (Option.isNone(script_path)) {
+			return false;
+		}
+
+		return yield* IsFile(path_service.join(candidate_root, "runtime", "package.json"));
+	});
+
+const ResolveLanguageServerPackageManifest = (
+	package_root: string,
+): Effect.Effect<
+	InstalledLanguageServerPackageManifest,
+	ServerPathError,
+	FileSystem.FileSystem | Path.Path
+> =>
+	Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+		const path_service = yield* Path.Path;
+		const package_json_path = path_service.join(package_root, "package.json");
+		const package_json = yield* file_system.readFileString(package_json_path).pipe(
+			Effect.mapError(
+				(cause) =>
+					new ServerPathError({
+						cause,
+						message: `Installed language-server package manifest is missing: ${package_json_path}.`,
+					}),
+			),
+		);
+
+		return yield* Schema.decodeUnknownEffect(
+			Schema.fromJsonString(InstalledPackageManifestWithMainSchema),
+		)(package_json).pipe(
+			Effect.mapError(
+				(cause) =>
+					new ServerPathError({
+						cause,
+						message: `Installed language-server package manifest is malformed: ${package_json_path}.`,
+					}),
+			),
+		);
+	});
+
+const ResolveLanguageServerScriptPath = (
+	package_root: string,
+	package_manifest: InstalledLanguageServerPackageManifest,
+) =>
+	Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+		const path_service = yield* Path.Path;
+		const candidate_script_paths = [
+			...new Set(
+				[package_manifest.main, ...language_server_script_fallback].filter(
+					(candidate_script): candidate_script is string =>
+						candidate_script !== undefined &&
+						candidate_script.length > 0 &&
+						!path_service.isAbsolute(candidate_script) &&
+						candidate_script.trim().length > 0,
+				),
+			),
+		];
+		const candidate_info = yield* Effect.forEach(candidate_script_paths, (candidate_path) =>
+			Effect.gen(function* () {
+				const absolute_script_path = path_service.join(package_root, candidate_path);
+				const info = yield* Effect.option(file_system.stat(absolute_script_path));
+
+				return {
+					absolute_script_path,
+					type: Option.isSome(info) ? info.value.type : undefined,
+				} satisfies {
+					absolute_script_path: string;
+					type: undefined | string;
+				};
+			}),
+		);
+
+		const resolved_script = candidate_info.find((candidate) => candidate.type === "File");
+
+		if (!resolved_script) {
+			const checked_paths = candidate_script_paths
+				.map((candidate) => path_service.join(package_root, candidate))
+				.join(", ");
+
+			return yield* new ServerPathError({
+				message: `Installed language-server script is missing. Checked candidates: ${checked_paths}.`,
+			});
+		}
+
+		return resolved_script.absolute_script_path;
+	});
+
+const IsDirectory = (path: string) =>
+	Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+		const info = yield* Effect.option(file_system.stat(path));
+
+		return Option.isSome(info) && info.value.type === "Directory";
+	});
+
+const IsFile = (path: string) =>
+	Effect.gen(function* () {
+		const file_system = yield* FileSystem.FileSystem;
+		const info = yield* Effect.option(file_system.stat(path));
+
+		return Option.isSome(info) && info.value.type === "File";
+	});
+

@@ -324,11 +324,11 @@ function make_awaited_yield_expression(
 	return {
 		declaration: `function* ${helper_name}() { return (${wrapped_yield_text}); }`,
 		expression: [
-			`await ${context.dispatcher_name}().promise({`,
+			`await ${context.dispatcher_name}().with_scope(${context.scope_name}.scope, () => ${context.dispatcher_name}().promise({`,
 			`id: ${JSON.stringify(helper_id)}, `,
 			`deps: ${deps_text}, `,
 			`factory: () => ${helper_name}()`,
-			`})`,
+			`}))`,
 		].join(""),
 	};
 }

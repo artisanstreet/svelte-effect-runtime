@@ -176,7 +176,7 @@ test("direct svelte transform lowers script effect and removes effect attribute"
 	const result = transform_svelte_effect(source, "Test.svelte");
 
 	assert_string_includes(result.code, `<script lang="ts">`);
-	assert_string_includes(result.code, `await get_dispatcher().promise({`);
+	assert_string_includes(result.code, `await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`);
 	assert_string_includes(result.code, `$state(await`);
 	assert_not_match(result.code, /\$effect\(\(\) =>/);
 	if (result.code.includes(` effect>`)) {
@@ -196,7 +196,7 @@ test("direct svelte transform scans quoted script attributes", () => {
 
 	assert_string_includes(result.code, `<script data-note="a > b" lang="ts">`);
 	assert_string_includes(result.code, `const marker = "</scripture>";`);
-	assert_string_includes(result.code, `await get_dispatcher().promise({`);
+	assert_string_includes(result.code, `await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`);
 	assert_not_match(result.code, /<script[^>]*\beffect\b/);
 });
 
@@ -950,7 +950,7 @@ test("vite plugin lowers svelte yield through its transform hook", async () => {
 	const result = await run_svelte_transform(plugin, source, "C:/src/routes/Test.svelte");
 
 	assert_string_includes(result.code, `<script lang="ts">`);
-	assert_string_includes(result.code, `await get_dispatcher().promise({`);
+	assert_string_includes(result.code, `await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`);
 	assert_string_includes(result.code, `$state(await`);
 	assert_string_includes(result.code, `Code.Markup.Run`);
 	assert_not_match(result.code, /\$effect\(\(\) =>/);
@@ -1003,7 +1003,7 @@ test("vite plugin lowers svelte yield in configured extension modules", async ()
 	const result = await run_svelte_transform(plugin, source, "C:/src/routes/Test.sv");
 
 	assert_string_includes(result.code, `<script lang="ts">`);
-	assert_string_includes(result.code, `await get_dispatcher().promise({`);
+	assert_string_includes(result.code, `await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`);
 	assert_string_includes(result.code, `$state(await`);
 	assert_string_includes(result.code, `Code.Markup.Run`);
 	assert_not_match(result.code, /\$effect\(\(\) =>/);
@@ -1038,8 +1038,8 @@ test("vite plugin emits client and server promises", async () => {
 		ssr: true,
 	});
 
-	assert_string_includes(client.code, `await Dispatcher.emit({ type: Code.Markup.Promise`);
-	assert_string_includes(server.code, `await Dispatcher.emit({ type: Code.Markup.Promise`);
+	assert_string_includes(client.code, `await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise`);
+	assert_string_includes(server.code, `await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise`);
 	assert_string_includes(server.code, `ssr_fallback: undefined`);
 
 	if (client.code.includes(`Code.Markup.Value`)) {

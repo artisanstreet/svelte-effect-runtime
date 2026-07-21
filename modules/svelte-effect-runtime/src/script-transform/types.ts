@@ -89,6 +89,8 @@ export interface ScriptLoweringContext {
 	filename: string;
 	/** Binding name used for the dispatcher factory in generated code. */
 	dispatcher_name: string;
+	/** Binding name used for the component's Effect scope in generated code. */
+	scope_name: string;
 	/** Binding name used for the Effect namespace in generated code. */
 	effect_name: string;
 	/** Binding name used for the yieldable normalization helper. */
@@ -115,6 +117,12 @@ export interface RuntimeImportBindings {
 	cancel: string;
 	/** Binding name used for Svelte's untrack helper. */
 	untrack: string;
+	/** Binding name used for Svelte's onDestroy lifecycle hook. */
+	on_destroy: string;
+	/** Binding name used for the component's Effect scope local. */
+	scope: string;
+	/** Binding name used for the lazily-created component scope holder. */
+	component_scope_ref: string;
 	/** Binding name used for the yieldable normalization helper. */
 	yieldable: string;
 	/** Binding name used for yieldable success type extraction. */

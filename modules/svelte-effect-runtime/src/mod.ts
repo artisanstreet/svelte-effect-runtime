@@ -215,6 +215,7 @@ export {
 	BatchQueryHandlerMissingError,
 	DispatcherDisposedError,
 	EmptyStreamYieldError,
+	ScopeDisposedError,
 	InvalidCommandFactoryError,
 	InvalidLiveQueryFactoryError,
 	InvalidLiveQueryReturnError,

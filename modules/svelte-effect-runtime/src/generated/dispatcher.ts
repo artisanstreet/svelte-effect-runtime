@@ -1,4 +1,5 @@
 import type {
+	ComponentScope,
 	Dispatcher as RuntimeDispatcher,
 	DispatcherEvent,
 	MarkupPromiseEvent,
@@ -24,6 +25,14 @@ export class Dispatcher {
 	static emit<A, F>(event: DispatcherEvent<A, F>): A | F | Promise<A>;
 	static emit<A, F>(event: DispatcherEvent<A, F>): A | F | Promise<A> {
 		return get_dispatcher().emit(event);
+	}
+
+	/**
+	 * Runs `fn` with `scope` as the active component scope so emitted work is
+	 * bound to the calling component's lifetime.
+	 */
+	static with_scope<T>(scope: ComponentScope, fn: () => T): T {
+		return get_dispatcher().with_scope(scope, fn);
 	}
 }
 
