@@ -110,7 +110,7 @@ type ManagedServerInstallRoot =
 export class ServerPathResolver extends Context.Service<
 	ServerPathResolver,
 	{
-		readonly get: Effect.Effect<string, unknown, never>;
+		readonly get: Effect.Effect<string, unknown>;
 	}
 >()("svelte-effect-runtime-vsix/ServerPathResolver") {}
 
@@ -125,7 +125,7 @@ export function make_server_path_resolver_layer(
 			const cache_root = get_server_install_cache_root(path_service, storage_path);
 			const retention = yield* MakeServerInstallRetention(cache_root);
 			const semaphore = yield* Semaphore.make(1);
-			const Get: Effect.Effect<string, unknown, never> = semaphore.withPermits(1)(
+			const Get: Effect.Effect<string, unknown> = semaphore.withPermits(1)(
 				Effect.gen(function* () {
 					let allow_configured_path = true;
 					let resolved = yield* ResolveServerPath(storage_path, allow_configured_path);
@@ -190,7 +190,7 @@ export const GetConfiguredServerPath = Effect.gen(function* () {
 const ResolveServerPath = (
 	storage_path: string,
 	allow_configured_path: boolean,
-): Effect.Effect<ResolvedLanguageServer, unknown, never> =>
+): Effect.Effect<ResolvedLanguageServer, unknown> =>
 	Effect.gen(function* () {
 		const path_service = yield* Path.Path;
 		const cache_root = get_server_install_cache_root(path_service, storage_path);
@@ -222,7 +222,7 @@ const ResolveServerPath = (
 
 const ResolveInstalledLanguageServer = (
 	storage_path: string,
-): Effect.Effect<ResolvedLanguageServer, unknown, never> =>
+): Effect.Effect<ResolvedLanguageServer, unknown> =>
 	Effect.gen(function* () {
 		const published = yield* InstallLanguageServer(storage_path);
 
@@ -232,7 +232,7 @@ const ResolveInstalledLanguageServer = (
 		} satisfies ResolvedLanguageServer;
 	});
 
-const InstallLanguageServer = (storage_path: string): Effect.Effect<PublishedLanguageServer, unknown, never> =>
+const InstallLanguageServer = (storage_path: string): Effect.Effect<PublishedLanguageServer, unknown> =>
 	Effect.gen(function* () {
 		const output = yield* ExtensionOutput;
 		const file_system = yield* FileSystem.FileSystem;
@@ -257,7 +257,7 @@ const InstallAndPublishLanguageServer = (
 	cache_root: string,
 	target_version: string,
 	retry_remaining = 1,
-): Effect.Effect<PublishedLanguageServer, unknown, never> =>
+): Effect.Effect<PublishedLanguageServer, unknown> =>
 	Effect.gen(function* () {
 		const output = yield* ExtensionOutput;
 		const file_system = yield* FileSystem.FileSystem;
@@ -290,9 +290,10 @@ const InstallAndPublishLanguageServer = (
 		const winner = yield* FindPublishedLanguageServer(cache_root, target_version);
 
 		if (Option.isSome(winner)) {
-			yield* file_system
-				.remove(staging_root, { force: true, recursive: true })
-				.pipe(Effect.catchAll(() => Effect.void));
+			yield* Effect.catchAll(
+				file_system.remove(staging_root, { force: true, recursive: true }),
+				() => Effect.void,
+			);
 			yield* output.append_line(
 				`Using concurrently installed ${language_server_package_name}@${target_version}.`,
 			);
@@ -345,7 +346,7 @@ const InstallAndPublishLanguageServer = (
 const FindPublishedLanguageServer = (
 	cache_root: string,
 	target_version: string,
-): Effect.Effect<Option.Option<PublishedLanguageServer>, unknown, never> =>
+): Effect.Effect<Option.Option<PublishedLanguageServer>, unknown> =>
 	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 		const path_service = yield* Path.Path;
@@ -820,9 +821,8 @@ const IsUsableLanguageServerPackageRoot = (
 	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 		const path_service = yield* Path.Path;
-		const candidate_root_is_resolved = yield* file_system
-			.realPath(candidate_root)
-			.pipe(Effect.as(true), Effect.catchAll(() => Effect.succeed(false)));
+		const candidate_root_realpath = yield* Effect.option(file_system.realPath(candidate_root));
+		const candidate_root_is_resolved = Option.isSome(candidate_root_realpath);
 
 		if (!candidate_root_is_resolved) {
 			return false;
@@ -839,11 +839,18 @@ const IsUsableLanguageServerPackageRoot = (
 				return false;
 			}
 
-			return true;
-		}
+			if (
+				expected_name !== undefined &&
+				manifest.value.name !== expected_name &&
+				manifest.value.name !== language_server_package_name
+			) {
+				return false;
+			}
 
-		if (expected_name === undefined || expected_name !== language_server_package_name) {
-			return false;
+		} else {
+			if (expected_name === undefined || expected_name !== language_server_package_name) {
+				return false;
+			}
 		}
 
 		const script_path = yield* Effect.option(
@@ -950,3 +957,4 @@ const IsFile = (path: string) =>
 
 		return Option.isSome(info) && info.value.type === "File";
 	});
+
