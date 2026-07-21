@@ -72,7 +72,7 @@ type InstalledLanguageServerPackageManifest = {
 	readonly version: string;
 };
 const PackageMapSchema = Schema.Struct({
-	packages: Schema.optional(Schema.Record({ key: Schema.String, value: Schema.Unknown })),
+	packages: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 });
 
 class ServerPathError extends Data.TaggedError("ServerPathError")<{
