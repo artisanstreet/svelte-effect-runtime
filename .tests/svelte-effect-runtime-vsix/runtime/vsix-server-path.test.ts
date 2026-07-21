@@ -984,7 +984,7 @@ test("VS Code extension ignores stale direct package roots when a pnpm store exi
 	);
 
 	assert_equals(install_attempts.value, 1);
-	assert_false(result.server_path === stale_server_path);
+	assert_false(result.server_path === result.stale_server_path);
 	assert_truthy(result.server_path.startsWith(join(result.cache_root, `${result.encoded_version}-`)));
 	assert_truthy(
 		result.server_path.endsWith(join("node_modules", language_server_package_name, ".dist", "server.cjs")),

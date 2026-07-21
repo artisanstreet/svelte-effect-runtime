@@ -67,8 +67,8 @@ const InstalledPackageManifestWithMainSchema = Schema.Struct({
 	version: Schema.String,
 });
 type InstalledLanguageServerPackageManifest = {
-	readonly main?: string;
-	readonly name?: string;
+	readonly main?: string | undefined;
+	readonly name?: string | undefined;
 	readonly version: string;
 };
 const PackageMapSchema = Schema.Struct({
@@ -190,7 +190,11 @@ export const GetConfiguredServerPath = Effect.gen(function* () {
 const ResolveServerPath = (
 	storage_path: string,
 	allow_configured_path: boolean,
-): Effect.Effect<ResolvedLanguageServer, unknown> =>
+): Effect.Effect<
+	ResolvedLanguageServer,
+	unknown,
+	ServerPathResolverLayerDependencies
+> =>
 	Effect.gen(function* () {
 		const path_service = yield* Path.Path;
 		const cache_root = get_server_install_cache_root(path_service, storage_path);
@@ -222,7 +226,11 @@ const ResolveServerPath = (
 
 const ResolveInstalledLanguageServer = (
 	storage_path: string,
-): Effect.Effect<ResolvedLanguageServer, unknown> =>
+): Effect.Effect<
+	ResolvedLanguageServer,
+	unknown,
+	ServerPathResolverLayerDependencies
+> =>
 	Effect.gen(function* () {
 		const published = yield* InstallLanguageServer(storage_path);
 
@@ -232,7 +240,9 @@ const ResolveInstalledLanguageServer = (
 		} satisfies ResolvedLanguageServer;
 	});
 
-const InstallLanguageServer = (storage_path: string): Effect.Effect<PublishedLanguageServer, unknown> =>
+const InstallLanguageServer = (
+	storage_path: string,
+): Effect.Effect<PublishedLanguageServer, unknown, ServerPathResolverLayerDependencies> =>
 	Effect.gen(function* () {
 		const output = yield* ExtensionOutput;
 		const file_system = yield* FileSystem.FileSystem;
@@ -257,7 +267,11 @@ const InstallAndPublishLanguageServer = (
 	cache_root: string,
 	target_version: string,
 	retry_remaining = 1,
-): Effect.Effect<PublishedLanguageServer, unknown> =>
+): Effect.Effect<
+	PublishedLanguageServer,
+	unknown,
+	ServerPathResolverLayerDependencies
+> =>
 	Effect.gen(function* () {
 		const output = yield* ExtensionOutput;
 		const file_system = yield* FileSystem.FileSystem;
@@ -290,10 +304,9 @@ const InstallAndPublishLanguageServer = (
 		const winner = yield* FindPublishedLanguageServer(cache_root, target_version);
 
 		if (Option.isSome(winner)) {
-			yield* Effect.catchAll(
-				file_system.remove(staging_root, { force: true, recursive: true }),
-				() => Effect.void,
-			);
+			yield* file_system
+				.remove(staging_root, { force: true, recursive: true })
+				.pipe(Effect.catch(() => Effect.void));
 			yield* output.append_line(
 				`Using concurrently installed ${language_server_package_name}@${target_version}.`,
 			);
@@ -346,7 +359,11 @@ const InstallAndPublishLanguageServer = (
 const FindPublishedLanguageServer = (
 	cache_root: string,
 	target_version: string,
-): Effect.Effect<Option.Option<PublishedLanguageServer>, unknown> =>
+): Effect.Effect<
+	Option.Option<PublishedLanguageServer>,
+	unknown,
+	ServerPathResolverLayerDependencies
+> =>
 	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 		const path_service = yield* Path.Path;
@@ -848,7 +865,10 @@ const IsUsableLanguageServerPackageRoot = (
 			}
 
 		} else {
-			if (expected_name === undefined || expected_name !== language_server_package_name) {
+			if (
+				expected_name !== undefined &&
+				expected_name !== language_server_package_name
+			) {
 				return false;
 			}
 		}
@@ -866,7 +886,11 @@ const IsUsableLanguageServerPackageRoot = (
 
 const ResolveLanguageServerPackageManifest = (
 	package_root: string,
-): Effect.Effect<InstalledLanguageServerPackageManifest, ServerPathError> =>
+): Effect.Effect<
+	InstalledLanguageServerPackageManifest,
+	ServerPathError,
+	FileSystem.FileSystem | Path.Path
+> =>
 	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
 		const path_service = yield* Path.Path;
