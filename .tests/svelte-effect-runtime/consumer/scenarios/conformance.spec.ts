@@ -352,12 +352,7 @@ test(transformed_form_scenario.promise, async ({ browser, playwright }, test_inf
 });
 
 test(request_interruption_scenario.promise, async ({ browser, playwright }, test_info) => {
-	await assert_native_parity(request_interruption_scenario, { browser, playwright }, test_info, {
-		stable: {
-			"$.events.length":
-				"The stable 4.0.0 Handler omits the finalization event after the HTTP client aborts; issue #33 records the minimized failure.",
-		},
-	});
+	await assert_native_parity(request_interruption_scenario, { browser, playwright }, test_info);
 });
 
 test(live_query_scenario.promise, async ({ browser, playwright }, test_info) => {
