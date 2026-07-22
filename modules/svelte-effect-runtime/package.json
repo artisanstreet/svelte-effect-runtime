@@ -1,6 +1,6 @@
 {
 	"name": "svelte-effect-runtime",
-	"version": "4.0.1",
+	"version": "4.1.0",
 	"description": "Core module that houses the Vite plugin to enable effectful execution.",
 	"license": "BSD-3-Clause",
 	"repository": {
