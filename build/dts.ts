@@ -14,6 +14,7 @@ type TargetConfig = {
 type TargetContext = {
 	package_name: string;
 	dist_root: string;
+	repo_root: string;
 	target: TargetConfig;
 };
 
@@ -45,11 +46,31 @@ const Main = Effect.gen(function* () {
 	const context: TargetContext = {
 		package_name,
 		target,
+		repo_root,
 		dist_root: path.join(repo_root, ".dist", package_name).replaceAll("\\", "/"),
 	};
 
 	yield* VisitRoot(context);
+	yield* InstallEnvironmentDeclarations(context);
 });
+
+const InstallEnvironmentDeclarations = (context: TargetContext) =>
+	Effect.gen(function* () {
+		if (context.package_name !== "svelte-effect-runtime") {
+			return;
+		}
+
+		const file_system = yield* FileSystem.FileSystem;
+		const source_path = `${context.repo_root}/modules/svelte-effect-runtime/src/environment/virtual-modules.d.ts`;
+		const output_path = `${context.dist_root}/environment/virtual-modules.d.ts`;
+		const entry_path = `${context.dist_root}/environment.d.ts`;
+		const reference = `/// <reference path="./environment/virtual-modules.d.ts" />`;
+		const declarations = yield* file_system.readFileString(source_path);
+		const entry = yield* file_system.readFileString(entry_path);
+
+		yield* file_system.writeFileString(output_path, declarations);
+		yield* file_system.writeFileString(entry_path, `${reference}\n\n${entry}`);
+	});
 
 const VisitRoot = (context: TargetContext) =>
 	Effect.gen(function* () {

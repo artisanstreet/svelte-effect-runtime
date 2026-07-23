@@ -442,7 +442,7 @@ async function prepare_application(
 		checker_path,
 	);
 
-	if (target.fixture === "stable") {
+	if (target.fixture !== "native") {
 		await cp(target_adapter_dir, application_dir, { force: true, recursive: true });
 	}
 

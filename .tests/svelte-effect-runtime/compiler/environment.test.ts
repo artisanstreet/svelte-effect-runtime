@@ -1,7 +1,6 @@
 import {
 	find_environment_exports,
 	make_environment_module,
-	make_environment_types,
 } from "../../../modules/svelte-effect-runtime/src/compiler/environment.ts";
 import { assert_equals, assert_string_includes } from "../unit/helpers/assert.ts";
 import { test } from "vitest";
@@ -37,12 +36,4 @@ test("generates yieldable public environment exports", () => {
 		module,
 		`export const PUBLIC_ORIGIN = Effect.succeed(environment_values.PUBLIC_ORIGIN);`,
 	);
-});
-
-test("maps SvelteKit environment declarations to Effect types", () => {
-	const types = make_environment_types();
-
-	assert_string_includes(types, `declare module "$ser/env/private"`);
-	assert_string_includes(types, `declare module "$ser/env/public"`);
-	assert_string_includes(types, `import("effect").Effect.Effect<Source[Name]>`);
 });
