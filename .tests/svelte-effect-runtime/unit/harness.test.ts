@@ -58,7 +58,7 @@ describe("conformance target selection", () => {
 
 	test("keeps native as oracle while stable and candidate remain independent artifacts", () => {
 		const targets = make_targets(
-			"package:svelte-effect-runtime@4.0.0",
+			"package:svelte-effect-runtime@4.1.0",
 			"artifact:C:/artifacts/candidate.tgz",
 		);
 
@@ -69,8 +69,9 @@ describe("conformance target selection", () => {
 		});
 		expect(get_target(targets, "stable").source).toEqual({
 			_tag: "Package",
-			specifier: "svelte-effect-runtime@4.0.0",
+			specifier: "svelte-effect-runtime@4.1.0",
 		});
+		expect(get_target(targets, "stable").fixture).toBe("candidate");
 		expect(get_target(targets, "candidate").source).toEqual({
 			_tag: "Artifact",
 			path: "C:/artifacts/candidate.tgz",
