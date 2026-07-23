@@ -25,6 +25,10 @@
 			"types": "./.dist/compiler.d.ts",
 			"default": "./.dist/compiler.js"
 		},
+		"./environment": {
+			"types": "./.dist/environment.d.ts",
+			"default": "./.dist/environment.js"
+		},
 		"./runtime/transform": {
 			"types": "./.dist/runtime/transform.d.ts",
 			"default": "./.dist/runtime/transform.js"

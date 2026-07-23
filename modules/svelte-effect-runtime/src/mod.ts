@@ -11,6 +11,16 @@ import { Dispatcher as InternalDispatcher } from "$/dispatcher.ts";
 import type { Context, Layer, ManagedRuntime } from "effect";
 import { ServerOnlyImportError } from "$/errors.ts";
 
+export { Env } from "$/environment.ts";
+export type {
+	EnvApi,
+	EnvironmentDefinition,
+	EnvironmentOptions,
+	EnvironmentSchema,
+	EnvironmentVariable,
+	SchemaOutput as EnvironmentSchemaOutput,
+} from "$/environment.ts";
+
 /**
  * Public API surface for `svelte-effect-runtime`.
  *
