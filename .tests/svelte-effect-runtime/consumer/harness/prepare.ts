@@ -69,7 +69,7 @@ async function main(): Promise<void> {
 	const runtime_manifest = await read_manifest(
 		join(repo_root, "modules", "svelte-effect-runtime", "package.json"),
 	);
-	const stable_source = process.env.SER_STABLE_TARGET ?? "package:svelte-effect-runtime@4.0.0";
+	const stable_source = process.env.SER_STABLE_TARGET ?? "package:svelte-effect-runtime@4.1.0";
 	const candidate_source =
 		process.env.SER_CANDIDATE_TARGET ??
 		make_candidate_artifact_source(runtime_manifest.version);

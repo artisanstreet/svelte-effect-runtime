@@ -2,14 +2,13 @@
 
 The harness copies fixed native and SER fixtures into isolated applications under
 `.dist/conformance/applications`. Native SvelteKit is the oracle. Stable SER defaults to the
-published non-Effect `4.0.0` artifact and applies its checked-in target adapter, while candidate
-SER is built and packed from the current checkout. `SER_STABLE_TARGET` and
+published `4.1.0` artifact with the current Effect fixture, while candidate SER is built and packed
+from the current checkout. `SER_STABLE_TARGET` and
 `SER_CANDIDATE_TARGET` accept `package:<specifier>`, `artifact:<path>`, or `git:<ref>`.
 
-Shared Query and root-page scenarios normalize the stable release's Promise-backed `Prerender`
-value and the candidate's Effect-backed adapter at the target boundary. A dedicated `/prerender`
-route still exercises SER's public `Prerender` export in a production server, so the known emitted
-binding defect remains executable without preventing unrelated scenarios from running.
+Shared Query and root-page scenarios compare the published release and candidate at the same
+Effect-backed target boundary. A dedicated `/prerender` route exercises SER's public `Prerender`
+export in a production server.
 
 Each application runs install, SvelteKit sync, TypeScript, Svelte diagnostics, production build,
 and adapter-node startup as distinct phases. The check phase runs published `svelte-check` against
@@ -43,13 +42,10 @@ run. A full server and browser run selects one profile with `SVELTEKIT_PROFILE=k
 `SVELTEKIT_VERSION` remains available for upgrade diagnosis and selects the compatible adapter
 generation automatically. Matrix automation and scheduling in CI remain issue #29.
 
-Known deviations stay executable and preserve raw evidence. Stable 4.0.0 differs from native for
-batch collection, indexed form paths, Effect-backed HTML/render sites, and live-stream disposal.
-The current candidate fixes the first three. Issues #30, #33, #34, #35, and #36 track the remaining
-page-disposal, request-abort, Prerender binding, live-query ESM, and Command compatibility defects.
-Issue #31 tracks the compiler diagnostic that identifies its public error correctly but loses the
-source position. Every deviation names its issue beside the exact comparison path, and the browser
-lane writes the corresponding observation and comparison JSON to `.dist/conformance/evidence`.
+The published stable release and candidate are both expected to match native behavior. Historical
+deviations remain traceable through issues #30, #33, #34, #35, and #36. Issue #31 tracks the compiler
+diagnostic that identifies its public error correctly but loses the source position. The browser
+lane writes each observation and comparison to `.dist/conformance/evidence`.
 
 The earlier regression corpus remains traceable at stronger seams:
 
