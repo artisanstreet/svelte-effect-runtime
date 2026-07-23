@@ -282,11 +282,14 @@ When releasing:
    - **Minor** (`1.7.0`): new features, backward-compatible.
    - **Patch** (`1.6.3`): bug fixes, no API or feature changes.
 2. Bump all four files to the same version.
-3. Merge the version change through a pull request to `master` and wait for
+3. Update the SER changelog at
+   `modules/frontend/src/content/ser/changelog.mdx` in the `usebarekey/barekey`
+   documentation repository.
+4. Merge the version change through a pull request to `master` and wait for
    `SER pipeline / Staging verified`.
-4. After explicit human approval, fast-forward `candidate` to that exact verified
+5. After explicit human approval, fast-forward `candidate` to that exact verified
    commit. Do not add release-only commits to `candidate`.
-5. Manually run `SER pipeline` on `candidate` in `dry-run` mode. After it verifies
+6. Manually run `SER pipeline` on `candidate` in `dry-run` mode. After it verifies
    the exact packages and browser smoke, run `release` mode for the same commit.
 
 If publication fails after durable provider state exists, leave `candidate`
