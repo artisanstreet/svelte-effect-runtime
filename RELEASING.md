@@ -19,9 +19,12 @@ already reachable from `master`.
     - `modules/svelte-effect-runtime-language-server/package.json`
     - `modules/svelte-effect-runtime-vsix/package.json`
 
-2. Merge the pull request to `master` and wait for
+2. Update the SER changelog at
+   `modules/frontend/src/content/ser/changelog.mdx` in the `usebarekey/barekey`
+   documentation repository.
+3. Merge the pull request to `master` and wait for
    `SER pipeline / Staging verified` on the selected full commit SHA.
-3. Verify the selected commit is reachable from the current remote `master`, then
+4. Verify the selected commit is reachable from the current remote `master`, then
    fast-forward `candidate` to that exact SHA:
 
     ```bash
