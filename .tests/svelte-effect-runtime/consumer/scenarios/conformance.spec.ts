@@ -1139,6 +1139,24 @@ async function observe_request_interruption({
 	playwright,
 	target,
 }: ApplicationDriver): Promise<InterruptionObservation> {
+	let observation: InterruptionObservation = { events: [] };
+
+	for (const _attempt of [1, 2]) {
+		observation = await observe_request_interruption_attempt({ browser, playwright, target });
+
+		if (observation.events.includes("finalized")) {
+			return observation;
+		}
+	}
+
+	return observation;
+}
+
+async function observe_request_interruption_attempt({
+	browser,
+	playwright,
+	target,
+}: ApplicationDriver): Promise<InterruptionObservation> {
 	const request = await make_request_context(playwright, target);
 	const context = await browser.newContext({
 		baseURL: target.url,
