@@ -104,6 +104,21 @@ test("passes through types, interfaces, enums, classes untouched", () => {
 	assert_string_includes(result.code, `class Helper { greet() { return "hi"; } }`);
 });
 
+test("injects scope wiring before leading trivia on the first effect statement", () => {
+	const source = [
+		`/** Load the initial value. */`,
+		`const value = yield* Effect.succeed(1);`,
+	].join("\n");
+
+	const result = transform_script_effect(source, "Test.svelte");
+	const scope_index = result.code.indexOf("const __SER___scope");
+	const effect_index = result.code.indexOf("const value = await");
+
+	assert_truthy(scope_index >= 0);
+	assert_truthy(effect_index >= 0);
+	assert_truthy(scope_index < effect_index);
+});
+
 test("preserves $state(yield* expr) as writable state", () => {
 	const source = `let user = $state(yield* getUser(id));`;
 	assert_transform(
@@ -130,7 +145,10 @@ test("preserves $state expressions with multiple yield points", () => {
 		result.code,
 		`function* __SER___effect_label_1() { return (yield* ToEffect(getLast())); }`,
 	);
-	assert_string_includes(result.code, "let label = $state(`${await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({");
+	assert_string_includes(
+		result.code,
+		"let label = $state(`${await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({",
+	);
 	assert_string_includes(result.code, `deps: [getFirst]`);
 	assert_string_includes(result.code, `deps: [getLast]`);
 	assert_not_match(result.code, /let label = \$derived/);
@@ -146,7 +164,10 @@ test("preserves $state.raw(yield* expr) as raw state", () => {
 		result.code,
 		`function* __SER___effect_raw() { return (yield* ToEffect(getRaw(id))); }`,
 	);
-	assert_string_includes(result.code, `let raw = $state.raw(await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`);
+	assert_string_includes(
+		result.code,
+		`let raw = $state.raw(await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`,
+	);
 	assert_string_includes(result.code, `deps: [getRaw, id]`);
 	assert_not_match(result.code, /let raw = \$derived/);
 	assert_not_match(result.code, /\$state\.raw<.*undefined/);
@@ -175,7 +196,10 @@ test("keeps state declarations out of dependency-tracked Effect.gen", () => {
 	const source = `let x = $state(yield* f());`;
 	const result = transform_script_effect(source, "Test.svelte");
 
-	assert_string_includes(result.code, `let x = $state(await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`);
+	assert_string_includes(
+		result.code,
+		`let x = $state(await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`,
+	);
 	assert_string_includes(
 		result.code,
 		`function* __SER___effect_x() { return (yield* ToEffect(f())); }`,
@@ -193,7 +217,10 @@ test("tracks reactive identifiers read by yielded remote arguments", () => {
 	const result = transform_script_effect(source, "Page.svelte");
 
 	assert_string_includes(result.code, `let { params } = $props();`);
-	assert_string_includes(result.code, `let result = $derived(await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`);
+	assert_string_includes(
+		result.code,
+		`let result = $derived(await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`,
+	);
 	assert_string_includes(result.code, `deps: [getPost, params]`);
 	assert_string_includes(
 		result.code,
@@ -210,7 +237,10 @@ test("lowers destructuring yield* into a boundary-compatible await", () => {
 		result.code,
 		`function* __SER___effect_destructure() { return (yield* ToEffect(getPost(id))); }`,
 	);
-	assert_string_includes(result.code, `const { title, body } = await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`);
+	assert_string_includes(
+		result.code,
+		`const { title, body } = await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`,
+	);
 	assert_string_includes(result.code, `deps: [getPost, id]`);
 	assert_not_match(result.code, /\$state<.*undefined/);
 	assert_not_match(result.code, /\$effect\(\(\) =>/);
@@ -224,7 +254,10 @@ test("preserves $derived(yield* expr) as an async derived", () => {
 		result.code,
 		`function* __SER___effect_msg() { return (yield* ToEffect(format(user))); }`,
 	);
-	assert_string_includes(result.code, `let msg = $derived(await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`);
+	assert_string_includes(
+		result.code,
+		`let msg = $derived(await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`,
+	);
 	assert_string_includes(result.code, `deps: [format, user]`);
 	assert_string_includes(result.code, `+ "!"`);
 	assert_not_match(result.code, /\$state<.*undefined/);
@@ -596,7 +629,10 @@ test("allows await-compatible rune arguments", () => {
 	for (const source of cases) {
 		const result = transform_script_effect(source, "Test.svelte");
 
-		assert_string_includes(result.code, `await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`);
+		assert_string_includes(
+			result.code,
+			`await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`,
+		);
 		assert_not_match(result.code, /\$effect\(\(\) =>/);
 		assert_not_match(result.code, /\$state<.*undefined/);
 	}
@@ -633,7 +669,10 @@ test("preserves surrounding expression syntax character-for-character", () => {
 	const result = transform_script_effect(source, "Test.svelte");
 
 	assert_string_includes(result.code, `* 2 + 1`);
-	assert_string_includes(result.code, `let result = $derived(await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`);
+	assert_string_includes(
+		result.code,
+		`let result = $derived(await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`,
+	);
 	assert_string_includes(result.code, `deps: [compute, a, b]`);
 	assert_not_match(result.code, /\$derived\(__SER___/);
 });
@@ -647,14 +686,20 @@ test("extracts every yield* expression in a compound initializer", () => {
 	assert_string_includes(result.code, `deps: [first]`);
 	assert_string_includes(result.code, `deps: [second]`);
 	assert_not_match(result.code, /\$derived\(\(__SER___\w+\) \+ \(__SER___\w+\)\)/);
-	assert_match(result.code, /\$derived\(\(await get_dispatcher\(\)\.with_scope\(__SER___scope\.scope, \(\) => get_dispatcher\(\)\.promise/);
+	assert_match(
+		result.code,
+		/\$derived\(\(await get_dispatcher\(\)\.with_scope\(__SER___scope\.scope, \(\) => get_dispatcher\(\)\.promise/,
+	);
 });
 
 test("plain compound declarations become boundary-compatible awaits", () => {
 	const source = `const value = (yield* loadValue()) + 1;`;
 	const result = transform_script_effect(source, "Test.svelte");
 
-	assert_string_includes(result.code, `const value = (await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`);
+	assert_string_includes(
+		result.code,
+		`const value = (await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`,
+	);
 	assert_string_includes(result.code, `deps: [loadValue]`);
 	assert_string_includes(result.code, `+ 1`);
 	assert_not_match(result.code, /\$derived\(/);
@@ -670,7 +715,10 @@ test("destructuring defaults with yield become boundary-compatible awaits", () =
 	const result = transform_script_effect(source, "Test.svelte");
 
 	assert_string_includes(result.code, `const post = { title: undefined };`);
-	assert_string_includes(result.code, `const { title = await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`);
+	assert_string_includes(
+		result.code,
+		`const { title = await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`,
+	);
 	assert_string_includes(result.code, `deps: [getTitle]`);
 	assert_not_match(result.code, /\$state<.*undefined/);
 	assert_not_match(result.code, /\$effect\(\(\) =>/);
@@ -680,7 +728,10 @@ test("props destructuring defaults with yield become boundary-compatible awaits"
 	const source = `let { value = yield* load() } = $props();`;
 	const result = transform_script_effect(source, "Test.svelte");
 
-	assert_string_includes(result.code, `let { value = await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`);
+	assert_string_includes(
+		result.code,
+		`let { value = await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`,
+	);
 	assert_string_includes(result.code, `deps: [load]`);
 	assert_string_includes(result.code, `} = $props();`);
 	assert_not_match(result.code, /\$state<.*undefined/);
@@ -704,7 +755,10 @@ test("handles ternary with yield* in condition position", () => {
 	const result = transform_script_effect(source, "Test.svelte");
 
 	assert_string_includes(result.code, `? "a" : "b"`);
-	assert_string_includes(result.code, `let flag = $state(await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`);
+	assert_string_includes(
+		result.code,
+		`let flag = $state(await get_dispatcher().with_scope(__SER___scope.scope, () => get_dispatcher().promise({`,
+	);
 	assert_string_includes(result.code, `deps: [check]`);
 	assert_not_match(result.code, /\$state<.*undefined/);
 	assert_not_match(result.code, /\$effect\(\(\) =>/);

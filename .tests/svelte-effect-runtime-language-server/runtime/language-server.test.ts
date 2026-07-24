@@ -99,6 +99,39 @@ test("virtual TS document removes the SER effect script attribute", () => {
 	assert_string_includes(code, "const post = await");
 });
 
+test("virtual TS document declares component scope before top-level effect work", () => {
+	const source = [
+		`<script lang="ts" effect>`,
+		`  import { Effect } from "effect";`,
+		``,
+		`  const value = yield* Effect.succeed(1);`,
+		`</script>`,
+		``,
+		`<button`,
+		`  onclick={yield* Effect.gen(function* () {`,
+		`    yield* Effect.log(value);`,
+		`  })}`,
+		`>`,
+		`  click`,
+		`</button>`,
+	].join("\n");
+	const document = make_document(source);
+	const prepared = prepare_virtual_document(document, make_transforms(), internals);
+
+	assert_truthy(prepared);
+
+	const snapshot = internals.document_snapshot.fromDocument(
+		prepared.document,
+		make_snapshot_options(),
+	);
+	const rebound_snapshot = rebind_snapshot_to_original_document(snapshot, document, prepared);
+	const scope_diagnostics = collect_scoped_name_diagnostics(rebound_snapshot.getFullText(), [
+		"__SER___scope",
+	]);
+
+	assert_equals(scope_diagnostics, []);
+});
+
 test("virtual TS document recovers from script transform errors", () => {
 	const source = [
 		`<script lang="ts" effect>`,

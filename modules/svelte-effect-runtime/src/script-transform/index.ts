@@ -75,6 +75,7 @@ export function transform_script_effect(
 	const emit_types = options.emit_types ?? true;
 
 	let has_effect = false;
+	let first_effect_statement_start = content.length;
 	let uses_dispatcher_promise = false;
 	let uses_yield_success_types = false;
 
@@ -149,6 +150,8 @@ export function transform_script_effect(
 		has_effect = true;
 		const lowered = lower_statement(stmt, content, context);
 
+		first_effect_statement_start = Math.min(first_effect_statement_start, lowered.range.start);
+
 		if (lowered.effect_blocks.length > 0 && contains_top_level_await(stmt)) {
 			const text = slice(content, stmt);
 			throw new AwaitInEffectWorkError(filename, text);
@@ -209,15 +212,17 @@ export function transform_script_effect(
 	 */
 	const scope_wiring = [
 		`const ${runtime_bindings.scope} = new ${runtime_bindings.component_scope_ref}(${runtime_bindings.dispatcher});`,
-		...(!is_server_target ? [`${runtime_bindings.on_destroy}(() => ${runtime_bindings.scope}.dispose());`] : []),
+		...(!is_server_target
+			? [`${runtime_bindings.on_destroy}(() => ${runtime_bindings.scope}.dispose());`]
+			: []),
 	].join("\n");
 
 	const injected = [imports, scope_wiring].filter(Boolean).join("\n");
 
-	if (last_import) {
+	if (last_import && last_import.end <= first_effect_statement_start) {
 		magic.appendRight(last_import.end, "\n" + injected);
 	} else {
-		magic.prepend(injected + "\n");
+		magic.appendLeft(first_effect_statement_start, injected + "\n");
 	}
 
 	/** Phase 4: append the runtime program blocks. */
