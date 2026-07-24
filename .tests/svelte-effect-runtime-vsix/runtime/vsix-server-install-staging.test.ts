@@ -161,14 +161,20 @@ test("VS Code extension removes dead staging installs and retains live ones", as
 				});
 				const dead_staging = join(cache_root, ".ser-stage-200-dead-generation-4.0.0-dead");
 				const live_staging = join(cache_root, ".ser-stage-300-live-generation-4.0.0-live");
+				const legacy_staging = join(
+					cache_root,
+					"4.0.1-.ser-stage-400-legacy-generation-4.0.1-dead",
+				);
 				const retention = yield* MakeServerInstallRetention(cache_root);
 
 				yield* WriteStagingOwner(dead_staging, 200, "dead-generation", 0);
 				yield* WriteStagingOwner(live_staging, 300, "live-generation", 0);
+				yield* WriteStagingOwner(legacy_staging, 400, "legacy-generation", 0);
 				yield* retention.cleanup(Option.none());
 
 				return {
 					dead_exists: yield* file_system.exists(dead_staging),
+					legacy_exists: yield* file_system.exists(legacy_staging),
 					live_exists: yield* file_system.exists(live_staging),
 				};
 			}),
@@ -180,6 +186,7 @@ test("VS Code extension removes dead staging installs and retains live ones", as
 	);
 
 	assert_false(result.dead_exists);
+	assert_false(result.legacy_exists);
 	assert_truthy(result.live_exists);
 	assert_equals(output_lines, []);
 });

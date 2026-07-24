@@ -69,7 +69,10 @@ const AbandonServerInstallStaging = (staging_root: string) =>
 		}
 
 		yield* file_system
-			.writeFileString(path_service.join(staging_root, server_install_staging_abandoned_file), "")
+			.writeFileString(
+				path_service.join(staging_root, server_install_staging_abandoned_file),
+				"",
+			)
 			.pipe(
 				Effect.ensuring(
 					file_system
@@ -110,7 +113,9 @@ export const CleanupServerInstallStaging = (staging_root: string, entry: string,
 const ReadServerInstallStagingOwner = (staging_root: string, entry: string, owner_path: string) =>
 	Effect.gen(function* () {
 		const file_system = yield* FileSystem.FileSystem;
-		const pid_match = /^\.ser-stage-(\d+)-/.exec(entry);
+		const staging_name_start = entry.indexOf(server_install_staging_prefix);
+		const staging_name = staging_name_start >= 0 ? entry.slice(staging_name_start) : entry;
+		const pid_match = /^\.ser-stage-(\d+)-/.exec(staging_name);
 		const entry_pid = pid_match ? Number(pid_match[1]) : Number.NaN;
 		const owner = yield* Effect.result(ReadServerInstallGeneration(owner_path));
 
@@ -124,7 +129,7 @@ const ReadServerInstallStagingOwner = (staging_root: string, entry: string, owne
 				owner.success.pid > 0 &&
 				Number.isFinite(owner.success.created_at_millis) &&
 				owner.success.generation.length > 0 &&
-				entry.startsWith(expected_prefix)
+				staging_name.startsWith(expected_prefix)
 			) {
 				return owner.success;
 			}
