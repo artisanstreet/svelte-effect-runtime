@@ -1,6 +1,6 @@
 {
 	"name": "svelte-effect-runtime-language-server",
-	"version": "4.1.0",
+	"version": "4.1.1",
 	"description": "Language server for Svelte Effect Runtime syntax in Svelte files.",
 	"license": "BSD-3-Clause",
 	"repository": {
