@@ -148,11 +148,9 @@ export function transform_script_effect(
 		}
 
 		has_effect = true;
-		first_effect_statement_start = Math.min(
-			first_effect_statement_start,
-			stmt.getStart(source_file),
-		);
 		const lowered = lower_statement(stmt, content, context);
+
+		first_effect_statement_start = Math.min(first_effect_statement_start, lowered.range.start);
 
 		if (lowered.effect_blocks.length > 0 && contains_top_level_await(stmt)) {
 			const text = slice(content, stmt);
