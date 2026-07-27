@@ -449,6 +449,10 @@ async function prepare_application(
 	 */
 	if (target.name === "candidate") {
 		await cp(target_adapter_dir, application_dir, { force: true, recursive: true });
+
+		if (!profile.supports_explicit_environment) {
+			await remove_explicit_environment_fixture(application_dir);
+		}
 	}
 
 	await prepare_adapter_workspace(workspace_path);
@@ -581,6 +585,18 @@ async function verify_adapter_output(
 	if (!resolves_to_build) {
 		throw new Error(`Adapter output must resolve its static root to ${build_dir}.`);
 	}
+}
+
+/** Remove environment fixture files on SvelteKit versions without explicit environment variables. */
+async function remove_explicit_environment_fixture(application_dir: string): Promise<void> {
+	const environment_paths = [
+		join(application_dir, "src", "env.ts"),
+		join(application_dir, "src", "lib", "components", "environment-page.svelte"),
+		join(application_dir, "src", "routes", "environment"),
+		join(application_dir, "src", "routes", "api", "environment"),
+	];
+
+	await Promise.all(environment_paths.map((path) => rm(path, { force: true, recursive: true })));
 }
 
 /** Record the application's source tree so evidence shows what each phase ran against. */

@@ -9,6 +9,7 @@ export type SvelteKitProfile = {
 	readonly name: SvelteKitProfileName | "custom";
 	readonly adapter_node_version: string;
 	readonly adapter_output_directory_module?: string;
+	readonly supports_explicit_environment: boolean;
 	readonly supports_paths_origin: boolean;
 	readonly sveltekit_version: string;
 	readonly unsupported_platforms?: Partial<
@@ -19,6 +20,7 @@ export type SvelteKitProfile = {
 const kit_2_stable: SvelteKitProfile = {
 	name: "kit-2-stable",
 	adapter_node_version: "5.5.7",
+	supports_explicit_environment: false,
 	supports_paths_origin: false,
 	sveltekit_version: "2.69.3",
 };
@@ -26,6 +28,7 @@ const kit_2_stable: SvelteKitProfile = {
 const kit_3_primary: SvelteKitProfile = {
 	name: "kit-3-primary",
 	adapter_node_version: "6.0.0-next.3",
+	supports_explicit_environment: true,
 	adapter_output_directory_module: "dir.js",
 	supports_paths_origin: true,
 	sveltekit_version: "3.0.0-next.8",
