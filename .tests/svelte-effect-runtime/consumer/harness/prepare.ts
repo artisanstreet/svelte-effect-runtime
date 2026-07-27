@@ -442,7 +442,12 @@ async function prepare_application(
 		checker_path,
 	);
 
-	if (target.fixture !== "native") {
+	/**
+	 * Only the candidate application receives the candidate overlay. The stable
+	 * application shares the candidate fixture name but runs the released
+	 * package, which cannot satisfy overlay files that exercise unreleased API.
+	 */
+	if (target.name === "candidate") {
 		await cp(target_adapter_dir, application_dir, { force: true, recursive: true });
 	}
 
