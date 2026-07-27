@@ -1,11 +1,13 @@
 import type {
 	EnvironmentSchemaOutput,
+	EnvironmentDefinition,
 	EffectRemoteCommandCall,
 	RemoteFailure,
 	RemoteLiveStream,
 } from "svelte-effect-runtime";
 import { ClientRuntime, DefineEnvVars, Live } from "svelte-effect-runtime";
 import { DefineEnvVars as EnvironmentDefineEnvVars } from "svelte-effect-runtime/environment";
+import type { StandardSchema } from "svelte-effect-runtime/environment";
 import { Effect, Schema, Stream } from "effect";
 import {
 	Command,
@@ -82,6 +84,12 @@ type PortOutput = Assert<Equal<EnvironmentSchemaOutput<typeof variables.PORT.sch
 type PublicOriginOutput = Assert<
 	Equal<EnvironmentSchemaOutput<typeof variables.PUBLIC_ORIGIN.schema>, URL>
 >;
+declare const loose_definition: EnvironmentDefinition;
+const loose_variables = DefineEnvVars(loose_definition);
+const loose_schema = loose_variables["PORT"]?.schema;
+type LooseSchemaKeepsValidator = Assert<
+	Equal<typeof loose_schema, StandardSchema<unknown> | undefined>
+>;
 
 void get_user_effect;
 void get_user_index_effect;
@@ -102,5 +110,7 @@ void (undefined as unknown as GetUserParameters);
 void (undefined as unknown as SaveUserParameters);
 void (undefined as unknown as CreateUserParameters);
 void (undefined as unknown as LoadUserResult);
+void loose_schema;
 void (undefined as unknown as PortOutput);
 void (undefined as unknown as PublicOriginOutput);
+void (undefined as unknown as LooseSchemaKeepsValidator);
