@@ -22,9 +22,15 @@ already reachable from `master`.
 2. Update the SER changelog at
    `modules/frontend/src/content/ser/changelog.mdx` in the `usebarekey/barekey`
    documentation repository.
-3. Merge the pull request to `master` and wait for
+3. Verify documentation coverage for the release: every new public API has a
+   docs page and every behavior change updates its pages, each carrying a
+   `> [!NOTE] Since <version>` callout that matches the version being released
+   (see [CONTRIBUTING.md](./CONTRIBUTING.md)). A release whose `@since`
+   annotations name a version that was never released must be corrected before
+   promotion.
+4. Merge the pull request to `master` and wait for
    `SER pipeline / Staging verified` on the selected full commit SHA.
-4. Verify the selected commit is reachable from the current remote `master`, then
+5. Verify the selected commit is reachable from the current remote `master`, then
    fast-forward `candidate` to that exact SHA:
 
     ```bash
