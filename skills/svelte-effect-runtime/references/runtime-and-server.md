@@ -76,3 +76,26 @@ Client components can yield remote calls through SER syntax:
   <p>{result.value}</p>
 {/await}
 ```
+
+## Environment Variables
+
+Declare SvelteKit explicit environment variables in `src/env.ts` with
+`DefineEnvVars` from `"svelte-effect-runtime/environment"` (also exported from
+the root). It is a thin wrapper over SvelteKit's `defineEnvVars` that accepts
+Effect Schemas and converts them to Standard Schemas; SvelteKit keeps loading,
+visibility, validation, and the server-only import guard.
+
+```ts
+import { DefineEnvVars } from "svelte-effect-runtime/environment";
+import { Schema } from "effect";
+
+export const variables = DefineEnvVars({
+  PORT: { schema: Schema.NumberFromString, description: "Server port." },
+  PUBLIC_ORIGIN: { public: true, schema: Schema.URLFromString },
+});
+```
+
+Consume decoded values as plain imports from `$app/env/private` or
+`$app/env/public`. Do not wrap them in Effects; validated constants are used
+directly inside effect code. Schemas must decode synchronously, and a schema
+may output `Redacted` values for private secrets.
