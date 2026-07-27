@@ -1,21 +1,42 @@
 import type { EnvVarConfig } from "@sveltejs/kit";
 import { Schema } from "effect";
 
+/**
+ * The Standard Schema validator shape SvelteKit accepts for an environment variable.
+ *
+ * @since 4.2.0
+ */
 export type StandardSchema<Output = unknown> = NonNullable<EnvVarConfig<Output>["schema"]>;
 
+/**
+ * A validator accepted by {@link DefineEnvVars}: an Effect Schema that decodes
+ * synchronously from the raw string value, or an existing Standard Schema.
+ *
+ * @since 4.2.0
+ */
 export type EnvironmentSchema =
 	| (Schema.ConstraintDecoder<unknown, never> & {
 			readonly Encoded: string | undefined;
 	  })
 	| StandardSchema<unknown>;
 
+/**
+ * The decoded output type an environment schema produces.
+ *
+ * @since 4.2.0
+ */
 export type EnvironmentSchemaOutput<S extends EnvironmentSchema> = S extends Schema.Constraint
 	? S["Type"]
 	: S extends StandardSchema<infer Output>
 		? Output
 		: never;
 
-/** One environment variable declaration, accepting Effect Schema or Standard Schema. */
+/**
+ * One environment variable declaration: SvelteKit's metadata plus an Effect
+ * Schema or Standard Schema validator.
+ *
+ * @since 4.2.0
+ */
 export interface EnvironmentVariable<S extends EnvironmentSchema = EnvironmentSchema> {
 	readonly public?: boolean;
 	readonly static?: boolean;
@@ -23,12 +44,27 @@ export interface EnvironmentVariable<S extends EnvironmentSchema = EnvironmentSc
 	readonly schema?: S;
 }
 
+/**
+ * Environment variable declarations keyed by variable name.
+ *
+ * @since 4.2.0
+ */
 export type EnvironmentDefinition = Record<string, EnvironmentVariable>;
 
+/**
+ * The normalized declarations {@link DefineEnvVars} returns, with every Effect
+ * Schema converted to a Standard Schema of the same decoded output type.
+ *
+ * @since 4.2.0
+ */
 export type EnvironmentVariables<Definition extends EnvironmentDefinition> = {
 	readonly [Name in keyof Definition]: Omit<Definition[Name], "schema"> &
 		(Definition[Name]["schema"] extends EnvironmentSchema
-			? { readonly schema: StandardSchema<EnvironmentSchemaOutput<Definition[Name]["schema"]>> }
+			? {
+					readonly schema: StandardSchema<
+						EnvironmentSchemaOutput<Definition[Name]["schema"]>
+					>;
+				}
 			: { readonly schema?: undefined });
 };
 
