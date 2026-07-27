@@ -80,13 +80,14 @@ Client components can yield remote calls through SER syntax:
 ## Environment Variables
 
 Declare SvelteKit explicit environment variables in `src/env.ts` with
-`DefineEnvVars` from `"svelte-effect-runtime/environment"` (also exported from
-the root). It is a thin wrapper over SvelteKit's `defineEnvVars` that accepts
+`DefineEnvVars` from `"svelte-effect-runtime"` (also available from
+`"svelte-effect-runtime/environment"`). It is a thin wrapper over SvelteKit's
+`defineEnvVars` that accepts
 Effect Schemas and converts them to Standard Schemas; SvelteKit keeps loading,
 visibility, validation, and the server-only import guard.
 
 ```ts
-import { DefineEnvVars } from "svelte-effect-runtime/environment";
+import { DefineEnvVars } from "svelte-effect-runtime";
 import { Schema } from "effect";
 
 export const variables = DefineEnvVars({
