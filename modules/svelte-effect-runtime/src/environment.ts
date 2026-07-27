@@ -59,14 +59,19 @@ export type EnvironmentDefinition = Record<string, EnvironmentVariable>;
  */
 export type EnvironmentVariables<Definition extends EnvironmentDefinition> = {
 	readonly [Name in keyof Definition]: Omit<Definition[Name], "schema"> &
-		(Definition[Name]["schema"] extends EnvironmentSchema
-			? {
-					readonly schema: StandardSchema<
-						EnvironmentSchemaOutput<Definition[Name]["schema"]>
-					>;
-				}
-			: { readonly schema?: undefined });
+		NormalizedVariableSchema<Definition[Name]["schema"]>;
 };
+
+/** Keeps the schema member sound when a declaration's schema type includes undefined. */
+type NormalizedVariableSchema<S> = [S] extends [EnvironmentSchema]
+	? { readonly schema: StandardSchema<EnvironmentSchemaOutput<S>> }
+	: [S] extends [undefined]
+		? { readonly schema?: undefined }
+		: {
+				readonly schema?: StandardSchema<
+					EnvironmentSchemaOutput<Extract<S, EnvironmentSchema>>
+				>;
+			};
 
 /**
  * Declares SvelteKit environment variables with Effect Schema validators.
