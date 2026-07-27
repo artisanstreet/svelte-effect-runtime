@@ -56,6 +56,7 @@ export const capability_lanes: ReadonlyArray<CapabilityLane> = Object.freeze([
 		`${ser_test_root}/runtime/dispatcher-scope.test.ts`,
 		`${ser_test_root}/runtime/dispatcher.test.ts`,
 		`${ser_test_root}/runtime/effect-channels.test.ts`,
+		`${ser_test_root}/runtime/environment.test.ts`,
 		`${ser_test_root}/runtime/form-invalid.test.ts`,
 		`${ser_test_root}/runtime/layer-lifecycle.test.ts`,
 		`${ser_test_root}/runtime/server-handler.test.ts`,

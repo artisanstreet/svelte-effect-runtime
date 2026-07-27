@@ -1,9 +1,8 @@
 import type { RequestHandler } from "./$types";
 import { Handler } from "svelte-effect-runtime/server";
-import { SER_PRIVATE_PORT } from "$ser/env/private";
+import { SER_PRIVATE_PORT } from "$app/env/private";
+import { Effect } from "effect";
 
-export const GET = Handler<RequestHandler>(function* () {
-	const private_port = yield* SER_PRIVATE_PORT;
-
-	return Response.json({ private_port });
-});
+export const GET = Handler<RequestHandler>(() =>
+	Effect.sync(() => Response.json({ private_port: SER_PRIVATE_PORT })),
+);

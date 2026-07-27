@@ -33,7 +33,6 @@
 		"./src/server.ts",
 		"./src/server/sveltekit-internal.d.ts",
 		"./src/compiler.ts",
-		"./src/environment/virtual-modules.d.ts",
 		"./src/remote/shared.ts",
 		"./src/remote/server.ts",
 		"./src/remote/client.ts",

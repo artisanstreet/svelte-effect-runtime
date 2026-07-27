@@ -1,7 +1,5 @@
-<script effect lang="ts">
-	import { SER_PUBLIC_ORIGIN } from "$ser/env/public";
-
-	const public_origin = yield* SER_PUBLIC_ORIGIN;
+<script lang="ts">
+	import { SER_PUBLIC_ORIGIN } from "$app/env/public";
 </script>
 
-<p data-environment-public-origin>{public_origin.href}</p>
+<p data-environment-public-origin>{SER_PUBLIC_ORIGIN.href}</p>

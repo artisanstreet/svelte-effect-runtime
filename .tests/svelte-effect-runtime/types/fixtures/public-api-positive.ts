@@ -4,8 +4,8 @@ import type {
 	RemoteFailure,
 	RemoteLiveStream,
 } from "svelte-effect-runtime";
-import { ClientRuntime, Env, Live } from "svelte-effect-runtime";
-import { Env as EnvironmentEnv } from "svelte-effect-runtime/environment";
+import { ClientRuntime, DefineEnvVars, Live } from "svelte-effect-runtime";
+import { DefineEnvVars as EnvironmentDefineEnvVars } from "svelte-effect-runtime/environment";
 import { Effect, Schema, Stream } from "effect";
 import {
 	Command,
@@ -38,9 +38,9 @@ const CreateUser = Form(Schema.Struct({ name: Schema.NonEmptyString }), ({ data 
 );
 const GetBuildLabel = Prerender(() => Effect.succeed("packed"));
 const LoadUser = Handler<NativeHandler>(({ id }) => Effect.succeed({ id }));
-const variables = Env.make({
-	PORT: Env.private(Schema.NumberFromString),
-	PUBLIC_ORIGIN: Env.public(Schema.URLFromString),
+const variables = DefineEnvVars({
+	PORT: { schema: Schema.NumberFromString },
+	PUBLIC_ORIGIN: { public: true, schema: Schema.URLFromString },
 });
 
 const get_user_effect: Effect.Effect<
@@ -96,7 +96,7 @@ void client_runtime_make;
 void server_runtime_make;
 void plugin;
 void rewrite;
-void EnvironmentEnv;
+void EnvironmentDefineEnvVars;
 void variables;
 void (undefined as unknown as GetUserParameters);
 void (undefined as unknown as SaveUserParameters);

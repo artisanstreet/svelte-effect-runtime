@@ -3,7 +3,6 @@ import {
 	is_sveltekit_remote_runtime_index,
 	make_missing_sveltekit_remote_runtime_message,
 } from "./compiler/sveltekit-remote-bridge.ts";
-import { make_environment_plugin } from "./compiler/environment.ts";
 import type { Plugin } from "vite";
 
 /**
@@ -68,7 +67,6 @@ export function effect(options?: EffectOptions): Plugin[] {
 	const component_filter = make_svelte_component_module_filter();
 
 	return [
-		make_environment_plugin(),
 		make_diagnostics_plugin(component_filter),
 		make_svelte_transform_plugin(component_filter),
 		make_server_rewrite_plugin(),

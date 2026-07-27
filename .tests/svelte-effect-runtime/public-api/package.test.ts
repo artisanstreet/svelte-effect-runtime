@@ -62,9 +62,9 @@ const required_root_exports = [
 	"BatchQueryHandlerMissingError",
 	"ClientRuntime",
 	"Command",
+	"DefineEnvVars",
 	"DispatcherDisposedError",
 	"EmptyStreamYieldError",
-	"Env",
 	"Error",
 	"Form",
 	"InvalidCommandFactoryError",
@@ -253,7 +253,7 @@ test("packed public entrypoints expose the runtime API through Node resolution",
 
 	expect([...observed.root].sort()).toEqual([...required_root_exports].sort());
 	expect([...observed.compiler].sort()).toEqual(["effect", "rewrite_remote_client_exports"]);
-	expect([...observed.environment].sort()).toEqual(["Env"]);
+	expect([...observed.environment].sort()).toEqual(["DefineEnvVars"]);
 }, 180_000);
 
 test("packed browser and server entrypoints preserve their runtime boundaries", async () => {

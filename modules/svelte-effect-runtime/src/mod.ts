@@ -11,14 +11,13 @@ import { Dispatcher as InternalDispatcher } from "$/dispatcher.ts";
 import type { Context, Layer, ManagedRuntime } from "effect";
 import { ServerOnlyImportError } from "$/errors.ts";
 
-export { Env } from "$/environment.ts";
+export { DefineEnvVars } from "$/environment.ts";
 export type {
-	EnvApi,
 	EnvironmentDefinition,
-	EnvironmentOptions,
 	EnvironmentSchema,
+	EnvironmentSchemaOutput,
 	EnvironmentVariable,
-	SchemaOutput as EnvironmentSchemaOutput,
+	EnvironmentVariables,
 } from "$/environment.ts";
 
 /**

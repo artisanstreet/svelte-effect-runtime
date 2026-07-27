@@ -1,32 +1,36 @@
-import { Env } from "../../../modules/svelte-effect-runtime/src/environment.ts";
-import { Env as RootEnv } from "../../../modules/svelte-effect-runtime/src/mod.ts";
+import { DefineEnvVars } from "../../../modules/svelte-effect-runtime/src/environment.ts";
+import { DefineEnvVars as RootDefineEnvVars } from "../../../modules/svelte-effect-runtime/src/mod.ts";
 import { assert_equals } from "../unit/helpers/assert.ts";
 import { Schema } from "effect";
 import { test } from "vitest";
 
-test("Env.make preserves SvelteKit environment metadata", () => {
-	const variables = Env.make({
-		PORT: Env.private(Schema.NumberFromString, {
+test("DefineEnvVars preserves SvelteKit environment metadata", () => {
+	const variables = DefineEnvVars({
+		PORT: {
+			schema: Schema.NumberFromString,
 			description: "Application port",
 			static: true,
-		}),
-		PUBLIC_ORIGIN: Env.public(Schema.URLFromString),
+		},
+		PUBLIC_ORIGIN: {
+			public: true,
+			schema: Schema.URLFromString,
+		},
 	});
 
-	assert_equals(variables.PORT.public, false);
+	assert_equals(variables.PORT.public, undefined);
 	assert_equals(variables.PORT.static, true);
 	assert_equals(variables.PORT.description, "Application port");
 	assert_equals(variables.PUBLIC_ORIGIN.public, true);
 });
 
-test("Env is available from the root and environment entrypoints", () => {
-	assert_equals(RootEnv, Env);
+test("DefineEnvVars is available from the root and environment entrypoints", () => {
+	assert_equals(RootDefineEnvVars, DefineEnvVars);
 });
 
-test("Env converts Effect Schemas to synchronous Standard Schemas", () => {
-	const variables = Env.make({
-		PORT: Env.private(Schema.NumberFromString),
-		PUBLIC_ORIGIN: Env.public(Schema.URLFromString),
+test("DefineEnvVars converts Effect Schemas to synchronous Standard Schemas", () => {
+	const variables = DefineEnvVars({
+		PORT: { schema: Schema.NumberFromString },
+		PUBLIC_ORIGIN: { public: true, schema: Schema.URLFromString },
 	});
 	const port_result = variables.PORT.schema["~standard"].validate("4173");
 	const origin_result =
@@ -44,11 +48,20 @@ test("Env converts Effect Schemas to synchronous Standard Schemas", () => {
 	assert_equals(origin_result.value.href, "https://example.com/");
 });
 
-test("Env preserves existing Standard Schema validators", () => {
+test("DefineEnvVars preserves existing Standard Schema validators", () => {
 	const standard_schema = Schema.toStandardSchemaV1(Schema.Trim);
-	const variables = Env.make({
-		NAME: Env.private(standard_schema),
+	const variables = DefineEnvVars({
+		NAME: { schema: standard_schema },
 	});
 
 	assert_equals(variables.NAME.schema, standard_schema);
+});
+
+test("DefineEnvVars passes schema-less declarations through unchanged", () => {
+	const variables = DefineEnvVars({
+		NAME: { description: "Plain non-empty string" },
+	});
+
+	assert_equals(variables.NAME.schema, undefined);
+	assert_equals(variables.NAME.description, "Plain non-empty string");
 });
