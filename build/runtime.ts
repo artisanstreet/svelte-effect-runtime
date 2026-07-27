@@ -31,6 +31,7 @@ const Main = Effect.gen(function* () {
 				mod: path.join(src_dir, "mod.ts"),
 				server: path.join(src_dir, "server.ts"),
 				compiler: path.join(src_dir, "compiler.ts"),
+				environment: path.join(src_dir, "environment.ts"),
 				"runtime/transform": path.join(src_dir, "runtime", "transform.ts"),
 				"internal/generators": path.join(src_dir, "internal", "generators.ts"),
 				"internal/remote-client": path.join(src_dir, "internal", "remote-client.ts"),

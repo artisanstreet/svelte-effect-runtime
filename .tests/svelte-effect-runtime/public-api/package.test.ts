@@ -27,6 +27,7 @@ const PackedManifestSchema = Schema.Struct({
 });
 const ModuleExportsSchema = Schema.Struct({
 	compiler: Schema.Array(Schema.String),
+	environment: Schema.Array(Schema.String),
 	root: Schema.Array(Schema.String),
 });
 const BrowserProbeSchema = Schema.Struct({
@@ -47,6 +48,7 @@ const required_entrypoints = [
 	".",
 	"./server",
 	"./compiler",
+	"./environment",
 	"./runtime/transform",
 	"./internal/generators",
 	"./internal/remote-client",
@@ -60,6 +62,7 @@ const required_root_exports = [
 	"BatchQueryHandlerMissingError",
 	"ClientRuntime",
 	"Command",
+	"DefineEnvVars",
 	"DispatcherDisposedError",
 	"EmptyStreamYieldError",
 	"Error",
@@ -223,7 +226,7 @@ test("packed compiler bridge loads at the minimum supported SvelteKit peer", asy
 	});
 }, 180_000);
 
-test("packed root and compiler entrypoints expose the runtime API through Node resolution", async () => {
+test("packed public entrypoints expose the runtime API through Node resolution", async () => {
 	const artifact = await ensure_packed_artifact();
 	const versions = await read_primary_dependency_versions();
 	const workspace = await prepare_workspace("public-imports", artifact, {
@@ -235,7 +238,8 @@ test("packed root and compiler entrypoints expose the runtime API through Node r
 	const probe = [
 		"const root = await import('svelte-effect-runtime');",
 		"const compiler = await import('svelte-effect-runtime/compiler');",
-		"console.log(JSON.stringify({ root: Object.keys(root), compiler: Object.keys(compiler) }));",
+		"const environment = await import('svelte-effect-runtime/environment');",
+		"console.log(JSON.stringify({ root: Object.keys(root), compiler: Object.keys(compiler), environment: Object.keys(environment) }));",
 	].join("\n");
 	const result = run_command(
 		process.execPath,
@@ -249,6 +253,7 @@ test("packed root and compiler entrypoints expose the runtime API through Node r
 
 	expect([...observed.root].sort()).toEqual([...required_root_exports].sort());
 	expect([...observed.compiler].sort()).toEqual(["effect", "rewrite_remote_client_exports"]);
+	expect([...observed.environment].sort()).toEqual(["DefineEnvVars"]);
 }, 180_000);
 
 test("packed browser and server entrypoints preserve their runtime boundaries", async () => {

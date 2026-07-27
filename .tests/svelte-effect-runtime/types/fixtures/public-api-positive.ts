@@ -1,9 +1,11 @@
 import type {
+	EnvironmentSchemaOutput,
 	EffectRemoteCommandCall,
 	RemoteFailure,
 	RemoteLiveStream,
 } from "svelte-effect-runtime";
-import { ClientRuntime, Live } from "svelte-effect-runtime";
+import { ClientRuntime, DefineEnvVars, Live } from "svelte-effect-runtime";
+import { DefineEnvVars as EnvironmentDefineEnvVars } from "svelte-effect-runtime/environment";
 import { Effect, Schema, Stream } from "effect";
 import {
 	Command,
@@ -36,6 +38,10 @@ const CreateUser = Form(Schema.Struct({ name: Schema.NonEmptyString }), ({ data 
 );
 const GetBuildLabel = Prerender(() => Effect.succeed("packed"));
 const LoadUser = Handler<NativeHandler>(({ id }) => Effect.succeed({ id }));
+const variables = DefineEnvVars({
+	PORT: { schema: Schema.NumberFromString },
+	PUBLIC_ORIGIN: { public: true, schema: Schema.URLFromString },
+});
 
 const get_user_effect: Effect.Effect<
 	{ readonly id: string },
@@ -72,6 +78,10 @@ type CreateUserParameters = Assert<
 	Equal<Parameters<typeof CreateUser>, [input: { readonly name: string }]>
 >;
 type LoadUserResult = Assert<Equal<Awaited<ReturnType<typeof LoadUser>>, { readonly id: string }>>;
+type PortOutput = Assert<Equal<EnvironmentSchemaOutput<typeof variables.PORT.schema>, number>>;
+type PublicOriginOutput = Assert<
+	Equal<EnvironmentSchemaOutput<typeof variables.PUBLIC_ORIGIN.schema>, URL>
+>;
 
 void get_user_effect;
 void get_user_index_effect;
@@ -86,7 +96,11 @@ void client_runtime_make;
 void server_runtime_make;
 void plugin;
 void rewrite;
+void EnvironmentDefineEnvVars;
+void variables;
 void (undefined as unknown as GetUserParameters);
 void (undefined as unknown as SaveUserParameters);
 void (undefined as unknown as CreateUserParameters);
 void (undefined as unknown as LoadUserResult);
+void (undefined as unknown as PortOutput);
+void (undefined as unknown as PublicOriginOutput);

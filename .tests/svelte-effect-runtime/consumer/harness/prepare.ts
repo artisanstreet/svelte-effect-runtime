@@ -6,7 +6,7 @@ import {
 	make_targets,
 } from "../../unit/harness/target.ts";
 import { read_packed_artifact_version } from "./artifact-manifest.ts";
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { render_fixture_sveltekit_config } from "./fixture-config.ts";
 import { resolve_sveltekit_profiles } from "./sveltekit-profiles.ts";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -442,8 +442,17 @@ async function prepare_application(
 		checker_path,
 	);
 
-	if (target.fixture === "stable") {
+	/**
+	 * Only the candidate application receives the candidate overlay. The stable
+	 * application shares the candidate fixture name but runs the released
+	 * package, which cannot satisfy overlay files that exercise unreleased API.
+	 */
+	if (target.name === "candidate") {
 		await cp(target_adapter_dir, application_dir, { force: true, recursive: true });
+
+		if (!profile.supports_explicit_environment) {
+			await remove_explicit_environment_fixture(application_dir);
+		}
 	}
 
 	await prepare_adapter_workspace(workspace_path);
@@ -492,6 +501,8 @@ async function prepare_application(
 	}
 
 	await writeFile(manifest_path, rendered_manifest);
+
+	await write_application_inventory(application_dir, evidence_root, target.name);
 
 	await run_phase(
 		corepack,
@@ -574,6 +585,57 @@ async function verify_adapter_output(
 	if (!resolves_to_build) {
 		throw new Error(`Adapter output must resolve its static root to ${build_dir}.`);
 	}
+}
+
+/** Remove environment fixture files on SvelteKit versions without explicit environment variables. */
+async function remove_explicit_environment_fixture(application_dir: string): Promise<void> {
+	const environment_paths = [
+		join(application_dir, "src", "env.ts"),
+		join(application_dir, "src", "lib", "components", "environment-page.svelte"),
+		join(application_dir, "src", "routes", "environment"),
+		join(application_dir, "src", "routes", "api", "environment"),
+	];
+
+	await Promise.all(environment_paths.map((path) => rm(path, { force: true, recursive: true })));
+}
+
+/** Record the application's source tree so evidence shows what each phase ran against. */
+async function write_application_inventory(
+	application_dir: string,
+	evidence_root: string,
+	target: TargetName,
+): Promise<void> {
+	const skipped = new Set(["node_modules", ".artifacts", ".harness", ".svelte-kit"]);
+	const files = await list_application_files(application_dir, application_dir, skipped);
+	const target_dir = join(evidence_root, target);
+
+	await mkdir(target_dir, { recursive: true });
+	await writeFile(join(target_dir, "inventory.txt"), `${files.sort().join("\n")}\n`);
+}
+
+async function list_application_files(
+	root: string,
+	directory: string,
+	skipped: ReadonlySet<string>,
+): Promise<ReadonlyArray<string>> {
+	const entries = await readdir(directory, { withFileTypes: true });
+	const nested = await Promise.all(
+		entries.map((entry) => {
+			if (skipped.has(entry.name)) {
+				return Promise.resolve<ReadonlyArray<string>>([]);
+			}
+
+			const path = join(directory, entry.name);
+
+			if (entry.isDirectory()) {
+				return list_application_files(root, path, skipped);
+			}
+
+			return Promise.resolve([relative(root, path).replaceAll("\\", "/")]);
+		}),
+	);
+
+	return nested.flat();
 }
 
 async function prepare_adapter_workspace(workspace_path: string): Promise<void> {
