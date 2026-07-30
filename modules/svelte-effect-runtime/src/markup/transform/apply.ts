@@ -71,7 +71,9 @@ export function inject_helpers(
 		return {
 			start: instance_script.content_end,
 			text,
-			extra_insertions: scope_text ? [{ start: instance_script.content_start, text: scope_text }] : [],
+			extra_insertions: scope_text
+				? [{ start: instance_script.content_start, text: scope_text }]
+				: [],
 			relocations: make_insertion_relocations(helper_segments, "\n"),
 		};
 	} else {
@@ -100,16 +102,19 @@ export function make_markup_helper_bindings(
 		collect_script_binding_names(script.text),
 	);
 	const markup_identifier_names = collect_markup_identifier_names(source_scan);
+	const detected_scope_name = extract_script_scope_binding(source_scan.scripts);
 	const name_allocator = make_name_allocator([
 		...script_binding_names,
 		...markup_identifier_names,
 	]);
 
+	const scope = detected_scope_name ?? name_allocator.reserve(default_helper_bindings.scope);
+
 	const bindings = {
 		codes: name_allocator.reserve(default_helper_bindings.codes),
 		dispatcher: name_allocator.reserve(default_helper_bindings.dispatcher),
 		yieldable: name_allocator.reserve(default_helper_bindings.yieldable),
-		scope: default_helper_bindings.scope,
+		scope,
 	};
 
 	const is_server_target = target === "server";
@@ -120,15 +125,13 @@ export function make_markup_helper_bindings(
 	 * component for client/editor targets — reserve the names the injected scope
 	 * wiring needs so markup emit calls still have a scope to enter.
 	 */
-	const scope_present = script_binding_names.includes(default_helper_bindings.scope);
+	const scope_present = detected_scope_name !== undefined;
 	const scope_wiring = scope_present
 		? undefined
 		: {
 				component_scope_ref: name_allocator.reserve("ComponentScopeRef"),
 				get_dispatcher: name_allocator.reserve("get_dispatcher"),
-				...(is_server_target
-					? {}
-					: { on_destroy: name_allocator.reserve("onDestroy") }),
+				...(is_server_target ? {} : { on_destroy: name_allocator.reserve("onDestroy") }),
 			};
 
 	return {
@@ -335,6 +338,98 @@ function collect_script_binding_names(script_content: string): string[] {
 	);
 
 	return collect_top_level_binding_names(source_file);
+}
+
+function extract_script_scope_binding(
+	scripts: ReadonlyArray<{ readonly text: string }>,
+): string | undefined {
+	for (const { text } of scripts) {
+		const source_file = ts.createSourceFile(
+			"markup-script.ts",
+			text,
+			ts.ScriptTarget.Latest,
+			true,
+			ts.ScriptKind.TS,
+		);
+
+		const component_scope_refs = collect_component_scope_ref_names(source_file);
+
+		for (const stmt of source_file.statements) {
+			if (!ts.isVariableStatement(stmt)) {
+				continue;
+			}
+
+			for (const decl of stmt.declarationList.declarations) {
+				if (!ts.isIdentifier(decl.name)) {
+					continue;
+				}
+
+				if (!is_generated_scope_name(decl.name.text)) {
+					continue;
+				}
+
+				if (!decl.initializer || !ts.isNewExpression(decl.initializer)) {
+					continue;
+				}
+
+				if (
+					ts.isIdentifier(decl.initializer.expression) &&
+					component_scope_refs.has(decl.initializer.expression.text)
+				) {
+					return decl.name.text;
+				}
+
+				if (
+					ts.isPropertyAccessExpression(decl.initializer.expression) &&
+					ts.isIdentifier(decl.initializer.expression.expression) &&
+					component_scope_refs.has(decl.initializer.expression.expression.text) &&
+					decl.initializer.expression.name.text === "ComponentScopeRef"
+				) {
+					return decl.name.text;
+				}
+			}
+		}
+	}
+
+	return undefined;
+}
+
+function collect_component_scope_ref_names(source_file: ts.SourceFile): Set<string> {
+	const scope_ref_names = new Set(["ComponentScopeRef"]);
+
+	for (const stmt of source_file.statements) {
+		if (
+			!ts.isImportDeclaration(stmt) ||
+			!ts.isStringLiteral(stmt.moduleSpecifier) ||
+			stmt.moduleSpecifier.text !== "svelte-effect-runtime/internal/generators"
+		) {
+			continue;
+		}
+
+		const clause = stmt.importClause;
+
+		if (!clause || clause.isTypeOnly) {
+			continue;
+		}
+
+		const named_bindings = clause.namedBindings;
+
+		if (!named_bindings || !ts.isNamedImports(named_bindings)) {
+			continue;
+		}
+
+		for (const element of named_bindings.elements) {
+			if (element.propertyName?.text === "ComponentScopeRef") {
+				scope_ref_names.add(element.name.text);
+			}
+		}
+	}
+
+	return scope_ref_names;
+}
+
+function is_generated_scope_name(name: string): boolean {
+	return /^__SER___scope(?:_\d+)?$/.test(name);
 }
 
 function make_name_allocator(initial_names: readonly string[]): {

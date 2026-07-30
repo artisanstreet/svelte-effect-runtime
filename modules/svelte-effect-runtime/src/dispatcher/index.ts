@@ -188,6 +188,13 @@ export class Dispatcher {
 			throw new ScopeDisposedError();
 		}
 
+		const scope_id = this.#scope_ids.get(scope);
+
+		if (scope_id !== undefined) {
+			this.#scope_ids.delete(scope);
+			this.#clear_scope_cache(scope_id);
+		}
+
 		scope.dispose();
 		this.#runtime.runFork(scope.close_effect as Effect.Effect<unknown, unknown, unknown>);
 	}
@@ -310,8 +317,37 @@ export class Dispatcher {
 			return Promise.reject(new DispatcherDisposedError());
 		}
 
-		const Program = Effect.gen(function* () {
+		const scoped_effect = Effect.gen(function* () {
 			const result = yield* Effect.exit(effect);
+
+			if (Exit.isSuccess(result)) {
+				return result.value;
+			}
+
+			if (Cause.hasInterruptsOnly(result.cause)) {
+				return undefined as A;
+			}
+
+			const error = Cause.squash(result.cause);
+
+			if (isRedirect(error)) {
+				return undefined as A;
+			}
+
+			/**
+			 * Surface the failure without reporting it. Both the scoped and the
+			 * unscoped path funnel through `interpreted_program`, which reports
+			 * once, so reporting here would raise every failure twice.
+			 */
+			return yield* Effect.fail(error);
+		});
+
+		const scope = this.#current_scope;
+		const materialized_program = scope
+			? Effect.flatMap(scope.fork_in(scoped_effect), (fiber) => Fiber.await(fiber))
+			: Effect.exit(scoped_effect);
+		const interpreted_program = Effect.gen(function* () {
+			const result = yield* materialized_program;
 
 			if (Exit.isSuccess(result)) {
 				return result.value;
@@ -336,13 +372,7 @@ export class Dispatcher {
 			return yield* Effect.fail(error);
 		});
 
-		const scope = this.#current_scope;
-
-		return this.#runtime.runPromise(
-			(scope
-				? Effect.provideService(Program, Scope.Scope, scope.underlying)
-				: Program) as Effect.Effect<A, unknown, unknown>,
-		);
+		return this.#runtime.runPromise(interpreted_program as Effect.Effect<A, unknown, unknown>);
 	}
 
 	#emit_markup_value<A, F>(event: MarkupValueEvent<A, F>): A | F {
@@ -441,6 +471,31 @@ export class Dispatcher {
 		return next;
 	}
 
+	#clear_scope_cache(scope_id: string): void {
+		const value_prefix = `${scope_id}|`;
+		const promise_prefix = `${scope_id}|`;
+
+		for (const [cache_id, cache_key] of this.#value_ids) {
+			if (!cache_id.startsWith(value_prefix)) {
+				continue;
+			}
+
+			this.#value_ids.delete(cache_id);
+			this.#interrupt_cached_fiber(cache_key);
+			this.#delete_value_cell(cache_key);
+		}
+
+		for (const [cache_id, cache_key] of this.#promise_ids) {
+			if (!cache_id.startsWith(promise_prefix)) {
+				continue;
+			}
+
+			this.#promise_ids.delete(cache_id);
+			this.#promise_values.delete(cache_key);
+			this.#interrupt_cached_fiber(cache_key);
+		}
+	}
+
 	#make_scoped_id(scope_id: string, id: string): string {
 		return `${scope_id}|${id}`;
 	}
@@ -468,44 +523,81 @@ export class Dispatcher {
 
 			return result;
 		});
-		/**
-		 * Provide the active component scope so scoped acquisition works and
-		 * finalizers run when the scope closes on unmount. Interruption of an
-		 * individual run does not close the component scope; its finalizers
-		 * run at scope disposal, matching the component lifetime.
-		 */
 		const scope = this.#current_scope;
-		const ScopedProgram = scope
-			? Effect.provideService(Program, Scope.Scope, scope.underlying)
-			: Program;
-		const fiber = this.#runtime.runFork(ScopedProgram as Effect.Effect<unknown, unknown, unknown>);
 
-		this.#fibers.set(cache_key, fiber);
+		if (!scope) {
+			const fiber = this.#runtime.runFork(
+				Program as Effect.Effect<unknown, unknown, unknown>,
+			);
 
-		queueMicrotask(() => {
-			if (!this.#is_current_fiber(cache_key, fiber)) {
-				return;
-			}
+			this.#fibers.set(cache_key, fiber);
 
-			if (this.#value_cells.has(cache_key)) {
-				return;
-			}
+			queueMicrotask(() => {
+				if (!this.#is_current_fiber(cache_key, fiber)) {
+					return;
+				}
 
-			this.#set_value_cell(cache_key, {
-				status: "pending",
-				fiber,
+				if (this.#value_cells.has(cache_key)) {
+					return;
+				}
+
+				this.#set_value_cell(cache_key, {
+					status: "pending",
+					fiber,
+				});
 			});
-		});
 
-		this.#runtime.runFork(
-			WatchFiberExit({
-				fiber,
-				surface_failure: false,
-				on_complete: () => this.#complete_fiber(cache_key, fiber),
-				on_success: (value) => this.#publish_value_success(cache_key, fiber, value),
-				on_failure: (error) => this.#publish_value_failure(cache_key, fiber, error),
-			}),
+			this.#runtime.runFork(
+				WatchFiberExit({
+					fiber,
+					surface_failure: false,
+					on_complete: () => this.#complete_fiber(cache_key, fiber),
+					on_success: (value) => this.#publish_value_success(cache_key, fiber, value),
+					on_failure: (error) => this.#publish_value_failure(cache_key, fiber, error),
+				}),
+			);
+
+			return;
+		}
+
+		const launch_fiber = this.#runtime.runFork(
+			Effect.flatMap(scope.fork_in(Program), (scoped_fiber) => {
+				if (this.#is_current_fiber(cache_key, launch_fiber)) {
+					this.#fibers.set(cache_key, scoped_fiber);
+				}
+
+				queueMicrotask(() => {
+					if (!this.#is_current_fiber(cache_key, scoped_fiber)) {
+						return;
+					}
+
+					this.#runtime.runFork(
+						WatchFiberExit({
+							fiber: scoped_fiber,
+							surface_failure: false,
+							on_complete: () => this.#complete_fiber(cache_key, scoped_fiber),
+							on_success: (value) =>
+								this.#publish_value_success(cache_key, scoped_fiber, value),
+							on_failure: (error) =>
+								this.#publish_value_failure(cache_key, scoped_fiber, error),
+						}),
+					);
+
+					if (this.#value_cells.has(cache_key)) {
+						return;
+					}
+
+					this.#set_value_cell(cache_key, {
+						status: "pending",
+						fiber: scoped_fiber,
+					});
+				});
+
+				return Effect.asVoid(Fiber.await(scoped_fiber));
+			}) as Effect.Effect<unknown, unknown, unknown>,
 		);
+
+		this.#fibers.set(cache_key, launch_fiber);
 	}
 
 	#start_promise_fiber<A>(
@@ -518,42 +610,81 @@ export class Dispatcher {
 
 			return result;
 		});
-		/**
-		 * See #start_value_fiber: the component scope is provided ambiently so
-		 * scoped acquisition works and finalizers run on unmount.
-		 */
 		const scope = this.#current_scope;
-		const ScopedProgram = scope
-			? Effect.provideService(Program, Scope.Scope, scope.underlying)
-			: Program;
-		const fiber = this.#runtime.runFork(ScopedProgram as Effect.Effect<unknown, unknown, unknown>);
-		const ReleaseFiber = Effect.sync(() => {
-			if (!this.#is_current_fiber(cache_key, fiber)) {
-				return;
-			}
 
-			this.#fibers.delete(cache_key);
-			this.#promise_values.delete(cache_key);
+		/** Generator bodies passed to `Effect.gen` carry their own `this`. */
+		const dispatcher = this;
 
-			if (this.#promise_ids.get(cache_id) === cache_key) {
-				this.#promise_ids.delete(cache_id);
-			}
-		});
-		const AwaitFiber = Effect.gen(function* () {
-			const exit = yield* Fiber.await(fiber);
+		if (!scope) {
+			const fiber = this.#runtime.runFork(
+				Program as Effect.Effect<unknown, unknown, unknown>,
+			);
+			const ReleaseFiber = Effect.sync(() => {
+				if (!this.#is_current_fiber(cache_key, fiber)) {
+					return;
+				}
 
-			yield* ReleaseFiber;
+				this.#fibers.delete(cache_key);
+				this.#promise_values.delete(cache_key);
 
-			if (Exit.isSuccess(exit)) {
-				return exit.value as A;
-			}
+				if (this.#promise_ids.get(cache_id) === cache_key) {
+					this.#promise_ids.delete(cache_id);
+				}
+			});
+			const AwaitFiber = Effect.gen(function* () {
+				const exit = yield* Fiber.await(fiber);
 
-			return yield* Effect.fail(Cause.squash(exit.cause));
-		});
+				yield* ReleaseFiber;
 
-		this.#fibers.set(cache_key, fiber);
+				if (Exit.isSuccess(exit)) {
+					return exit.value as A;
+				}
 
-		return this.#runtime.runPromise(AwaitFiber);
+				return yield* Effect.fail(Cause.squash(exit.cause));
+			});
+
+			this.#fibers.set(cache_key, fiber);
+			this.#promise_values.set(cache_key, this.#runtime.runPromise(AwaitFiber));
+
+			return this.#promise_values.get(cache_key) as Promise<A>;
+		}
+
+		const promise = this.#runtime.runPromise(
+			Effect.gen(function* () {
+				const scoped_fiber = yield* scope.fork_in(Program);
+
+				dispatcher.#fibers.set(cache_key, scoped_fiber);
+				dispatcher.#runtime.runFork(
+					WatchFiberExit({
+						fiber: scoped_fiber,
+						on_complete: () => {
+							if (!dispatcher.#is_current_fiber(cache_key, scoped_fiber)) {
+								return;
+							}
+
+							dispatcher.#fibers.delete(cache_key);
+							dispatcher.#promise_values.delete(cache_key);
+
+							if (dispatcher.#promise_ids.get(cache_id) === cache_key) {
+								dispatcher.#promise_ids.delete(cache_id);
+							}
+						},
+					}),
+				);
+
+				const exit = yield* Fiber.await(scoped_fiber);
+
+				if (Exit.isSuccess(exit)) {
+					return exit.value as A;
+				}
+
+				return yield* Effect.fail(Cause.squash(exit.cause));
+			}),
+		);
+
+		this.#promise_values.set(cache_key, promise);
+
+		return promise;
 	}
 
 	#clear_pending_value_cell(
@@ -667,6 +798,7 @@ export function reset_dispatcher(): void {
 export class ComponentScopeRef {
 	readonly #get_dispatcher: () => Dispatcher;
 	#scope: ComponentScope | undefined;
+	#disposed = false;
 
 	constructor(get_dispatcher_fn: () => Dispatcher) {
 		this.#get_dispatcher = get_dispatcher_fn;
@@ -674,6 +806,10 @@ export class ComponentScopeRef {
 
 	/** The component scope, creating it on first access. */
 	get scope(): ComponentScope {
+		if (this.#disposed) {
+			throw new ScopeDisposedError();
+		}
+
 		this.#scope ??= this.#get_dispatcher().begin_scope();
 
 		return this.#scope;
@@ -681,6 +817,8 @@ export class ComponentScopeRef {
 
 	/** Disposes the scope if it was created. Idempotent. */
 	dispose(): void {
+		this.#disposed = true;
+
 		const scope = this.#scope;
 		this.#scope = undefined;
 

@@ -107,6 +107,7 @@ export function has_local_import_binding(
 	source_file: ts.SourceFile,
 	module_name: string,
 	local_name: string,
+	allow_namespace_import = true,
 ): boolean {
 	return source_file.statements.some((stmt) => {
 		if (
@@ -134,7 +135,7 @@ export function has_local_import_binding(
 		}
 
 		if (ts.isNamespaceImport(named_bindings)) {
-			return named_bindings.name.text === local_name;
+			return allow_namespace_import && named_bindings.name.text === local_name;
 		}
 
 		return named_bindings.elements.some(

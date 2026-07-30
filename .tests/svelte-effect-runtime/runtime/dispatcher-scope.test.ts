@@ -2,9 +2,7 @@ import {
 	Dispatcher,
 	ComponentScope,
 } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
-import {
-	ScopeDisposedError,
-} from "../../../modules/svelte-effect-runtime/src/mod.ts";
+import { ScopeDisposedError } from "../../../modules/svelte-effect-runtime/src/mod.ts";
 import { assert_equals, assert_throws } from "../unit/helpers/assert.ts";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { test } from "vitest";
@@ -135,10 +133,7 @@ test("run_scoped rejects a scope that belongs to another dispatcher", () => {
 	const d2 = make_dispatcher();
 	const foreign = d1.begin_scope();
 
-	assert_throws(
-		() => d2.run_scoped(foreign, Effect.succeed(1)),
-		ScopeDisposedError,
-	);
+	assert_throws(() => d2.run_scoped(foreign, Effect.succeed(1)), ScopeDisposedError);
 
 	d1.dispose();
 	d2.dispose();
@@ -211,10 +206,7 @@ test("dispose_scope rejects an open scope owned by another dispatcher", () => {
 	const d2 = make_dispatcher();
 	const foreign = d1.begin_scope();
 
-	assert_throws(
-		() => d2.dispose_scope(foreign),
-		ScopeDisposedError,
-	);
+	assert_throws(() => d2.dispose_scope(foreign), ScopeDisposedError);
 
 	// The foreign scope is left untouched and still owned by d1.
 	assert_equals(foreign.disposed, false);
@@ -357,4 +349,3 @@ test("execution outside with_scope is not bound to any component scope", async (
 
 	d.dispose();
 });
-

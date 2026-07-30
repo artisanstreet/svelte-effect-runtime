@@ -162,7 +162,12 @@ function emit_replacement(
 	} else if (kind === "html") {
 		const effect = make_inline_effect(normalized_candidate, helper_bindings);
 
-		replacement_text = emit_await_expression(id_text, effect, helper_bindings);
+		replacement_text = emit_await_expression(
+			id_text,
+			effect,
+			helper_bindings,
+			server_fallback(is_server_target, "undefined"),
+		);
 		helpers = normalized.helpers;
 		relocation = make_pending_relocation(
 			candidate,
@@ -212,7 +217,7 @@ function make_event_handler(
 	return {
 		expr_text: wrapped_expr_text,
 		relocation: make_yield_operand_relocation(expr_text, wrapped_expr_text, helper_bindings),
-		text: `(event) => { ${helper_bindings.dispatcher}.with_scope(${helper_bindings.scope}.scope, () => ${helper_bindings.dispatcher}.emit({ type: ${helper_bindings.codes}.Markup.Run, fn: function* () { ${wrapped_expr_text}; } })); }`,
+		text: `(event) => { ${helper_bindings.dispatcher}.emit({ type: ${helper_bindings.codes}.Markup.Run, fn: function* () { ${wrapped_expr_text}; } }); }`,
 	};
 }
 

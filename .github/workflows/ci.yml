@@ -715,6 +715,7 @@ jobs:
         name: Prepare GitHub release
         if: >-
             always() &&
+            !cancelled() &&
             github.event_name == 'workflow_dispatch' &&
             github.ref == 'refs/heads/candidate' &&
             (inputs.mode == 'release' || inputs.mode == 'resume') &&
@@ -802,6 +803,7 @@ jobs:
         name: Publish npm
         if: >-
             always() &&
+            !cancelled() &&
             github.event_name == 'workflow_dispatch' &&
             github.ref == 'refs/heads/candidate' &&
             (inputs.mode == 'release' || inputs.mode == 'resume') &&
@@ -855,6 +857,7 @@ jobs:
         name: Publish GitHub assets
         if: >-
             always() &&
+            !cancelled() &&
             github.event_name == 'workflow_dispatch' &&
             github.ref == 'refs/heads/candidate' &&
             (inputs.mode == 'release' || inputs.mode == 'resume') &&
@@ -907,6 +910,7 @@ jobs:
         name: Publish OpenVSX
         if: >-
             always() &&
+            !cancelled() &&
             github.event_name == 'workflow_dispatch' &&
             github.ref == 'refs/heads/candidate' &&
             (inputs.mode == 'release' || inputs.mode == 'resume') &&
@@ -963,6 +967,7 @@ jobs:
         name: Finalize GitHub release
         if: >-
             always() &&
+            !cancelled() &&
             github.event_name == 'workflow_dispatch' &&
             github.ref == 'refs/heads/candidate' &&
             (inputs.mode == 'release' || inputs.mode == 'resume') &&

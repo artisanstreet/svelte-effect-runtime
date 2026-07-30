@@ -60,4 +60,4 @@ function* __SER___markup_effect_2084_2114() { return (yield* ToEffect_1(Effect.s
 {/if}
 {@html await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise, id: "Representative.svelte:2026:2064", deps: [Effect], fn: () => (function* () { return (yield* ToEffect_1(Effect.succeed("<em>html</em>"))); })() }))}
 {@render rendered(await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise, id: "Representative.svelte:2084:2114", deps: [Effect, doubled], fn: () => __SER___markup_effect_2084_2114() })))}
-<button onclick={(event) => { Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* ToEffect_1(Increment); } })); }}>increment</button>
+<button onclick={(event) => { Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* ToEffect_1(Increment); } }); }}>increment</button>

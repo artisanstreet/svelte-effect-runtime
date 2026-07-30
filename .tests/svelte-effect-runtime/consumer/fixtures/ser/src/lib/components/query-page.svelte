@@ -5,6 +5,7 @@
 		GetSlowQuery,
 	} from "$lib/conformance.remote";
 	import { Effect } from "effect";
+	import { normalize_error } from "$lib/normalize-error.ts";
 
 	import NativePrerenderQuery from "$lib/components/native-prerender-query.svelte";
 
@@ -45,20 +46,7 @@
 		failure_error = yield* NormalizeError(FailureResource.error);
 	});
 
-	const NormalizeError = (error: unknown) =>
-		Effect.gen(function* () {
-			if (!error || typeof error !== "object") {
-				return String(error);
-			}
-
-			const body = Reflect.get(error, "body");
-			const body_message =
-				body && typeof body === "object" ? Reflect.get(body, "message") : undefined;
-			const message = Reflect.get(error, "message");
-			const status = Reflect.get(error, "status");
-
-			return `${typeof status === "number" ? status : 0}:${typeof body_message === "string" ? body_message : typeof message === "string" ? message : "unknown"}`;
-		});
+	const NormalizeError = (error: unknown) => normalize_error(error);
 </script>
 
 <p data-testid="cache">{cache.key}:{cache.invocation}</p>

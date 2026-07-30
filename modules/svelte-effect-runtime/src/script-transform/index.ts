@@ -56,7 +56,6 @@ export function transform_script_effect(
 ): ScriptTransformResult {
 	let temp_counter = 0;
 	const target = options.target ?? "client";
-	const is_server_target = target === "server";
 
 	const source_file = ts.createSourceFile(
 		filename,
@@ -89,7 +88,12 @@ export function transform_script_effect(
 	);
 
 	const has_untrack_import = has_local_import_binding(source_file, "svelte", "untrack");
-	const has_on_destroy_import = has_local_import_binding(source_file, "svelte", "onDestroy");
+	const has_on_destroy_import = has_local_import_binding(
+		source_file,
+		"svelte",
+		"onDestroy",
+		false,
+	);
 
 	const reserve_runtime_import = (name: string) =>
 		top_level_binding_names_set.has(name)
@@ -148,6 +152,7 @@ export function transform_script_effect(
 		}
 
 		has_effect = true;
+
 		const lowered = lower_statement(stmt, content, context);
 
 		first_effect_statement_start = Math.min(first_effect_statement_start, lowered.range.start);
@@ -195,7 +200,7 @@ export function transform_script_effect(
 			needs_dispatcher: effect_blocks.length > 0 || uses_dispatcher_promise,
 			needs_effect: effect_blocks.length > 0,
 			needs_untrack: effect_blocks.length > 0,
-			needs_on_destroy: !is_server_target,
+			needs_on_destroy: true,
 			needs_yield_success: uses_yield_success_types,
 			needs_yieldable: effect_blocks.length > 0 || uses_dispatcher_promise,
 			needs_scope_ref: true,
@@ -203,6 +208,9 @@ export function transform_script_effect(
 	);
 
 	const last_import = [...source_file.statements].reverse().find(ts.isImportDeclaration);
+	const injection_point = last_import
+		? Math.min(last_import.end, first_effect_statement_start)
+		: first_effect_statement_start;
 
 	/**
 	 * The scope holder is created synchronously with the imports so it exists
@@ -212,15 +220,17 @@ export function transform_script_effect(
 	 */
 	const scope_wiring = [
 		`const ${runtime_bindings.scope} = new ${runtime_bindings.component_scope_ref}(${runtime_bindings.dispatcher});`,
-		...(!is_server_target
-			? [`${runtime_bindings.on_destroy}(() => ${runtime_bindings.scope}.dispose());`]
-			: []),
+		...(target === "server"
+			? []
+			: [`${runtime_bindings.on_destroy}(() => ${runtime_bindings.scope}.dispose());`]),
 	].join("\n");
 
 	const injected = [imports, scope_wiring].filter(Boolean).join("\n");
 
 	if (last_import && last_import.end <= first_effect_statement_start) {
 		magic.appendRight(last_import.end, "\n" + injected);
+	} else if (injection_point >= 0) {
+		magic.appendLeft(injection_point, injected + "\n");
 	} else {
 		magic.appendLeft(first_effect_statement_start, injected + "\n");
 	}
