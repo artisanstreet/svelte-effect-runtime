@@ -5,7 +5,7 @@
 		GetSlowQuery,
 	} from "$lib/conformance.remote";
 	import { Effect } from "effect";
-	import { normalize_error } from "$lib/normalize-error.ts";
+	import { normalize_error } from "$lib/normalize-error";
 
 	import NativePrerenderQuery from "$lib/components/native-prerender-query.svelte";
 

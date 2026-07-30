@@ -447,17 +447,16 @@ async function prepare_application(
 	);
 
 	/**
-	 * Each non-native target overlays its own fixture directory. The stable
-	 * overlay downgrades the sources that exercise unreleased API so the
-	 * released package still compiles, so applying the candidate overlay to
-	 * stable — or applying no overlay at all — breaks the stable application.
+	 * Only the candidate application receives the candidate overlay. The stable
+	 * application shares the candidate fixture name but runs the released
+	 * package, which cannot satisfy overlay files that exercise unreleased API.
 	 */
-	if (target.fixture !== "native") {
+	if (target.name === "candidate") {
 		await cp(target_adapter_dir, application_dir, { force: true, recursive: true });
-	}
 
-	if (target.name === "candidate" && !profile.supports_explicit_environment) {
-		await remove_explicit_environment_fixture(application_dir);
+		if (!profile.supports_explicit_environment) {
+			await remove_explicit_environment_fixture(application_dir);
+		}
 	}
 
 	await prepare_adapter_workspace(workspace_path);
