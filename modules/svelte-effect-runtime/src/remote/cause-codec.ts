@@ -1,7 +1,29 @@
+import type { OpaqueRemoteFailureReason } from "$/remote/diagnostics.ts";
 import { isHttpError, isRedirect, isValidationError } from "@sveltejs/kit";
 import { is_form_error, type FormIssue } from "$/remote/shared.ts";
 import { Cause, Schema } from "effect";
 import { stringify } from "devalue";
+
+/**
+ * Records that a failure lost its detail on the way to the client, so callers
+ * can report the original error instead of dropping it silently.
+ *
+ * @example
+ * ```ts
+ * const diagnostic: OpaqueRemoteFailure = { reason: "untagged", value: err };
+ * ```
+ *
+ * @since 4.2.0
+ */
+export type OpaqueRemoteFailure = {
+	readonly reason: OpaqueRemoteFailureReason;
+	readonly value: unknown;
+};
+
+type EncodedRemoteFailure = {
+	readonly encoded: string;
+	readonly opaque?: OpaqueRemoteFailure;
+};
 
 export type RemoteCauseResolution =
 	| {
@@ -19,6 +41,7 @@ export type RemoteCauseResolution =
 	| {
 			readonly _tag: "RemoteFailure";
 			readonly encoded: string;
+			readonly opaque?: OpaqueRemoteFailure;
 	  };
 
 /** Preserves SvelteKit control flow before classifying transportable Effect failures. */
@@ -48,28 +71,75 @@ export function classify_remote_cause(cause: Cause.Cause<unknown>): RemoteCauseR
 		};
 	}
 
+	const failure = encode_remote_failure_detailed(cause);
+
 	return {
 		_tag: "RemoteFailure",
-		encoded: encode_remote_failure(cause),
+		encoded: failure.encoded,
+		...(failure.opaque ? { opaque: failure.opaque } : {}),
 	};
 }
 
 /** Encodes a remote failure into the transport ABI shared with generated clients. */
 export function encode_remote_failure(cause: Cause.Cause<unknown>): string {
+	return encode_remote_failure_detailed(cause).encoded;
+}
+
+/**
+ * Encodes a remote failure and reports whether its detail survived encoding.
+ *
+ * @example
+ * ```ts
+ * const { encoded, opaque } = encode_remote_failure_detailed(cause);
+ * ```
+ *
+ * @since 4.2.0
+ * @param cause - Cause carrying the handler's failure.
+ * @returns The encoded payload and, when detail was lost, why.
+ */
+export function encode_remote_failure_detailed(cause: Cause.Cause<unknown>): EncodedRemoteFailure {
 	for (const reason of cause.reasons) {
 		if (!Cause.isFailReason(reason)) {
 			continue;
 		}
 
-		const failure = to_public_remote_failure(reason.error);
-		const encoded = stringify_failure(failure);
+		const tagged = has_public_remote_failure_tag(reason.error);
+
+		if (!tagged) {
+			return {
+				encoded: stringify_unknown_remote_failure(),
+				opaque: { reason: "untagged", value: reason.error },
+			};
+		}
+
+		const failure = to_serializable_public_failure(reason.error);
+		const encoded = failure === undefined ? undefined : stringify_failure(failure);
 
 		if (encoded !== undefined) {
-			return encoded;
+			return { encoded };
+		}
+
+		return {
+			encoded: stringify_unknown_remote_failure(),
+			opaque: { reason: "unserializable", value: reason.error },
+		};
+	}
+
+	return {
+		encoded: stringify_unknown_remote_failure(),
+		opaque: { reason: "unknown", value: find_defect(cause) },
+	};
+}
+
+/** Surfaces a defect so an unencodable cause still names something concrete. */
+function find_defect(cause: Cause.Cause<unknown>): unknown {
+	for (const reason of cause.reasons) {
+		if (Cause.isDieReason(reason)) {
+			return reason.defect;
 		}
 	}
 
-	return stringify_unknown_remote_failure();
+	return undefined;
 }
 
 function find_sveltekit_control_flow(cause: Cause.Cause<unknown>): unknown | undefined {
@@ -120,16 +190,6 @@ function stringify_failure(value: unknown): string | undefined {
 	} catch {
 		return undefined;
 	}
-}
-
-function to_public_remote_failure(value: unknown): unknown {
-	if (!has_public_remote_failure_tag(value)) {
-		return create_unknown_remote_failure();
-	}
-
-	const serializable_failure = to_serializable_public_failure(value);
-
-	return serializable_failure ?? create_unknown_remote_failure();
 }
 
 function to_serializable_public_failure(value: unknown, seen = new WeakSet<object>()): unknown {

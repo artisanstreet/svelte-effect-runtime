@@ -1,5 +1,9 @@
 import { error as svelte_error, invalid as svelte_invalid } from "@sveltejs/kit";
-import { run_remote_effect, throw_remote_cause } from "$/remote/server.ts";
+import {
+	run_remote_effect,
+	throw_remote_cause,
+	to_remote_failure_context,
+} from "$/remote/server.ts";
 import { RunInsideRemoteEffectHandler } from "./remote-handler-context.ts";
 import { get_server_runtime_or_throw, RequestEvent } from "./runtime.ts";
 import type { RequestEvent as RequestEventShape } from "./runtime.ts";
@@ -75,19 +79,32 @@ function run_live_source_effect<A>(
 		event,
 	) as Effect.Effect<ResolvedLiveSource<A>, unknown, unknown>;
 
-	return run_remote_effect(EffectWithRequestEvent, runtime, svelte_invalid, svelte_remote_error);
+	return run_remote_effect(
+		EffectWithRequestEvent,
+		runtime,
+		svelte_invalid,
+		svelte_remote_error,
+		to_remote_failure_context(event),
+	);
 }
 
 const ToLiveSourceEffect = <A>(value: LiveHandlerResult<A>, event: RequestEventShape) =>
-	Stream.toAsyncIterableEffect(preserve_live_source_cause(value)).pipe(
+	Stream.toAsyncIterableEffect(preserve_live_source_cause(value, event)).pipe(
 		Effect.map((source) => wrap_live_source_errors(source, event)),
 	) as Effect.Effect<ResolvedLiveSource<A>, unknown, unknown>;
 
-const preserve_live_source_cause = <A>(value: LiveHandlerResult<A>) =>
+const preserve_live_source_cause = <A>(value: LiveHandlerResult<A>, event: RequestEventShape) =>
 	value.pipe(
 		Stream.catchCause((cause) =>
 			Stream.fromEffect(
-				Effect.sync(() => throw_remote_cause(cause, svelte_invalid, svelte_remote_error)),
+				Effect.sync(() =>
+					throw_remote_cause(
+						cause,
+						svelte_invalid,
+						svelte_remote_error,
+						to_remote_failure_context(event),
+					),
+				),
 			),
 		),
 	);
@@ -154,7 +171,13 @@ export function run_handler_effect<A>(
 		event,
 	) as Effect.Effect<A, unknown, unknown>;
 
-	return run_remote_effect(EffectWithRequestEvent, runtime, svelte_invalid, svelte_remote_error);
+	return run_remote_effect(
+		EffectWithRequestEvent,
+		runtime,
+		svelte_invalid,
+		svelte_remote_error,
+		to_remote_failure_context(event),
+	);
 }
 
 const svelte_remote_error = (status: number, body: unknown): never => {

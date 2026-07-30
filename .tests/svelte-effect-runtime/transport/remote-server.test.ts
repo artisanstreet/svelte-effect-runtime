@@ -12,6 +12,7 @@ import {
 	normalize_remote_helper_error,
 	run_remote_effect,
 	throw_form_error,
+	throw_remote_cause,
 } from "../../../modules/svelte-effect-runtime/src/remote/server.ts";
 import {
 	error as svelte_error,
@@ -1251,6 +1252,103 @@ function set_passthrough_prerender(): void {
 		return (input: unknown) => handler(input);
 	});
 }
+
+test("an untagged failure is reported with its original error and cause", () => {
+	const failure = new Error("database password rejected");
+	const reports: string[] = [];
+
+	assert_throws(() =>
+		throw_remote_cause(
+			{ reasons: [{ _tag: "Fail", error: failure }] } as never,
+			() => {
+				throw new Error("invalid");
+			},
+			() => {
+				throw new Error("error");
+			},
+			{ method: "POST", route: "/api/[id]/checkout", url: "/api/7/checkout" },
+			(message: string) => reports.push(message),
+		),
+	);
+
+	const [report] = reports;
+
+	assert_equals(reports.length, 1);
+	assert_string_includes(report ?? "", "could not be sent to the client");
+	assert_string_includes(report ?? "", "no string `_tag`");
+	assert_string_includes(report ?? "", "POST /api/7/checkout (route /api/[id]/checkout)");
+	assert_string_includes(report ?? "", "database password rejected");
+	assert_string_includes(report ?? "", "Data.TaggedError");
+});
+
+test("a transportable tagged failure is not reported", () => {
+	const reports: string[] = [];
+
+	assert_throws(() =>
+		throw_remote_cause(
+			{ reasons: [{ _tag: "Fail", error: { _tag: "DbError", detail: "lost" } }] } as never,
+			() => {
+				throw new Error("invalid");
+			},
+			() => {
+				throw new Error("error");
+			},
+			undefined,
+			(message: string) => reports.push(message),
+		),
+	);
+
+	assert_equals(reports.length, 0);
+});
+
+test("an interrupted handler is reported as an interrupt", async () => {
+	const reports: string[] = [];
+	const exit = await get_server_dispatcher().run(Effect.exit(Effect.interrupt));
+
+	assert_throws(() =>
+		throw_remote_cause(
+			Exit.isFailure(exit) ? exit.cause : ({ reasons: [] } as never),
+			() => {
+				throw new Error("invalid");
+			},
+			() => {
+				throw new Error("error");
+			},
+			{ url: "/api/live" },
+			(message: string) => reports.push(message),
+		),
+	);
+
+	const [report] = reports;
+
+	assert_equals(reports.length, 1);
+	assert_string_includes(report ?? "", "interrupted before it produced a result");
+	assert_string_includes(report ?? "", "/api/live");
+});
+
+test("a defect with no failure reason still names the thrown value", () => {
+	const reports: string[] = [];
+
+	assert_throws(() =>
+		throw_remote_cause(
+			{ reasons: [{ _tag: "Die", defect: new Error("thrown outside Effect") }] } as never,
+			() => {
+				throw new Error("invalid");
+			},
+			() => {
+				throw new Error("error");
+			},
+			undefined,
+			(message: string) => reports.push(message),
+		),
+	);
+
+	const [report] = reports;
+
+	assert_equals(reports.length, 1);
+	assert_string_includes(report ?? "", "no failure reason");
+	assert_string_includes(report ?? "", "thrown outside Effect");
+});
 
 function make_request_event() {
 	return {

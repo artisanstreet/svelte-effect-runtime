@@ -1,5 +1,7 @@
 import { create_serialized_remote_failure_envelope } from "$/remote/shared.ts";
+import { report_opaque_remote_failure } from "$/remote/diagnostics.ts";
 import { RemoteHelperContextError, RemoteHelperError } from "$/errors.ts";
+import type { RemoteFailureContext } from "$/remote/diagnostics.ts";
 import { classify_remote_cause } from "$/remote/cause-codec.ts";
 import type { FormIssue } from "$/remote/shared.ts";
 import { Cause, Effect, Exit } from "effect";
@@ -23,6 +25,7 @@ export async function run_remote_effect<A>(
 	},
 	invalid: SvelteInvalid,
 	error: SvelteError,
+	context?: RemoteFailureContext,
 ): Promise<A> {
 	const exit: Exit.Exit<A, unknown> = (await runtime.runPromise(
 		Effect.exit(effect) as Effect.Effect<unknown, unknown, unknown>,
@@ -32,7 +35,7 @@ export async function run_remote_effect<A>(
 		return exit.value;
 	}
 
-	throw_remote_cause(exit.cause, invalid, error);
+	throw_remote_cause(exit.cause, invalid, error, context);
 }
 
 /** Applies a classified remote Cause decision to SvelteKit's server helpers. */
@@ -40,6 +43,8 @@ export function throw_remote_cause(
 	cause: Cause.Cause<unknown>,
 	invalid: SvelteInvalid,
 	error: SvelteError,
+	context?: RemoteFailureContext,
+	report?: (message: string) => void,
 ): never {
 	const resolution = classify_remote_cause(cause);
 
@@ -48,6 +53,14 @@ export function throw_remote_cause(
 			throw resolution.value;
 		}
 		case "InterruptOnly": {
+			report_opaque_remote_failure(
+				"interrupted",
+				resolution.cause,
+				undefined,
+				context,
+				report,
+			);
+
 			throw Cause.squash(resolution.cause);
 		}
 		case "FormInvalid": {
@@ -56,9 +69,51 @@ export function throw_remote_cause(
 		case "RemoteFailure": {
 			const envelope = create_serialized_remote_failure_envelope(resolution.encoded);
 
+			/**
+			 * The client only receives a generic 500 for a failure SER could not
+			 * encode, so the original error is reported here or lost entirely.
+			 */
+			if (resolution.opaque) {
+				report_opaque_remote_failure(
+					resolution.opaque.reason,
+					cause,
+					resolution.opaque.value,
+					context,
+					report,
+				);
+			}
+
 			error(500, envelope);
 		}
 	}
+}
+
+/**
+ * Describes the request a remote failure occurred in.
+ *
+ * @example
+ * ```ts
+ * const context = to_remote_failure_context(event);
+ * ```
+ *
+ * @since 4.2.0
+ * @param event - Request event the handler ran under.
+ * @returns Request detail for opaque failure reports.
+ */
+export function to_remote_failure_context(event: {
+	readonly request?: { readonly method?: string };
+	readonly route?: { readonly id?: string | null };
+	readonly url?: { readonly pathname?: string };
+}): RemoteFailureContext {
+	const method = event.request?.method;
+	const route = event.route?.id ?? undefined;
+	const url = event.url?.pathname;
+
+	return {
+		...(method ? { method } : {}),
+		...(route ? { route } : {}),
+		...(url ? { url } : {}),
+	};
 }
 
 export function throw_form_error(issues: readonly FormIssue[], invalid: SvelteInvalid): never {
