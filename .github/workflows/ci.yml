@@ -715,9 +715,9 @@ jobs:
         name: Prepare GitHub release
         if: >-
             always() &&
-            !cancelled() &&
             github.event_name == 'workflow_dispatch' &&
             github.ref == 'refs/heads/candidate' &&
+            !cancelled() &&
             (inputs.mode == 'release' || inputs.mode == 'resume') &&
             needs.plan.result == 'success' &&
             needs.candidate_verified.result == 'success' &&
@@ -803,9 +803,9 @@ jobs:
         name: Publish npm
         if: >-
             always() &&
-            !cancelled() &&
             github.event_name == 'workflow_dispatch' &&
             github.ref == 'refs/heads/candidate' &&
+            !cancelled() &&
             (inputs.mode == 'release' || inputs.mode == 'resume') &&
             needs.plan.result == 'success' &&
             needs.github_prepare.result == 'success'
@@ -857,9 +857,9 @@ jobs:
         name: Publish GitHub assets
         if: >-
             always() &&
-            !cancelled() &&
             github.event_name == 'workflow_dispatch' &&
             github.ref == 'refs/heads/candidate' &&
+            !cancelled() &&
             (inputs.mode == 'release' || inputs.mode == 'resume') &&
             needs.plan.result == 'success' &&
             needs.github_prepare.result == 'success'
@@ -910,9 +910,9 @@ jobs:
         name: Publish OpenVSX
         if: >-
             always() &&
-            !cancelled() &&
             github.event_name == 'workflow_dispatch' &&
             github.ref == 'refs/heads/candidate' &&
+            !cancelled() &&
             (inputs.mode == 'release' || inputs.mode == 'resume') &&
             needs.plan.result == 'success' &&
             needs.npm_publish.result == 'success'
@@ -967,9 +967,9 @@ jobs:
         name: Finalize GitHub release
         if: >-
             always() &&
-            !cancelled() &&
             github.event_name == 'workflow_dispatch' &&
             github.ref == 'refs/heads/candidate' &&
+            !cancelled() &&
             (inputs.mode == 'release' || inputs.mode == 'resume') &&
             needs.plan.result == 'success' &&
             needs.npm_publish.result == 'success' &&
