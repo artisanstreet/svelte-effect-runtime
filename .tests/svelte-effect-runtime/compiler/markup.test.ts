@@ -738,7 +738,7 @@ test("rewrites onclick event effect expressions as run wrappers", () => {
 	assert_string_includes(result.code, `Code.Markup.Run`);
 	assert_string_includes(
 		result.code,
-		`Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* ToEffect(trackEvent()); } });`,
+		`Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* ToEffect(trackEvent()); } }));`,
 	);
 	if (result.code.includes("void Code.Markup.Run")) {
 		throw new Error("event handler wrappers should not emit void");
@@ -755,7 +755,7 @@ test("rewrites event effect expressions with generated event parameter", () => {
 	assert_string_includes(result.code, `event.currentTarget.value`);
 	assert_string_includes(
 		result.code,
-		`Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* ToEffect(validate(event.currentTarget.value)); } });`,
+		`Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* ToEffect(validate(event.currentTarget.value)); } }));`,
 	);
 
 	compile(result.code, {
@@ -886,7 +886,7 @@ test("rewrites native-style form validation handlers only when marked with yield
 	assert_string_includes(result.code, `oninput={(event) =>`);
 	assert_string_includes(
 		result.code,
-		`Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* ToEffect(createPost.validate()); } });`,
+		`Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* ToEffect(createPost.validate()); } }));`,
 	);
 	assert_string_includes(result.code, `from "svelte-effect-runtime/internal/generators"`);
 	if (!result.has_yield) throw new Error("has_yield should be true");
@@ -915,7 +915,7 @@ test("injects dispatcher import when another generated helper import already exi
 	);
 	assert_string_includes(
 		result.code,
-		`Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* ToEffect(Effect.gen(function* () {`,
+		`Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* ToEffect(Effect.gen(function* () {`,
 	);
 
 	compile(result.code, {
