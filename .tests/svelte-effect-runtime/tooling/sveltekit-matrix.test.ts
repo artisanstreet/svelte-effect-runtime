@@ -11,16 +11,20 @@ test("supported SvelteKit profiles select peer-compatible adapter generations", 
 		{
 			name: "kit-2-stable",
 			adapter_node_version: "5.5.7",
+			generated_tsconfig_specifier: "./.svelte-kit/tsconfig.json",
 			supports_explicit_environment: false,
 			supports_paths_origin: false,
+			supports_subpath_lib_imports: false,
 			sveltekit_version: "2.69.3",
 		},
 		{
 			name: "kit-3-primary",
 			adapter_node_version: "6.0.0-next.3",
 			adapter_output_directory_module: "dir.js",
+			generated_tsconfig_specifier: "./.svelte-kit/tsconfig.json",
 			supports_explicit_environment: true,
 			supports_paths_origin: true,
+			supports_subpath_lib_imports: false,
 			sveltekit_version: "3.0.0-next.8",
 			unsupported_platforms: {
 				win32: {
@@ -75,10 +79,42 @@ test.each([
 test.each([
 	["2.68.0", "5.5.7"],
 	["3.0.0-next.8", "6.0.0-next.3"],
+	["3.0.0-next.9", "6.0.0-next.4"],
+	["3.0.0-next.10", "6.0.0-next.4"],
+	["3.0.0-next.11", "6.0.0-next.5"],
+	["3.0.0-next.13", "6.0.0-next.6"],
 ])("custom SvelteKit %s selects adapter-node %s", (sveltekit_version, adapter_node_version) => {
 	const [profile] = resolve_sveltekit_profiles({ SVELTEKIT_VERSION: sveltekit_version }, "linux");
 
 	expect(profile).toMatchObject({ adapter_node_version, sveltekit_version });
+});
+
+test.each([
+	["3.0.0-next.8", false, "./.svelte-kit/tsconfig.json"],
+	["3.0.0-next.9", true, "./.svelte-kit/tsconfig.json"],
+	["3.0.0-next.11", true, "./.svelte-kit/tsconfig.json"],
+	["3.0.0-next.12", true, "$app/tsconfig"],
+	["3.0.0-next.13", true, "$app/tsconfig"],
+])(
+	"custom SvelteKit %s records the fixture layout that version requires",
+	(sveltekit_version, supports_subpath_lib_imports, generated_tsconfig_specifier) => {
+		const [profile] = resolve_sveltekit_profiles(
+			{ SVELTEKIT_VERSION: sveltekit_version },
+			"linux",
+		);
+
+		expect(profile).toMatchObject({
+			generated_tsconfig_specifier,
+			supports_subpath_lib_imports,
+		});
+	},
+);
+
+test("a custom SvelteKit prerelease with a fixed adapter drops the Windows defect", () => {
+	const [profile] = resolve_sveltekit_profiles({ SVELTEKIT_VERSION: "3.0.0-next.13" }, "win32");
+
+	expect(profile).toMatchObject({ adapter_node_version: "6.0.0-next.6", name: "custom" });
+	expect(profile?.unsupported_platforms).toBeUndefined();
 });
 
 test("matrix mode rejects an ambiguous version override", () => {
