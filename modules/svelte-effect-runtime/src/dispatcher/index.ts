@@ -494,6 +494,32 @@ export class Dispatcher {
 			this.#promise_values.delete(cache_key);
 			this.#interrupt_cached_fiber(cache_key);
 		}
+
+		/**
+		 * The id maps only name the newest key per entry, so a scope whose
+		 * dependencies changed leaves the settled cells of every superseded key
+		 * behind. Sweep the caches themselves so unmounting releases them all.
+		 */
+		const value_key_prefix = `value:${scope_id}|`;
+		const promise_key_prefix = `promise:${scope_id}|`;
+
+		for (const cache_key of [...this.#value_cells.keys()]) {
+			if (!cache_key.startsWith(value_key_prefix)) {
+				continue;
+			}
+
+			this.#interrupt_cached_fiber(cache_key);
+			this.#delete_value_cell(cache_key);
+		}
+
+		for (const cache_key of [...this.#promise_values.keys()]) {
+			if (!cache_key.startsWith(promise_key_prefix)) {
+				continue;
+			}
+
+			this.#interrupt_cached_fiber(cache_key);
+			this.#promise_values.delete(cache_key);
+		}
 	}
 
 	#make_scoped_id(scope_id: string, id: string): string {
@@ -657,6 +683,12 @@ export class Dispatcher {
 				dispatcher.#runtime.runFork(
 					WatchFiberExit({
 						fiber: scoped_fiber,
+						/**
+						 * The promise this call returns already rejects with the
+						 * failure, so surfacing it again would hand a handled
+						 * rejection back as an uncaught error.
+						 */
+						surface_failure: false,
 						on_complete: () => {
 							if (!dispatcher.#is_current_fiber(cache_key, scoped_fiber)) {
 								return;

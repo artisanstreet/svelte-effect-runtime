@@ -82,6 +82,7 @@ test.each([
 	["3.0.0-next.9", "6.0.0-next.4"],
 	["3.0.0-next.10", "6.0.0-next.4"],
 	["3.0.0-next.11", "6.0.0-next.5"],
+	["3.0.0-next.12", "6.0.0-next.6"],
 	["3.0.0-next.13", "6.0.0-next.6"],
 ])("custom SvelteKit %s selects adapter-node %s", (sveltekit_version, adapter_node_version) => {
 	const [profile] = resolve_sveltekit_profiles({ SVELTEKIT_VERSION: sveltekit_version }, "linux");
@@ -107,6 +108,15 @@ test.each([
 			generated_tsconfig_specifier,
 			supports_subpath_lib_imports,
 		});
+	},
+);
+
+test.each(["3.x", "3", "2.69", "next"])(
+	"a malformed SVELTEKIT_VERSION %s names what the harness accepts",
+	(sveltekit_version) => {
+		expect(() =>
+			resolve_sveltekit_profiles({ SVELTEKIT_VERSION: sveltekit_version }, "linux"),
+		).toThrow(`Unsupported SVELTEKIT_VERSION ${sveltekit_version}`);
 	},
 );
 

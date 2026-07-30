@@ -1326,6 +1326,45 @@ test("an interrupted handler is reported as an interrupt", async () => {
 	assert_string_includes(report ?? "", "/api/live");
 });
 
+test("a failure that resists every conversion still reaches SvelteKit's error helper", () => {
+	const hostile = Object.create(null) as Record<string, unknown>;
+
+	hostile.toString = () => {
+		throw new Error("toString refused");
+	};
+	hostile.toJSON = () => {
+		throw new Error("toJSON refused");
+	};
+	Object.defineProperty(hostile, Symbol.toPrimitive, {
+		value: () => {
+			throw new Error("toPrimitive refused");
+		},
+	});
+
+	let captured_status = 0;
+
+	assert_throws(() =>
+		throw_remote_cause(
+			{ reasons: [{ _tag: "Fail", error: hostile }] } as never,
+			() => {
+				throw new Error("invalid");
+			},
+			(status: number) => {
+				captured_status = status;
+
+				throw new Error("error");
+			},
+			undefined,
+			() => {
+				throw new Error("reporter exploded");
+			},
+		),
+	);
+
+	/** The diagnostic must not replace the response the handler owes. */
+	assert_equals(captured_status, 500);
+});
+
 test("a defect with no failure reason still names the thrown value", () => {
 	const reports: string[] = [];
 

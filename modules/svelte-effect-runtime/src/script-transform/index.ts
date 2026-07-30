@@ -200,7 +200,8 @@ export function transform_script_effect(
 			needs_dispatcher: effect_blocks.length > 0 || uses_dispatcher_promise,
 			needs_effect: effect_blocks.length > 0,
 			needs_untrack: effect_blocks.length > 0,
-			needs_on_destroy: true,
+			/** The server never registers disposal, so it never needs the import. */
+			needs_on_destroy: target !== "server",
 			needs_yield_success: uses_yield_success_types,
 			needs_yieldable: effect_blocks.length > 0 || uses_dispatcher_promise,
 			needs_scope_ref: true,

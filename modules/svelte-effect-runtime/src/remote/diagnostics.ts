@@ -78,7 +78,16 @@ export function report_opaque_remote_failure(
 	context?: RemoteFailureContext,
 	report: Reporter = default_reporter,
 ): void {
-	report(render_opaque_remote_failure(reason, cause, value, context));
+	/**
+	 * Reporting runs before SvelteKit's error helper, and the failure it
+	 * describes is arbitrary user data. Throwing here would replace the 500
+	 * the handler owes the client with the reporter's own error.
+	 */
+	try {
+		report(render_opaque_remote_failure(reason, cause, value, context));
+	} catch {
+		/** A diagnostic is never worth failing the request over. */
+	}
 }
 
 /**
@@ -160,13 +169,41 @@ function inspect_failure(value: unknown): string {
 	}
 
 	if (typeof value !== "object" || value === null) {
-		return String(value);
+		return describe_primitive(value);
 	}
 
 	try {
-		return JSON.stringify(value, undefined, 2) ?? String(value);
+		return JSON.stringify(value, undefined, 2) ?? describe_object(value);
 	} catch {
+		return describe_object(value);
+	}
+}
+
+/** A primitive can still carry a throwing `Symbol.toPrimitive`. */
+function describe_primitive(value: unknown): string {
+	try {
 		return String(value);
+	} catch {
+		return typeof value;
+	}
+}
+
+/**
+ * Falls back through conversions an object can subvert. A null-prototype or
+ * hostile object may throw from `toString` and lack `Object.prototype`, so the
+ * last resort must not touch the value at all.
+ */
+function describe_object(value: object): string {
+	try {
+		return String(value);
+	} catch {
+		/** Fall through to a conversion the value cannot override. */
+	}
+
+	try {
+		return Object.prototype.toString.call(value);
+	} catch {
+		return "[unrenderable failure]";
 	}
 }
 

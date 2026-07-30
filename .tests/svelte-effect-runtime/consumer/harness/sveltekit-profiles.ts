@@ -1,4 +1,4 @@
-import { gte } from "semver";
+import { gte, valid } from "semver";
 
 export type SvelteKitProfileName = "kit-2-stable" | "kit-3-primary";
 
@@ -149,6 +149,17 @@ function get_platform_defect(
 }
 
 function make_custom_profile(sveltekit_version: string): SvelteKitProfile {
+	/**
+	 * Reject a malformed version before comparing it. `semver` throws its own
+	 * `Invalid Version` error, which says nothing about what this harness
+	 * accepts.
+	 */
+	if (!valid(sveltekit_version)) {
+		throw new Error(
+			`Unsupported SVELTEKIT_VERSION ${sveltekit_version}; expected an exact 2.x or 3.x version.`,
+		);
+	}
+
 	if (sveltekit_version.startsWith("2.")) {
 		return {
 			...kit_2_stable,
