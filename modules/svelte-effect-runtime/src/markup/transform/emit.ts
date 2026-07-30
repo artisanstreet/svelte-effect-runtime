@@ -162,12 +162,7 @@ function emit_replacement(
 	} else if (kind === "html") {
 		const effect = make_inline_effect(normalized_candidate, helper_bindings);
 
-		replacement_text = emit_await_expression(
-			id_text,
-			effect,
-			helper_bindings,
-			server_fallback(is_server_target, "undefined"),
-		);
+		replacement_text = emit_await_expression(id_text, effect, helper_bindings);
 		helpers = normalized.helpers;
 		relocation = make_pending_relocation(
 			candidate,

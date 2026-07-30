@@ -1899,8 +1899,12 @@ test("rewrites {@html yield* expr} in raw HTML insertion", () => {
 	assert_string_includes(result.code, `renderMarkup`);
 	assert_string_includes(result.code, `fn: () => (function* ()`);
 	assert_false(result.code.includes(`function* __SER___markup_effect`));
-	assert_false(result.code.includes(`ssr_fallback`));
-	assert_string_includes(server.code, `ssr_fallback: undefined`);
+
+	/**
+	 * A server fallback renders nothing in place of the raw HTML, so the
+	 * element never reaches the browser. `{@html}` must stay unwrapped.
+	 */
+	assert_false(server.code.includes(`ssr_fallback`));
 });
 
 test("rejects {@debug yield* expr} instead of emitting invalid Svelte", () => {
