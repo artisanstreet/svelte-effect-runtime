@@ -89,8 +89,7 @@ type ServerPathResolverLayerDependencies =
 	| ServerInstallRetentionDependencies
 	| ServerPathResolverDependencies;
 
-type ScopedServerPathResolverLayerDependencies =
-	ServerPathResolverLayerDependencies | Scope.Scope;
+type ScopedServerPathResolverLayerDependencies = ServerPathResolverLayerDependencies | Scope.Scope;
 
 interface PublishedLanguageServer {
 	install_root: string;
@@ -190,11 +189,7 @@ export const GetConfiguredServerPath = Effect.gen(function* () {
 const ResolveServerPath = (
 	storage_path: string,
 	allow_configured_path: boolean,
-): Effect.Effect<
-	ResolvedLanguageServer,
-	unknown,
-	ServerPathResolverLayerDependencies
-> =>
+): Effect.Effect<ResolvedLanguageServer, unknown, ServerPathResolverLayerDependencies> =>
 	Effect.gen(function* () {
 		const path_service = yield* Path.Path;
 		const cache_root = get_server_install_cache_root(path_service, storage_path);
@@ -226,11 +221,7 @@ const ResolveServerPath = (
 
 const ResolveInstalledLanguageServer = (
 	storage_path: string,
-): Effect.Effect<
-	ResolvedLanguageServer,
-	unknown,
-	ServerPathResolverLayerDependencies
-> =>
+): Effect.Effect<ResolvedLanguageServer, unknown, ServerPathResolverLayerDependencies> =>
 	Effect.gen(function* () {
 		const published = yield* InstallLanguageServer(storage_path);
 
@@ -267,11 +258,7 @@ const InstallAndPublishLanguageServer = (
 	cache_root: string,
 	target_version: string,
 	retry_remaining = 1,
-): Effect.Effect<
-	PublishedLanguageServer,
-	unknown,
-	ScopedServerPathResolverLayerDependencies
-> =>
+): Effect.Effect<PublishedLanguageServer, unknown, ScopedServerPathResolverLayerDependencies> =>
 	Effect.gen(function* () {
 		const output = yield* ExtensionOutput;
 		const file_system = yield* FileSystem.FileSystem;
@@ -317,7 +304,10 @@ const InstallAndPublishLanguageServer = (
 		const publication = yield* Effect.result(file_system.rename(staging_root, install_root));
 
 		if (Result.isFailure(publication)) {
-			const published_after_failure = yield* FindPublishedLanguageServer(cache_root, target_version);
+			const published_after_failure = yield* FindPublishedLanguageServer(
+				cache_root,
+				target_version,
+			);
 
 			if (Option.isSome(published_after_failure)) {
 				yield* output.append_line(
@@ -391,8 +381,7 @@ const FindPublishedLanguageServer = (
 			const verification = yield* Effect.result(
 				VerifyLanguageServerInstall(install_root, target_version),
 			);
-			const keep_corrupt_cached_exact_version_install =
-				candidate === encoded_version;
+			const keep_corrupt_cached_exact_version_install = candidate === encoded_version;
 
 			if (Result.isSuccess(verification)) {
 				return Option.some(verification.success);
@@ -590,7 +579,9 @@ const ReadInstalledPackageVersion = (install_root: string) =>
 			return Option.none<string>();
 		}
 
-		const package_manifest = yield* Effect.option(ResolveLanguageServerPackageManifest(package_root.value));
+		const package_manifest = yield* Effect.option(
+			ResolveLanguageServerPackageManifest(package_root.value),
+		);
 
 		return Option.map(package_manifest, (manifest) => manifest.version);
 	});
@@ -721,9 +712,8 @@ const ResolveLanguageServerPackageRoot = (install_root: string) =>
 			return resolved_package_root;
 		}
 
-		const mapped_package_root = yield* ResolveLanguageServerPackageRootFromPackageMap(
-			install_root,
-		);
+		const mapped_package_root =
+			yield* ResolveLanguageServerPackageRootFromPackageMap(install_root);
 
 		if (Option.isSome(mapped_package_root)) {
 			return mapped_package_root;
@@ -764,11 +754,15 @@ const ResolveLanguageServerPackageRootFromPackageMap = (install_root: string) =>
 		}
 
 		const package_map = yield* Effect.option(
-			file_system.readFileString(package_map_path).pipe(
-				Effect.flatMap((payload) =>
-					Schema.decodeUnknownEffect(Schema.fromJsonString(PackageMapSchema))(payload),
+			file_system
+				.readFileString(package_map_path)
+				.pipe(
+					Effect.flatMap((payload) =>
+						Schema.decodeUnknownEffect(Schema.fromJsonString(PackageMapSchema))(
+							payload,
+						),
+					),
 				),
-			),
 		);
 
 		if (Option.isNone(package_map)) {
@@ -820,7 +814,10 @@ const IsWithinDirectory = (
 	parent_path: string,
 ) => {
 	const package_map_root = path_service.resolve(parent_path);
-	const relative_path = path_service.relative(package_map_root, path_service.resolve(candidate_path));
+	const relative_path = path_service.relative(
+		package_map_root,
+		path_service.resolve(candidate_path),
+	);
 
 	return (
 		relative_path.length > 0 &&
@@ -878,12 +875,8 @@ const IsUsableLanguageServerPackageRoot = (
 			) {
 				return false;
 			}
-
 		} else {
-			if (
-				expected_name !== undefined &&
-				expected_name !== language_server_package_name
-			) {
+			if (expected_name !== undefined && expected_name !== language_server_package_name) {
 				return false;
 			}
 		}
@@ -996,4 +989,3 @@ const IsFile = (path: string) =>
 
 		return Option.isSome(info) && info.value.type === "File";
 	});
-

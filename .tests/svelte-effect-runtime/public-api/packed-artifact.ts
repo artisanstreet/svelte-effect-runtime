@@ -147,14 +147,32 @@ export function run_command(
 	cwd: string,
 ): CommandResult {
 	const uses_windows_corepack = process.platform === "win32" && command === "corepack";
-	const executable = uses_windows_corepack ? process.execPath : command;
-	const resolved_arguments = uses_windows_corepack
+	/**
+	 * Only route through cmd.exe when the caller names a shim. Vite+ installs
+	 * `vp` as a native executable, so rewriting it to `vp.cmd` would spawn a
+	 * file that does not exist.
+	 */
+	const command_for_spawn = command;
+	const uses_windows_shim = process.platform === "win32" && command_for_spawn.endsWith(".cmd");
+	const executable = uses_windows_corepack
+		? process.execPath
+		: uses_windows_shim
+			? (process.env.ComSpec ?? "cmd.exe")
+			: command_for_spawn;
+	const command_arguments = uses_windows_corepack
 		? [
 				join(dirname(process.execPath), "node_modules", "corepack", "dist", "corepack.js"),
 				...arguments_,
 			]
-		: arguments_;
-	const output = spawnSync(executable, resolved_arguments, {
+		: uses_windows_shim
+			? [
+					"/d",
+					"/s",
+					"/c",
+					[command_for_spawn, ...arguments_].map(quote_windows_argument).join(" "),
+				]
+			: arguments_;
+	const output = spawnSync(executable, command_arguments, {
 		cwd,
 		encoding: "utf8",
 		env: {
@@ -169,6 +187,14 @@ export function run_command(
 		stderr: output.stderr ?? output.error?.message ?? "",
 		stdout: output.stdout ?? "",
 	};
+}
+
+function quote_windows_argument(argument: string): string {
+	if (!/[\s"&|<>^]/.test(argument)) {
+		return argument;
+	}
+
+	return `"${argument.replaceAll('"', '\\"')}"`;
 }
 
 export function assert_command_succeeded(phase: string, result: CommandResult): void {
@@ -356,6 +382,7 @@ async function reclaim_abandoned_directory_lock(
 	stale_after_ms: number,
 ): Promise<boolean> {
 	const recovery_lock_path = `${lock_path}.recovery`;
+	const initial_owner = await read_lock_owner(lock_path);
 
 	try {
 		await mkdir(recovery_lock_path);
@@ -372,11 +399,41 @@ async function reclaim_abandoned_directory_lock(
 			return false;
 		}
 
+		const owner = await read_lock_owner(lock_path);
+
+		if (initial_owner && owner && initial_owner.pid !== owner.pid) {
+			return false;
+		}
+
+		if (owner && is_process_running(owner.pid)) {
+			return false;
+		}
+
 		await rm(lock_path, { force: true, recursive: true });
 
 		return true;
 	} finally {
 		await rm(recovery_lock_path, { force: true, recursive: true });
+	}
+}
+
+async function read_lock_owner(lock_path: string): Promise<{ readonly pid: number } | undefined> {
+	let owner_source;
+
+	try {
+		owner_source = await readFile(join(lock_path, "owner.json"), "utf8");
+	} catch (error) {
+		if (is_not_found_error(error)) {
+			return undefined;
+		}
+
+		throw error;
+	}
+
+	try {
+		return Schema.decodeUnknownSync(DirectoryLockOwnerSchema)(JSON.parse(owner_source));
+	} catch {
+		return undefined;
 	}
 }
 

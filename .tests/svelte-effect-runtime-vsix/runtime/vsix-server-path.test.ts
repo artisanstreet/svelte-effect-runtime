@@ -491,7 +491,12 @@ test("VS Code extension prefers mapped package roots that contain executable art
 				});
 				const cache_root = join(storage_path, "language-server", "installs");
 				const encoded_version = encodeURIComponent(package_version);
-				const stale_root = join(cache_root, encoded_version, "node_modules", language_server_package_name);
+				const stale_root = join(
+					cache_root,
+					encoded_version,
+					"node_modules",
+					language_server_package_name,
+				);
 				const mapped_root = join(
 					cache_root,
 					encoded_version,
@@ -514,17 +519,29 @@ test("VS Code extension prefers mapped package roots that contain executable art
 					join(stale_root, "package.json"),
 					JSON.stringify({ version: package_version }),
 				);
-				yield* file_system.writeFileString(join(stale_root, "runtime", "package.json"), "{}");
+				yield* file_system.writeFileString(
+					join(stale_root, "runtime", "package.json"),
+					"{}",
+				);
 
 				yield* file_system.makeDirectory(mapped_root, { recursive: true });
 				yield* file_system.makeDirectory(join(mapped_root, "runtime"), { recursive: true });
 				yield* file_system.makeDirectory(join(mapped_root, ".dist"), { recursive: true });
 				yield* file_system.writeFileString(
 					join(mapped_root, "package.json"),
-					JSON.stringify({ name: language_server_package_name, version: package_version }),
+					JSON.stringify({
+						name: language_server_package_name,
+						version: package_version,
+					}),
 				);
-				yield* file_system.writeFileString(join(mapped_root, "runtime", "package.json"), "{}");
-				yield* file_system.writeFileString(join(mapped_root, ".dist", "server.cjs"), "module.exports = {};\n");
+				yield* file_system.writeFileString(
+					join(mapped_root, "runtime", "package.json"),
+					"{}",
+				);
+				yield* file_system.writeFileString(
+					join(mapped_root, ".dist", "server.cjs"),
+					"module.exports = {};\n",
+				);
 
 				const node_modules_root = join(cache_root, encoded_version, "node_modules");
 				yield* file_system.makeDirectory(node_modules_root, { recursive: true });
@@ -598,7 +615,12 @@ test("VS Code extension resolves mapped package roots keyed by package name", as
 				});
 				const cache_root = join(storage_path, "language-server", "installs");
 				const encoded_version = encodeURIComponent(package_version);
-				const stale_root = join(cache_root, encoded_version, "node_modules", language_server_package_name);
+				const stale_root = join(
+					cache_root,
+					encoded_version,
+					"node_modules",
+					language_server_package_name,
+				);
 				const mapped_root = join(
 					cache_root,
 					encoded_version,
@@ -621,14 +643,20 @@ test("VS Code extension resolves mapped package roots keyed by package name", as
 					join(stale_root, "package.json"),
 					JSON.stringify({ version: package_version }),
 				);
-				yield* file_system.writeFileString(join(stale_root, "runtime", "package.json"), "{}");
+				yield* file_system.writeFileString(
+					join(stale_root, "runtime", "package.json"),
+					"{}",
+				);
 
 				yield* file_system.makeDirectory(mapped_root, { recursive: true });
 				yield* file_system.makeDirectory(join(mapped_root, "runtime"), { recursive: true });
 				yield* file_system.makeDirectory(join(mapped_root, ".dist"), { recursive: true });
 				yield* file_system.writeFileString(
 					join(mapped_root, "package.json"),
-					JSON.stringify({ name: language_server_package_name, version: package_version }),
+					JSON.stringify({
+						name: language_server_package_name,
+						version: package_version,
+					}),
 				);
 				yield* file_system.writeFileString(
 					join(mapped_root, "runtime", "package.json"),
@@ -944,7 +972,12 @@ test("VS Code extension ignores stale direct package roots when a pnpm store exi
 				});
 				const cache_root = join(storage_path, "language-server", "installs");
 				const encoded_version = encodeURIComponent(package_version);
-				const stale_root = join(cache_root, encoded_version, "node_modules", language_server_package_name);
+				const stale_root = join(
+					cache_root,
+					encoded_version,
+					"node_modules",
+					language_server_package_name,
+				);
 				const stale_server_path = join(stale_root, ".dist", "server.cjs");
 				const pnpm_root = join(cache_root, encoded_version, "node_modules", ".pnpm");
 
@@ -959,8 +992,14 @@ test("VS Code extension ignores stale direct package roots when a pnpm store exi
 						version: package_version,
 					}),
 				);
-				yield* file_system.writeFileString(join(stale_root, ".dist", "server.cjs"), "module.exports = {};\n");
-				yield* file_system.writeFileString(join(stale_root, "runtime", "package.json"), "{}");
+				yield* file_system.writeFileString(
+					join(stale_root, ".dist", "server.cjs"),
+					"module.exports = {};\n",
+				);
+				yield* file_system.writeFileString(
+					join(stale_root, "runtime", "package.json"),
+					"{}",
+				);
 
 				yield* Effect.sync(() => {
 					vscode_configuration.global_path = undefined;
@@ -985,9 +1024,13 @@ test("VS Code extension ignores stale direct package roots when a pnpm store exi
 
 	assert_equals(install_attempts.value, 1);
 	assert_false(result.server_path === result.stale_server_path);
-	assert_truthy(result.server_path.startsWith(join(result.cache_root, `${result.encoded_version}-`)));
 	assert_truthy(
-		result.server_path.endsWith(join("node_modules", language_server_package_name, ".dist", "server.cjs")),
+		result.server_path.startsWith(join(result.cache_root, `${result.encoded_version}-`)),
+	);
+	assert_truthy(
+		result.server_path.endsWith(
+			join("node_modules", language_server_package_name, ".dist", "server.cjs"),
+		),
 	);
 	assert_truthy(output_lines.some((line) => line.startsWith("Installing ")));
 });

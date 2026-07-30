@@ -17,6 +17,7 @@ import { ExtensionOutput } from "../extension-services.ts";
 const server_install_observation_prefix = ".ser-observed-";
 const server_install_retired_prefix = ".ser-retired-install-";
 const server_install_legacy_staging_signature = `-${server_install_staging_prefix}`;
+const server_install_legacy_staging_regex = /^(?:.+-)?\.ser-stage-(\d+)-/;
 
 export type ServerInstallRetentionDependencies =
 	| ExtensionOutput
@@ -90,7 +91,7 @@ const CleanupServerInstallCache = (
 
 			if (
 				entry.startsWith(server_install_staging_prefix) ||
-				entry.includes(server_install_legacy_staging_signature)
+				is_valid_legacy_staging_entry(entry)
 			) {
 				yield* CleanupServerInstallStaging(entry_path, entry, now).pipe(
 					Effect.catch((error) =>
@@ -255,3 +256,17 @@ const ReadOrCreateServerInstallObservation = (install_root: string, now: number)
 
 		return Option.some(Math.min(...observed_at_millis));
 	});
+
+const is_valid_legacy_staging_entry = (entry: string): boolean => {
+	if (!entry.includes(server_install_legacy_staging_signature)) {
+		return false;
+	}
+
+	const match = server_install_legacy_staging_regex.exec(entry);
+
+	if (!match) {
+		return false;
+	}
+
+	return Number.isSafeInteger(Number(match[1])) && Number(match[1]) > 0;
+};

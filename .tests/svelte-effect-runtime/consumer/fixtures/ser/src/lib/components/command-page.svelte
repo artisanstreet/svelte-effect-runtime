@@ -7,6 +7,7 @@
 		SlowCommand,
 	} from "$lib/conformance.remote";
 	import { Effect } from "effect";
+	import { normalize_error } from "$lib/normalize-error";
 
 	const MutationResource = GetMutation();
 
@@ -54,23 +55,7 @@
 		);
 	});
 
-	const NormalizeError = (error: unknown) =>
-		Effect.gen(function* () {
-			if (!error || typeof error !== "object") {
-				return String(error);
-			}
-
-			const body = Reflect.get(error, "body");
-			const body_message =
-				body && typeof body === "object" ? Reflect.get(body, "message") : undefined;
-			const cause = Reflect.get(error, "cause");
-			const cause_message =
-				cause && typeof cause === "object" ? Reflect.get(cause, "message") : undefined;
-			const message = Reflect.get(error, "message");
-			const status = Reflect.get(error, "status");
-
-			return `${typeof status === "number" ? status : 0}:${typeof body_message === "string" ? body_message : typeof message === "string" ? message : typeof cause_message === "string" ? cause_message : "unknown"}`;
-		});
+	const NormalizeError = (error: unknown) => normalize_error(error, { include_cause: true });
 </script>
 
 <p data-testid="mutation">{mutation.value}</p>

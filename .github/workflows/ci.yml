@@ -717,6 +717,7 @@ jobs:
             always() &&
             github.event_name == 'workflow_dispatch' &&
             github.ref == 'refs/heads/candidate' &&
+            !cancelled() &&
             (inputs.mode == 'release' || inputs.mode == 'resume') &&
             needs.plan.result == 'success' &&
             needs.candidate_verified.result == 'success' &&
@@ -804,6 +805,7 @@ jobs:
             always() &&
             github.event_name == 'workflow_dispatch' &&
             github.ref == 'refs/heads/candidate' &&
+            !cancelled() &&
             (inputs.mode == 'release' || inputs.mode == 'resume') &&
             needs.plan.result == 'success' &&
             needs.github_prepare.result == 'success'
@@ -857,6 +859,7 @@ jobs:
             always() &&
             github.event_name == 'workflow_dispatch' &&
             github.ref == 'refs/heads/candidate' &&
+            !cancelled() &&
             (inputs.mode == 'release' || inputs.mode == 'resume') &&
             needs.plan.result == 'success' &&
             needs.github_prepare.result == 'success'
@@ -909,6 +912,7 @@ jobs:
             always() &&
             github.event_name == 'workflow_dispatch' &&
             github.ref == 'refs/heads/candidate' &&
+            !cancelled() &&
             (inputs.mode == 'release' || inputs.mode == 'resume') &&
             needs.plan.result == 'success' &&
             needs.npm_publish.result == 'success'
@@ -965,6 +969,7 @@ jobs:
             always() &&
             github.event_name == 'workflow_dispatch' &&
             github.ref == 'refs/heads/candidate' &&
+            !cancelled() &&
             (inputs.mode == 'release' || inputs.mode == 'resume') &&
             needs.plan.result == 'success' &&
             needs.npm_publish.result == 'success' &&

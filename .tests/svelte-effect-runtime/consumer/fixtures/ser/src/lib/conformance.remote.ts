@@ -60,7 +60,9 @@ export const GetProfile = Query(Schema.Struct({ id: Schema.String }), ({ id }) =
 );
 
 export const GetDeduped = Query(Schema.String, (id) =>
-	Effect.succeed({ id, invocation: ++query_count }),
+	Effect.gen(function* () {
+		return { id, invocation: ++query_count };
+	}),
 );
 
 export const GetBatched = Query.batch(Schema.String, (ids) =>

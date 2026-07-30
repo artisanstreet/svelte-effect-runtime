@@ -90,7 +90,8 @@ export function wait_for_child_close(child: EventEmitter): Promise<number> {
 
 function parse_options(arguments_: readonly string[]): ServerOutputOptions {
 	const separator = arguments_.indexOf("--");
-	const evidence_index = arguments_.indexOf("--evidence-dir");
+	const arguments_before_command = separator === -1 ? arguments_ : arguments_.slice(0, separator);
+	const evidence_index = arguments_before_command.indexOf("--evidence-dir");
 	const evidence_dir = evidence_index === -1 ? undefined : arguments_[evidence_index + 1];
 	const command = separator === -1 ? undefined : arguments_[separator + 1];
 	const command_arguments = separator === -1 ? [] : arguments_.slice(separator + 2);

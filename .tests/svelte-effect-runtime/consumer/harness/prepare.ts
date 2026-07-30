@@ -7,7 +7,11 @@ import {
 } from "../../unit/harness/target.ts";
 import { read_packed_artifact_version } from "./artifact-manifest.ts";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { render_fixture_sveltekit_config } from "./fixture-config.ts";
+import {
+	lib_subpath_imports,
+	render_fixture_lib_imports,
+	render_fixture_sveltekit_config,
+} from "./fixture-config.ts";
 import { resolve_sveltekit_profiles } from "./sveltekit-profiles.ts";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { SvelteKitProfile } from "./sveltekit-profiles.ts";
@@ -456,6 +460,8 @@ async function prepare_application(
 	}
 
 	await prepare_adapter_workspace(workspace_path);
+	await render_application_sources(application_dir, profile);
+	await render_application_tsconfig(application_dir, profile);
 
 	const config_source = await readFile(config_path, "utf8");
 	const rendered_config = render_fixture_sveltekit_config(
@@ -478,6 +484,10 @@ async function prepare_application(
 
 	manifest.dependencies["@sveltejs/kit"] = profile.sveltekit_version;
 	manifest.dependencies["@sveltejs/adapter-node"] = profile.adapter_node_version;
+
+	if (profile.supports_subpath_lib_imports) {
+		manifest.imports = { ...lib_subpath_imports };
+	}
 
 	if (target.fixture !== "native") {
 		if (!artifact) {
@@ -561,6 +571,10 @@ async function prepare_application(
 	if (profile.adapter_output_directory_module) {
 		await verify_adapter_output(application_dir, profile.adapter_output_directory_module);
 	}
+
+	if (profile.adapter_output_directory_module === undefined && profile.supports_paths_origin) {
+		await verify_adapter_entry_constants(application_dir);
+	}
 }
 
 async function verify_adapter_output(
@@ -585,6 +599,99 @@ async function verify_adapter_output(
 	if (!resolves_to_build) {
 		throw new Error(`Adapter output must resolve its static root to ${build_dir}.`);
 	}
+}
+
+/**
+ * Build-time identifiers adapter-node replaces in its own entrypoints. Leaving
+ * any of them in the emitted bundle reproduces the defect that made the
+ * adapter unable to start; see https://github.com/sveltejs/kit/issues/16365.
+ */
+const adapter_entry_constants = ["ENV_PREFIX", "PRECOMPRESS"];
+
+/**
+ * Guards the same regression as {@link verify_adapter_output} on adapter
+ * releases that no longer emit the static directory module under a stable
+ * name, so the assertion does not depend on chunk naming.
+ */
+async function verify_adapter_entry_constants(application_dir: string): Promise<void> {
+	const build_dir = join(application_dir, "build");
+	const client_version = join(build_dir, "client", "_app", "version.json");
+	const entry = join(build_dir, "index.js");
+
+	try {
+		await Promise.all([readFile(client_version), readFile(entry)]);
+	} catch {
+		throw new Error(`Adapter output must contain ${client_version} and ${entry}.`);
+	}
+
+	const skipped = new Set(["client", "prerendered"]);
+	const modules = (await list_application_files(build_dir, build_dir, skipped)).filter((file) =>
+		file.endsWith(".js"),
+	);
+	const sources = await Promise.all(
+		modules.map(async (file) => ({
+			file,
+			source: await readFile(join(build_dir, file), "utf8"),
+		})),
+	);
+
+	for (const { file, source } of sources) {
+		for (const constant of adapter_entry_constants) {
+			if (new RegExp(String.raw`\b${constant}\b`).test(source)) {
+				throw new Error(
+					`Adapter output must not leave ${constant} unresolved in build/${file}.`,
+				);
+			}
+		}
+	}
+}
+
+/** Extensions whose fixture sources address the library root by specifier. */
+const rendered_source_extensions = [".js", ".svelte", ".ts"];
+
+/** Rewrite fixture sources onto the library specifier the profile supports. */
+async function render_application_sources(
+	application_dir: string,
+	profile: SvelteKitProfile,
+): Promise<void> {
+	if (!profile.supports_subpath_lib_imports) {
+		return;
+	}
+
+	const skipped = new Set(["node_modules", ".artifacts", ".harness", ".svelte-kit"]);
+	const files = await list_application_files(application_dir, application_dir, skipped);
+
+	await Promise.all(
+		files
+			.filter((file) => rendered_source_extensions.some((suffix) => file.endsWith(suffix)))
+			.map(async (file) => {
+				const path = join(application_dir, file);
+				const source = await readFile(path, "utf8");
+				const rendered = render_fixture_lib_imports(source, profile);
+
+				if (rendered !== source) {
+					await writeFile(path, rendered);
+				}
+			}),
+	);
+}
+
+/** Point the fixture tsconfig at the generated options this SvelteKit emits. */
+async function render_application_tsconfig(
+	application_dir: string,
+	profile: SvelteKitProfile,
+): Promise<void> {
+	const tsconfig_path = join(application_dir, "tsconfig.json");
+	const source = await readFile(tsconfig_path, "utf8");
+	const tsconfig = Schema.decodeUnknownSync(JsonRecord)(JSON.parse(source));
+
+	if (tsconfig.extends === profile.generated_tsconfig_specifier) {
+		return;
+	}
+
+	const rendered = { ...tsconfig, extends: profile.generated_tsconfig_specifier };
+
+	await writeFile(tsconfig_path, `${JSON.stringify(rendered, null, "\t")}\n`);
 }
 
 /** Remove environment fixture files on SvelteKit versions without explicit environment variables. */
