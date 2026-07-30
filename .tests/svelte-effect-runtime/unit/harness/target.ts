@@ -13,7 +13,7 @@ export function make_targets(
 		{
 			name: "stable",
 			source: parse_target_source(stable_source),
-			fixture: "stable",
+			fixture: "candidate",
 		},
 		{
 			name: "candidate",

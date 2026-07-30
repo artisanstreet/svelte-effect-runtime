@@ -37,6 +37,19 @@ SER documentation content and documentation UI live in
 changes SER behavior, public API shape, syntax, setup, or user-facing runtime
 semantics, update the Barekey docs in the same line of work.
 
+A new public API gets its own docs page; changed behavior updates the pages
+that describe it. Open each affected page or section with a version callout
+using the docs' note syntax, matching the `@since` annotation in source:
+
+```mdx
+> [!NOTE] Since 4.2.0
+> `ts DefineEnvVars` requires `svelte-effect-runtime` 4.2.0 and SvelteKit 3's
+> explicit environment variables.
+```
+
+Name the minimum SER version, plus any peer requirement (SvelteKit or Effect
+version) the feature depends on.
+
 ## Common Commands
 
 Run the full test suite before broad runtime, server, compiler, grammar, or

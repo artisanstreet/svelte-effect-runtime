@@ -185,19 +185,6 @@ const visible_test_ids = [
 	"render",
 ] as const;
 
-const stable_deviations: Readonly<Record<string, string>> = {
-	"$.initial.html":
-		"The stable 4.0.0 compiler drops Effect-backed {@html} output; candidate must render the native HTML node.",
-	"$.initial.render":
-		"The stable 4.0.0 compiler cannot parse a typed snippet used by an Effect-backed {@render}; candidate must compile and render it.",
-	"$.initial.batch":
-		"The stable 4.0.0 client starts each Query.batch resource as a separate one-item batch; candidate must match native shared batching.",
-	"$.interactions.form_issue":
-		"The stable 4.0.0 client drops nested indexed programmatic invalidation from visible form field state; candidate must match native paths and messages.",
-	"$.interactions.form_all_issues":
-		"The stable 4.0.0 server emits indexed paths as strings; candidate must match native numeric paths and field names.",
-};
-
 const query_behavior_scenario: Scenario<ApplicationDriver, QueryObservation> = {
 	id: "query-state-cache-and-prerender",
 	capability: "consumer",
@@ -339,12 +326,7 @@ test(query_behavior_scenario.promise, async ({ browser, playwright }, test_info)
 });
 
 test(command_behavior_scenario.promise, async ({ browser, playwright }, test_info) => {
-	await assert_native_parity(command_behavior_scenario, { browser, playwright }, test_info, {
-		stable: {
-			"$.traffic":
-				"Stable 4.0.0 lacks Command call updates, so its equivalent fixture refreshes the query with a second GET instead of SvelteKit's single requested-query POST.",
-		},
-	});
+	await assert_native_parity(command_behavior_scenario, { browser, playwright }, test_info);
 });
 
 test(transformed_form_scenario.promise, async ({ browser, playwright }, test_info) => {
@@ -356,27 +338,7 @@ test(request_interruption_scenario.promise, async ({ browser, playwright }, test
 });
 
 test(live_query_scenario.promise, async ({ browser, playwright }, test_info) => {
-	await assert_native_parity(live_query_scenario, { browser, playwright }, test_info, {
-		stable: {
-			"$.availability":
-				"The stable 4.0.0 live query does not complete SSR for the shared Stream fixture; the harness retains that transition evidence separately from the corrected candidate.",
-			"$.done": "The stable live route is unavailable before browser state can be observed.",
-			"$.initial_active_connections":
-				"The stable live route is unavailable before connection state can be observed.",
-			"$.initial_finalizations":
-				"The stable live route is unavailable before finalization state can be observed.",
-			"$.initial_starts":
-				"The stable live route is unavailable before start state can be observed.",
-			"$.reconnect_active_connections":
-				"The stable live route is unavailable before reconnect state can be observed.",
-			"$.reconnect_start_delta":
-				"The stable live route is unavailable before reconnect state can be observed.",
-			"$.status":
-				"The stable live route is unavailable before resource status can be observed.",
-			"$.traffic": "The stable live route times out before a browser live transport opens.",
-			"$.update": "The stable live route is unavailable before updates can be observed.",
-		},
-	});
+	await assert_native_parity(live_query_scenario, { browser, playwright }, test_info);
 });
 
 test(handler_scenario.promise, async ({ browser, playwright }, test_info) => {
@@ -392,9 +354,7 @@ test(transport_boundary_scenario.promise, async ({ browser, playwright }, test_i
 });
 
 test(browser_contracts_scenario.promise, async ({ browser, playwright }, test_info) => {
-	await assert_native_parity(browser_contracts_scenario, { browser, playwright }, test_info, {
-		stable: stable_deviations,
-	});
+	await assert_native_parity(browser_contracts_scenario, { browser, playwright }, test_info);
 });
 
 test(unenhanced_form_scenario.promise, async ({ browser, playwright }, test_info) => {
@@ -449,7 +409,7 @@ async function observe_browser_contracts({
 		});
 	});
 
-	const observation = await observe_page(page, target.name);
+	const observation = await observe_page(page);
 
 	expect(console_errors, `${target.name} browser console`).toEqual([]);
 	expect(network.length, `${target.name} remote traffic`).toBeGreaterThan(0);
@@ -464,7 +424,7 @@ async function open_hydrated_page(page: Page, path: string): Promise<void> {
 	await expect(page.getByTestId("hydration-ready")).toHaveText("true");
 }
 
-async function observe_page(page: Page, target: TargetName): Promise<PageObservation> {
+async function observe_page(page: Page): Promise<PageObservation> {
 	await open_hydrated_page(page, "/");
 
 	await expect(page.getByTestId("profile")).toHaveText("profile:alpha:configured");
@@ -479,13 +439,8 @@ async function observe_page(page: Page, target: TargetName): Promise<PageObserva
 	await expect(page.getByTestId("await")).toHaveText("await:ready");
 	await expect(page.getByTestId("key")).toHaveText("key:1");
 	await expect(page.getByTestId("declaration")).toHaveText("declaration:ready");
-	if (target !== "stable") {
-		await expect(page.getByTestId("render")).toHaveText("render:ready");
-	}
-
-	if (target !== "stable") {
-		await expect(page.getByTestId("html")).toHaveText("html:ready");
-	}
+	await expect(page.getByTestId("render")).toHaveText("render:ready");
+	await expect(page.getByTestId("html")).toHaveText("html:ready");
 
 	await expect(page.getByTestId("signal")).toHaveText("Signal 1");
 
@@ -539,7 +494,7 @@ async function observe_page(page: Page, target: TargetName): Promise<PageObserva
 	const form_all_issues = await page.getByTestId("form-all-issues").innerText();
 
 	await expect(page.getByTestId("form-issue"), form_all_issues).toHaveText(
-		target === "stable" ? "valid" : "Blocked labels are rejected.",
+		"Blocked labels are rejected.",
 		{ timeout: 1_000 },
 	);
 
@@ -1180,6 +1135,24 @@ async function observe_transformed_form({
 }
 
 async function observe_request_interruption({
+	browser,
+	playwright,
+	target,
+}: ApplicationDriver): Promise<InterruptionObservation> {
+	let observation: InterruptionObservation = { events: [] };
+
+	for (const _attempt of [1, 2]) {
+		observation = await observe_request_interruption_attempt({ browser, playwright, target });
+
+		if (observation.events.includes("finalized")) {
+			return observation;
+		}
+	}
+
+	return observation;
+}
+
+async function observe_request_interruption_attempt({
 	browser,
 	playwright,
 	target,
