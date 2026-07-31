@@ -348,6 +348,29 @@ test("moves bare yield* statements into the effect body", () => {
 	assert_string_includes(result.code, `Effect.gen(function*`);
 });
 
+test("strips yield* from a bare statement carrying a leading JSDoc comment", () => {
+	const source = [
+		`/**`,
+		` * A failed first load is expected and already answered.`,
+		` */`,
+		`yield* RefreshThreads.pipe(Effect.ignore);`,
+	].join("\n");
+	const result = transform_script_effect(source, "Test.svelte");
+
+	assert_string_includes(result.code, `yield* ToEffect(RefreshThreads.pipe(Effect.ignore));`);
+	assert_not_match(result.code, /ToEffect\(\s*\/\*/);
+	assert_not_match(result.code, /ToEffect\([^)]*yield\*/);
+});
+
+test("strips yield* from a bare statement carrying a leading line comment", () => {
+	const source = [`// warm the cache before first paint`, `yield* WarmCache();`].join("\n");
+	const result = transform_script_effect(source, "Test.svelte");
+
+	assert_string_includes(result.code, `yield* ToEffect(WarmCache());`);
+	assert_not_match(result.code, /ToEffect\(\s*\/\//);
+	assert_not_match(result.code, /ToEffect\([^)]*yield\*/);
+});
+
 test("wraps yield* inside control-flow statements moved into effect bodies", () => {
 	const source = [
 		`let count = $state(0);`,

@@ -95,7 +95,12 @@ function lower_expression_statement(
 	}
 
 	if (is_yield_star_expression(expr)) {
-		const text = slice(content, expr).trim();
+		/**
+		 * Leading trivia must stay out of the sliced expression: a comment ahead
+		 * of the yield* would defeat the anchored strip in wrap_yield_text and
+		 * leave a second yield* nested inside the ToEffect argument.
+		 */
+		const text = slice_start(content, expr).trim();
 		const yield_text = wrap_yield_text(text, context);
 
 		return {
