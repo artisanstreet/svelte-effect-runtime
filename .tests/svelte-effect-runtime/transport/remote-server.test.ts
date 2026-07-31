@@ -13,6 +13,7 @@ import {
 	run_remote_effect,
 	throw_form_error,
 	throw_remote_cause,
+	to_remote_failure_context,
 } from "../../../modules/svelte-effect-runtime/src/remote/server.ts";
 import {
 	error as svelte_error,
@@ -1266,7 +1267,7 @@ test("an untagged failure is reported with its original error and cause", () => 
 			() => {
 				throw new Error("error");
 			},
-			{ method: "POST", route: "/api/[id]/checkout", url: "/api/7/checkout" },
+			() => ({ method: "POST", route: "/api/[id]/checkout", url: "/api/7/checkout" }),
 			(message: string) => reports.push(message),
 		),
 	);
@@ -1314,7 +1315,7 @@ test("an interrupted handler is reported as an interrupt", async () => {
 			() => {
 				throw new Error("error");
 			},
-			{ url: "/api/live" },
+			() => ({ url: "/api/live" }),
 			(message: string) => reports.push(message),
 		),
 	);
@@ -1324,6 +1325,66 @@ test("an interrupted handler is reported as an interrupt", async () => {
 	assert_equals(reports.length, 1);
 	assert_string_includes(report ?? "", "interrupted before it produced a result");
 	assert_string_includes(report ?? "", "/api/live");
+});
+
+test("a request event that refuses its properties does not reach a successful handler", async () => {
+	class TestRuntime {
+		runPromise(effect: Effect.Effect<unknown, unknown, unknown>): Promise<unknown> {
+			return get_server_dispatcher().run(effect);
+		}
+	}
+
+	/** SvelteKit restricts what a remote function may read from its event. */
+	const hostile_event = {
+		get request(): never {
+			throw new Error("event.request is not available here");
+		},
+		get route(): never {
+			throw new Error("event.route is not available here");
+		},
+		get url(): never {
+			throw new Error("event.url is not available here");
+		},
+	};
+	const result = await run_remote_effect(
+		Effect.succeed("handler ran"),
+		new TestRuntime(),
+		() => {
+			throw new Error("invalid");
+		},
+		() => {
+			throw new Error("error");
+		},
+		() => to_remote_failure_context(hostile_event as never),
+	);
+
+	assert_equals(result, "handler ran");
+});
+
+test("a request event that refuses its properties still reports the failure", () => {
+	const reports: string[] = [];
+
+	assert_throws(() =>
+		throw_remote_cause(
+			{ reasons: [{ _tag: "Fail", error: new Error("boom") }] } as never,
+			() => {
+				throw new Error("invalid");
+			},
+			() => {
+				throw new Error("error");
+			},
+			() =>
+				to_remote_failure_context({
+					get route(): never {
+						throw new Error("event.route is not available here");
+					},
+				} as never),
+			(message: string) => reports.push(message),
+		),
+	);
+
+	assert_equals(reports.length, 1);
+	assert_string_includes(reports[0] ?? "", "could not be sent to the client");
 });
 
 test("a failure that resists every conversion still reaches SvelteKit's error helper", () => {
