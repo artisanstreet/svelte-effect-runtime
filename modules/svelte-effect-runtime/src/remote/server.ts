@@ -1,7 +1,7 @@
 import { create_serialized_remote_failure_envelope } from "$/remote/shared.ts";
 import { report_opaque_remote_failure } from "$/remote/diagnostics.ts";
 import { RemoteHelperContextError, RemoteHelperError } from "$/errors.ts";
-import type { RemoteFailureContext } from "$/remote/diagnostics.ts";
+import type { RemoteFailureContext, ResolveRemoteFailureContext } from "$/remote/diagnostics.ts";
 import { classify_remote_cause } from "$/remote/cause-codec.ts";
 import type { FormIssue } from "$/remote/shared.ts";
 import { Cause, Effect, Exit } from "effect";
@@ -25,7 +25,7 @@ export async function run_remote_effect<A>(
 	},
 	invalid: SvelteInvalid,
 	error: SvelteError,
-	context?: RemoteFailureContext,
+	resolve_context?: ResolveRemoteFailureContext,
 ): Promise<A> {
 	const exit: Exit.Exit<A, unknown> = (await runtime.runPromise(
 		Effect.exit(effect) as Effect.Effect<unknown, unknown, unknown>,
@@ -35,7 +35,7 @@ export async function run_remote_effect<A>(
 		return exit.value;
 	}
 
-	throw_remote_cause(exit.cause, invalid, error, context);
+	throw_remote_cause(exit.cause, invalid, error, resolve_context);
 }
 
 /** Applies a classified remote Cause decision to SvelteKit's server helpers. */
@@ -43,7 +43,7 @@ export function throw_remote_cause(
 	cause: Cause.Cause<unknown>,
 	invalid: SvelteInvalid,
 	error: SvelteError,
-	context?: RemoteFailureContext,
+	resolve_context?: ResolveRemoteFailureContext,
 	report?: (message: string) => void,
 ): never {
 	const resolution = classify_remote_cause(cause);
@@ -57,7 +57,7 @@ export function throw_remote_cause(
 				"interrupted",
 				resolution.cause,
 				undefined,
-				context,
+				resolve_context,
 				report,
 			);
 
@@ -78,7 +78,7 @@ export function throw_remote_cause(
 					resolution.opaque.reason,
 					cause,
 					resolution.opaque.value,
-					context,
+					resolve_context,
 					report,
 				);
 			}
@@ -105,15 +105,30 @@ export function to_remote_failure_context(event: {
 	readonly route?: { readonly id?: string | null };
 	readonly url?: { readonly pathname?: string };
 }): RemoteFailureContext {
-	const method = event.request?.method;
-	const route = event.route?.id ?? undefined;
-	const url = event.url?.pathname;
+	const method = read_event_detail(() => event.request?.method);
+	const route = read_event_detail(() => event.route?.id ?? undefined);
+	const url = read_event_detail(() => event.url?.pathname);
 
 	return {
 		...(method ? { method } : {}),
 		...(route ? { route } : {}),
 		...(url ? { url } : {}),
 	};
+}
+
+/**
+ * Reads one request detail, tolerating an event that refuses it.
+ *
+ * SvelteKit restricts which parts of a request a remote function may observe,
+ * and the set has changed across releases. A diagnostic must never be the
+ * reason a handler cannot answer, so an unavailable detail is simply omitted.
+ */
+function read_event_detail(read: () => string | undefined): string | undefined {
+	try {
+		return read();
+	} catch {
+		return undefined;
+	}
 }
 
 export function throw_form_error(issues: readonly FormIssue[], invalid: SvelteInvalid): never {

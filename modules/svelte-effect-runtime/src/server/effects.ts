@@ -84,7 +84,7 @@ function run_live_source_effect<A>(
 		runtime,
 		svelte_invalid,
 		svelte_remote_error,
-		to_remote_failure_context(event),
+		() => to_remote_failure_context(event),
 	);
 }
 
@@ -98,10 +98,7 @@ const preserve_live_source_cause = <A>(value: LiveHandlerResult<A>, event: Reque
 		Stream.catchCause((cause) =>
 			Stream.fromEffect(
 				Effect.sync(() =>
-					throw_remote_cause(
-						cause,
-						svelte_invalid,
-						svelte_remote_error,
+					throw_remote_cause(cause, svelte_invalid, svelte_remote_error, () =>
 						to_remote_failure_context(event),
 					),
 				),
@@ -176,7 +173,7 @@ export function run_handler_effect<A>(
 		runtime,
 		svelte_invalid,
 		svelte_remote_error,
-		to_remote_failure_context(event),
+		() => to_remote_failure_context(event),
 	);
 }
 

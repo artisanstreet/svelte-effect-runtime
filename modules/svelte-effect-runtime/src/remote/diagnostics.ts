@@ -29,6 +29,23 @@ export type RemoteFailureContext = {
 	readonly url?: string;
 };
 
+/**
+ * Defers building a {@link RemoteFailureContext} until a report is actually
+ * rendered.
+ *
+ * The context describes a request SER never otherwise inspects, so resolving
+ * it eagerly would read request-event properties on every remote call to
+ * describe the few that fail.
+ *
+ * @example
+ * ```ts
+ * const resolve: ResolveRemoteFailureContext = () => ({ url: event.url.pathname });
+ * ```
+ *
+ * @since 4.2.1
+ */
+export type ResolveRemoteFailureContext = () => RemoteFailureContext | undefined;
+
 type Reporter = (message: string) => void;
 
 const explanations: Readonly<Record<OpaqueRemoteFailureReason, string>> = {
@@ -75,16 +92,17 @@ export function report_opaque_remote_failure(
 	reason: OpaqueRemoteFailureReason,
 	cause: Cause.Cause<unknown>,
 	value: unknown,
-	context?: RemoteFailureContext,
+	resolve_context?: ResolveRemoteFailureContext,
 	report: Reporter = default_reporter,
 ): void {
 	/**
-	 * Reporting runs before SvelteKit's error helper, and the failure it
-	 * describes is arbitrary user data. Throwing here would replace the 500
-	 * the handler owes the client with the reporter's own error.
+	 * Reporting runs before SvelteKit's error helper, and both the failure and
+	 * the request it describes are arbitrary values SER does not own. Resolve
+	 * the context in here so a request event that refuses a property cannot
+	 * replace the 500 the handler owes the client.
 	 */
 	try {
-		report(render_opaque_remote_failure(reason, cause, value, context));
+		report(render_opaque_remote_failure(reason, cause, value, resolve_context?.()));
 	} catch {
 		/** A diagnostic is never worth failing the request over. */
 	}
