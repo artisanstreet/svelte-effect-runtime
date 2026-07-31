@@ -1,6 +1,6 @@
 {
 	"name": "svelte-effect-runtime-language-server",
-	"version": "4.2.0",
+	"version": "4.2.1",
 	"description": "Language server for Svelte Effect Runtime syntax in Svelte files.",
 	"license": "BSD-3-Clause",
 	"repository": {
@@ -30,7 +30,7 @@
 		"@jridgewell/trace-mapping": "^0.3.31",
 		"magic-string": "^0.30.21",
 		"svelte": "^5.56.0",
-		"svelte-effect-runtime-grammars": "workspace:4.2.0",
+		"svelte-effect-runtime-grammars": "workspace:4.2.1",
 		"svelte-language-server": "^0.17.30",
 		"typescript": "^6.0.0",
 		"vscode-languageserver": "9.0.1"
