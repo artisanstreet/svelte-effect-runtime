@@ -39,6 +39,38 @@ test("remote transport retains conformance evidence after failures", async () =>
 	});
 });
 
+test("workflow policy reserves Blacksmith for remote transport", async () => {
+	const workflow = parse(await readFile(".github/workflows/ci.yml", "utf8"));
+	const setup_action = parse(await readFile(".github/actions/setup/action.yml", "utf8"));
+
+	workflow.jobs.capability_compiler["runs-on"] = "blacksmith-4vcpu-ubuntu-2404";
+
+	const violations = find_workflow_policy_violations({
+		workflow,
+		setup_action,
+		workflow_files: ["ci.yml"],
+	});
+
+	expect(violations).toContain("capability_compiler must run on ubuntu-latest.");
+});
+
+test("workflow policy keeps remote transport on the fast runner", async () => {
+	const workflow = parse(await readFile(".github/workflows/ci.yml", "utf8"));
+	const setup_action = parse(await readFile(".github/actions/setup/action.yml", "utf8"));
+
+	workflow.jobs.capability_transport["runs-on"] = "ubuntu-latest";
+
+	const violations = find_workflow_policy_violations({
+		workflow,
+		setup_action,
+		workflow_files: ["ci.yml"],
+	});
+
+	expect(violations).toContain(
+		"capability_transport must run on blacksmith-4vcpu-ubuntu-2404.",
+	);
+});
+
 test("resume reruns candidate smoke jobs after skipped artifact builds", async () => {
 	const workflow = parse(await readFile(".github/workflows/ci.yml", "utf8"));
 
