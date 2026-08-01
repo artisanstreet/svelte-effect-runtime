@@ -41,7 +41,7 @@ concurrency:
 jobs:
     plan:
         name: Plan
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-latest
         timeout-minutes: 10
         permissions:
             contents: read
@@ -120,7 +120,7 @@ jobs:
     static_policy:
         name: Static policy
         needs: plan
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-latest
         timeout-minutes: 15
         permissions:
             contents: read
@@ -146,7 +146,7 @@ jobs:
     capability_compiler:
         name: Capability / Compiler
         needs: plan
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-latest
         timeout-minutes: 15
         permissions:
             contents: read
@@ -164,7 +164,7 @@ jobs:
     capability_runtime:
         name: Capability / Runtime and lifecycle
         needs: plan
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-latest
         timeout-minutes: 15
         permissions:
             contents: read
@@ -182,7 +182,7 @@ jobs:
     capability_signals:
         name: Capability / Signals and reactivity
         needs: plan
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-latest
         timeout-minutes: 15
         permissions:
             contents: read
@@ -240,7 +240,7 @@ jobs:
     capability_public_api:
         name: Capability / Public API
         needs: plan
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-latest
         timeout-minutes: 15
         permissions:
             contents: read
@@ -258,7 +258,7 @@ jobs:
     capability_types:
         name: Capability / Type contracts
         needs: plan
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-latest
         timeout-minutes: 20
         permissions:
             contents: read
@@ -276,7 +276,7 @@ jobs:
     capability_package:
         name: Capability / Package and tooling
         needs: plan
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-latest
         timeout-minutes: 15
         permissions:
             contents: read
@@ -304,7 +304,7 @@ jobs:
             - capability_public_api
             - capability_types
             - capability_package
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-latest
         timeout-minutes: 5
         permissions: {}
         steps:
@@ -323,7 +323,7 @@ jobs:
         needs:
             - plan
             - staging_verified
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-latest
         timeout-minutes: 20
         permissions:
             contents: read
@@ -355,7 +355,7 @@ jobs:
         needs:
             - plan
             - staging_verified
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-latest
         timeout-minutes: 15
         permissions:
             contents: read
@@ -388,7 +388,7 @@ jobs:
             - plan
             - staging_verified
             - artifact_runtime
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-latest
         timeout-minutes: 20
         permissions:
             contents: read
@@ -425,7 +425,7 @@ jobs:
         needs:
             - plan
             - staging_verified
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-latest
         timeout-minutes: 20
         permissions:
             contents: read
@@ -475,7 +475,7 @@ jobs:
             - artifact_grammars
             - artifact_language_server
             - artifact_vsix
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-latest
         timeout-minutes: 20
         permissions:
             actions: read
@@ -567,7 +567,7 @@ jobs:
         needs:
             - plan
             - candidate_assemble
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-latest
         timeout-minutes: 20
         permissions:
             contents: read
@@ -602,7 +602,7 @@ jobs:
         needs:
             - plan
             - candidate_assemble
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-latest
         timeout-minutes: 30
         permissions:
             contents: read
@@ -633,7 +633,7 @@ jobs:
             - candidate_assemble
             - candidate_consumer_smoke
             - candidate_browser_smoke
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-latest
         timeout-minutes: 5
         permissions: {}
         steps:
@@ -652,7 +652,7 @@ jobs:
         needs:
             - plan
             - candidate_verified
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-latest
         timeout-minutes: 10
         permissions:
             contents: read
@@ -702,7 +702,7 @@ jobs:
         needs:
             - plan
             - candidate_verified
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-latest
         timeout-minutes: 5
         environment: release-approval
         permissions:
@@ -726,7 +726,7 @@ jobs:
             - plan
             - candidate_verified
             - release_gate
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-latest
         timeout-minutes: 15
         permissions:
             actions: read
@@ -866,7 +866,7 @@ jobs:
         needs:
             - plan
             - github_prepare
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-latest
         timeout-minutes: 15
         permissions:
             actions: read
@@ -919,7 +919,7 @@ jobs:
         needs:
             - plan
             - npm_publish
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-latest
         timeout-minutes: 15
         environment:
             name: release
@@ -980,7 +980,7 @@ jobs:
             - npm_publish
             - github_assets
             - openvsx_publish
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-latest
         timeout-minutes: 15
         permissions:
             actions: read
@@ -1031,7 +1031,7 @@ jobs:
             - github_assets
             - openvsx_publish
             - github_finalize
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-latest
         timeout-minutes: 10
         permissions:
             actions: read
@@ -1078,7 +1078,7 @@ jobs:
             - candidate_verified
             - dry_run
             - promotion_evidence
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-latest
         timeout-minutes: 10
         permissions:
             actions: read

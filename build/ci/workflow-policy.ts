@@ -43,6 +43,9 @@ const candidate_job_ids = [
 	"promotion_evidence",
 ] as const;
 const expected_trigger_names = ["pull_request", "push", "workflow_dispatch"];
+const fast_runner_job_id = "capability_transport";
+const fast_runner = "blacksmith-4vcpu-ubuntu-2404";
+const standard_runner = "ubuntu-latest";
 const candidate_job_guard =
 	"github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/candidate'";
 const forbidden_surface =
@@ -222,6 +225,7 @@ export function find_workflow_policy_violations(input: WorkflowPolicyInput): Rea
 		violations.push("Dry-run must fetch candidate history before promotion checks.");
 	}
 
+	validate_job_runners(jobs, violations);
 	validate_permissions(jobs, violations);
 	validate_action_pins([workflow, setup_action], violations);
 	validate_artifact_uploads(jobs, violations);
@@ -272,6 +276,23 @@ function has_top_level_disjunction(condition: string): boolean {
 	}
 
 	return false;
+}
+
+function validate_job_runners(
+	jobs: Readonly<Record<string, unknown>>,
+	violations: Array<string>,
+): void {
+	for (const [job_id, value] of Object.entries(jobs)) {
+		const job = require_record(value, `job ${job_id}`, violations);
+		const expected_runner =
+			job_id === fast_runner_job_id ? fast_runner : standard_runner;
+
+		if (job["runs-on"] === expected_runner) {
+			continue;
+		}
+
+		violations.push(`${job_id} must run on ${expected_runner}.`);
+	}
 }
 
 function validate_shell_inputs(
