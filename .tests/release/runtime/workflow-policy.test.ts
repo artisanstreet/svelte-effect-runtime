@@ -48,7 +48,7 @@ test("workflow policy reserves Blacksmith for remote transport", async () => {
 	const violations = find_workflow_policy_violations({
 		workflow,
 		setup_action,
-		workflow_files: ["ci.yml"],
+		workflow_files: ["ci.yml", "fuzz.yml"],
 	});
 
 	expect(violations).toContain("capability_compiler must run on ubuntu-latest.");
@@ -63,7 +63,7 @@ test("workflow policy keeps remote transport on the fast runner", async () => {
 	const violations = find_workflow_policy_violations({
 		workflow,
 		setup_action,
-		workflow_files: ["ci.yml"],
+		workflow_files: ["ci.yml", "fuzz.yml"],
 	});
 
 	expect(violations).toContain("capability_transport must run on blacksmith-4vcpu-ubuntu-2404.");
@@ -128,7 +128,7 @@ test("workflow policy rejects a master publication path", async () => {
 	const violations = find_workflow_policy_violations({
 		workflow,
 		setup_action,
-		workflow_files: ["ci.yml"],
+		workflow_files: ["ci.yml", "fuzz.yml"],
 	});
 
 	expect(violations).toContain("github_prepare must be gated on a manual candidate dispatch.");
@@ -146,7 +146,7 @@ test("workflow policy requires candidate history for the dry-run promotion proof
 	const violations = find_workflow_policy_violations({
 		workflow,
 		setup_action,
-		workflow_files: ["ci.yml"],
+		workflow_files: ["ci.yml", "fuzz.yml"],
 	});
 
 	expect(violations).toContain("Dry-run must fetch candidate history before promotion checks.");
@@ -164,7 +164,7 @@ test("workflow policy reads the candidate guard from the job condition", async (
 	const violations = find_workflow_policy_violations({
 		workflow,
 		setup_action,
-		workflow_files: ["ci.yml"],
+		workflow_files: ["ci.yml", "fuzz.yml"],
 	});
 
 	expect(violations).toContain("github_prepare must be gated on a manual candidate dispatch.");
@@ -179,7 +179,7 @@ test("workflow policy rejects a widened candidate guard", async () => {
 	const violations = find_workflow_policy_violations({
 		workflow,
 		setup_action,
-		workflow_files: ["ci.yml"],
+		workflow_files: ["ci.yml", "fuzz.yml"],
 	});
 
 	expect(violations).toContain("github_prepare must be gated on a manual candidate dispatch.");
@@ -194,7 +194,7 @@ test("workflow policy rejects extra publication authority", async () => {
 	const violations = find_workflow_policy_violations({
 		workflow,
 		setup_action,
-		workflow_files: ["ci.yml"],
+		workflow_files: ["ci.yml", "fuzz.yml"],
 	});
 
 	expect(violations).toContain("npm publication must use only read access and OIDC authority.");
@@ -209,7 +209,7 @@ test("workflow policy requires GitHub-hosted npm trusted publishing", async () =
 	const violations = find_workflow_policy_violations({
 		workflow,
 		setup_action,
-		workflow_files: ["ci.yml"],
+		workflow_files: ["ci.yml", "fuzz.yml"],
 	});
 
 	expect(violations).toContain("npm trusted publishing must run on a GitHub-hosted runner.");
@@ -224,7 +224,7 @@ test("workflow policy rejects direct shell interpolation of manual inputs", asyn
 	const violations = find_workflow_policy_violations({
 		workflow,
 		setup_action,
-		workflow_files: ["ci.yml"],
+		workflow_files: ["ci.yml", "fuzz.yml"],
 	});
 
 	expect(violations).toContain("plan interpolates manual input directly into a shell script.");

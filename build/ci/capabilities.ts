@@ -6,6 +6,7 @@ export const capability_lane_ids = [
 	"public-api",
 	"type-contracts",
 	"package-and-tooling",
+	"fuzzing",
 ] as const;
 
 export type CapabilityLaneId = (typeof capability_lane_ids)[number];
@@ -117,6 +118,22 @@ export const capability_lanes: ReadonlyArray<CapabilityLane> = Object.freeze([
 		`${vsix_test_root}/vsix-server-path.test.ts`,
 		`${vsix_test_root}/vsix-svelte-config.test.ts`,
 		`${vsix_test_root}/vsix-svelte-extension-control.test.ts`,
+	]),
+	/**
+	 * Property-based suites run apart from the deterministic lanes: they are
+	 * randomised and CPU-heavy, and sharing a runner with the compiler lane's
+	 * wall-clock performance guards makes those guards flake.
+	 */
+	make_lane("fuzzing", "Capability / Fuzzing", [
+		`${ser_test_root}/fuzz/compiler-helpers.test.ts`,
+		`${ser_test_root}/fuzz/dispatcher.test.ts`,
+		`${ser_test_root}/fuzz/free-identifiers.test.ts`,
+		`${ser_test_root}/fuzz/markup-transform.test.ts`,
+		`${ser_test_root}/fuzz/pipeline.test.ts`,
+		`${ser_test_root}/fuzz/remote-failures.test.ts`,
+		`${ser_test_root}/fuzz/script-transform.test.ts`,
+		`${ser_test_root}/fuzz/source-scan.test.ts`,
+		`${ser_test_root}/fuzz/yieldable.test.ts`,
 	]),
 ]);
 
