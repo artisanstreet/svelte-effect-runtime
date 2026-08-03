@@ -66,9 +66,7 @@ test("workflow policy keeps remote transport on the fast runner", async () => {
 		workflow_files: ["ci.yml"],
 	});
 
-	expect(violations).toContain(
-		"capability_transport must run on blacksmith-4vcpu-ubuntu-2404.",
-	);
+	expect(violations).toContain("capability_transport must run on blacksmith-4vcpu-ubuntu-2404.");
 });
 
 test("resume reruns candidate smoke jobs after skipped artifact builds", async () => {
