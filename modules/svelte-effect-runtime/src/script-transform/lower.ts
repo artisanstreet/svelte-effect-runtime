@@ -46,6 +46,7 @@ function lower_variable_statement(
 
 	const decl_list = stmt.declarationList;
 	const kind = (decl_list.flags & ts.NodeFlags.Let) !== 0 ? "let" : "const";
+	const modifiers = ts.getModifiers(stmt) ?? [];
 	let uses_dispatcher_promise = false;
 
 	for (const decl of decl_list.declarations) {
@@ -66,7 +67,16 @@ function lower_variable_statement(
 		uses_dispatcher_promise ||= lowered.uses_dispatcher_promise;
 	}
 
-	const rewritten_text = `${kind} ${rewritten_decls.join(", ")};`;
+	/**
+	 * The rewritten range starts at the statement itself, which covers any
+	 * modifiers, so `export` has to be re-emitted or the binding silently stops
+	 * being a component export.
+	 */
+	const modifier_prefix = modifiers.map((modifier) => slice_start(content, modifier)).join(" ");
+
+	const rewritten_text = [modifier_prefix, `${kind} ${rewritten_decls.join(", ")};`]
+		.filter(Boolean)
+		.join(" ");
 
 	return {
 		temps: [],

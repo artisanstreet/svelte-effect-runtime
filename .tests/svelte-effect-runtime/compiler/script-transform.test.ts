@@ -795,3 +795,26 @@ test("does not choke on $props() or $bindable declarations", () => {
 	assert_string_includes(result.code, `$bindable(0)`);
 	assert_not_match(result.code, /__SER__/);
 });
+
+test("preserves the export modifier when lowering a declaration", () => {
+	const source = `export const user = yield* loadUser(id);`;
+	const result = transform_script_effect(source, "Test.svelte");
+
+	assert_string_includes(result.code, `export const user = await get_dispatcher()`);
+	assert_not_match(result.code, /^const user = await/m);
+});
+
+test("preserves the export modifier on a lowered let declaration", () => {
+	const source = `export let user = yield* loadUser(id);`;
+	const result = transform_script_effect(source, "Test.svelte");
+
+	assert_string_includes(result.code, `export let user = await get_dispatcher()`);
+});
+
+test("preserves the export modifier across a multi declarator statement", () => {
+	const source = `export const user = yield* loadUser(id), limit = 10;`;
+	const result = transform_script_effect(source, "Test.svelte");
+
+	assert_string_includes(result.code, `export const user = await get_dispatcher()`);
+	assert_string_includes(result.code, `limit = 10;`);
+});
