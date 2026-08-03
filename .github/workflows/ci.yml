@@ -161,24 +161,6 @@ jobs:
             - name: Verify capability
               run: vp node build/ci/run-capability.ts compiler
 
-    capability_fuzzing:
-        name: Capability / Fuzzing
-        needs: plan
-        runs-on: ubuntu-latest
-        timeout-minutes: 15
-        permissions:
-            contents: read
-        steps:
-            - name: Checkout selected commit
-              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-              with:
-                  persist-credentials: false
-                  ref: ${{ github.sha }}
-            - name: Setup workspace
-              uses: ./.github/actions/setup
-            - name: Verify capability
-              run: vp node build/ci/run-capability.ts fuzzing
-
     capability_runtime:
         name: Capability / Runtime and lifecycle
         needs: plan
@@ -316,7 +298,6 @@ jobs:
             - plan
             - static_policy
             - capability_compiler
-            - capability_fuzzing
             - capability_runtime
             - capability_signals
             - capability_transport

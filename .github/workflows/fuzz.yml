@@ -1,0 +1,36 @@
+name: SER fuzzing
+
+on:
+    workflow_dispatch:
+        inputs:
+            runs:
+                description: Generated cases per property. Higher finds more, and takes longer.
+                type: string
+                default: "5000"
+                required: true
+
+permissions: {}
+
+concurrency:
+    group: ser-fuzzing-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    fuzzing:
+        name: Fuzzing
+        runs-on: ubuntu-latest
+        timeout-minutes: 60
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout selected commit
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+              with:
+                  persist-credentials: false
+                  ref: ${{ github.sha }}
+            - name: Setup workspace
+              uses: ./.github/actions/setup
+            - name: Run fuzzing capability
+              env:
+                  SER_FUZZ_RUNS: ${{ inputs.runs }}
+              run: vp node build/ci/run-capability.ts fuzzing

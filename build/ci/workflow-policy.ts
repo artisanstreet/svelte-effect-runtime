@@ -235,7 +235,12 @@ export function find_workflow_policy_violations(input: WorkflowPolicyInput): Rea
 		violations.push("Workflow configuration contains an unsupported publication surface.");
 	}
 
-	require_equal_list(input.workflow_files, ["ci.yml"], "workflow files", violations);
+	/**
+	 * `fuzz.yml` is dispatch-only and runs no publication surface, so it is
+	 * allowed alongside the authoritative pipeline. Any other workflow file is
+	 * still a policy violation.
+	 */
+	require_equal_list(input.workflow_files, ["ci.yml", "fuzz.yml"], "workflow files", violations);
 
 	return Object.freeze(violations);
 }
