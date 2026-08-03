@@ -1,4 +1,4 @@
 interface:
   display_name: "Svelte Effect Runtime"
-  short_description: "Use SER syntax without false fixes"
-  default_prompt: "Use $svelte-effect-runtime when editing a SvelteKit app that has SER installed."
+  short_description: "Write strict SER-idiomatic Effect code"
+  default_prompt: "Use $svelte-effect-runtime for all work in a SvelteKit app that has SER installed: SER owns Effect execution (never runSync/runPromise or your own runtime), handlers are Effect.gen, and components use direct yield* at SER sites."
