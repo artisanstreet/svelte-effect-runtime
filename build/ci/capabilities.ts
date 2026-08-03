@@ -41,6 +41,7 @@ export const static_policy_test_files = Object.freeze([
 
 export const capability_lanes: ReadonlyArray<CapabilityLane> = Object.freeze([
 	make_lane("compiler", "Capability / Compiler", [
+		`${ser_test_root}/compiler/dependencies.test.ts`,
 		`${ser_test_root}/compiler/detect.test.ts`,
 		`${ser_test_root}/compiler/diagnostic-contract.test.ts`,
 		`${ser_test_root}/compiler/diagnostics.test.ts`,

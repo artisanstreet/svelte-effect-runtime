@@ -1,36 +1,41 @@
 import ts from "typescript";
 
+const callback_prefix = "const __SER___callback = ";
+
+/**
+ * Splits a callback expression into its parameter list and body.
+ *
+ * The split is syntactic rather than textual: locating the body by searching
+ * for `=>` finds the first arrow anywhere in the string, including one nested
+ * inside the callback's own body, which silently truncates the body and hides
+ * whatever it contained.
+ */
 export function strip_arrow_function(expr: string): {
 	params: string;
 	body: string;
 	body_start: number;
 	body_end: number;
 } {
-	const arrow_idx = expr.indexOf("=>");
+	const callback = parse_callback_expression(expr);
 
-	if (arrow_idx === -1) {
+	if (!callback) {
 		return { params: "()", body: expr, body_start: 0, body_end: expr.length };
 	}
 
-	const params = expr.slice(0, arrow_idx).trim();
-	const raw_body = expr.slice(arrow_idx + 2);
-	const leading_ws = raw_body.length - raw_body.trimStart().length;
-	let body_start = arrow_idx + 2 + leading_ws;
-	let body_end = expr.length - (raw_body.length - raw_body.trimEnd().length);
-	let body = expr.slice(body_start, body_end);
+	const offset = callback_prefix.length;
+	const parameters = callback.parameters;
+	const params = `(${expr.slice(parameters.pos - offset, parameters.end - offset).trim()})`;
+	const is_block = ts.isBlock(callback.body);
 
-	if (body.startsWith("{") && body.endsWith("}")) {
-		body_start += 1;
-		body_end -= 1;
-		body = body.slice(1, -1);
-	}
+	let body_start = callback.body.getStart() - offset + (is_block ? 1 : 0);
+	let body_end = callback.body.end - offset - (is_block ? 1 : 0);
 
-	const body_leading_ws = body.length - body.trimStart().length;
-	const body_trailing_ws = body.length - body.trimEnd().length;
+	const raw = expr.slice(body_start, body_end);
 
-	body_start += body_leading_ws;
-	body_end -= body_trailing_ws;
-	body = body.trim();
+	body_start += raw.length - raw.trimStart().length;
+	body_end -= raw.length - raw.trimEnd().length;
+
+	let body = raw.trim();
 
 	if (body.endsWith(";")) {
 		body = body.slice(0, -1);
@@ -38,6 +43,34 @@ export function strip_arrow_function(expr: string): {
 	}
 
 	return { params, body, body_start, body_end };
+}
+
+function parse_callback_expression(
+	expr: string,
+): (ts.ArrowFunction | ts.FunctionExpression) | undefined {
+	const source_file = ts.createSourceFile(
+		"callback.ts",
+		callback_prefix + expr,
+		ts.ScriptTarget.Latest,
+		true,
+		ts.ScriptKind.TS,
+	);
+	const stmt = source_file.statements[0];
+
+	if (!stmt || !ts.isVariableStatement(stmt)) {
+		return undefined;
+	}
+
+	const initializer = stmt.declarationList.declarations[0]?.initializer;
+
+	if (
+		initializer === undefined ||
+		!(ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer))
+	) {
+		return undefined;
+	}
+
+	return initializer;
 }
 
 export function is_callback_function_expression(expr: string): boolean {
@@ -126,24 +159,92 @@ export function collect_free_identifiers(expr_text: string): string[] {
 }
 
 function visit_ids(node: ts.Node, locals: Set<string>, seen: Set<string>, ids: string[]): void {
-	if (
-		ts.isArrowFunction(node) ||
-		ts.isFunctionExpression(node) ||
-		ts.isFunctionDeclaration(node)
-	) {
+	if (ts.isFunctionLike(node)) {
 		const scoped = new Set(locals);
 
-		if (ts.isFunctionDeclaration(node) && node.name) {
+		if (
+			(ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)) &&
+			node.name !== undefined
+		) {
 			scoped.add(node.name.text);
+		}
+
+		/**
+		 * A computed member name is evaluated in the enclosing scope, so it stays
+		 * a dependency even though the member itself introduces a new scope.
+		 */
+		if ("name" in node && node.name !== undefined && ts.isComputedPropertyName(node.name)) {
+			visit_ids(node.name.expression, locals, seen, ids);
 		}
 
 		for (const parameter of node.parameters) {
 			add_binding_names(parameter.name, scoped);
 		}
 
-		if (node.body) {
+		/**
+		 * Defaults are evaluated in parameter scope: they can reference the values
+		 * this expression depends on, so skipping them drops a dependency and the
+		 * effect silently stops re-running.
+		 */
+		for (const parameter of node.parameters) {
+			if (parameter.initializer) {
+				visit_ids(parameter.initializer, scoped, seen, ids);
+			}
+		}
+
+		if ("body" in node && node.body) {
 			visit_ids(node.body, scoped, seen, ids);
 		}
+
+		return;
+	}
+
+	/** A block-scoped declaration must not leak into the enclosing scope. */
+	if (ts.isBlock(node) || ts.isCaseBlock(node)) {
+		const scoped = new Set(locals);
+
+		node.forEachChild((child) => visit_ids(child, scoped, seen, ids));
+
+		return;
+	}
+
+	/**
+	 * The iterable is evaluated before the loop binding exists, so it has to be
+	 * walked in the enclosing scope. Binding first would silently swallow a
+	 * dependency that happens to share the loop variable's name.
+	 */
+	if (ts.isForOfStatement(node) || ts.isForInStatement(node)) {
+		const scoped = new Set(locals);
+
+		visit_ids(node.expression, locals, seen, ids);
+		visit_ids(node.initializer, scoped, seen, ids);
+		visit_ids(node.statement, scoped, seen, ids);
+
+		return;
+	}
+
+	if (ts.isForStatement(node)) {
+		const scoped = new Set(locals);
+
+		for (const part of [node.initializer, node.condition, node.incrementor]) {
+			if (part) {
+				visit_ids(part, scoped, seen, ids);
+			}
+		}
+
+		visit_ids(node.statement, scoped, seen, ids);
+
+		return;
+	}
+
+	if (ts.isCatchClause(node)) {
+		const scoped = new Set(locals);
+
+		if (node.variableDeclaration) {
+			visit_ids(node.variableDeclaration, scoped, seen, ids);
+		}
+
+		visit_ids(node.block, scoped, seen, ids);
 
 		return;
 	}
@@ -163,6 +264,15 @@ function visit_ids(node: ts.Node, locals: Set<string>, seen: Set<string>, ids: s
 	}
 
 	if (ts.isIdentifier(node)) {
+		/**
+		 * Statement text reaches this collector through an expression-shaped
+		 * wrapper, so parser error recovery can synthesise a nameless identifier.
+		 * Emitting it produces a bare `;` in the generated dependency reads.
+		 */
+		if (node.text === "") {
+			return;
+		}
+
 		if (
 			node.text === "yield" ||
 			node.text === "undefined" ||
@@ -271,12 +381,20 @@ function is_yield_star_expression(node: ts.Node): boolean {
 	);
 }
 
+/**
+ * Declaration names are not references. Emitting one as a dependency makes the
+ * generated code read an identifier that was never declared, which fails at
+ * runtime rather than merely re-running too often.
+ */
 function is_property_access_name(node: ts.Identifier): boolean {
 	const parent = node.parent;
 
 	return (
 		(ts.isPropertyAccessExpression(parent) && parent.name === node) ||
 		(ts.isPropertyAssignment(parent) && parent.name === node) ||
+		(ts.isPropertyDeclaration(parent) && parent.name === node) ||
+		(ts.isClassDeclaration(parent) && parent.name === node) ||
+		(ts.isClassExpression(parent) && parent.name === node) ||
 		(ts.isBindingElement(parent) && parent.propertyName === node) ||
 		ts.isImportSpecifier(parent) ||
 		ts.isExportSpecifier(parent)

@@ -284,8 +284,7 @@ function validate_job_runners(
 ): void {
 	for (const [job_id, value] of Object.entries(jobs)) {
 		const job = require_record(value, `job ${job_id}`, violations);
-		const expected_runner =
-			job_id === fast_runner_job_id ? fast_runner : standard_runner;
+		const expected_runner = job_id === fast_runner_job_id ? fast_runner : standard_runner;
 
 		if (job["runs-on"] === expected_runner) {
 			continue;
