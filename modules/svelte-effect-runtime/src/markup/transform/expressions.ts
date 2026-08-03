@@ -1,36 +1,41 @@
 import ts from "typescript";
 
+const callback_prefix = "const __SER___callback = ";
+
+/**
+ * Splits a callback expression into its parameter list and body.
+ *
+ * The split is syntactic rather than textual: locating the body by searching
+ * for `=>` finds the first arrow anywhere in the string, including one nested
+ * inside the callback's own body, which silently truncates the body and hides
+ * whatever it contained.
+ */
 export function strip_arrow_function(expr: string): {
 	params: string;
 	body: string;
 	body_start: number;
 	body_end: number;
 } {
-	const arrow_idx = expr.indexOf("=>");
+	const callback = parse_callback_expression(expr);
 
-	if (arrow_idx === -1) {
+	if (!callback) {
 		return { params: "()", body: expr, body_start: 0, body_end: expr.length };
 	}
 
-	const params = expr.slice(0, arrow_idx).trim();
-	const raw_body = expr.slice(arrow_idx + 2);
-	const leading_ws = raw_body.length - raw_body.trimStart().length;
-	let body_start = arrow_idx + 2 + leading_ws;
-	let body_end = expr.length - (raw_body.length - raw_body.trimEnd().length);
-	let body = expr.slice(body_start, body_end);
+	const offset = callback_prefix.length;
+	const parameters = callback.parameters;
+	const params = `(${expr.slice(parameters.pos - offset, parameters.end - offset).trim()})`;
+	const is_block = ts.isBlock(callback.body);
 
-	if (body.startsWith("{") && body.endsWith("}")) {
-		body_start += 1;
-		body_end -= 1;
-		body = body.slice(1, -1);
-	}
+	let body_start = callback.body.getStart() - offset + (is_block ? 1 : 0);
+	let body_end = callback.body.end - offset - (is_block ? 1 : 0);
 
-	const body_leading_ws = body.length - body.trimStart().length;
-	const body_trailing_ws = body.length - body.trimEnd().length;
+	const raw = expr.slice(body_start, body_end);
 
-	body_start += body_leading_ws;
-	body_end -= body_trailing_ws;
-	body = body.trim();
+	body_start += raw.length - raw.trimStart().length;
+	body_end -= raw.length - raw.trimEnd().length;
+
+	let body = raw.trim();
 
 	if (body.endsWith(";")) {
 		body = body.slice(0, -1);
@@ -38,6 +43,34 @@ export function strip_arrow_function(expr: string): {
 	}
 
 	return { params, body, body_start, body_end };
+}
+
+function parse_callback_expression(
+	expr: string,
+): (ts.ArrowFunction | ts.FunctionExpression) | undefined {
+	const source_file = ts.createSourceFile(
+		"callback.ts",
+		callback_prefix + expr,
+		ts.ScriptTarget.Latest,
+		true,
+		ts.ScriptKind.TS,
+	);
+	const stmt = source_file.statements[0];
+
+	if (!stmt || !ts.isVariableStatement(stmt)) {
+		return undefined;
+	}
+
+	const initializer = stmt.declarationList.declarations[0]?.initializer;
+
+	if (
+		initializer === undefined ||
+		!(ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer))
+	) {
+		return undefined;
+	}
+
+	return initializer;
 }
 
 export function is_callback_function_expression(expr: string): boolean {

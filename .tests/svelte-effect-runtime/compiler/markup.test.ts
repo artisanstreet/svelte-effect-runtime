@@ -2,6 +2,7 @@ import { transform_markup_effect } from "../../../modules/svelte-effect-runtime/
 import { scan_svelte_effect_source } from "../../../modules/svelte-effect-runtime/src/compiler/source-scan.ts";
 import { create_relocations } from "../../../modules/svelte-effect-runtime/src/markup/transform/apply.ts";
 import { sanitize_markup } from "../../../modules/svelte-effect-runtime/src/markup/transform/scan.ts";
+import { strip_arrow_function } from "../../../modules/svelte-effect-runtime/src/markup/transform/expressions.ts";
 import { reset_dispatcher } from "../../../modules/svelte-effect-runtime/src/dispatcher.ts";
 import {
 	assert_equals,
@@ -2073,4 +2074,50 @@ test("markup promise can stay pending during SSR await blocks", async () => {
 	} finally {
 		reset_dispatcher();
 	}
+});
+
+test("rejects a yield event callback whose effect contains a nested arrow", () => {
+	const source = [
+		`<script effect>`,
+		`	const id = 1;`,
+		`</script>`,
+		`<button onclick={function (event) { yield* Save(id).pipe(Effect.map((entry) => entry)); }}>Save</button>`,
+	].join("\n");
+
+	const error = assert_throws(
+		() => transform_markup_effect(source, "Test.svelte"),
+		Error,
+		"yield* in markup event handlers must be written directly",
+	);
+
+	assert_string_includes(error.message, "[ASYNC_EFFECT_IN_EVENT_HANDLER_CALLBACK]:");
+});
+
+test("rejects a yield arrow callback whose effect contains a nested arrow", () => {
+	const source = [
+		`<script effect>`,
+		`	const id = 1;`,
+		`</script>`,
+		`<button onclick={() => yield* Save(id).pipe(Effect.map((entry) => entry))}>Save</button>`,
+	].join("\n");
+
+	assert_throws(
+		() => transform_markup_effect(source, "Test.svelte"),
+		Error,
+		"yield* in markup event handlers must be written directly",
+	);
+});
+
+test("strips a callback body without splitting on a nested arrow", () => {
+	const stripped = strip_arrow_function(`function (event) { record(items.map((x) => x)); }`);
+
+	assert_equals(stripped.body, `record(items.map((x) => x))`);
+
+	const arrow = strip_arrow_function(`(event) => record(items.map((x) => x))`);
+
+	assert_equals(arrow.body, `record(items.map((x) => x))`);
+
+	const plain = strip_arrow_function(`yield* Save(id)`);
+
+	assert_equals(plain.body, `yield* Save(id)`);
 });
