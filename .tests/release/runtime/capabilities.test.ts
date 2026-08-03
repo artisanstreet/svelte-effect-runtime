@@ -16,6 +16,7 @@ const expected_lane_names = [
 	"Capability / Public API",
 	"Capability / Type contracts",
 	"Capability / Package and tooling",
+	"Capability / Fuzzing",
 ];
 
 test("issue 28 capability lanes have stable names and testable commands", () => {
