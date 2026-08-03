@@ -126,24 +126,92 @@ export function collect_free_identifiers(expr_text: string): string[] {
 }
 
 function visit_ids(node: ts.Node, locals: Set<string>, seen: Set<string>, ids: string[]): void {
-	if (
-		ts.isArrowFunction(node) ||
-		ts.isFunctionExpression(node) ||
-		ts.isFunctionDeclaration(node)
-	) {
+	if (ts.isFunctionLike(node)) {
 		const scoped = new Set(locals);
 
-		if (ts.isFunctionDeclaration(node) && node.name) {
+		if (
+			(ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)) &&
+			node.name !== undefined
+		) {
 			scoped.add(node.name.text);
+		}
+
+		/**
+		 * A computed member name is evaluated in the enclosing scope, so it stays
+		 * a dependency even though the member itself introduces a new scope.
+		 */
+		if ("name" in node && node.name !== undefined && ts.isComputedPropertyName(node.name)) {
+			visit_ids(node.name.expression, locals, seen, ids);
 		}
 
 		for (const parameter of node.parameters) {
 			add_binding_names(parameter.name, scoped);
 		}
 
-		if (node.body) {
+		/**
+		 * Defaults are evaluated in parameter scope: they can reference the values
+		 * this expression depends on, so skipping them drops a dependency and the
+		 * effect silently stops re-running.
+		 */
+		for (const parameter of node.parameters) {
+			if (parameter.initializer) {
+				visit_ids(parameter.initializer, scoped, seen, ids);
+			}
+		}
+
+		if ("body" in node && node.body) {
 			visit_ids(node.body, scoped, seen, ids);
 		}
+
+		return;
+	}
+
+	/** A block-scoped declaration must not leak into the enclosing scope. */
+	if (ts.isBlock(node) || ts.isCaseBlock(node)) {
+		const scoped = new Set(locals);
+
+		node.forEachChild((child) => visit_ids(child, scoped, seen, ids));
+
+		return;
+	}
+
+	/**
+	 * The iterable is evaluated before the loop binding exists, so it has to be
+	 * walked in the enclosing scope. Binding first would silently swallow a
+	 * dependency that happens to share the loop variable's name.
+	 */
+	if (ts.isForOfStatement(node) || ts.isForInStatement(node)) {
+		const scoped = new Set(locals);
+
+		visit_ids(node.expression, locals, seen, ids);
+		visit_ids(node.initializer, scoped, seen, ids);
+		visit_ids(node.statement, scoped, seen, ids);
+
+		return;
+	}
+
+	if (ts.isForStatement(node)) {
+		const scoped = new Set(locals);
+
+		for (const part of [node.initializer, node.condition, node.incrementor]) {
+			if (part) {
+				visit_ids(part, scoped, seen, ids);
+			}
+		}
+
+		visit_ids(node.statement, scoped, seen, ids);
+
+		return;
+	}
+
+	if (ts.isCatchClause(node)) {
+		const scoped = new Set(locals);
+
+		if (node.variableDeclaration) {
+			visit_ids(node.variableDeclaration, scoped, seen, ids);
+		}
+
+		visit_ids(node.block, scoped, seen, ids);
 
 		return;
 	}
@@ -163,6 +231,15 @@ function visit_ids(node: ts.Node, locals: Set<string>, seen: Set<string>, ids: s
 	}
 
 	if (ts.isIdentifier(node)) {
+		/**
+		 * Statement text reaches this collector through an expression-shaped
+		 * wrapper, so parser error recovery can synthesise a nameless identifier.
+		 * Emitting it produces a bare `;` in the generated dependency reads.
+		 */
+		if (node.text === "") {
+			return;
+		}
+
 		if (
 			node.text === "yield" ||
 			node.text === "undefined" ||
@@ -271,12 +348,20 @@ function is_yield_star_expression(node: ts.Node): boolean {
 	);
 }
 
+/**
+ * Declaration names are not references. Emitting one as a dependency makes the
+ * generated code read an identifier that was never declared, which fails at
+ * runtime rather than merely re-running too often.
+ */
 function is_property_access_name(node: ts.Identifier): boolean {
 	const parent = node.parent;
 
 	return (
 		(ts.isPropertyAccessExpression(parent) && parent.name === node) ||
 		(ts.isPropertyAssignment(parent) && parent.name === node) ||
+		(ts.isPropertyDeclaration(parent) && parent.name === node) ||
+		(ts.isClassDeclaration(parent) && parent.name === node) ||
+		(ts.isClassExpression(parent) && parent.name === node) ||
 		(ts.isBindingElement(parent) && parent.propertyName === node) ||
 		ts.isImportSpecifier(parent) ||
 		ts.isExportSpecifier(parent)
