@@ -260,9 +260,8 @@ export class Dispatcher {
 		const cell = this.#value_cells.get(cache_key);
 
 		if (old_key !== undefined && old_key !== cache_key) {
-			const old_fiber = this.#interrupt_cached_fiber(old_key);
-
-			this.#clear_pending_value_cell(old_key, old_fiber);
+			this.#interrupt_cached_fiber(old_key);
+			this.#delete_value_cell(old_key);
 		}
 
 		this.#value_ids.set(cache_id, cache_key);
@@ -441,6 +440,17 @@ export class Dispatcher {
 		});
 	}
 
+	/**
+	 * Read-only snapshot of the value/promise cache keys. Diagnostic surface
+	 * for leak regression tests; not part of the runtime contract.
+	 */
+	inspect_cache(): { value_cells: readonly string[]; promise_values: readonly string[] } {
+		return {
+			value_cells: [...this.#value_cells.keys()],
+			promise_values: [...this.#promise_values.keys()],
+		};
+	}
+
 	#make_value_cache_key(id: string, deps: readonly unknown[]): string {
 		return `value:${id}::${this.#hash_deps(deps)}`;
 	}
@@ -496,9 +506,9 @@ export class Dispatcher {
 		}
 
 		/**
-		 * The id maps only name the newest key per entry, so a scope whose
-		 * dependencies changed leaves the settled cells of every superseded key
-		 * behind. Sweep the caches themselves so unmounting releases them all.
+		 * value() and promise() evict a superseded key eagerly, so the id maps
+		 * above normally cover everything. Sweep the caches themselves as a
+		 * backstop so unmounting releases any entry the hot path missed.
 		 */
 		const value_key_prefix = `value:${scope_id}|`;
 		const promise_key_prefix = `promise:${scope_id}|`;
@@ -586,9 +596,26 @@ export class Dispatcher {
 			return;
 		}
 
-		const launch_fiber = this.#runtime.runFork(
+		let launch_fiber: FiberType<unknown, unknown> | undefined;
+		let forked_fiber: FiberType<unknown, unknown> | undefined;
+
+		const launched = this.#runtime.runFork(
 			Effect.flatMap(scope.fork_in(Program), (scoped_fiber) => {
-				if (this.#is_current_fiber(cache_key, launch_fiber)) {
+				forked_fiber = scoped_fiber;
+
+				/**
+				 * This continuation can run synchronously inside `runFork`,
+				 * before `launch_fiber` is assigned. In that case nothing can
+				 * have superseded the launch yet and the caller below records
+				 * the scoped fiber itself. An asynchronous continuation takes
+				 * over tracking only while its launch fiber is still current;
+				 * a superseded launch interrupts the orphaned scoped fiber.
+				 */
+				if (launch_fiber !== undefined) {
+					if (!this.#is_current_fiber(cache_key, launch_fiber)) {
+						return InterruptFiber(scoped_fiber);
+					}
+
 					this.#fibers.set(cache_key, scoped_fiber);
 				}
 
@@ -623,7 +650,8 @@ export class Dispatcher {
 			}) as Effect.Effect<unknown, unknown, unknown>,
 		);
 
-		this.#fibers.set(cache_key, launch_fiber);
+		launch_fiber = launched;
+		this.#fibers.set(cache_key, forked_fiber ?? launched);
 	}
 
 	#start_promise_fiber<A>(
@@ -717,23 +745,6 @@ export class Dispatcher {
 		this.#promise_values.set(cache_key, promise);
 
 		return promise;
-	}
-
-	#clear_pending_value_cell(
-		cache_key: string,
-		fiber: FiberType<unknown, unknown> | undefined,
-	): void {
-		const cell = this.#value_cells.get(cache_key);
-
-		if (cell?.status !== "pending") {
-			return;
-		}
-
-		if (fiber !== undefined && cell.fiber !== fiber) {
-			return;
-		}
-
-		this.#delete_value_cell(cache_key);
 	}
 
 	#complete_fiber(cache_key: string, fiber: FiberType<unknown, unknown>): void {

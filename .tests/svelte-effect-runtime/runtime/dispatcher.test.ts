@@ -378,7 +378,65 @@ test("value starts a new fiber when deps change", async () => {
 	await sleep(50);
 	assert_equals(d.value(opts2), 2);
 
-	assert_equals(d.value(opts1), 1);
+	/** Flipping deps back re-runs: the superseded cell was evicted, not kept. */
+	assert_equals(d.value(opts1), 0);
+	await sleep(50);
+	assert_equals(d.value(opts1), 3);
+
+	d.dispose();
+});
+
+test("value evicts settled cells of superseded keys", async () => {
+	const d = make_dispatcher();
+	const changes = 20;
+
+	const make_options = (dep: number): ValueOptions<number> => ({
+		id: "superseded",
+		deps: [dep],
+		fallback: -1,
+		factory: function* () {
+			return yield* Effect.succeed(dep);
+		},
+	});
+
+	for (let dep = 0; dep < changes; dep += 1) {
+		const options = make_options(dep);
+
+		d.value(options);
+		await wait_for(() => d.value(options) === dep);
+	}
+
+	/** Only the current key may remain cached — O(1) in dependency changes. */
+	assert_equals(d.inspect_cache().value_cells.length, 1);
+
+	d.dispose();
+});
+
+test("dispose_scope leaves no value cells behind for the scope", async () => {
+	const d = make_dispatcher();
+	const scope = d.begin_scope();
+
+	const make_options = (dep: number): ValueOptions<number> => ({
+		id: "scoped-superseded",
+		deps: [dep],
+		fallback: -1,
+		factory: function* () {
+			return yield* Effect.succeed(dep);
+		},
+	});
+
+	for (let dep = 0; dep < 5; dep += 1) {
+		const options = make_options(dep);
+
+		d.with_scope(scope, () => d.value(options));
+		await wait_for(() => d.with_scope(scope, () => d.value(options)) === dep);
+	}
+
+	d.dispose_scope(scope);
+
+	assert_equals(d.inspect_cache().value_cells.length, 0);
+
+	d.dispose();
 });
 
 test("value cancels old fiber when deps change", async () => {
