@@ -215,7 +215,13 @@ test("bounds AST brace probing within one large division expression", () => {
 
 test("bounds TypeScript parsing for many slash-bearing expressions", () => {
 	const count = 16_000;
-	const max_elapsed_ms = 5_000;
+	/**
+	 * The superlinear scanning this guards against overshoots by orders of
+	 * magnitude, so the budget only needs to exclude it — linear scanning
+	 * was measured at ~5.1–5.5s on slow CI runners, which the previous 5s
+	 * budget flaked on.
+	 */
+	const max_elapsed_ms = 10_000;
 	const make_source = (count: number) =>
 		`<Component>${Array.from(
 			{ length: count },
