@@ -43,7 +43,7 @@
 		"test": "corepack pnpm --dir ../.. exec vp test run .tests/svelte-effect-runtime-grammars/runtime/grammars.test.ts"
 	},
 	"devDependencies": {
-		"@types/node": "^24.6.1",
+		"@types/node": "^26.1.2",
 		"rolldown": "^1.0.0-rc.13",
 		"typescript": "^6.0.0"
 	},
