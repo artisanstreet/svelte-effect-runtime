@@ -66,7 +66,7 @@ export class ComponentScope {
 		effect: Effect.Effect<A, E, R>,
 	): {
 		readonly fork_effect: Effect.Effect<Fiber.Fiber<A, E>, never, R>;
-		readonly close_effect: Effect.Effect<void>;
+		readonly close_effect: (exit: Exit.Exit<unknown, unknown>) => Effect.Effect<void>;
 	} {
 		const run_scope = Scope.forkUnsafe(this.#scope);
 		const fork_effect = Effect.forkIn(
@@ -76,7 +76,7 @@ export class ComponentScope {
 
 		return {
 			fork_effect,
-			close_effect: Scope.close(run_scope, Exit.void),
+			close_effect: (exit) => Scope.close(run_scope, exit),
 		};
 	}
 

@@ -34,6 +34,53 @@ async function wait_for(predicate: () => boolean, timeout = 1000): Promise<void>
 	}
 }
 
+async function assert_failed_run_closes_children(
+	failure: Effect.Effect<never, unknown>,
+): Promise<void> {
+	const d = make_dispatcher();
+	const scope = d.begin_scope();
+	const baseline_finalizers = component_finalizer_count(scope);
+	let child_started = false;
+	let child_finalizers = 0;
+	let finalizer_exit: string | undefined;
+
+	const Child = Effect.gen(function* () {
+		yield* Effect.addFinalizer((exit) =>
+			Effect.sync(() => {
+				child_finalizers += 1;
+				finalizer_exit = exit._tag;
+			}),
+		);
+		child_started = true;
+		yield* Effect.never;
+	});
+	const Program = Effect.gen(function* () {
+		yield* Child.pipe(Effect.forkScoped);
+
+		while (!child_started) {
+			yield* Effect.yieldNow;
+		}
+
+		return yield* failure;
+	});
+
+	const cleanup = d.run_scoped(scope, Program);
+
+	await wait_for(() => child_started);
+	await wait_for(() => child_finalizers === 1);
+	await wait_for(() => component_finalizer_count(scope) === baseline_finalizers);
+
+	cleanup();
+	cleanup();
+	await sleep(20);
+
+	assert_equals(child_finalizers, 1);
+	assert_equals(finalizer_exit, "Failure");
+	assert_equals(component_finalizer_count(scope), baseline_finalizers);
+
+	d.dispose();
+}
+
 test("begin_scope returns a component scope bound to the dispatcher", () => {
 	const d = make_dispatcher();
 	const scope = d.begin_scope();
@@ -274,6 +321,14 @@ test("component disposal closes forkScoped children from completed reactive setu
 	assert_equals(scope.disposed, true);
 
 	d.dispose();
+});
+
+test("run_scoped closes forkScoped children after a typed setup failure", async () => {
+	await assert_failed_run_closes_children(Effect.fail("expected failure"));
+});
+
+test("run_scoped closes forkScoped children after a setup defect", async () => {
+	await assert_failed_run_closes_children(Effect.die("expected defect"));
 });
 
 test("run_scoped throws ScopeDisposedError after the scope is disposed", () => {

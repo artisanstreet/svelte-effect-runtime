@@ -149,7 +149,9 @@ export class Dispatcher {
 
 		this.#runtime.runFork(
 			Effect.flatMap(run.fork_effect, (fiber) => {
-				return Effect.asVoid(Fiber.await(fiber));
+				return Effect.flatMap(Fiber.await(fiber), (exit) => {
+					return Exit.isFailure(exit) ? run.close_effect(exit) : Effect.void;
+				});
 			}) as Effect.Effect<unknown, unknown, unknown>,
 		);
 
@@ -159,7 +161,9 @@ export class Dispatcher {
 			}
 
 			disposed = true;
-			this.#runtime.runFork(run.close_effect as Effect.Effect<unknown, unknown, unknown>);
+			this.#runtime.runFork(
+				run.close_effect(Exit.void) as Effect.Effect<unknown, unknown, unknown>,
+			);
 		};
 	}
 
