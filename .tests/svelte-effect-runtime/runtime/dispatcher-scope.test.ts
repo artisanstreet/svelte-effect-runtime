@@ -18,6 +18,12 @@ function sleep(ms: number): Promise<void> {
 	return new Promise((r) => setTimeout(r, ms));
 }
 
+function component_finalizer_count(scope: ComponentScope): number {
+	const state = scope.underlying.state;
+
+	return state._tag === "Open" ? state.finalizers.size : 0;
+}
+
 async function wait_for(predicate: () => boolean, timeout = 1000): Promise<void> {
 	const start = Date.now();
 	while (!predicate()) {
@@ -108,6 +114,164 @@ test("run_scoped cleanup interrupts a running scoped fiber", async () => {
 	await sleep(50);
 
 	if (finished) throw new Error("scoped fiber should have been interrupted");
+
+	d.dispose();
+});
+
+test("run_scoped cleanup closes forkScoped children after setup completes", async () => {
+	const d = make_dispatcher();
+	const scope = d.begin_scope();
+	const baseline_finalizers = component_finalizer_count(scope);
+	let child_started = false;
+	let child_finalizers = 0;
+	let setup_completed = false;
+
+	const Child = Effect.gen(function* () {
+		yield* Effect.addFinalizer(() =>
+			Effect.sync(() => {
+				child_finalizers += 1;
+			}),
+		);
+		child_started = true;
+		yield* Effect.never;
+	});
+	const Program = Effect.gen(function* () {
+		yield* Child.pipe(Effect.forkScoped);
+		setup_completed = true;
+	});
+
+	const cleanup = d.run_scoped(scope, Program);
+
+	await wait_for(() => child_started && setup_completed);
+	await sleep(20);
+
+	assert_equals(child_finalizers, 0);
+
+	cleanup();
+	cleanup();
+
+	await wait_for(() => child_finalizers === 1);
+	await wait_for(() => component_finalizer_count(scope) === baseline_finalizers);
+	await sleep(20);
+
+	assert_equals(child_finalizers, 1);
+	assert_equals(component_finalizer_count(scope), baseline_finalizers);
+
+	d.dispose();
+});
+
+test("run_scoped cleanup isolates concurrent reactive run children", async () => {
+	const d = make_dispatcher();
+	const scope = d.begin_scope();
+	const baseline_finalizers = component_finalizer_count(scope);
+	const active_runs = new Set<number>();
+	const finalized_runs = new Set<number>();
+
+	const MakeProgram = (run_id: number) =>
+		Effect.gen(function* () {
+			yield* Effect.gen(function* () {
+				yield* Effect.addFinalizer(() =>
+					Effect.sync(() => {
+						active_runs.delete(run_id);
+						finalized_runs.add(run_id);
+					}),
+				);
+				active_runs.add(run_id);
+				yield* Effect.never;
+			}).pipe(Effect.forkScoped);
+		});
+
+	const cleanup_first = d.run_scoped(scope, MakeProgram(1));
+	const cleanup_second = d.run_scoped(scope, MakeProgram(2));
+
+	await wait_for(() => active_runs.size === 2);
+
+	cleanup_first();
+
+	await wait_for(() => finalized_runs.has(1));
+
+	assert_equals(active_runs.has(1), false);
+	assert_equals(active_runs.has(2), true);
+	assert_equals(finalized_runs.has(2), false);
+
+	cleanup_second();
+
+	await wait_for(() => finalized_runs.size === 2);
+	await wait_for(() => component_finalizer_count(scope) === baseline_finalizers);
+
+	assert_equals(component_finalizer_count(scope), baseline_finalizers);
+
+	d.dispose();
+});
+
+test("reactive rerun cleanup keeps component finalizers bounded", async () => {
+	const d = make_dispatcher();
+	const scope = d.begin_scope();
+	const baseline_finalizers = component_finalizer_count(scope);
+	const run_count = 128;
+	let active_children = 0;
+	let finalized_children = 0;
+
+	const Child = Effect.gen(function* () {
+		yield* Effect.addFinalizer(() =>
+			Effect.sync(() => {
+				active_children -= 1;
+				finalized_children += 1;
+			}),
+		);
+		active_children += 1;
+		yield* Effect.never;
+	});
+	const Program = Effect.gen(function* () {
+		yield* Child.pipe(Effect.forkScoped);
+	});
+
+	/** Repeatedly model Svelte invalidating the previous completed setup run. */
+	for (let index = 0; index < run_count; index += 1) {
+		const cleanup = d.run_scoped(scope, Program);
+
+		await wait_for(() => active_children === 1);
+		cleanup();
+		await wait_for(() => finalized_children === index + 1);
+		await wait_for(() => component_finalizer_count(scope) === baseline_finalizers);
+
+		assert_equals(active_children, 0);
+	}
+
+	assert_equals(finalized_children, run_count);
+	assert_equals(component_finalizer_count(scope), baseline_finalizers);
+
+	d.dispose();
+});
+
+test("component disposal closes forkScoped children from completed reactive setup", async () => {
+	const d = make_dispatcher();
+	const scope = d.begin_scope();
+	let child_started = false;
+	let child_finalized = false;
+
+	const Child = Effect.gen(function* () {
+		yield* Effect.addFinalizer(() =>
+			Effect.sync(() => {
+				child_finalized = true;
+			}),
+		);
+		child_started = true;
+		yield* Effect.never;
+	});
+	const Program = Effect.gen(function* () {
+		yield* Child.pipe(Effect.forkScoped);
+	});
+
+	d.run_scoped(scope, Program);
+
+	await wait_for(() => child_started);
+
+	d.dispose_scope(scope);
+
+	await wait_for(() => child_finalized);
+
+	assert_equals(scope.disposed, true);
 
 	d.dispose();
 });
