@@ -57,6 +57,29 @@ export class ComponentScope {
 		) as Effect.Effect<Fiber.Fiber<A, E>, never, R>;
 	}
 
+	/**
+	 * Forks an effect into a child scope owned by one reactive run. The child
+	 * remains open after setup completes so nested scoped work survives until
+	 * that run is invalidated, while component disposal remains its backstop.
+	 */
+	fork_run_in<A, E, R>(
+		effect: Effect.Effect<A, E, R>,
+	): {
+		readonly fork_effect: Effect.Effect<Fiber.Fiber<A, E>, never, R>;
+		readonly close_effect: (exit: Exit.Exit<unknown, unknown>) => Effect.Effect<void>;
+	} {
+		const run_scope = Scope.forkUnsafe(this.#scope);
+		const fork_effect = Effect.forkIn(
+			Effect.provideService(effect, Scope.Scope, run_scope),
+			run_scope,
+		) as Effect.Effect<Fiber.Fiber<A, E>, never, R>;
+
+		return {
+			fork_effect,
+			close_effect: (exit) => Scope.close(run_scope, exit),
+		};
+	}
+
 	/** Effect that closes the scope. Must be run by the owning dispatcher. */
 	get close_effect(): Effect.Effect<void> {
 		return Scope.close(this.#scope, Exit.void);

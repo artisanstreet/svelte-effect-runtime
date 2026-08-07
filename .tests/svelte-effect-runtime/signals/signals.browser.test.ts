@@ -5,6 +5,7 @@ import { render } from "virtual:signals-ssr-renderer";
 import NativeLifecycle from "./fixtures/native-lifecycle.svelte";
 import NativeLifecycleMissingAdvance from "./fixtures/native-lifecycle-missing-advance.svelte";
 import NativeLifecycleServer from "./fixtures/native-lifecycle.svelte?signals-ssr";
+import SerRunScopeLifecycle from "./fixtures/ser-run-scope-lifecycle.svelte";
 import NativeReactivity from "./fixtures/native-reactivity.svelte";
 import SerLifecycle from "./fixtures/ser-lifecycle.svelte";
 import SerLifecycleServer from "./fixtures/ser-lifecycle.svelte?signals-ssr";
@@ -262,6 +263,50 @@ async function observe_lifecycle(component: Component<LifecycleProps>): Promise<
 	}
 }
 
+async function observe_ser_run_scope_lifecycle(run_count: number): Promise<string[]> {
+	const recorder = new EventRecorder();
+	const target = create_target();
+	let instance: ReturnType<typeof mount> | undefined;
+
+	try {
+		instance = mount(SerRunScopeLifecycle, {
+			target,
+			props: { record_event: recorder.record_event },
+		});
+
+		for (let generation = 1; generation <= run_count; generation += 1) {
+			expect(await recorder.next_event()).toBe(`start:${generation}`);
+
+			find_test_element(target, "publish-run-scope").click();
+			expect(await recorder.next_event()).toBe(`value:${generation}:${generation}`);
+
+			if (generation === run_count) {
+				continue;
+			}
+
+			find_test_element(target, "advance-run-scope").click();
+			expect(await recorder.next_event()).toBe(`finalize:${generation}`);
+		}
+
+		const mounted_instance = instance;
+		instance = undefined;
+		await unmount(mounted_instance);
+		expect(await recorder.next_event()).toBe(`finalize:${run_count}`);
+		await Promise.resolve();
+		await tick();
+
+		return recorder.snapshot();
+	} finally {
+		try {
+			if (instance) {
+				await unmount(instance);
+			}
+		} finally {
+			target.remove();
+		}
+	}
+}
+
 async function observe_ssr_hydration(
 	server_component: Component<Record<string, unknown>>,
 	client_component: Component<LifecycleProps>,
@@ -342,6 +387,22 @@ describe("Signals browser conformance", () => {
 
 		expect(native_events).toEqual(["start:1", "finalize:1", "start:2", "finalize:2"]);
 		expect(ser_events).toEqual(native_events);
+	});
+
+	test("keeps one forkScoped PubSub subscriber across reactive reruns", async () => {
+		const run_count = 32;
+		const events = await observe_ser_run_scope_lifecycle(run_count);
+		const expected_events = Array.from({ length: run_count }, (_, index) => {
+			const generation = index + 1;
+
+			return [
+				`start:${generation}`,
+				`value:${generation}:${generation}`,
+				`finalize:${generation}`,
+			];
+		}).flat();
+
+		expect(events).toEqual(expected_events);
 	});
 
 	test("removes mounted targets when lifecycle observation fails", async () => {

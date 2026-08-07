@@ -127,10 +127,10 @@ export class Dispatcher {
 	}
 
 	/**
-	 * Forks an effect into a component scope and starts it. The fiber becomes
-	 * a child of the scope, so disposing the scope interrupts it and runs its
-	 * finalizers. Returns an idempotent handle that interrupts the scoped
-	 * fiber directly.
+	 * Forks an effect into a reactive-run scope and starts it. The run scope is
+	 * a child of the component scope, so rerun cleanup closes only that run
+	 * while component disposal remains a backstop. Returns an idempotent handle
+	 * that closes the run scope and all work forked into it.
 	 *
 	 * Throws {@link ScopeDisposedError} when the scope was already disposed
 	 * and {@link DispatcherDisposedError} when the dispatcher was shut down.
@@ -144,22 +144,16 @@ export class Dispatcher {
 			throw new ScopeDisposedError();
 		}
 
-		/**
-		 * Track the scoped fiber itself: `forkIn` binds it to the component
-		 * scope rather than the awaiting parent, so per-run disposal must
-		 * interrupt the scoped fiber directly.
-		 */
-		let scoped_fiber: FiberType<unknown, unknown> | undefined;
+		const run = scope.fork_run_in(effect);
+		let disposed = false;
 
 		this.#runtime.runFork(
-			Effect.flatMap(scope.fork_in(effect), (fiber) => {
-				scoped_fiber = fiber;
-
-				return Effect.asVoid(Fiber.await(fiber));
+			Effect.flatMap(run.fork_effect, (fiber) => {
+				return Effect.flatMap(Fiber.await(fiber), (exit) => {
+					return Exit.isFailure(exit) ? run.close_effect(exit) : Effect.void;
+				});
 			}) as Effect.Effect<unknown, unknown, unknown>,
 		);
-
-		let disposed = false;
 
 		return (): void => {
 			if (disposed) {
@@ -167,10 +161,9 @@ export class Dispatcher {
 			}
 
 			disposed = true;
-
-			if (scoped_fiber) {
-				this.#runtime.runFork(InterruptFiber(scoped_fiber));
-			}
+			this.#runtime.runFork(
+				run.close_effect(Exit.void) as Effect.Effect<unknown, unknown, unknown>,
+			);
 		};
 	}
 
