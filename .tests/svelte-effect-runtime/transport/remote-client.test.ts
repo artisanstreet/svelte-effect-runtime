@@ -1077,7 +1077,7 @@ test("current SvelteKit decodes SER multipart form data", async () => {
 		],
 		tags: ["svelte", "effect"],
 		title: "Hello",
-	});
+	}, "abc/create");
 	const request = new Request("https://example.test/_app/remote/abc/create", {
 		method: "POST",
 		body: form_data,
@@ -2325,6 +2325,7 @@ interface CurrentSvelteKitFormData {
 
 async function deserialize_with_current_sveltekit(
 	request: Request,
+	form_id = "abc/create",
 ): Promise<CurrentSvelteKitFormData> {
 	const require = createRequire(import.meta.url);
 	const package_path = require.resolve("@sveltejs/kit/package.json");
@@ -2332,8 +2333,11 @@ async function deserialize_with_current_sveltekit(
 		join(dirname(package_path), "src", "runtime", "form-utils.js"),
 	).href;
 	const form_utils = (await import(module_url)) as {
-		deserialize_binary_form: (request: Request) => Promise<CurrentSvelteKitFormData>;
+		deserialize_binary_form: (
+			request: Request,
+			form_id: string,
+		) => Promise<CurrentSvelteKitFormData>;
 	};
 
-	return form_utils.deserialize_binary_form(request);
+	return form_utils.deserialize_binary_form(request, form_id);
 }

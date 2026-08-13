@@ -17,18 +17,34 @@ export type SvelteKitProfile = {
 	readonly supports_paths_origin: boolean;
 	/** SvelteKit 3 replaced the `$lib` alias with package.json subpath imports. */
 	readonly supports_subpath_lib_imports: boolean;
+	/** SvelteKit 3.0.0-next.20 stopped defining `#lib`, so subpath imports resolve Node-style and need explicit extensions. */
+	readonly requires_explicit_module_extensions: boolean;
 	readonly sveltekit_version: string;
 	readonly unsupported_platforms?: Partial<
 		Readonly<Record<NodeJS.Platform, SvelteKitPlatformDefect>>
 	>;
 };
 
-const kit_3_adapter_directory_module = "dir.js";
-
 const legacy_generated_tsconfig = "./.svelte-kit/tsconfig.json";
 
 /** SvelteKit 3.0.0-next.12 moved the generated tsconfig into `node_modules/$app`. */
 const app_generated_tsconfig = "$app/tsconfig";
+
+/**
+ * Adapter release paired with SvelteKit prereleases before 3.0.0-next.9. It
+ * still emits its static directory module under a stable name, and its win32
+ * bundling defect was only fixed in 6.0.0-next.8.
+ */
+const legacy_kit_3_adapter = {
+	adapter_node_version: "6.0.0-next.3",
+	adapter_output_directory_module: "dir.js",
+	unsupported_platforms: {
+		win32: {
+			issue: "https://github.com/sveltejs/kit/issues/16365",
+			reason: "adapter-node 6.0.0-next.3 leaves entry constants unresolved and cannot start",
+		},
+	},
+} as const;
 
 const kit_2_stable: SvelteKitProfile = {
 	name: "kit-2-stable",
@@ -37,24 +53,19 @@ const kit_2_stable: SvelteKitProfile = {
 	supports_explicit_environment: false,
 	supports_paths_origin: false,
 	supports_subpath_lib_imports: false,
-	sveltekit_version: "2.69.3",
+	requires_explicit_module_extensions: false,
+	sveltekit_version: "2.70.2",
 };
 
 const kit_3_primary: SvelteKitProfile = {
 	name: "kit-3-primary",
-	adapter_node_version: "6.0.0-next.3",
-	generated_tsconfig_specifier: legacy_generated_tsconfig,
+	adapter_node_version: "6.0.0-next.10",
+	generated_tsconfig_specifier: app_generated_tsconfig,
 	supports_explicit_environment: true,
-	adapter_output_directory_module: "dir.js",
 	supports_paths_origin: true,
-	supports_subpath_lib_imports: false,
-	sveltekit_version: "3.0.0-next.8",
-	unsupported_platforms: {
-		win32: {
-			issue: "https://github.com/sveltejs/kit/issues/16365",
-			reason: "adapter-node 6.0.0-next.3 leaves entry constants unresolved and cannot start",
-		},
-	},
+	supports_subpath_lib_imports: true,
+	requires_explicit_module_extensions: true,
+	sveltekit_version: "3.0.0-next.23",
 };
 
 /**
@@ -63,6 +74,10 @@ const kit_3_primary: SvelteKitProfile = {
  * alongside and records the fixture shape that version requires.
  */
 const kit_3_prerelease_steps = [
+	{ adapter_node_version: "6.0.0-next.10", sveltekit_version: "3.0.0-next.20" },
+	{ adapter_node_version: "6.0.0-next.9", sveltekit_version: "3.0.0-next.19" },
+	{ adapter_node_version: "6.0.0-next.8", sveltekit_version: "3.0.0-next.15" },
+	{ adapter_node_version: "6.0.0-next.7", sveltekit_version: "3.0.0-next.14" },
 	{ adapter_node_version: "6.0.0-next.6", sveltekit_version: "3.0.0-next.12" },
 	{ adapter_node_version: "6.0.0-next.5", sveltekit_version: "3.0.0-next.11" },
 	{ adapter_node_version: "6.0.0-next.4", sveltekit_version: "3.0.0-next.9" },
@@ -172,26 +187,26 @@ function make_custom_profile(sveltekit_version: string): SvelteKitProfile {
 		const step = kit_3_prerelease_steps.find((candidate) =>
 			gte(sveltekit_version, candidate.sveltekit_version),
 		);
-		const adapter_node_version =
-			step?.adapter_node_version ?? kit_3_primary.adapter_node_version;
-		const platform_defects =
-			adapter_node_version === kit_3_primary.adapter_node_version
-				? { unsupported_platforms: kit_3_primary.unsupported_platforms }
-				: {};
 
 		/**
-		 * adapter-node 6.0.0-next.4 bundles the static directory module into a
-		 * hashed chunk, so only the release that emits `dir.js` is asserted by
-		 * name.
+		 * Prereleases before 3.0.0-next.9 predate every stepped adapter and pair
+		 * with the legacy adapter, whose stable directory module and win32 defect
+		 * still apply. adapter-node 6.0.0-next.4 and later bundle the static
+		 * directory module into a hashed chunk, so it cannot be asserted by name.
 		 */
+		const adapter = step ?? legacy_kit_3_adapter;
 		const directory_module =
-			adapter_node_version === kit_3_primary.adapter_node_version
-				? { adapter_output_directory_module: kit_3_adapter_directory_module }
+			"adapter_output_directory_module" in adapter
+				? { adapter_output_directory_module: adapter.adapter_output_directory_module }
+				: {};
+		const platform_defects =
+			"unsupported_platforms" in adapter
+				? { unsupported_platforms: adapter.unsupported_platforms }
 				: {};
 
 		return {
 			name: "custom",
-			adapter_node_version,
+			adapter_node_version: adapter.adapter_node_version,
 			...directory_module,
 			generated_tsconfig_specifier: gte(sveltekit_version, "3.0.0-next.12")
 				? app_generated_tsconfig
@@ -199,6 +214,7 @@ function make_custom_profile(sveltekit_version: string): SvelteKitProfile {
 			supports_explicit_environment: kit_3_primary.supports_explicit_environment,
 			supports_paths_origin: kit_3_primary.supports_paths_origin,
 			supports_subpath_lib_imports: gte(sveltekit_version, "3.0.0-next.9"),
+			requires_explicit_module_extensions: gte(sveltekit_version, "3.0.0-next.20"),
 			sveltekit_version,
 			...platform_defects,
 		};

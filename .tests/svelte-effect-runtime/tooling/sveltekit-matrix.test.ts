@@ -2,7 +2,10 @@ import {
 	resolve_sveltekit_profiles,
 	sveltekit_profiles,
 } from "../consumer/harness/sveltekit-profiles.ts";
-import { render_fixture_sveltekit_config } from "../consumer/harness/fixture-config.ts";
+import {
+	render_fixture_lib_imports,
+	render_fixture_sveltekit_config,
+} from "../consumer/harness/fixture-config.ts";
 import { resolve_conformance_layout } from "../consumer/harness/prepare.ts";
 import { expect, test } from "vitest";
 
@@ -15,23 +18,18 @@ test("supported SvelteKit profiles select peer-compatible adapter generations", 
 			supports_explicit_environment: false,
 			supports_paths_origin: false,
 			supports_subpath_lib_imports: false,
-			sveltekit_version: "2.69.3",
+			requires_explicit_module_extensions: false,
+			sveltekit_version: "2.70.2",
 		},
 		{
 			name: "kit-3-primary",
-			adapter_node_version: "6.0.0-next.3",
-			adapter_output_directory_module: "dir.js",
-			generated_tsconfig_specifier: "./.svelte-kit/tsconfig.json",
+			adapter_node_version: "6.0.0-next.10",
+			generated_tsconfig_specifier: "$app/tsconfig",
 			supports_explicit_environment: true,
 			supports_paths_origin: true,
-			supports_subpath_lib_imports: false,
-			sveltekit_version: "3.0.0-next.8",
-			unsupported_platforms: {
-				win32: {
-					issue: "https://github.com/sveltejs/kit/issues/16365",
-					reason: "adapter-node 6.0.0-next.3 leaves entry constants unresolved and cannot start",
-				},
-			},
+			supports_subpath_lib_imports: true,
+			requires_explicit_module_extensions: true,
+			sveltekit_version: "3.0.0-next.23",
 		},
 	]);
 });
@@ -42,18 +40,16 @@ test("all matrix mode resolves every supported profile", () => {
 	expect(profiles).toEqual(sveltekit_profiles);
 });
 
-test("Windows matrix mode excludes the upstream-broken Kit 3 Node profile", () => {
+test("Windows matrix mode resolves every supported profile since adapter-node 6.0.0-next.8", () => {
 	const profiles = resolve_sveltekit_profiles({ SVELTEKIT_MATRIX: "all" }, "win32");
 
-	expect(profiles).toEqual([sveltekit_profiles[0]]);
+	expect(profiles).toEqual(sveltekit_profiles);
 });
 
-test("matrix output remains isolated when the platform supports one profile", () => {
+test("matrix mode keeps its isolated output layout", () => {
 	const environment = { SVELTEKIT_MATRIX: "all" };
-	const profiles = resolve_sveltekit_profiles(environment, "win32");
 	const layout = resolve_conformance_layout(environment);
 
-	expect(profiles).toHaveLength(1);
 	expect(layout).toEqual({
 		is_matrix: true,
 		metadata_path: "matrix.json",
@@ -61,18 +57,17 @@ test("matrix output remains isolated when the platform supports one profile", ()
 	});
 });
 
-test("Windows defaults to the production-capable Kit 2 profile", () => {
+test("Windows defaults to the Kit 3 primary profile", () => {
 	const profiles = resolve_sveltekit_profiles({}, "win32");
 
-	expect(profiles).toEqual([sveltekit_profiles[0]]);
+	expect(profiles).toEqual([sveltekit_profiles[1]]);
 });
 
-test.each([
-	[{ SVELTEKIT_PROFILE: "kit-3-primary" }, "kit-3-primary"],
-	[{ SVELTEKIT_VERSION: "3.0.0-next.8" }, "custom"],
-])("Windows rejects an explicit unsupported Kit 3 selection for %s", (environment, profile) => {
-	expect(() => resolve_sveltekit_profiles(environment, "win32")).toThrow(
-		`${profile} is unavailable on win32 because adapter-node 6.0.0-next.3 leaves entry constants unresolved and cannot start; see https://github.com/sveltejs/kit/issues/16365.`,
+test("Windows rejects a custom prerelease that pairs with the defective legacy adapter", () => {
+	expect(() =>
+		resolve_sveltekit_profiles({ SVELTEKIT_VERSION: "3.0.0-next.8" }, "win32"),
+	).toThrow(
+		"custom is unavailable on win32 because adapter-node 6.0.0-next.3 leaves entry constants unresolved and cannot start; see https://github.com/sveltejs/kit/issues/16365.",
 	);
 });
 
@@ -84,6 +79,13 @@ test.each([
 	["3.0.0-next.11", "6.0.0-next.5"],
 	["3.0.0-next.12", "6.0.0-next.6"],
 	["3.0.0-next.13", "6.0.0-next.6"],
+	["3.0.0-next.14", "6.0.0-next.7"],
+	["3.0.0-next.15", "6.0.0-next.8"],
+	["3.0.0-next.17", "6.0.0-next.8"],
+	["3.0.0-next.19", "6.0.0-next.9"],
+	["3.0.0-next.20", "6.0.0-next.10"],
+	["3.0.0-next.21", "6.0.0-next.10"],
+	["3.0.0-next.23", "6.0.0-next.10"],
 ])("custom SvelteKit %s selects adapter-node %s", (sveltekit_version, adapter_node_version) => {
 	const [profile] = resolve_sveltekit_profiles({ SVELTEKIT_VERSION: sveltekit_version }, "linux");
 
@@ -91,14 +93,22 @@ test.each([
 });
 
 test.each([
-	["3.0.0-next.8", false, "./.svelte-kit/tsconfig.json"],
-	["3.0.0-next.9", true, "./.svelte-kit/tsconfig.json"],
-	["3.0.0-next.11", true, "./.svelte-kit/tsconfig.json"],
-	["3.0.0-next.12", true, "$app/tsconfig"],
-	["3.0.0-next.13", true, "$app/tsconfig"],
+	["3.0.0-next.8", false, false, "./.svelte-kit/tsconfig.json"],
+	["3.0.0-next.9", true, false, "./.svelte-kit/tsconfig.json"],
+	["3.0.0-next.11", true, false, "./.svelte-kit/tsconfig.json"],
+	["3.0.0-next.12", true, false, "$app/tsconfig"],
+	["3.0.0-next.13", true, false, "$app/tsconfig"],
+	["3.0.0-next.19", true, false, "$app/tsconfig"],
+	["3.0.0-next.20", true, true, "$app/tsconfig"],
+	["3.0.0-next.23", true, true, "$app/tsconfig"],
 ])(
 	"custom SvelteKit %s records the fixture layout that version requires",
-	(sveltekit_version, supports_subpath_lib_imports, generated_tsconfig_specifier) => {
+	(
+		sveltekit_version,
+		supports_subpath_lib_imports,
+		requires_explicit_module_extensions,
+		generated_tsconfig_specifier,
+	) => {
 		const [profile] = resolve_sveltekit_profiles(
 			{ SVELTEKIT_VERSION: sveltekit_version },
 			"linux",
@@ -106,8 +116,43 @@ test.each([
 
 		expect(profile).toMatchObject({
 			generated_tsconfig_specifier,
+			requires_explicit_module_extensions,
 			supports_subpath_lib_imports,
 		});
+	},
+);
+
+test.each([
+	[
+		"2.69.0",
+		'import { GetPosts } from "$lib/conformance.remote";',
+		'import { GetPosts } from "$lib/conformance.remote";',
+	],
+	[
+		"3.0.0-next.19",
+		'import { GetPosts } from "$lib/conformance.remote";',
+		'import { GetPosts } from "#lib/conformance.remote";',
+	],
+	[
+		"3.0.0-next.20",
+		'import { GetPosts } from "$lib/conformance.remote";',
+		'import { GetPosts } from "#lib/conformance.remote.ts";',
+	],
+	[
+		"3.0.0-next.20",
+		'import Page from "$lib/components/query-page.svelte";',
+		'import Page from "#lib/components/query-page.svelte";',
+	],
+])(
+	"custom SvelteKit %s renders %s onto the supported library specifier",
+	(sveltekit_version, source, rendered) => {
+		const [profile] = resolve_sveltekit_profiles(
+			{ SVELTEKIT_VERSION: sveltekit_version },
+			"linux",
+		);
+
+		expect(profile).toBeDefined();
+		expect(render_fixture_lib_imports(source, profile!)).toBe(rendered);
 	},
 );
 
