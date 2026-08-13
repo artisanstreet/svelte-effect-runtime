@@ -1062,22 +1062,25 @@ test("remote command adapter supports invoke objects and rejects invalid factori
 
 test("current SvelteKit decodes SER multipart form data", async () => {
 	const avatar = new File(["avatar"], "avatar.txt", { type: "text/plain" });
-	const form_data = to_form_data({
-		active: true,
-		avatar,
-		count: 2,
-		draft: false,
-		nested: {
-			missing: undefined,
-			nil: null,
+	const form_data = to_form_data(
+		{
+			active: true,
+			avatar,
+			count: 2,
+			draft: false,
+			nested: {
+				missing: undefined,
+				nil: null,
+			},
+			rows: [
+				{ count: 1, title: "First" },
+				{ count: 2, title: "Second" },
+			],
+			tags: ["svelte", "effect"],
+			title: "Hello",
 		},
-		rows: [
-			{ count: 1, title: "First" },
-			{ count: 2, title: "Second" },
-		],
-		tags: ["svelte", "effect"],
-		title: "Hello",
-	}, "abc/create");
+		"abc/create",
+	);
 	const request = new Request("https://example.test/_app/remote/abc/create", {
 		method: "POST",
 		body: form_data,

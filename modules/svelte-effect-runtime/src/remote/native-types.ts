@@ -26,11 +26,7 @@ type DeepPartial<T> = T extends Record<PropertyKey, unknown> | unknown[]
 		}
 	: T | undefined;
 
-type WillRecurseIndefinitely<T> = unknown extends T
-	? true
-	: string extends keyof T
-		? true
-		: false;
+type WillRecurseIndefinitely<T> = unknown extends T ? true : string extends keyof T ? true : false;
 
 type KeysOfUnion<T> = T extends unknown ? keyof T : never;
 
@@ -47,9 +43,7 @@ type ValueOfUnionKey<T, K extends PropertyKey> = T extends unknown
  * @since 4.3.0
  */
 export interface NativeRemoteFormInput {
-	[key: string]:
-		| MaybeArray<string | number | boolean | File | NativeRemoteFormInput>
-		| undefined;
+	[key: string]: MaybeArray<string | number | boolean | File | NativeRemoteFormInput> | undefined;
 }
 
 /**
@@ -179,7 +173,9 @@ type NativeRemoteFormFieldValue = string | string[] | number | boolean | File | 
 type NativeRemoteFormField<Value extends NativeRemoteFormFieldValue> =
 	NativeRemoteFormFieldMethods<Value> & {
 		/** Returns spreadable input-element props for the given input type. */
-		as<T extends NativeRemoteFormFieldType<Value>>(...args: AsArgs<T, Value>): InputElementProps<T>;
+		as<T extends NativeRemoteFormFieldType<Value>>(
+			...args: AsArgs<T, Value>
+		): InputElementProps<T>;
 	};
 
 type NativeRemoteFormFieldContainer<Value> = NativeRemoteFormFieldMethods<Value> & {
