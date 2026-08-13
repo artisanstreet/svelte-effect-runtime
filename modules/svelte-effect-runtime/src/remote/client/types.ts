@@ -1,4 +1,8 @@
-import type { RemoteForm, RemoteFormInput, RemoteQueryUpdate } from "@sveltejs/kit";
+import type {
+	NativeRemoteForm,
+	NativeRemoteFormInput,
+	NativeRemoteQueryUpdate,
+} from "$/remote/native-types.ts";
 import type { RemoteFailure } from "$/remote/shared.ts";
 import type { Effect, Schema, Stream } from "effect";
 import type { RemoteLiveStream } from "$/live.ts";
@@ -10,7 +14,7 @@ export type EffectRemoteQueryUpdateBrand = {
 	readonly [effect_remote_query_update]: true;
 };
 
-type EffectRemoteFormCallable<Input extends RemoteFormInput | void, Output, ErrorType> = [
+type EffectRemoteFormCallable<Input extends NativeRemoteFormInput | void, Output, ErrorType> = [
 	Input,
 ] extends [void]
 	? () => Effect.Effect<Output, RemoteFailure<ErrorType>>
@@ -18,21 +22,23 @@ type EffectRemoteFormCallable<Input extends RemoteFormInput | void, Output, Erro
 		? (input?: Input) => Effect.Effect<Output, RemoteFailure<ErrorType>>
 		: (input: Input) => Effect.Effect<Output, RemoteFailure<ErrorType>>;
 
-type NativeRemoteFormPreflightSchema<Input extends RemoteFormInput | void, Output> = Parameters<
-	RemoteForm<Input, Output>["preflight"]
->[0];
+type NativeRemoteFormPreflightSchema<
+	Input extends NativeRemoteFormInput | void,
+	Output,
+> = Parameters<NativeRemoteForm<Input, Output>["preflight"]>[0];
 
-type NativeRemoteFormValidateOptions<Input extends RemoteFormInput | void, Output> = NonNullable<
-	Parameters<RemoteForm<Input, Output>["validate"]>[0]
->;
+type NativeRemoteFormValidateOptions<
+	Input extends NativeRemoteFormInput | void,
+	Output,
+> = NonNullable<Parameters<NativeRemoteForm<Input, Output>["validate"]>[0]>;
 
 export type EffectRemoteFormPreflightSchema<
-	Input extends RemoteFormInput | void,
+	Input extends NativeRemoteFormInput | void,
 	Output = unknown,
 > = NativeRemoteFormPreflightSchema<Input, Output> | Schema.Codec<unknown, Input, never, unknown>;
 
 export type EffectRemoteFormValidateOptions<
-	Input extends RemoteFormInput | void,
+	Input extends NativeRemoteFormInput | void,
 	Output = unknown,
 > = Omit<
 	NativeRemoteFormValidateOptions<Input, Output>,
@@ -64,8 +70,6 @@ type EffectRemoteQueryUpdateInput<Update> = Update extends EffectRemoteCommandUp
 type EffectRemoteQueryUpdates<Updates extends readonly unknown[]> = Updates & {
 	[Index in keyof Updates]: EffectRemoteQueryUpdateInput<Updates[Index]>;
 };
-
-type NativeRemoteQueryUpdate = RemoteQueryUpdate;
 
 type EffectRemoteQueryUpdateFunction = (input: never) => EffectRemoteQueryUpdateResource;
 
@@ -103,11 +107,13 @@ export type EffectRemoteFormSubmit<Output = unknown, ErrorType = never> = Effect
 };
 
 export type EffectRemoteFormEnhanceOptions<
-	Input extends RemoteFormInput | void,
+	Input extends NativeRemoteFormInput | void,
 	Output,
 	ErrorType = never,
 > = Omit<
-	Parameters<RemoteForm<Input, Output>["enhance"]>[0] extends (options: infer Options) => unknown
+	Parameters<NativeRemoteForm<Input, Output>["enhance"]>[0] extends (
+		options: infer Options,
+	) => unknown
 		? Options
 		: never,
 	"submit"
@@ -116,18 +122,21 @@ export type EffectRemoteFormEnhanceOptions<
 };
 
 export type EffectRemoteForm<
-	Input extends RemoteFormInput | void,
+	Input extends NativeRemoteFormInput | void,
 	Output,
 	ErrorType = never,
 > = EffectRemoteFormCallable<Input, Output, ErrorType> &
-	Omit<RemoteForm<Input, Output>, "enhance" | "for" | "preflight" | "submit" | "validate"> & {
+	Omit<
+		NativeRemoteForm<Input, Output>,
+		"enhance" | "for" | "preflight" | "submit" | "validate"
+	> & {
 		enhance(
 			callback?: (
 				options: EffectRemoteFormEnhanceOptions<Input, Output, ErrorType>,
 			) => void | Promise<void> | Effect.Effect<void, unknown, unknown>,
-		): ReturnType<RemoteForm<Input, Output>["enhance"]>;
+		): ReturnType<NativeRemoteForm<Input, Output>["enhance"]>;
 		for(
-			id: Parameters<RemoteForm<Input, Output>["for"]>[0],
+			id: Parameters<NativeRemoteForm<Input, Output>["for"]>[0],
 		): EffectRemoteFormCallable<Input, Output, ErrorType> &
 			Omit<EffectRemoteForm<Input, Output, ErrorType>, "for">;
 		preflight(

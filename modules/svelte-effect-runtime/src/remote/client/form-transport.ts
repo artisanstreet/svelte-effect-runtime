@@ -150,7 +150,10 @@ export const SubmitRemoteForm = <Output, ErrorType = never>(
 			fetch(to_remote_form_url(remote_base, action_id), {
 				method: "POST",
 				headers: get_remote_request_headers(),
-				body: to_form_data(to_remote_form_input(input, action_id)),
+				body: to_form_data(
+					to_remote_form_input(input, action_id),
+					to_remote_form_id(action_id),
+				),
 				signal,
 			}),
 		);
@@ -215,11 +218,14 @@ export function get_remote_action_id(form_obj: NativeFormRecord): string | undef
 }
 
 function to_remote_form_url(remote_base: string, action_id: string): string {
-	const parts = action_id.split("/");
-	const head = parts.slice(0, 2).join("/");
 	const normalized_base = remote_base.replace(/\/$/, "");
 
-	return `${normalized_base}/${head}`;
+	return `${normalized_base}/${to_remote_form_id(action_id)}`;
+}
+
+/** The un-keyed remote action id SvelteKit suffixes onto every form field name. */
+function to_remote_form_id(action_id: string): string {
+	return action_id.split("/").slice(0, 2).join("/");
 }
 
 function to_remote_form_input(input: unknown, action_id: string): Record<string, unknown> {
