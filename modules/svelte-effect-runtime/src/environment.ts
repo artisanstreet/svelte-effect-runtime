@@ -6,13 +6,13 @@ import { Schema } from "effect";
  * variable. Mirrors `EnvVarConfig["schema"]` structurally rather than
  * importing it, because SvelteKit 2 declares `EnvVarConfig` in
  * `@sveltejs/kit` while SvelteKit 3 (since `3.0.0-next.20`) declares it only
- * in `@sveltejs/kit/env`.
+ * in `@sveltejs/kit/env`. SvelteKit's generated `$app/env/*` types infer each
+ * variable through `StandardSchemaV1.InferOutput`, so the normalized schema
+ * member must stay exactly this shape.
  *
  * @since 4.2.0
  */
-export type StandardSchema<Output = unknown> =
-	| StandardSchemaV1<string | undefined, Output>
-	| ((value: string | undefined) => Output | undefined);
+export type StandardSchema<Output = unknown> = StandardSchemaV1<string | undefined, Output>;
 
 /**
  * A validator accepted by {@link DefineEnvVars}: an Effect Schema that decodes
