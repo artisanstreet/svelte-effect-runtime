@@ -568,12 +568,34 @@ async function prepare_application(
 		"build",
 	);
 
+	if (target.name === "candidate") {
+		await verify_effect_prerender_output(application_dir);
+	}
+
 	if (profile.adapter_output_directory_module) {
 		await verify_adapter_output(application_dir, profile.adapter_output_directory_module);
 	}
 
 	if (profile.adapter_output_directory_module === undefined && profile.supports_paths_origin) {
 		await verify_adapter_entry_constants(application_dir);
+	}
+}
+
+async function verify_effect_prerender_output(application_dir: string): Promise<void> {
+	const prerendered_dir = join(application_dir, "build", "prerendered");
+	const files = await list_application_files(prerendered_dir, prerendered_dir, new Set());
+	const remote_files = files.filter((file) => file.replaceAll("\\", "/").includes("/remote/"));
+	const payloads = await Promise.all(
+		remote_files.map((file) => readFile(join(prerendered_dir, file), "utf8")),
+	);
+	const has_effect_snapshot = payloads.some((payload) =>
+		payload.includes("static:configured:build"),
+	);
+
+	if (!has_effect_snapshot) {
+		throw new Error(
+			`Candidate output must contain the Effect-backed prerender payload under ${prerendered_dir}.`,
+		);
 	}
 }
 

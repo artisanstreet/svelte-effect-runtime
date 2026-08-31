@@ -8,7 +8,7 @@ import type { StandardSchemaV1 } from "@sveltejs/kit/internal/types";
  * breaks the other major, and the shapes cannot be derived from the
  * `$app/server` value exports because their overload sets share a type-arity
  * with incompatible constraints. This module vendors the surface SER needs.
- * The shapes are identical in SvelteKit 2.69+ and 3.0.0-next.23 except
+ * The shapes are identical in SvelteKit 2.69+ and 3.0.0-next.25 except
  * `validate`, whose options here form the superset of both majors.
  */
 

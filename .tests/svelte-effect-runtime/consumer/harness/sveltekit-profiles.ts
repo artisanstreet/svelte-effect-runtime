@@ -65,7 +65,7 @@ const kit_3_primary: SvelteKitProfile = {
 	supports_paths_origin: true,
 	supports_subpath_lib_imports: true,
 	requires_explicit_module_extensions: true,
-	sveltekit_version: "3.0.0-next.23",
+	sveltekit_version: "3.0.0-next.25",
 };
 
 /**
