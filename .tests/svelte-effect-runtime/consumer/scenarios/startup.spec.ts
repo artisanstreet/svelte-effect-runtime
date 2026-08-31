@@ -1,12 +1,12 @@
+import { resolve_sveltekit_target_names } from "../harness/sveltekit-profiles.ts";
 import { get_conformance_proxy_url } from "../../unit/harness/model.ts";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { make_evidence } from "../../unit/harness/evidence.ts";
-import type { TargetName } from "../../unit/harness/model.ts";
 import { expect, test } from "@playwright/test";
 import { dirname, resolve } from "node:path";
 import { Schema } from "effect";
 
-const targets = ["native", "stable", "candidate"] as const satisfies readonly TargetName[];
+const targets = resolve_sveltekit_target_names(process.env);
 const repo_root = resolve(import.meta.dirname, "../../../../");
 const candidate_build_root = resolve(repo_root, ".dist/conformance/applications/candidate/build");
 const StartupBody = Schema.Struct({
@@ -34,7 +34,7 @@ test("packed candidate runtime excludes compiler-only CommonJS dependencies", as
 	expect(leaking_files).toEqual([]);
 });
 
-test("production adapter servers start and answer through named HTTPS origins", async ({
+test("production servers start and answer through named HTTPS origins", async ({
 	request,
 }, test_info) => {
 	for (const target of targets) {

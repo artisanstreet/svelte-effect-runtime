@@ -27,7 +27,7 @@ type_contract("remote form preflight keeps enhance callback Effect-aware", async
 		`
 import { Effect, Schema, Stream } from "effect";
 import { create_remote_form_adapter } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
-import type { RemoteFormInput } from "@sveltejs/kit";
+import type { NativeRemoteFormInput as RemoteFormInput } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/native-types.ts";
 
 declare const schema: {
   "~standard": {
@@ -64,7 +64,7 @@ type_contract("remote form preflight keeps validate Effect-yieldable", async () 
 		`
 import { Effect, Schema, Stream } from "effect";
 import { create_remote_form_adapter } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
-import type { RemoteFormInput } from "@sveltejs/kit";
+import type { NativeRemoteFormInput as RemoteFormInput } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/native-types.ts";
 
 declare const schema: {
   "~standard": {
@@ -93,7 +93,7 @@ type_contract("remote form enhance submit keeps form result types", async () => 
 import { Cause, Effect } from "effect";
 import { create_remote_form_adapter } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
 import type { RemoteFailure } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/shared.ts";
-import type { RemoteFormInput } from "@sveltejs/kit";
+import type { NativeRemoteFormInput as RemoteFormInput } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/native-types.ts";
 
 const form = create_remote_form_adapter<RemoteFormInput, { id: string }>(
   {},
@@ -275,7 +275,7 @@ import {
   create_remote_query_adapter,
 } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
 import type { RemoteFailure } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/shared.ts";
-import type { RemoteQueryFunction } from "@sveltejs/kit";
+import type { NativeRemoteQueryFunction as RemoteQueryFunction } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/native-types.ts";
 
 const client_posts = create_remote_query_adapter<void, string[]>(
   () => Promise.resolve(["one"]),
@@ -347,7 +347,7 @@ import {
   create_remote_form_adapter,
   create_remote_query_adapter,
 } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
-import type { RemoteFormInput } from "@sveltejs/kit";
+import type { NativeRemoteFormInput as RemoteFormInput } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/native-types.ts";
 
 declare const schema: {
   "~standard": {
@@ -1065,7 +1065,7 @@ type_contract("remote form enhance submit exposes form result Effects", async ()
 		"remote-form-submit-result.ts",
 		`
 import { Effect } from "effect";
-import type { RemoteFormInput } from "@sveltejs/kit";
+import type { NativeRemoteFormInput as RemoteFormInput } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/native-types.ts";
 import type { EffectRemoteFormEnhanceOptions } from "__RUNTIME__/modules/svelte-effect-runtime/src/remote/client.ts";
 
 type SaveResult = { readonly ok: true };

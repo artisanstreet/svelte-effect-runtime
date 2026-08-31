@@ -7,8 +7,10 @@ from the current checkout. `SER_STABLE_TARGET` and
 `SER_CANDIDATE_TARGET` accept `package:<specifier>`, `artifact:<path>`, or `git:<ref>`.
 
 Shared Query and root-page scenarios compare the published release and candidate at the same
-Effect-backed target boundary. A dedicated `/prerender` route exercises SER's public `Prerender`
-export in a production server.
+Effect-backed target boundary when the selected framework profile supports both. A profile newer
+than the published release compares the candidate directly with native SvelteKit, so an obsolete
+baseline cannot prevent the candidate from running. A dedicated `/prerender` route exercises SER's
+public `Prerender` export in a production server.
 
 Each application runs install, SvelteKit sync, TypeScript, Svelte diagnostics, production build,
 and adapter-node startup as distinct phases. The check phase runs published `svelte-check` against
@@ -24,15 +26,19 @@ observations. SvelteKit 3 fixtures compile with the canonical direct adapter ori
 SvelteKit 2 profile omits the unsupported `paths.origin` option. Browser parity still drives the
 direct adapter URLs under both profiles, so remote-function and CSRF checks remain active.
 
-The compatibility matrix pins two reviewable profiles. `kit-2-stable` uses SvelteKit 2.69.3 and its
-peer-compatible adapter-node 5.5.7. `kit-3-primary` uses the official SvelteKit 3.0.0-next.8 and
-adapter-node 6.0.0-next.3 pair. Every target receives unpatched framework artifacts, and the Kit 3
-profile verifies that adapter output contains client assets and resolves its emitted static root to
-the application build directory. Adapter-node 6.0.0-next.3 cannot produce a runnable Kit 3 build on
-Windows because its Rolldown entrypoint matchers mishandle path separators; the native target fails
-before SER is involved. Windows matrix and default selection therefore use `kit-2-stable`, while an
-explicit Kit 3 selection reports [upstream issue #16365](https://github.com/sveltejs/kit/issues/16365)
-instead of applying a local framework patch. Linux and macOS continue to run the Kit 3 profile.
+The compatibility matrix pins two reviewable profiles. `kit-2-stable` uses SvelteKit 2.70.2 and its
+peer-compatible adapter-node 5.5.7. `kit-3-primary` uses SvelteKit 3.0.0-next.25 and adapter-node
+6.0.0-next.10. Every target receives unpatched framework artifacts, and the Kit 3 profile verifies
+that adapter output contains client assets and resolves its emitted static root to the application
+build directory. Older Kit 3 prereleases remain selectable for diagnosis; the harness reports
+[upstream issue #16365](https://github.com/sveltejs/kit/issues/16365) on Windows when one requires
+the affected adapter-node 6.0.0-next.3 instead of applying a local framework patch.
+
+SvelteKit 3.0.0-next.20 and later run browser conformance through SvelteKit's production preview
+server. Their latest compatible adapter-node release can build the new application layout but
+resolves its emitted static root from a hashed server chunk, so its standalone server cannot serve
+client assets. The harness still builds and inspects adapter-node output before using preview for
+the runtime comparison.
 
 `corepack pnpm run check:conformance:matrix` installs, synchronizes, type-checks, SER-checks, and
 builds packed native, stable, and candidate consumers under every profile available on the current

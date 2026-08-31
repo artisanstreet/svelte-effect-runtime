@@ -1,4 +1,8 @@
-import type { RemoteFormInput, RemoteQuery, RemoteQueryOverride } from "@sveltejs/kit";
+import type {
+	NativeRemoteFormInput,
+	NativeRemoteQuery,
+	NativeRemoteQueryOverride,
+} from "$/remote/native-types.ts";
 import type {
 	EffectRemoteCommandCall as ClientEffectRemoteCommandCall,
 	EffectRemoteForm as ClientEffectRemoteForm,
@@ -443,7 +447,7 @@ export interface FormFactory {
 	<A, E = never, R = never>(
 		validate_or_handler: EffectLike<A, E, R> | RemoteFormHandler<void, A, E, R>,
 	): EffectRemoteForm<void, A, E>;
-	<Input extends RemoteFormInput, A, E = never, R = never>(
+	<Input extends NativeRemoteFormInput, A, E = never, R = never>(
 		validate_or_handler: "unchecked",
 		maybe_handler: RemoteFormHandler<Input, A, E, R>,
 	): EffectRemoteForm<Input, A, E>;
@@ -544,13 +548,13 @@ export type EffectRemotePrerenderFunction<Input, A, E = never> = [Input] extends
  */
 export type EffectRemoteQuery<A, E = never> = ClientEffectRemoteQueryUpdateBrand &
 	Effect.Effect<A, RemoteFailure<E>, never> &
-	Pick<RemoteQuery<A>, "set"> & {
+	Pick<NativeRemoteQuery<A>, "set"> & {
 		readonly current: A | undefined;
 		readonly error: unknown;
 		readonly loading: boolean;
 		readonly ready: boolean;
 		readonly refresh: () => Effect.Effect<void, unknown, never>;
-		readonly withOverride: (update: (current: A) => A) => RemoteQueryOverride;
+		readonly withOverride: (update: (current: A) => A) => NativeRemoteQueryOverride;
 	};
 
 /**
@@ -639,7 +643,7 @@ export type EffectRemoteCommand<Input, A, E = never> = ([Input] extends [void]
  * @template A - Successful value produced by the form handler.
  */
 export type EffectRemoteForm<
-	Input extends RemoteFormInput | void,
+	Input extends NativeRemoteFormInput | void,
 	A,
 	E = never,
 > = ClientEffectRemoteForm<Input, A, E>;
@@ -647,10 +651,12 @@ export type EffectRemoteForm<
 type FormSchemaEncodedInput<S> = S extends Schema.Top ? FormRemoteInput<S["Encoded"]> : never;
 
 type FormRemoteInput<Input> =
-	NormalizeFormEncoded<Input> extends RemoteFormInput ? NormalizeFormEncoded<Input> : never;
+	NormalizeFormEncoded<Input> extends NativeRemoteFormInput ? NormalizeFormEncoded<Input> : never;
 
 type FormStandardSchemaInput<S> =
-	StandardSchemaInput<S> extends RemoteFormInput ? StandardSchemaInput<S> : RemoteFormInput;
+	StandardSchemaInput<S> extends NativeRemoteFormInput
+		? StandardSchemaInput<S>
+		: NativeRemoteFormInput;
 
 type FormScalar = string | number | boolean | File;
 

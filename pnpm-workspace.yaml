@@ -16,6 +16,7 @@ catalog:
 
 minimumReleaseAgeExclude:
     - "@sveltejs/adapter-node@6.0.0-next.3"
+    - "@sveltejs/kit@3.0.0-next.25"
 
 overrides:
     "@effect/platform-node-shared": "4.0.0-beta.93"

@@ -1,5 +1,6 @@
 import type { OpaqueRemoteFailureReason } from "$/remote/diagnostics.ts";
-import { isHttpError, isRedirect, isValidationError } from "@sveltejs/kit";
+import { isHttpError, isRedirect } from "@sveltejs/kit";
+import * as SvelteKit from "@sveltejs/kit";
 import { is_form_error, type FormIssue } from "$/remote/shared.ts";
 import { Cause, Schema } from "effect";
 import { stringify } from "devalue";
@@ -181,7 +182,29 @@ function get_form_error_issues(value: unknown): readonly FormIssue[] | undefined
 }
 
 function is_sveltekit_control_flow(value: unknown): boolean {
-	return isRedirect(value) || isHttpError(value) || isValidationError(value);
+	return isRedirect(value) || isHttpError(value) || is_validation_error(value);
+}
+
+/**
+ * SvelteKit `3.0.0-next.21` and `3.0.0-next.22` removed `isValidationError`
+ * from the `@sveltejs/kit` index (`3.0.0-next.23` restored it), so a named
+ * import would crash module evaluation on those versions. The namespace access
+ * stays safe on every version and the structural check mirrors SvelteKit's
+ * `ValidationError` (`Error` named `ValidationError` carrying `issues`).
+ */
+function is_validation_error(value: unknown): boolean {
+	const native = (SvelteKit as { isValidationError?: (value: unknown) => boolean })
+		.isValidationError;
+
+	if (native !== undefined) {
+		return native(value);
+	}
+
+	return (
+		value instanceof globalThis.Error &&
+		value.name === "ValidationError" &&
+		Array.isArray((value as { issues?: unknown }).issues)
+	);
 }
 
 function stringify_failure(value: unknown): string | undefined {

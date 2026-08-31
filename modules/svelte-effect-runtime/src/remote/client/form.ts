@@ -9,7 +9,7 @@ import { MakeEffectFromPromise, MakeEffectFromSync } from "$/remote/effect.ts";
 import { copy_property_descriptors, has_method } from "./utils.ts";
 import { wrap_enhance_callback } from "./form-enhance.ts";
 import { DecodeResponseOrValue } from "./responses.ts";
-import type { RemoteFormInput } from "@sveltejs/kit";
+import type { NativeRemoteFormInput } from "$/remote/native-types.ts";
 import { Effect } from "effect";
 
 type RemoteInput<Input> = undefined extends Input ? Input | void : Input;
@@ -20,7 +20,7 @@ interface RemoteFormAdapterState {
 
 /** Adapts a generated SvelteKit form to SER's Effect-based client ABI. */
 export function create_remote_form_adapter<
-	Input extends RemoteFormInput | void,
+	Input extends NativeRemoteFormInput | void,
 	Output,
 	ErrorType = never,
 >(

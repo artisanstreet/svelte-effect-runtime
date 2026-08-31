@@ -63,16 +63,18 @@ import { copy_property_descriptors } from "$/internal/descriptors.ts";
 import { normalize_remote_helper_error } from "$/remote/server.ts";
 import { create_remote_transport_error } from "$/remote/shared.ts";
 import { get_remote_live_snapshot_encoder } from "./transport.ts";
-import type { RemoteFormInput } from "@sveltejs/kit";
+import type { NativeRemoteFormInput } from "$/remote/native-types.ts";
 import { Effect, Result, type Schema } from "effect";
 
 type FormSchemaEncodedInput<S> = S extends Schema.Top ? FormRemoteInput<S["Encoded"]> : never;
 
 type FormRemoteInput<Input> =
-	NormalizeFormEncoded<Input> extends RemoteFormInput ? NormalizeFormEncoded<Input> : never;
+	NormalizeFormEncoded<Input> extends NativeRemoteFormInput ? NormalizeFormEncoded<Input> : never;
 
 type FormStandardSchemaInput<S> =
-	StandardSchemaInput<S> extends RemoteFormInput ? StandardSchemaInput<S> : RemoteFormInput;
+	StandardSchemaInput<S> extends NativeRemoteFormInput
+		? StandardSchemaInput<S>
+		: NativeRemoteFormInput;
 
 type FormScalar = string | number | boolean | File;
 
@@ -669,7 +671,7 @@ export function Command(validate_or_handler: unknown, maybe_handler?: unknown): 
 export function Form<A, E = never, R = never>(
 	validate_or_handler: EffectLike<A, E, R> | RemoteFormHandler<void, A, E, R>,
 ): EffectRemoteForm<void, A, E>;
-export function Form<Input extends RemoteFormInput, A, E = never, R = never>(
+export function Form<Input extends NativeRemoteFormInput, A, E = never, R = never>(
 	validate_or_handler: "unchecked",
 	maybe_handler: RemoteFormHandler<Input, A, E, R>,
 ): EffectRemoteForm<Input, A, E>;

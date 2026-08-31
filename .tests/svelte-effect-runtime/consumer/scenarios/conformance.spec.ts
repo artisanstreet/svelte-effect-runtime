@@ -9,6 +9,7 @@ import {
 	type TestInfo,
 } from "@playwright/test";
 import type { Observation, Scenario, TargetName } from "../../unit/harness/model.ts";
+import { resolve_sveltekit_target_names } from "../harness/sveltekit-profiles.ts";
 import { normalize_observation } from "../../unit/harness/normalization.ts";
 import { get_conformance_proxy_url } from "../../unit/harness/model.ts";
 import { compare_observations } from "../../unit/harness/comparison.ts";
@@ -153,20 +154,9 @@ type LiveFinalizationObservation = {
 	readonly finalized_after_close: boolean;
 };
 
-const targets: ReadonlyArray<TargetEndpoint> = [
-	{
-		name: "native",
-		url: get_conformance_proxy_url("native"),
-	},
-	{
-		name: "stable",
-		url: get_conformance_proxy_url("stable"),
-	},
-	{
-		name: "candidate",
-		url: get_conformance_proxy_url("candidate"),
-	},
-];
+const targets: ReadonlyArray<TargetEndpoint> = resolve_sveltekit_target_names(process.env).map(
+	(name) => ({ name, url: get_conformance_proxy_url(name) }),
+);
 
 const visible_test_ids = [
 	"profile",
@@ -264,7 +254,7 @@ const transport_boundary_scenario: Scenario<ApplicationDriver, TransportBoundary
 const browser_contracts_scenario: Scenario<ApplicationDriver, PageObservation> = {
 	id: "browser-visible-contracts",
 	capability: "consumer",
-	promise: "Native, stable, and candidate expose the same browser-visible contracts",
+	promise: "Native and supported SER targets expose the same browser-visible contracts",
 	regression:
 		"A packed consumer can build while hydration, remote forms, Signals, or transformed markup fail in a real browser",
 	drive: observe_browser_contracts,
@@ -819,7 +809,7 @@ async function assert_native_parity<Value>(
 
 	const native = get_observation(observations, "native");
 
-	for (const target of ["stable", "candidate"] as const) {
+	for (const { name: target } of targets.filter(({ name }) => name !== "native")) {
 		const comparison = compare_observations(native, get_observation(observations, target));
 		const documented = deviations[target] ?? {};
 		const evidence = make_evidence(
@@ -1566,6 +1556,7 @@ async function make_request_context(
 ): Promise<APIRequestContext> {
 	return playwright.request.newContext({
 		baseURL: target.url,
+		extraHTTPHeaders: { origin: target.url },
 		ignoreHTTPSErrors: true,
 	});
 }

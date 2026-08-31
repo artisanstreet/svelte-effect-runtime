@@ -1,3 +1,4 @@
+import { RuntimeLabel } from "$lib/server-runtime";
 import { Prerender } from "svelte-effect-runtime";
 import { Effect, Schema } from "effect";
 
@@ -9,9 +10,19 @@ export const GetBuildSnapshot = Prerender(() =>
 
 export const GetDynamicSnapshot = Prerender(
 	Schema.String,
-	(input) => Effect.succeed(`${input}:${process.env.PORT ? "runtime" : "build"}`),
+	(input) =>
+		Effect.gen(function* () {
+			const runtime = yield* RuntimeLabel;
+
+			return `${input}:${runtime.value}:${process.env.PORT ? "runtime" : "build"}`;
+		}),
 	{
 		dynamic: true,
-		inputs: () => Effect.succeed(["static"]),
+		inputs: () =>
+			Effect.gen(function* () {
+				yield* RuntimeLabel;
+
+				return ["static"];
+			}),
 	},
 );

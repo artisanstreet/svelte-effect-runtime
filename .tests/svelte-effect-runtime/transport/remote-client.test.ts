@@ -747,6 +747,13 @@ test("remote live query compares replay snapshots with SvelteKit transport encod
 	assert_equals(next_value.amount, 2);
 });
 
+test("remote live query tolerates request stores without transport hooks", () => {
+	const snapshot = { value: "ready" };
+	const encode_snapshot = make_remote_live_snapshot_encoder(undefined);
+
+	assert_equals(encode_snapshot(snapshot), stringify(snapshot));
+});
+
 test("remote live status reports failed resources before closed resources", async () => {
 	const native = () => ({
 		connected: false,
@@ -1062,22 +1069,25 @@ test("remote command adapter supports invoke objects and rejects invalid factori
 
 test("current SvelteKit decodes SER multipart form data", async () => {
 	const avatar = new File(["avatar"], "avatar.txt", { type: "text/plain" });
-	const form_data = to_form_data({
-		active: true,
-		avatar,
-		count: 2,
-		draft: false,
-		nested: {
-			missing: undefined,
-			nil: null,
+	const form_data = to_form_data(
+		{
+			active: true,
+			avatar,
+			count: 2,
+			draft: false,
+			nested: {
+				missing: undefined,
+				nil: null,
+			},
+			rows: [
+				{ count: 1, title: "First" },
+				{ count: 2, title: "Second" },
+			],
+			tags: ["svelte", "effect"],
+			title: "Hello",
 		},
-		rows: [
-			{ count: 1, title: "First" },
-			{ count: 2, title: "Second" },
-		],
-		tags: ["svelte", "effect"],
-		title: "Hello",
-	});
+		"abc/create",
+	);
 	const request = new Request("https://example.test/_app/remote/abc/create", {
 		method: "POST",
 		body: form_data,
@@ -2325,6 +2335,7 @@ interface CurrentSvelteKitFormData {
 
 async function deserialize_with_current_sveltekit(
 	request: Request,
+	form_id = "abc/create",
 ): Promise<CurrentSvelteKitFormData> {
 	const require = createRequire(import.meta.url);
 	const package_path = require.resolve("@sveltejs/kit/package.json");
@@ -2332,8 +2343,11 @@ async function deserialize_with_current_sveltekit(
 		join(dirname(package_path), "src", "runtime", "form-utils.js"),
 	).href;
 	const form_utils = (await import(module_url)) as {
-		deserialize_binary_form: (request: Request) => Promise<CurrentSvelteKitFormData>;
+		deserialize_binary_form: (
+			request: Request,
+			form_id: string,
+		) => Promise<CurrentSvelteKitFormData>;
 	};
 
-	return form_utils.deserialize_binary_form(request);
+	return form_utils.deserialize_binary_form(request, form_id);
 }

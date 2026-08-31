@@ -1353,3 +1353,20 @@ test("vite remote client wrapper preserves native SvelteKit remote module", asyn
 		throw new Error("remote helpers must be declared before wrapped exports");
 	}
 });
+
+test("vite remote client wrapper recognizes SvelteKit next.25 runtime imports", async () => {
+	const runtime_specifier =
+		"../../node_modules/@sveltejs/kit/src/runtime/client/remote-functions/index.js";
+	const source = [
+		`import * as __remote from '${runtime_specifier}';`,
+		`export const get_post = __remote.query('abc/get_post');`,
+	].join("\n");
+
+	const result = await rewrite_remote_client_exports(source);
+
+	assert_string_includes(result, `from '${runtime_specifier}';`);
+	assert_string_includes(
+		result,
+		`export const get_post = create_remote_query_adapter(__remote.query('abc/get_post'), __SER___decode_payload);`,
+	);
+});

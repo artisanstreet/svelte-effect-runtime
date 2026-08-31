@@ -4,6 +4,10 @@ import {
 	get_conformance_browsers,
 	get_conformance_target_url,
 } from "../unit/harness/model.ts";
+import {
+	resolve_sveltekit_profiles,
+	resolve_sveltekit_target_names,
+} from "./harness/sveltekit-profiles.ts";
 import { defineConfig, devices, type PlaywrightTestProject } from "@playwright/test";
 import { make_evidence } from "../unit/harness/evidence.ts";
 import { delimiter, dirname, resolve } from "node:path";
@@ -30,7 +34,8 @@ const portless_env = {
 	PORTLESS_STATE_DIR: portless_state_dir,
 };
 const lane = process.env.CONFORMANCE_LANE ?? "fast";
-const target_names = ["native", "stable", "candidate"] as const;
+const target_names = resolve_sveltekit_target_names(process.env);
+const [profile] = resolve_sveltekit_profiles(process.env);
 const browsers = get_conformance_browsers(lane, process.platform);
 const projects: PlaywrightTestProject[] = [
 	{
@@ -86,7 +91,7 @@ export default defineConfig({
 		},
 		...target_names.map((target) => ({
 			name: target,
-			command: `node "${server_output_recorder}" --evidence-dir "${resolve(repo_root, dirname(make_evidence(".dist/conformance/evidence", "playwright-startup", "server-start", target, "start", "readiness.json").path))}" -- node "${portless_cli}" --name ser-conformance-${target} --force --app-port ${conformance_target_ports[target]} -- node build`,
+			command: `node "${server_output_recorder}" --evidence-dir "${resolve(repo_root, dirname(make_evidence(".dist/conformance/evidence", "playwright-startup", "server-start", target, "start", "readiness.json").path))}" -- node "${portless_cli}" --name ser-conformance-${target} --force --app-port ${conformance_target_ports[target]} -- ${make_application_server_command(profile?.browser_server, conformance_target_ports[target])}`,
 			cwd: resolve(applications_root, target),
 			env: portless_env,
 			url: `${get_conformance_target_url(target)}/api/context`,
@@ -97,3 +102,18 @@ export default defineConfig({
 		})),
 	],
 });
+
+function make_application_server_command(
+	browser_server: "adapter" | "preview" | undefined,
+	port: number,
+): string {
+	if (browser_server === "adapter") {
+		return "node build";
+	}
+
+	if (browser_server === "preview") {
+		return `node "node_modules/vite/bin/vite.js" preview --host 127.0.0.1 --port ${port} --strictPort`;
+	}
+
+	throw new Error("Browser conformance requires exactly one SvelteKit profile.");
+}
