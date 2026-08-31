@@ -61,7 +61,7 @@
 		"typescript": "^6.0.0"
 	},
 	"devDependencies": {
-		"@types/node": "^24.6.1",
+		"@types/node": "^26.4.0",
 		"rolldown": "^1.0.0-rc.13"
 	},
 	"peerDependencies": {
