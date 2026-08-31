@@ -9,12 +9,12 @@ export type NativeTransport = Readonly<
 	>
 >;
 
-/** Converts SvelteKit transport hooks into a devalue live snapshot encoder. */
+/** Converts available SvelteKit transport hooks into a devalue live snapshot encoder. */
 export function make_remote_live_snapshot_encoder(
-	transport: NativeTransport,
+	transport: NativeTransport | undefined,
 ): (value: unknown) => string {
 	const encoders = Object.fromEntries(
-		Object.entries(transport).map(([key, transformer]) => [key, transformer.encode]),
+		Object.entries(transport ?? {}).map(([key, transformer]) => [key, transformer.encode]),
 	);
 
 	return (value) => stringify(value, encoders);

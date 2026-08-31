@@ -7,8 +7,10 @@ from the current checkout. `SER_STABLE_TARGET` and
 `SER_CANDIDATE_TARGET` accept `package:<specifier>`, `artifact:<path>`, or `git:<ref>`.
 
 Shared Query and root-page scenarios compare the published release and candidate at the same
-Effect-backed target boundary. A dedicated `/prerender` route exercises SER's public `Prerender`
-export in a production server.
+Effect-backed target boundary when the selected framework profile supports both. A profile newer
+than the published release compares the candidate directly with native SvelteKit, so an obsolete
+baseline cannot prevent the candidate from running. A dedicated `/prerender` route exercises SER's
+public `Prerender` export in a production server.
 
 Each application runs install, SvelteKit sync, TypeScript, Svelte diagnostics, production build,
 and adapter-node startup as distinct phases. The check phase runs published `svelte-check` against

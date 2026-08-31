@@ -4,7 +4,7 @@ import * as SvelteKitInternalServer from "@sveltejs/kit/internal/server";
 
 type NativeRequestStore = {
 	readonly state: {
-		readonly transport: NativeTransport;
+		readonly transport?: NativeTransport;
 	};
 };
 

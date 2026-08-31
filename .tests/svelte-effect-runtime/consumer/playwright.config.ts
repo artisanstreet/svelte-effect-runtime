@@ -4,6 +4,7 @@ import {
 	get_conformance_browsers,
 	get_conformance_target_url,
 } from "../unit/harness/model.ts";
+import { resolve_sveltekit_target_names } from "./harness/sveltekit-profiles.ts";
 import { defineConfig, devices, type PlaywrightTestProject } from "@playwright/test";
 import { make_evidence } from "../unit/harness/evidence.ts";
 import { delimiter, dirname, resolve } from "node:path";
@@ -30,7 +31,7 @@ const portless_env = {
 	PORTLESS_STATE_DIR: portless_state_dir,
 };
 const lane = process.env.CONFORMANCE_LANE ?? "fast";
-const target_names = ["native", "stable", "candidate"] as const;
+const target_names = resolve_sveltekit_target_names(process.env);
 const browsers = get_conformance_browsers(lane, process.platform);
 const projects: PlaywrightTestProject[] = [
 	{

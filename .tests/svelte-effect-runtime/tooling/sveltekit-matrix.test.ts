@@ -1,4 +1,5 @@
 import {
+	resolve_sveltekit_target_names,
 	resolve_sveltekit_profiles,
 	sveltekit_profiles,
 } from "../consumer/harness/sveltekit-profiles.ts";
@@ -19,6 +20,7 @@ test("supported SvelteKit profiles select peer-compatible adapter generations", 
 			supports_paths_origin: false,
 			supports_subpath_lib_imports: false,
 			requires_explicit_module_extensions: false,
+			supports_published_stable: true,
 			sveltekit_version: "2.70.2",
 		},
 		{
@@ -29,6 +31,7 @@ test("supported SvelteKit profiles select peer-compatible adapter generations", 
 			supports_paths_origin: true,
 			supports_subpath_lib_imports: true,
 			requires_explicit_module_extensions: true,
+			supports_published_stable: false,
 			sveltekit_version: "3.0.0-next.25",
 		},
 	]);
@@ -61,6 +64,13 @@ test("Windows defaults to the Kit 3 primary profile", () => {
 	const profiles = resolve_sveltekit_profiles({}, "win32");
 
 	expect(profiles).toEqual([sveltekit_profiles[1]]);
+});
+
+test("browser conformance omits a published stable target from incompatible profiles", () => {
+	expect(resolve_sveltekit_target_names({}, "linux")).toEqual(["native", "candidate"]);
+	expect(resolve_sveltekit_target_names({ SVELTEKIT_VERSION: "3.0.0-next.19" }, "linux")).toEqual(
+		["native", "stable", "candidate"],
+	);
 });
 
 test("Windows rejects a custom prerelease that pairs with the defective legacy adapter", () => {

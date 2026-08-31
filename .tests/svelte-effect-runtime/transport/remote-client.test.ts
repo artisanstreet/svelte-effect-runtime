@@ -747,6 +747,13 @@ test("remote live query compares replay snapshots with SvelteKit transport encod
 	assert_equals(next_value.amount, 2);
 });
 
+test("remote live query tolerates request stores without transport hooks", () => {
+	const snapshot = { value: "ready" };
+	const encode_snapshot = make_remote_live_snapshot_encoder(undefined);
+
+	assert_equals(encode_snapshot(snapshot), stringify(snapshot));
+});
+
 test("remote live status reports failed resources before closed resources", async () => {
 	const native = () => ({
 		connected: false,

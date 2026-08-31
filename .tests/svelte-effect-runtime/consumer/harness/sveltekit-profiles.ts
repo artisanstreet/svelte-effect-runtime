@@ -1,3 +1,4 @@
+import type { TargetName } from "../../unit/harness/model.ts";
 import { gte, valid } from "semver";
 
 export type SvelteKitProfileName = "kit-2-stable" | "kit-3-primary";
@@ -19,6 +20,8 @@ export type SvelteKitProfile = {
 	readonly supports_subpath_lib_imports: boolean;
 	/** SvelteKit 3.0.0-next.20 stopped defining `#lib`, so subpath imports resolve Node-style and need explicit extensions. */
 	readonly requires_explicit_module_extensions: boolean;
+	/** Whether the published stable artifact can run against this framework profile. */
+	readonly supports_published_stable: boolean;
 	readonly sveltekit_version: string;
 	readonly unsupported_platforms?: Partial<
 		Readonly<Record<NodeJS.Platform, SvelteKitPlatformDefect>>
@@ -54,6 +57,7 @@ const kit_2_stable: SvelteKitProfile = {
 	supports_paths_origin: false,
 	supports_subpath_lib_imports: false,
 	requires_explicit_module_extensions: false,
+	supports_published_stable: true,
 	sveltekit_version: "2.70.2",
 };
 
@@ -65,6 +69,7 @@ const kit_3_primary: SvelteKitProfile = {
 	supports_paths_origin: true,
 	supports_subpath_lib_imports: true,
 	requires_explicit_module_extensions: true,
+	supports_published_stable: false,
 	sveltekit_version: "3.0.0-next.25",
 };
 
@@ -84,6 +89,22 @@ const kit_3_prerelease_steps = [
 ] as const;
 
 export const sveltekit_profiles = [kit_2_stable, kit_3_primary] as const;
+
+export function resolve_sveltekit_target_names(
+	environment: NodeJS.ProcessEnv,
+	platform: NodeJS.Platform = process.platform,
+): ReadonlyArray<TargetName> {
+	const profiles = resolve_sveltekit_profiles(environment, platform);
+	const [profile] = profiles;
+
+	if (!profile || profiles.length !== 1) {
+		throw new Error("Browser conformance requires exactly one SvelteKit profile.");
+	}
+
+	return profile.supports_published_stable
+		? ["native", "stable", "candidate"]
+		: ["native", "candidate"];
+}
 
 export function resolve_sveltekit_profiles(
 	environment: NodeJS.ProcessEnv,
@@ -215,6 +236,7 @@ function make_custom_profile(sveltekit_version: string): SvelteKitProfile {
 			supports_paths_origin: kit_3_primary.supports_paths_origin,
 			supports_subpath_lib_imports: gte(sveltekit_version, "3.0.0-next.9"),
 			requires_explicit_module_extensions: gte(sveltekit_version, "3.0.0-next.20"),
+			supports_published_stable: !gte(sveltekit_version, "3.0.0-next.20"),
 			sveltekit_version,
 			...platform_defects,
 		};
