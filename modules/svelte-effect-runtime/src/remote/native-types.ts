@@ -40,7 +40,7 @@ type ValueOfUnionKey<T, K extends PropertyKey> = T extends unknown
  * Data shape SvelteKit accepts for a remote form submission. Mirrors
  * SvelteKit's `RemoteFormInput`.
  *
- * @since 4.3.0
+ * @since 4.2.5
  */
 export interface NativeRemoteFormInput {
 	[key: string]: MaybeArray<string | number | boolean | File | NativeRemoteFormInput> | undefined;
@@ -50,7 +50,7 @@ export interface NativeRemoteFormInput {
  * A single validation issue reported for a remote form field. Mirrors
  * SvelteKit's `RemoteFormIssue`.
  *
- * @since 4.3.0
+ * @since 4.2.5
  */
 export interface NativeRemoteFormIssue {
 	message: string;
@@ -237,7 +237,7 @@ type ExtractId<Input> = Input extends { id: infer Id }
  * The form instance received inside an `enhance` callback. Mirrors SvelteKit's
  * `RemoteFormEnhanceInstance`.
  *
- * @since 4.3.0
+ * @since 4.2.5
  */
 export type NativeRemoteFormEnhanceInstance<
 	Input extends NativeRemoteFormInput | void = NativeRemoteFormInput | void,
@@ -250,7 +250,7 @@ export type NativeRemoteFormEnhanceInstance<
  * The callback passed to a remote form's `enhance` method. Mirrors SvelteKit's
  * `RemoteFormEnhanceCallback`.
  *
- * @since 4.3.0
+ * @since 4.2.5
  */
 export type NativeRemoteFormEnhanceCallback<
 	Input extends NativeRemoteFormInput | void = NativeRemoteFormInput | void,
@@ -261,7 +261,7 @@ export type NativeRemoteFormEnhanceCallback<
  * SvelteKit's `RemoteForm` surface. `validate` accepts the superset of the
  * SvelteKit 2 (`includeUntouched`) and SvelteKit 3 (`all`) options.
  *
- * @since 4.3.0
+ * @since 4.2.5
  */
 export type NativeRemoteForm<Input extends NativeRemoteFormInput | void, Output> = {
 	/** Attachment that intercepts the form submission on the client to prevent a full page reload. */
@@ -308,7 +308,7 @@ export type NativeRemoteForm<Input extends NativeRemoteFormInput | void, Output>
  * SvelteKit's `RemoteResource` shape shared by query, live query, and
  * prerender resources.
  *
- * @since 4.3.0
+ * @since 4.2.5
  */
 export type NativeRemoteResource<T> = Promise<T> & {
 	/** The error in case the query fails. */
@@ -331,7 +331,7 @@ export type NativeRemoteResource<T> = Promise<T> & {
 /**
  * SvelteKit's `RemoteQuery` resource surface.
  *
- * @since 4.3.0
+ * @since 4.2.5
  */
 export type NativeRemoteQuery<T> = NativeRemoteResource<T> & {
 	/** Update the value of the query without re-fetching it. */
@@ -345,7 +345,7 @@ export type NativeRemoteQuery<T> = NativeRemoteResource<T> & {
 /**
  * SvelteKit's `RemoteLiveQuery` resource surface.
  *
- * @since 4.3.0
+ * @since 4.2.5
  */
 export type NativeRemoteLiveQuery<T> = NativeRemoteResource<T> &
 	AsyncIterable<T> & {
@@ -360,7 +360,7 @@ export type NativeRemoteLiveQuery<T> = NativeRemoteResource<T> &
 /**
  * SvelteKit's `RemoteQueryFunction`.
  *
- * @since 4.3.0
+ * @since 4.2.5
  */
 export type NativeRemoteQueryFunction<Input, Output, _Validated = Input> = (
 	arg: undefined extends Input ? Input | void : Input,
@@ -369,7 +369,7 @@ export type NativeRemoteQueryFunction<Input, Output, _Validated = Input> = (
 /**
  * SvelteKit's `RemoteLiveQueryFunction`.
  *
- * @since 4.3.0
+ * @since 4.2.5
  */
 export type NativeRemoteLiveQueryFunction<Input, Output, _Validated = Input> = (
 	arg: undefined extends Input ? Input | void : Input,
@@ -378,7 +378,7 @@ export type NativeRemoteLiveQueryFunction<Input, Output, _Validated = Input> = (
 /**
  * SvelteKit's `RemoteQueryOverride`.
  *
- * @since 4.3.0
+ * @since 4.2.5
  */
 export type NativeRemoteQueryOverride = () => void;
 
@@ -386,7 +386,7 @@ export type NativeRemoteQueryOverride = () => void;
  * Update selection accepted by SvelteKit's command and form `updates(...)`
  * methods. Mirrors SvelteKit's `RemoteQueryUpdate`.
  *
- * @since 4.3.0
+ * @since 4.2.5
  */
 export type NativeRemoteQueryUpdate =
 	| NativeRemoteQuery<any>
