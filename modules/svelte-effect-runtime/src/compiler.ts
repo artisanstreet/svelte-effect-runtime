@@ -691,7 +691,14 @@ function make_remote_client_wrapper_plugin(options?: EffectOptions): Plugin {
 				return { code: rewritten, map: null };
 			}
 
-			if (!is_remote_module(id) || !code.includes("__sveltekit/remote")) {
+			if (!is_remote_module(id)) {
+				return undefined;
+			}
+
+			const remote_client = await import("./compiler/remote-client.ts");
+			const runtime_specifier = remote_client.find_remote_client_runtime_specifier(code);
+
+			if (!runtime_specifier) {
 				return undefined;
 			}
 
@@ -700,14 +707,14 @@ function make_remote_client_wrapper_plugin(options?: EffectOptions): Plugin {
 			has_remote_form_module ||= has_remote_form;
 
 			if (has_remote_form) {
-				const resolved_runtime = await this.resolve("__sveltekit/remote", id);
+				const resolved_runtime = await this.resolve(runtime_specifier, id);
 
 				if (!resolved_runtime || !is_sveltekit_remote_runtime_index(resolved_runtime.id)) {
 					this.error(make_missing_sveltekit_remote_runtime_message());
 				}
 			}
 
-			const rewritten = await rewrite_remote_client_exports(code, options);
+			const rewritten = remote_client.rewrite_remote_client_exports(code, options);
 
 			if (rewritten === code) {
 				return undefined;

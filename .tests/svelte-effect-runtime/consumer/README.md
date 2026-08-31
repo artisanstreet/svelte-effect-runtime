@@ -34,6 +34,12 @@ build directory. Older Kit 3 prereleases remain selectable for diagnosis; the ha
 [upstream issue #16365](https://github.com/sveltejs/kit/issues/16365) on Windows when one requires
 the affected adapter-node 6.0.0-next.3 instead of applying a local framework patch.
 
+SvelteKit 3.0.0-next.20 and later run browser conformance through SvelteKit's production preview
+server. Their latest compatible adapter-node release can build the new application layout but
+resolves its emitted static root from a hashed server chunk, so its standalone server cannot serve
+client assets. The harness still builds and inspects adapter-node output before using preview for
+the runtime comparison.
+
 `corepack pnpm run check:conformance:matrix` installs, synchronizes, type-checks, SER-checks, and
 builds packed native, stable, and candidate consumers under every profile available on the current
 platform, preserving its evidence under `.dist/conformance-matrix` so it cannot overwrite a browser

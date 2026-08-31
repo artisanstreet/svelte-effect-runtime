@@ -135,6 +135,21 @@ test("remote client plugin injects the SvelteKit transport bridge", async () => 
 	}
 });
 
+test("remote client plugin rewrites SvelteKit next.25 relative runtime imports", async () => {
+	const plugin = get_remote_client_plugin();
+	const source = [
+		`import * as __remote from '../../node_modules/@sveltejs/kit/src/runtime/client/remote-functions/index.js';`,
+		`export const get_post = __remote.query('abc/get_post');`,
+	].join("\n");
+	const result = await run_transform(plugin, source, "C:/repo/src/get-post.remote.js");
+
+	if (!result || typeof result === "string") {
+		throw new Error("remote client plugin should wrap relative Kit runtime imports");
+	}
+
+	assert_string_includes(result.code, "create_remote_query_adapter");
+});
+
 test("remote client plugin rejects a moved Kit virtual runtime during transformation", async () => {
 	const plugin = get_remote_client_plugin();
 

@@ -12,6 +12,7 @@ export type SvelteKitProfile = {
 	readonly name: SvelteKitProfileName | "custom";
 	readonly adapter_node_version: string;
 	readonly adapter_output_directory_module?: string;
+	readonly browser_server: "adapter" | "preview";
 	/** Specifier the fixture tsconfig inherits SvelteKit's generated options from. */
 	readonly generated_tsconfig_specifier: string;
 	readonly supports_explicit_environment: boolean;
@@ -52,6 +53,7 @@ const legacy_kit_3_adapter = {
 const kit_2_stable: SvelteKitProfile = {
 	name: "kit-2-stable",
 	adapter_node_version: "5.5.7",
+	browser_server: "adapter",
 	generated_tsconfig_specifier: legacy_generated_tsconfig,
 	supports_explicit_environment: false,
 	supports_paths_origin: false,
@@ -64,6 +66,7 @@ const kit_2_stable: SvelteKitProfile = {
 const kit_3_primary: SvelteKitProfile = {
 	name: "kit-3-primary",
 	adapter_node_version: "6.0.0-next.10",
+	browser_server: "preview",
 	generated_tsconfig_specifier: app_generated_tsconfig,
 	supports_explicit_environment: true,
 	supports_paths_origin: true,
@@ -228,6 +231,7 @@ function make_custom_profile(sveltekit_version: string): SvelteKitProfile {
 		return {
 			name: "custom",
 			adapter_node_version: adapter.adapter_node_version,
+			browser_server: gte(sveltekit_version, "3.0.0-next.20") ? "preview" : "adapter",
 			...directory_module,
 			generated_tsconfig_specifier: gte(sveltekit_version, "3.0.0-next.12")
 				? app_generated_tsconfig

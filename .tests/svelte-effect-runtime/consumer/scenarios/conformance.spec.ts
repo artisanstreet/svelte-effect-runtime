@@ -1556,6 +1556,7 @@ async function make_request_context(
 ): Promise<APIRequestContext> {
 	return playwright.request.newContext({
 		baseURL: target.url,
+		extraHTTPHeaders: { origin: target.url },
 		ignoreHTTPSErrors: true,
 	});
 }

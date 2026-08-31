@@ -34,7 +34,7 @@ test("packed candidate runtime excludes compiler-only CommonJS dependencies", as
 	expect(leaking_files).toEqual([]);
 });
 
-test("production adapter servers start and answer through named HTTPS origins", async ({
+test("production servers start and answer through named HTTPS origins", async ({
 	request,
 }, test_info) => {
 	for (const target of targets) {

@@ -23,6 +23,7 @@ type RemoteClientExportType =
 
 interface RemoteNamespaceImport {
 	name: string;
+	specifier: string;
 	statement: ImportDeclaration;
 }
 
@@ -47,13 +48,7 @@ export function rewrite_remote_client_exports(
 	code: string,
 	options?: RemoteClientRewriteOptions,
 ): string {
-	const source_file = ts.createSourceFile(
-		"sveltekit-remote-client.ts",
-		code,
-		ts.ScriptTarget.Latest,
-		true,
-		ts.ScriptKind.TS,
-	);
+	const source_file = create_remote_client_source_file(code);
 	const namespace_import = find_remote_namespace_import(source_file);
 
 	if (!namespace_import) {
@@ -115,6 +110,22 @@ export function rewrite_remote_client_exports(
 	return magic.toString();
 }
 
+export function find_remote_client_runtime_specifier(code: string): string | undefined {
+	const source_file = create_remote_client_source_file(code);
+
+	return find_remote_namespace_import(source_file)?.specifier;
+}
+
+function create_remote_client_source_file(code: string): SourceFile {
+	return ts.createSourceFile(
+		"sveltekit-remote-client.ts",
+		code,
+		ts.ScriptTarget.Latest,
+		true,
+		ts.ScriptKind.TS,
+	);
+}
+
 function make_remote_export(
 	name: string,
 	remote_type: RemoteClientExportType,
@@ -164,7 +175,7 @@ function get_remote_namespace_import(
 ): RemoteNamespaceImport | undefined {
 	if (
 		!ts.isStringLiteral(statement.moduleSpecifier) ||
-		statement.moduleSpecifier.text !== "__sveltekit/remote"
+		!is_sveltekit_remote_client_specifier(statement.moduleSpecifier.text)
 	) {
 		return undefined;
 	}
@@ -178,8 +189,18 @@ function get_remote_namespace_import(
 
 	return {
 		name: bindings.name.text,
+		specifier: statement.moduleSpecifier.text,
 		statement,
 	};
+}
+
+function is_sveltekit_remote_client_specifier(specifier: string): boolean {
+	const normalized_specifier = specifier.replaceAll("\\", "/");
+
+	return (
+		normalized_specifier === "__sveltekit/remote" ||
+		normalized_specifier.endsWith("/@sveltejs/kit/src/runtime/client/remote-functions/index.js")
+	);
 }
 
 function collect_remote_client_exports(
