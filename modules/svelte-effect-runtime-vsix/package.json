@@ -24,7 +24,7 @@
 		"package:built": "vp node ../../build/vsix.ts"
 	},
 	"dependencies": {
-		"vscode-languageclient": "9.0.1"
+		"vscode-languageclient": "10.1.1"
 	},
 	"contributes": {
 		"languages": [
