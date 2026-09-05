@@ -33,7 +33,7 @@
 		"svelte-effect-runtime-grammars": "workspace:4.2.6",
 		"svelte-language-server": "^0.17.30",
 		"typescript": "^6.0.0",
-		"vscode-languageserver": "9.0.1"
+		"vscode-languageserver": "10.1.1"
 	},
 	"devDependencies": {
 		"rolldown": "^1.0.0-rc.13"
