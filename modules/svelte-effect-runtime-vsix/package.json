@@ -1,7 +1,7 @@
 {
 	"name": "svelte-effect-runtime-vscode",
 	"displayName": "Svelte Effect Runtime",
-	"version": "4.2.5",
+	"version": "4.2.6",
 	"description": "VS Code extension that installs and launches the SER LSP from the npm registry.",
 	"categories": [
 		"Other",
