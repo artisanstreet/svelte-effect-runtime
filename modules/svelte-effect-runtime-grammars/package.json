@@ -1,11 +1,11 @@
 {
 	"name": "svelte-effect-runtime-grammars",
-	"version": "4.2.5",
+	"version": "4.2.6",
 	"description": "TextMate and tree-sitter grammar data for Svelte Effect Runtime tooling.",
 	"license": "BSD-3-Clause",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/usebarekey/svelte-effect-runtime.git",
+		"url": "git+https://github.com/artisanstreet/svelte-effect-runtime.git",
 		"directory": "modules/svelte-effect-runtime-grammars"
 	},
 	"files": [
