@@ -363,6 +363,7 @@ test("vite plugin keeps runtime package transformable in SSR builds", () => {
 	});
 
 	const resolved_config = {
+		environments: {},
 		ssr: {
 			noExternal: ["svelte"],
 		},
@@ -371,6 +372,55 @@ test("vite plugin keeps runtime package transformable in SSR builds", () => {
 	client_plugin.configResolved?.(resolved_config as never);
 
 	assert_equals(resolved_config.ssr.noExternal, ["svelte", "svelte-effect-runtime"]);
+});
+
+test("vite plugin bundles runtime package when adapters externalize dependencies", () => {
+	const client_plugin = effect().find(
+		(plugin) => plugin.name === "svelte-effect-runtime:remote-client",
+	);
+
+	const make_environment = (consumer: string) => ({
+		consumer,
+		build: {
+			rolldownOptions: {
+				external: [/^effect(\/.*)?$/, /^svelte-effect-runtime(\/.*)?$/, "pg"],
+			},
+		},
+	});
+
+	const resolved_config = {
+		environments: {
+			client: make_environment("client"),
+			ssr: make_environment("server"),
+		},
+		ssr: {
+			noExternal: [],
+		},
+	};
+
+	if (typeof client_plugin?.configResolved !== "function") {
+		throw new Error("remote client plugin should expose a configResolved hook");
+	}
+
+	client_plugin.configResolved(resolved_config as never);
+
+	const server_external = resolved_config.environments.ssr.build.rolldownOptions.external;
+
+	if (typeof server_external !== "function") {
+		throw new Error("server environment externals should be wrapped");
+	}
+
+	assert_equals(server_external("svelte-effect-runtime", undefined, false), false);
+	assert_equals(server_external("svelte-effect-runtime/server", undefined, false), false);
+	assert_equals(server_external("effect", undefined, false), true);
+	assert_equals(server_external("effect/Schema", undefined, false), true);
+	assert_equals(server_external("pg", undefined, false), true);
+	assert_equals(server_external("svelte-effect-runtime-extra", undefined, false), false);
+	assert_equals(server_external("#lib/server", undefined, false), false);
+	assert_equals(
+		Array.isArray(resolved_config.environments.client.build.rolldownOptions.external),
+		true,
+	);
 });
 
 test("vite server import rewrite handles query-suffixed server modules", async () => {
