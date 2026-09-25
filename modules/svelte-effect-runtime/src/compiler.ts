@@ -3,7 +3,7 @@ import {
 	is_sveltekit_remote_runtime_index,
 	make_missing_sveltekit_remote_runtime_message,
 } from "./compiler/sveltekit-remote-bridge.ts";
-import type { Plugin } from "vite";
+import type { Plugin, ResolvedConfig, Rolldown } from "vite";
 
 /**
  * Options for the {@link effect} Vite plugin.
@@ -659,6 +659,8 @@ function make_remote_client_wrapper_plugin(options?: EffectOptions): Plugin {
 			const no_external = config.ssr.noExternal;
 			const runtime_package = "svelte-effect-runtime";
 
+			keep_runtime_package_bundled(config);
+
 			if (no_external === true) {
 				return;
 			}
@@ -723,6 +725,46 @@ function make_remote_client_wrapper_plugin(options?: EffectOptions): Plugin {
 			return { code: rewritten, map: null };
 		},
 	};
+}
+
+/**
+ * SvelteKit adapters externalize every production dependency, which overrides
+ * `ssr.noExternal` and leaves the runtime's `$app/*` imports unresolvable.
+ */
+function keep_runtime_package_bundled(config: ResolvedConfig): void {
+	for (const environment of Object.values(config.environments)) {
+		/** Vite 7 has no `rolldownOptions`; its adapters never externalize dependencies. */
+		const rolldown_options = environment.build.rolldownOptions as
+			| Rolldown.InputOptions
+			| undefined;
+		const external = rolldown_options?.external;
+
+		if (environment.consumer !== "server" || !rolldown_options || external === undefined) {
+			continue;
+		}
+
+		rolldown_options.external = (id, parent_id, is_resolved) =>
+			!is_runtime_package_specifier(id) && is_external(external, id, parent_id, is_resolved);
+	}
+}
+
+function is_runtime_package_specifier(id: string): boolean {
+	return /^svelte-effect-runtime(?:\/|$)/.test(id);
+}
+
+function is_external(
+	external: NonNullable<Rolldown.InputOptions["external"]>,
+	id: string,
+	parent_id: string | undefined,
+	is_resolved: boolean,
+): boolean {
+	if (typeof external === "function") {
+		return external(id, parent_id, is_resolved) === true;
+	}
+
+	return [external]
+		.flat()
+		.some((entry) => (typeof entry === "string" ? entry === id : entry.test(id)));
 }
 
 function is_server_runtime_module(id: string): boolean {
