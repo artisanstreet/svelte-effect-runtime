@@ -771,13 +771,16 @@ function is_server_runtime_module(id: string): boolean {
 	const [filename] = id.split("?", 2);
 
 	return (
-		/\.(server|remote)(?:\.[cm])?\.[jt]s$/.test(filename) ||
+		is_remote_module(id) ||
+		/\.server(?:\.[cm])?\.[jt]s$/.test(filename) ||
 		/(?:^|[\\/])hooks\.server(?:\.[cm])?\.[jt]s$/.test(filename)
 	);
 }
 
 function is_remote_module(id: string): boolean {
-	return /\.(remote|remote\.[cm]?)\.[jt]s(?:\?.*)?$/.test(id) || id.includes(".remote.");
+	const [filename] = id.split("?", 2);
+
+	return /(?:^|[\\/.])remote\.[^\\/]+$/.test(filename);
 }
 
 function is_svelte_component_module(id: string, extensions: readonly string[]): boolean {
