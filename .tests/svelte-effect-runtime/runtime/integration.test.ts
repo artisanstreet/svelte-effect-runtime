@@ -454,6 +454,82 @@ test("vite server import rewrite handles query-suffixed server modules", async (
 	}
 });
 
+test("vite remote transforms recognize remote filename segments", async () => {
+	const server_source = [
+		`import { Prerender, Query } from "svelte-effect-runtime";`,
+		`export const GetPost = Query(() => Effect.gen(function* () { return "post"; }));`,
+		`export const GetBuildInfo = Prerender(() => Effect.gen(function* () { return "ready"; }));`,
+	].join("\n");
+	const client_source = [
+		`import * as __remote from '__sveltekit/remote';`,
+		`export const GetPost = __remote.query('abc/GetPost');`,
+	].join("\n");
+	const client_plugin = effect().find(
+		(candidate) => candidate.name === "svelte-effect-runtime:remote-client",
+	);
+	const ids = [
+		"remote.ts",
+		"/src/routes/remote.ts",
+		"/src/routes/remote.ts?server",
+		"C:\\src\\routes\\remote.ts?server",
+		"/src/routes/data.remote.ts",
+		"/src/routes/data.remote.test.ts?server",
+		"/src/routes/remote.test.ts",
+		"/src/routes/remote.js",
+		"/src/routes/remote.m.ts?server",
+	];
+
+	if (!client_plugin || typeof client_plugin.transform !== "function") {
+		throw new Error("remote client plugin should expose a transform hook");
+	}
+
+	/** Both transforms must agree on remote modules, including Prerender context injection. */
+	for (const id of ids) {
+		const server_result = await run_server_import_transform(server_source, id);
+		const client_result = await client_plugin.transform.call({} as never, client_source, id);
+
+		assert_string_includes(server_result, `from "svelte-effect-runtime/server"`);
+		assert_string_includes(server_result, `import { prerender } from "$app/server";`);
+		assert_string_includes(server_result, `undefined, undefined, prerender)`);
+
+		if (!client_result || typeof client_result === "string") {
+			throw new Error(`remote client transform should return code for ${id}`);
+		}
+
+		assert_string_includes(client_result.code, `create_remote_query_adapter(__remote.query(`);
+	}
+});
+
+test("vite remote transforms ignore remote text outside filename segments", async () => {
+	const server_source = `import { Query } from "svelte-effect-runtime";`;
+	const client_source = [
+		`import * as __remote from '__sveltekit/remote';`,
+		`export const GetPost = __remote.query('abc/GetPost');`,
+	].join("\n");
+	const client_plugin = effect().find(
+		(candidate) => candidate.name === "svelte-effect-runtime:remote-client",
+	);
+	const ids = [
+		"/src/routes/notremote.ts",
+		"/src/routes/remote/data.ts",
+		"/src/routes/data.remote.ts/helper.ts",
+		"C:\\src\\routes\\data.remote.ts\\helper.ts",
+		"/src/routes/data.ts?import=data.remote.ts",
+	];
+
+	if (!client_plugin || typeof client_plugin.transform !== "function") {
+		throw new Error("remote client plugin should expose a transform hook");
+	}
+
+	for (const id of ids) {
+		const server_result = await run_server_import_transform(server_source, id);
+		const client_result = await client_plugin.transform.call({} as never, client_source, id);
+
+		assert_equals(server_result, server_source);
+		assert_equals(client_result, undefined);
+	}
+});
+
 test("vite server import rewrite parses imports instead of rewriting text", async () => {
 	const source = [
 		`import type { RequestEvent } from "svelte-effect-runtime";`,
