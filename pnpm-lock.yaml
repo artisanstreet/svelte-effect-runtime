@@ -213,7 +213,7 @@ importers:
     devDependencies:
       '@effect/platform-node':
         specifier: 4.0.0-beta.93
-        version: 4.0.0-beta.93(effect@4.0.0-beta.93)(ioredis@5.11.1)
+        version: 4.0.0-beta.93(effect@4.0.0-rc.117)(ioredis@5.11.1)
       '@playwright/test':
         specifier: 1.61.1
         version: 1.61.1
@@ -248,8 +248,8 @@ importers:
         specifier: 5.8.1
         version: 5.8.1
       effect:
-        specifier: 4.0.0-beta.93
-        version: 4.0.0-beta.93
+        specifier: 4.0.0-rc.117
+        version: 4.0.0-rc.117
       fast-check:
         specifier: ^4.9.0
         version: 4.9.0
@@ -1736,6 +1736,9 @@ packages:
   effect@4.0.0-beta.93:
     resolution: {integrity: sha512-wNS5MKFa3C42uBfIDik2oJ78lhpoYz2hN4oBR0229BeeDCIrkg/FiOvoiPGdCVlWa7MEKxEL5I0f8AILVHSD9A==}
 
+  effect@4.0.0-rc.117:
+    resolution: {integrity: sha512-UUyi9QiOW4nySFIBM3KnYbNMd9EZliOdKfBcyLD0mPMPheO2fkuXS5y0opjWc9oqzlJxPQICEGm8gGw3kh9j/w==}
+
   emmet@2.4.11:
     resolution: {integrity: sha512-23QPJB3moh/U9sT4rQzGgeyyGIrcM+GH5uVYg2C6wZIxAIJq7Ng3QLT79tl8FUwDXhyq9SusfknOrofAKqvgyQ==}
 
@@ -3181,19 +3184,19 @@ snapshots:
 
   '@blazediff/core@1.9.1': {}
 
-  '@effect/platform-node-shared@4.0.0-beta.93(effect@4.0.0-beta.93)':
+  '@effect/platform-node-shared@4.0.0-beta.93(effect@4.0.0-rc.117)':
     dependencies:
       '@types/ws': 8.18.1
-      effect: 4.0.0-beta.93
+      effect: 4.0.0-rc.117
       ws: 8.21.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@effect/platform-node@4.0.0-beta.93(effect@4.0.0-beta.93)(ioredis@5.11.1)':
+  '@effect/platform-node@4.0.0-beta.93(effect@4.0.0-rc.117)(ioredis@5.11.1)':
     dependencies:
-      '@effect/platform-node-shared': 4.0.0-beta.93(effect@4.0.0-beta.93)
-      effect: 4.0.0-beta.93
+      '@effect/platform-node-shared': 4.0.0-beta.93(effect@4.0.0-rc.117)
+      effect: 4.0.0-rc.117
       ioredis: 5.11.1
       mime: 4.1.0
       undici: 8.7.0
@@ -4363,6 +4366,8 @@ snapshots:
       toml: 4.1.2
       uuid: 14.0.1
       yaml: 2.9.0
+
+  effect@4.0.0-rc.117: {}
 
   emmet@2.4.11:
     dependencies:
