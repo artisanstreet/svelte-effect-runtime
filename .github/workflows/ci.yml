@@ -401,7 +401,7 @@ jobs:
             - name: Setup workspace
               uses: ./.github/actions/setup
             - name: Download verified runtime output
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
               with:
                   name: runtime-${{ github.sha }}
                   path: .dist/svelte-effect-runtime
@@ -490,37 +490,37 @@ jobs:
             - name: Setup workspace
               uses: ./.github/actions/setup
             - name: Download current plan
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
               with:
                   name: release-plan-${{ github.run_id }}
                   path: release-input/plan
             - name: Download runtime package
               if: inputs.mode != 'resume'
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
               with:
                   name: runtime-${{ github.sha }}
                   path: release-input/runtime
             - name: Download grammar package
               if: inputs.mode != 'resume'
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
               with:
                   name: grammars-${{ github.sha }}
                   path: release-input/grammars
             - name: Download language server package
               if: inputs.mode != 'resume'
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
               with:
                   name: language-server-${{ github.sha }}
                   path: release-input/language-server
             - name: Download VSIX
               if: inputs.mode != 'resume'
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
               with:
                   name: vsix-${{ github.sha }}
                   path: release-input/vsix
             - name: Download exact prior candidate
               if: inputs.mode == 'resume'
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
               with:
                   name: release-candidate-${{ inputs.resume_version }}-${{ inputs.resume_commit }}
                   path: release-source
@@ -580,7 +580,7 @@ jobs:
             - name: Setup workspace
               uses: ./.github/actions/setup
             - name: Download candidate bundle
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
               with:
                   name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
                   path: release-candidate
@@ -615,7 +615,7 @@ jobs:
             - name: Setup workspace
               uses: ./.github/actions/setup
             - name: Download candidate bundle
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
               with:
                   name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
                   path: release-candidate
@@ -666,7 +666,7 @@ jobs:
             - name: Setup workspace
               uses: ./.github/actions/setup
             - name: Download candidate bundle
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
               with:
                   name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
                   path: release-candidate
@@ -741,7 +741,7 @@ jobs:
             - name: Setup workspace
               uses: ./.github/actions/setup
             - name: Download candidate bundle
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
               with:
                   name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
                   path: release-candidate
@@ -827,7 +827,7 @@ jobs:
             - name: Setup workspace
               uses: ./.github/actions/setup
             - name: Download candidate bundle
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
               with:
                   name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
                   path: release-candidate
@@ -880,7 +880,7 @@ jobs:
             - name: Setup workspace
               uses: ./.github/actions/setup
             - name: Download candidate bundle
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
               with:
                   name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
                   path: release-candidate
@@ -936,7 +936,7 @@ jobs:
             - name: Setup workspace
               uses: ./.github/actions/setup
             - name: Download candidate bundle
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
               with:
                   name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
                   path: release-candidate
@@ -994,7 +994,7 @@ jobs:
             - name: Setup workspace
               uses: ./.github/actions/setup
             - name: Download candidate bundle
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
               with:
                   name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
                   path: release-candidate
@@ -1045,7 +1045,7 @@ jobs:
             - name: Setup workspace
               uses: ./.github/actions/setup
             - name: Download candidate bundle
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
               with:
                   name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
                   path: release-candidate
@@ -1094,27 +1094,27 @@ jobs:
               uses: ./.github/actions/setup
             - name: Download promotion evidence
               continue-on-error: true
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
               with:
                   name: promotion-state-${{ github.run_id }}
                   path: release-report
             - name: Download provider timing evidence
               if: github.event_name == 'workflow_dispatch' && inputs.mode != 'dry-run'
               continue-on-error: true
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
               with:
                   pattern: promotion-phase-*-${{ github.run_id }}
                   path: release-report/phases
             - name: Download release plan
               continue-on-error: true
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
               with:
                   name: release-plan-${{ github.run_id }}
                   path: release-report/plan
             - name: Download candidate identity
               if: github.event_name == 'workflow_dispatch'
               continue-on-error: true
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
               with:
                   name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
                   path: release-report/candidate
