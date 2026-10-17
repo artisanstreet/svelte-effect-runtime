@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 const sveltekit_remote_runtime_suffix =
 	"/node_modules/@sveltejs/kit/src/runtime/client/remote-functions/index.js";
 
@@ -26,6 +28,27 @@ export function is_sveltekit_remote_runtime_index(id: string): boolean {
 	const normalized_filename = filename.replaceAll("\\", "/");
 
 	return normalized_filename.endsWith(sveltekit_remote_runtime_suffix);
+}
+
+/** Reads the major version of the SvelteKit package that owns a resolved remote runtime index. */
+export async function read_sveltekit_remote_runtime_major(id: string): Promise<number | undefined> {
+	const [filename] = id.split("?", 2);
+	const normalized_filename = filename.replaceAll("\\", "/");
+	const runtime_path = sveltekit_remote_runtime_suffix.replace("/node_modules/@sveltejs/kit", "");
+
+	if (!normalized_filename.endsWith(runtime_path)) {
+		return undefined;
+	}
+
+	const package_root = normalized_filename.slice(0, -runtime_path.length);
+	const manifest = await readFile(`${package_root}/package.json`, "utf8").catch(() => undefined);
+	const version: unknown = manifest === undefined ? undefined : JSON.parse(manifest).version;
+
+	if (typeof version !== "string") {
+		return undefined;
+	}
+
+	return Number.parseInt(version, 10);
 }
 
 export function append_sveltekit_remote_transport_bridge(code: string): string {

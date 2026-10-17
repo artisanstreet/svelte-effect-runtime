@@ -2,6 +2,7 @@ import {
 	append_sveltekit_remote_transport_bridge,
 	is_sveltekit_remote_runtime_index,
 	make_missing_sveltekit_remote_runtime_message,
+	read_sveltekit_remote_runtime_major,
 } from "./compiler/sveltekit-remote-bridge.ts";
 import type { Plugin, ResolvedConfig, Rolldown } from "vite";
 
@@ -706,6 +707,8 @@ function make_remote_client_wrapper_plugin(options?: EffectOptions): Plugin {
 
 			const has_remote_form = /\.[\s\n]*form[\s\n]*\(/.test(code);
 
+			let sveltekit_major: number | undefined;
+
 			has_remote_form_module ||= has_remote_form;
 
 			if (has_remote_form) {
@@ -714,9 +717,14 @@ function make_remote_client_wrapper_plugin(options?: EffectOptions): Plugin {
 				if (!resolved_runtime || !is_sveltekit_remote_runtime_index(resolved_runtime.id)) {
 					this.error(make_missing_sveltekit_remote_runtime_message());
 				}
+
+				sveltekit_major = await read_sveltekit_remote_runtime_major(resolved_runtime.id);
 			}
 
-			const rewritten = remote_client.rewrite_remote_client_exports(code, options);
+			const rewritten = remote_client.rewrite_remote_client_exports(code, {
+				...options,
+				sveltekit_major,
+			});
 
 			if (rewritten === code) {
 				return undefined;

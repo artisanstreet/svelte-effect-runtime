@@ -11,6 +11,8 @@ import ts from "typescript";
 
 interface RemoteClientRewriteOptions {
 	debug?: boolean;
+	/** SvelteKit 3 deprecated `invalidateAll` in favor of `refreshAll`. */
+	sveltekit_major?: number | undefined;
 }
 
 type RemoteClientExportType =
@@ -63,10 +65,11 @@ export function rewrite_remote_client_exports(
 
 	const magic = new MagicString(code);
 	const has_remote_form = remote_exports.some((remote_export) => remote_export.type === "form");
+	const refresh_all = (options?.sveltekit_major ?? 2) >= 3 ? "refreshAll" : "invalidateAll";
 	const imports = [
 		`import { create_remote_query_adapter, create_remote_live_query_adapter, create_remote_prerender_adapter, create_remote_command_adapter, create_remote_form_adapter } from "svelte-effect-runtime/internal/remote-client";`,
 		has_remote_form &&
-			`import { goto as __SER___goto, invalidateAll as __SER___invalidate_all } from "$app/navigation";`,
+			`import { goto as __SER___goto, ${refresh_all} as __SER___invalidate_all } from "$app/navigation";`,
 		`import { app_dir, base } from "$app/paths/internal/client";`,
 	]
 		.filter(Boolean)
@@ -86,7 +89,7 @@ export function rewrite_remote_client_exports(
 				`\t\treturn Promise.resolve();`,
 				`\t}`,
 				``,
-				`\treturn __SER___goto(target, { invalidateAll: invalidate_all });`,
+				`\treturn __SER___goto(target, { ${refresh_all}: invalidate_all });`,
 				`}`,
 			].join("\n"),
 		has_remote_form &&

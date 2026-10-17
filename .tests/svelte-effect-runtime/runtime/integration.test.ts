@@ -19,6 +19,8 @@ import {
 	assert_not_match,
 	assert_string_includes,
 } from "../unit/helpers/assert.ts";
+import { rewrite_remote_client_exports as rewrite_remote_client_source } from "../../../modules/svelte-effect-runtime/src/compiler/remote-client.ts";
+import { read_sveltekit_remote_runtime_major } from "../../../modules/svelte-effect-runtime/src/compiler/sveltekit-remote-bridge.ts";
 import { RuntimeAlreadyInitializedError } from "../../../modules/svelte-effect-runtime/src/errors.ts";
 import { promise } from "../../../modules/svelte-effect-runtime/src/markup/promise.ts";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -1419,6 +1421,34 @@ test("compiler entrypoint defers compiler-only imports until transform hooks", a
 	assert_string_includes(source, `"./diagnostics.ts"`);
 	assert_string_includes(source, `"./runtime/transform.ts"`);
 	assert_string_includes(source, `"./compiler/remote-client.ts"`);
+});
+
+test("vite remote client wrapper uses refreshAll navigation on SvelteKit 3", async () => {
+	const source = [
+		`import * as __remote from '__sveltekit/remote';`,
+		``,
+		`export const create_post = __remote.form('abc/create_post');`,
+	].join("\n");
+
+	const kit_2 = rewrite_remote_client_source(source, { sveltekit_major: 2 });
+	const kit_3 = rewrite_remote_client_source(source, { sveltekit_major: 3 });
+
+	assert_string_includes(kit_2, `invalidateAll as __SER___invalidate_all`);
+	assert_string_includes(kit_2, `__SER___goto(target, { invalidateAll: invalidate_all })`);
+	assert_string_includes(kit_3, `refreshAll as __SER___invalidate_all`);
+	assert_string_includes(kit_3, `__SER___goto(target, { refreshAll: invalidate_all })`);
+});
+
+test("SvelteKit remote runtime major is read from the owning package", async () => {
+	const kit_3_index = fileURLToPath(
+		new URL(
+			"../../../modules/svelte-effect-runtime/node_modules/@sveltejs/kit/src/runtime/client/remote-functions/index.js",
+			import.meta.url,
+		),
+	);
+
+	assert_equals(await read_sveltekit_remote_runtime_major(`${kit_3_index}?v=1`), 3);
+	assert_equals(await read_sveltekit_remote_runtime_major("/tmp/not-kit/index.js"), undefined);
 });
 
 test("vite remote client wrapper preserves native SvelteKit remote module", async () => {
