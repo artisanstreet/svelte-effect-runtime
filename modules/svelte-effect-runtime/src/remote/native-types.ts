@@ -8,8 +8,9 @@ import type { StandardSchemaV1 } from "@sveltejs/kit/internal/types";
  * breaks the other major, and the shapes cannot be derived from the
  * `$app/server` value exports because their overload sets share a type-arity
  * with incompatible constraints. This module vendors the surface SER needs.
- * The shapes are identical in SvelteKit 2.69+ and 3.0.0-next.25 except
- * `validate`, whose options here form the superset of both majors.
+ * The shapes are identical in SvelteKit 2.69+ and 3.1 except `validate` and
+ * the checkbox and radio `as(...)` arguments, which here form the superset of
+ * both majors.
  */
 
 type MaybeArray<T> = T | T[];
@@ -152,9 +153,10 @@ type NativeRemoteFormFieldMethods<T> = {
 	issues(): NativeRemoteFormIssue[] | undefined;
 };
 
+/** SvelteKit 3 adds the trailing `checked` argument for checkbox and radio inputs; SvelteKit 2 ignores it. */
 type AsArgs<Type extends keyof InputTypeMap, Value> = Type extends "checkbox"
 	? Value extends string[]
-		? [type: Type, value: Value[number] | (string & {})]
+		? [type: Type, value: Value[number] | (string & {}), checked?: boolean]
 		: Value extends boolean
 			? [type: Type] | [type: Type, value: boolean]
 			: [type: Type] | [type: Type, value: Value | (string & {})]
@@ -163,7 +165,7 @@ type AsArgs<Type extends keyof InputTypeMap, Value> = Type extends "checkbox"
 			? [type: Type, value: Value | (string & {})]
 			: [type: Type, value: Value]
 		: Type extends "radio"
-			? [type: Type, value: Value | (string & {})]
+			? [type: Type, value: Value | (string & {}), checked?: boolean]
 			: Type extends "file" | "file multiple"
 				? [type: Type]
 				: [type: Type] | [type: Type, value: Value | undefined];
