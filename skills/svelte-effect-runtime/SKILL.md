@@ -212,7 +212,8 @@ Read the matching reference completely before acting; each is short.
   `.svelte` files: every supported and unsupported `yield*` position.
 - [remote-functions.md](references/remote-functions.md) — before editing
   `.remote.ts` or `+server.ts`: Query/batch/live, Command, Form, Prerender,
-  Handler, RequestEvent, Error/Redirect/invalid.
+  Handler, RequestEvent, Requested (single-flight updates),
+  Error/Redirect/invalid.
 - [runtimes-and-environment.md](references/runtimes-and-environment.md) —
   before touching hooks, layers, services, or environment variables.
 - [setup-and-tooling.md](references/setup-and-tooling.md) — before changing

@@ -203,6 +203,41 @@ Recover expected failures in-channel before the site that yields:
 <button onclick={yield* archive("p_123")}>Archive</button>
 ```
 
+### Single-flight updates
+
+Pick the queries a mutation should refresh at the call site with
+`.updates(...)`, and answer the request on the server with `Requested`. Both
+sides are Effects:
+
+```svelte
+<button onclick={yield* CreatePost(draft).updates(GetPosts)}>Publish</button>
+```
+
+```ts
+import { Command, Requested } from "svelte-effect-runtime";
+
+export const CreatePost = Command(PostInput, (input) =>
+	Effect.gen(function* () {
+		yield* Posts.create(input);
+
+		for (const { arg, query, ignore } of yield* Requested(GetPosts, 10)) {
+			yield* arg.author === input.author ? query.refresh() : ignore;
+		}
+	}),
+);
+```
+
+- `arg` is the query argument after validation; `query.refresh()` /
+  `query.set(value)` reach the client's cache entry.
+- `limit` is required: the client controls the list. Requests past it fail
+  on the client.
+- Shorthands: `Requested.refreshAll(GetPosts, 1)`,
+  `Requested.reconnectAll(LiveQuery, 1)`, `Requested.ignoreAll(GetPosts, 10)`.
+- On SvelteKit 3, every requested instance must be refreshed, set,
+  reconnected, or ignored, or that client query fails. Live entries
+  reconnect with `yield* Live.reconnect(query)`.
+- Only valid inside `Command` and `Form` handlers.
+
 ## Form
 
 ```ts
