@@ -55,7 +55,6 @@ export function transform_script_effect(
 	options: ScriptTransformOptions = {},
 ): ScriptTransformResult {
 	let temp_counter = 0;
-	const target = options.target ?? "client";
 
 	const source_file = ts.createSourceFile(
 		filename,
@@ -200,8 +199,7 @@ export function transform_script_effect(
 			needs_dispatcher: effect_blocks.length > 0 || uses_dispatcher_promise,
 			needs_effect: effect_blocks.length > 0,
 			needs_untrack: effect_blocks.length > 0,
-			/** The server never registers disposal, so it never needs the import. */
-			needs_on_destroy: target !== "server",
+			needs_on_destroy: true,
 			needs_yield_success: uses_yield_success_types,
 			needs_yieldable: effect_blocks.length > 0 || uses_dispatcher_promise,
 			needs_scope_ref: true,
@@ -216,14 +214,14 @@ export function transform_script_effect(
 	/**
 	 * The scope holder is created synchronously with the imports so it exists
 	 * before any top-level `await`, and disposal is registered through
-	 * `onDestroy` during component initialisation. Emitting both here keeps
+	 * `onDestroy` during component initialisation. Svelte runs server
+	 * `onDestroy` callbacks when the render finishes, so server scopes are
+	 * released per request too, and both targets emit identical offsets. Emitting both here keeps
 	 * them ahead of every lowered statement that references the scope.
 	 */
 	const scope_wiring = [
 		`const ${runtime_bindings.scope} = new ${runtime_bindings.component_scope_ref}(${runtime_bindings.dispatcher});`,
-		...(target === "server"
-			? []
-			: [`${runtime_bindings.on_destroy}(() => ${runtime_bindings.scope}.dispose());`]),
+		`${runtime_bindings.on_destroy}(() => ${runtime_bindings.scope}.dispose());`,
 	].join("\n");
 
 	const injected = [imports, scope_wiring].filter(Boolean).join("\n");

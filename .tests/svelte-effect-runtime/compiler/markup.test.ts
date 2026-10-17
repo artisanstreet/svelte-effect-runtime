@@ -508,6 +508,23 @@ test("server declaration tags lower to awaited promise reads", () => {
 	});
 });
 
+test("server and client markup share promise ids and dispose the scope", () => {
+	const source = [
+		`<script>`,
+		`  function loadValue() {}`,
+		`</script>`,
+		`<p>{yield* loadValue()}</p>`,
+	].join("\n");
+
+	const client = transform_markup_effect(source, "Parity.svelte", { target: "client" });
+	const server = transform_markup_effect(source, "Parity.svelte", { target: "server" });
+	const read_ids = (code: string) => [...code.matchAll(/id: "([^"]+)"/g)].map((match) => match[1]);
+
+	assert_equals(read_ids(server.code).length, 1);
+	assert_equals(read_ids(server.code), read_ids(client.code));
+	assert_string_includes(server.code, `onDestroy(() => __SER___scope.dispose())`);
+});
+
 test("client render tags use awaited promise calls", () => {
 	const source = `{@render yield* getSnippet()}`;
 	const result = transform_markup_effect(source, "RenderClient.svelte", {

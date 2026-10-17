@@ -66,7 +66,7 @@ export function transform_markup_effect(
 	}
 
 	const effect_context = collect_effect_callback_bindings(source_scan.scripts);
-	const helper_context = make_markup_helper_bindings(source_scan, options.target ?? "client");
+	const helper_context = make_markup_helper_bindings(source_scan);
 
 	/** Parse the sanitized markup with Svelte's AST. */
 	const ast = parse(work.parse_code, { filename, modern: true }) as AST.Root;
