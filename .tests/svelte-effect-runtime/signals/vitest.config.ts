@@ -122,6 +122,15 @@ registerHooks({
 			return { url: pathToFileURL(filename).href, shortCircuit: true };
 		}
 
+		if (specifier.startsWith("svelte-effect-runtime/")) {
+			const filename = resolve(
+				runtime_source_root,
+				specifier.slice("svelte-effect-runtime/".length),
+			);
+
+			return { url: pathToFileURL(filename).href, shortCircuit: true };
+		}
+
 		return next_resolve(specifier, context);
 	},
 });

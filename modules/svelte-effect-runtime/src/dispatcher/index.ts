@@ -20,7 +20,7 @@ import type { Fiber as FiberType } from "effect/Fiber";
 import { createSubscriber } from "svelte/reactivity";
 import {
 	get_reaction_abort_signal,
-	make_hydration_key,
+	read_hydratable_key,
 	read_hydration,
 	record_hydration,
 	type HydrationRecord,
@@ -67,7 +67,6 @@ export class Dispatcher {
 	#value_ids = new Map<string, string>();
 	#promise_ids = new Map<string, string>();
 	#aborted_promises = new Set<string>();
-	#hydration_occurrences = new WeakMap<ComponentScope, Map<string, number>>();
 	#scope_ids = new WeakMap<ComponentScope, string>();
 	#hash_deps = make_dependency_hasher();
 	#disposed = false;
@@ -309,15 +308,16 @@ export class Dispatcher {
 			return existing as Promise<A>;
 		}
 
-		const hydration_key = this.#next_hydration_key(options);
+		const primed = prime_generator(options.factory);
+		const hydration_key = read_hydratable_key(primed.first_value);
 		const hydrated =
 			hydration_key === undefined || this.#is_server_render()
 				? undefined
 				: read_hydration(hydration_key);
 
 		const promise = hydrated
-			? this.#resume_hydrated_promise(hydrated, cache_key, options, cache_id)
-			: this.#start_promise_fiber(cache_key, options, cache_id);
+			? this.#resume_hydrated_promise(hydrated, cache_key, primed.factory, cache_id)
+			: this.#start_promise_fiber(cache_key, primed.factory, cache_id);
 
 		this.#promise_values.set(cache_key, promise);
 
@@ -685,10 +685,9 @@ export class Dispatcher {
 
 	#start_promise_fiber<A>(
 		cache_key: string,
-		options: PromiseOptions<A>,
+		factory: PromiseOptions<A>["factory"],
 		cache_id: string,
 	): Promise<A> {
-		const factory = prime_generator(options.factory);
 		const Program = Effect.gen(function* () {
 			const result = yield* Effect.gen(factory);
 
@@ -777,36 +776,11 @@ export class Dispatcher {
 		return promise;
 	}
 
-	/**
-	 * Counts how often a position started work in this component instance, so
-	 * an `{#each}` body gets one hydration key per item on both sides.
-	 */
-	#next_hydration_key<A>(options: PromiseOptions<A>): string | undefined {
-		const scope = this.#current_scope;
-		const instance = scope?.instance;
-
-		if (!scope || scope.disposed || instance === undefined) {
-			return undefined;
-		}
-
-		let occurrences = this.#hydration_occurrences.get(scope);
-
-		if (!occurrences) {
-			occurrences = new Map();
-			this.#hydration_occurrences.set(scope, occurrences);
-		}
-
-		const occurrence = occurrences.get(options.id) ?? 0;
-		occurrences.set(options.id, occurrence + 1);
-
-		return make_hydration_key(instance, options.id, occurrence);
-	}
-
 	/** Uses the server's result while hydrating, running the Effect only when the server could not. */
 	#resume_hydrated_promise<A>(
 		record: Promise<HydrationRecord>,
 		cache_key: string,
-		options: PromiseOptions<A>,
+		factory: PromiseOptions<A>["factory"],
 		cache_id: string,
 	): Promise<A> {
 		const scope = this.#current_scope;
@@ -826,9 +800,9 @@ export class Dispatcher {
 
 				return scope
 					? this.with_scope(scope, () =>
-							this.#start_promise_fiber(cache_key, options, cache_id),
+							this.#start_promise_fiber(cache_key, factory, cache_id),
 						)
-					: this.#start_promise_fiber(cache_key, options, cache_id);
+					: this.#start_promise_fiber(cache_key, factory, cache_id);
 			});
 
 		return promise;
@@ -970,9 +944,12 @@ export function reset_dispatcher(): void {
 /**
  * Runs a generator to its first `yield` now, so the expression in front of it
  * reads reactive state inside the calling derived (including a `fork()`'s
- * speculative values) rather than whenever the fiber starts.
+ * speculative values) rather than whenever the fiber starts. The first
+ * yielded value is returned too, which is where a `Hydratable` marker sits.
  */
-function prime_generator<G extends Iterator<unknown, unknown, unknown>>(factory: () => G): () => G {
+function prime_generator<G extends Iterator<unknown, unknown, unknown>>(
+	factory: () => G,
+): { readonly factory: () => G; readonly first_value: unknown } {
 	let primed:
 		| { readonly iterator: G; readonly first: IteratorResult<unknown, unknown> }
 		| { readonly error: unknown };
@@ -987,7 +964,7 @@ function prime_generator<G extends Iterator<unknown, unknown, unknown>>(factory:
 
 	let used = false;
 
-	return () => {
+	const primed_factory = (): G => {
 		if (used) {
 			return factory();
 		}
@@ -1019,12 +996,16 @@ function prime_generator<G extends Iterator<unknown, unknown, unknown>>(factory:
 			},
 		} as unknown as G;
 	};
+
+	return {
+		factory: primed_factory,
+		first_value: "first" in primed && !primed.first.done ? primed.first.value : undefined,
+	};
 }
 
 export class ComponentScopeRef {
 	readonly #get_dispatcher: () => Dispatcher;
 	#scope: ComponentScope | undefined;
-	#instance: string | undefined;
 	#disposed = false;
 	readonly #services = read_provided_services();
 
@@ -1040,20 +1021,10 @@ export class ComponentScopeRef {
 
 		if (!this.#scope) {
 			this.#scope = this.#get_dispatcher().begin_scope();
-			this.#scope.instance = this.#instance;
 			this.#scope.services = this.#services;
 		}
 
 		return this.#scope;
-	}
-
-	/** Records the component's `$props.id()` so server results can hydrate this instance. */
-	identify(instance: string): void {
-		this.#instance = instance;
-
-		if (this.#scope) {
-			this.#scope.instance = instance;
-		}
 	}
 
 	/** Disposes the scope if it was created. Idempotent. */

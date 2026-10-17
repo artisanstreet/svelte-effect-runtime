@@ -206,33 +206,3 @@ function collect_binding_name_text(name: ts.BindingName): string[] {
 		return collect_binding_name_text(element.name);
 	});
 }
-
-/** Finds the component's own `const id = $props.id()`; Svelte allows only one per component. */
-export function find_props_id_declaration(source_file: ts.SourceFile):
-	| {
-			readonly name: string;
-			readonly statement_start: number;
-			readonly initializer: ts.Expression;
-	  }
-	| undefined {
-	const declaration = source_file.statements
-		.filter(ts.isVariableStatement)
-		.flatMap((stmt) => [...stmt.declarationList.declarations])
-		.find(
-			(decl) =>
-				ts.isIdentifier(decl.name) &&
-				decl.initializer !== undefined &&
-				ts.isCallExpression(decl.initializer) &&
-				decl.initializer.expression.getText(source_file) === "$props.id",
-		);
-
-	if (!declaration?.initializer || !ts.isIdentifier(declaration.name)) {
-		return undefined;
-	}
-
-	return {
-		name: declaration.name.text,
-		statement_start: declaration.parent.parent.getStart(source_file),
-		initializer: declaration.initializer,
-	};
-}

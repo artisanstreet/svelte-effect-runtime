@@ -389,8 +389,8 @@ function install_server_head(head: string): HTMLScriptElement {
 async function observe_server_hydration(): Promise<{
 	script: string;
 	markup: string;
+	plain: string;
 	opaque: string;
-	uid_matches: boolean;
 	client_events: string[];
 }> {
 	const recorder = new EventRecorder();
@@ -401,22 +401,21 @@ async function observe_server_hydration(): Promise<{
 	try {
 		target.innerHTML = SerHydrationHtml.body;
 
-		const server_uid = read_test_text(target, "uid");
-
 		instance = hydrate(SerHydration, {
 			target,
 			props: { record_event: recorder.record_event },
 		});
 
 		await wait_for_test_text(target, "opaque", "client");
+		await wait_for_test_text(target, "plain", "client");
 		await tick();
 
 		return {
 			script: read_test_text(target, "script"),
 			markup: read_test_text(target, "markup"),
+			plain: read_test_text(target, "plain"),
 			opaque: read_test_text(target, "opaque"),
-			uid_matches: read_test_text(target, "uid") === server_uid,
-			client_events: recorder.snapshot(),
+			client_events: recorder.snapshot().sort(),
 		};
 	} finally {
 		try {
@@ -518,16 +517,16 @@ describe("Signals browser conformance", () => {
 		expect(ser_observation).toEqual(native_observation);
 	});
 
-	test("hydrates server Effect results and reruns only values the server could not serialize", async () => {
+	test("hydrates Hydratable server results and reruns everything else on the client", async () => {
 		const observation = await observe_server_hydration();
 
-		expect(SerHydrationHtml.body).toContain(">server</output>");
+		expect(SerHydrationHtml.body).toContain('data-testid="plain">server</output>');
 		expect(observation).toEqual({
 			script: "server",
 			markup: "server",
+			plain: "client",
 			opaque: "client",
-			uid_matches: true,
-			client_events: ["opaque"],
+			client_events: ["opaque", "plain"],
 		});
 	});
 

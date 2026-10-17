@@ -68,6 +68,7 @@ const required_root_exports = [
 	"Error",
 	"Form",
 	"HandleError",
+	"Hydratable",
 	"InvalidCommandFactoryError",
 	"InvalidLiveQueryFactoryError",
 	"InvalidLiveQueryReturnError",

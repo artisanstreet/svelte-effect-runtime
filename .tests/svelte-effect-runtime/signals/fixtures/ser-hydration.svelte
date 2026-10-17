@@ -1,4 +1,5 @@
 <script lang="ts" effect>
+	import { Hydratable } from "svelte-effect-runtime/hydratable.ts";
 	import { Effect } from "effect";
 
 	interface Props {
@@ -6,8 +7,6 @@
 	}
 
 	let { record_event }: Props = $props();
-
-	const uid = $props.id();
 
 	const Environment = (label: string) =>
 		Effect.sync(() => {
@@ -25,11 +24,11 @@
 		};
 	});
 
-	const script_value = $derived(yield* Environment("script"));
-	const opaque = $derived(yield* Opaque);
+	const script_value = $derived(yield* Hydratable("script", Environment("script")));
+	const opaque = $derived(yield* Hydratable("opaque", Opaque));
 </script>
 
 <output data-testid="script">{script_value}</output>
-<output data-testid="markup">{yield* Environment("markup")}</output>
+<output data-testid="markup">{yield* Hydratable("markup", Environment("markup"))}</output>
+<output data-testid="plain">{yield* Environment("plain")}</output>
 <output data-testid="opaque">{opaque.label}</output>
-<output data-testid="uid">{uid}</output>

@@ -8,10 +8,7 @@ import type {
 	Replacement,
 } from "./types.ts";
 import type { SvelteEffectSourceScan } from "$/compiler/source-scan.ts";
-import {
-	collect_top_level_binding_names,
-	find_props_id_declaration,
-} from "$/script-transform/imports.ts";
+import { collect_top_level_binding_names } from "$/script-transform/imports.ts";
 import { collect_markup_identifier_names } from "$/compiler/markup-identifiers.ts";
 import { default_helper_bindings } from "./constants.ts";
 
@@ -136,40 +133,6 @@ export function make_markup_helper_bindings(source_scan: SvelteEffectSourceScan)
 		name_allocator,
 		scope_wiring,
 	};
-}
-
-/**
- * Markup Effects run after the instance script, so identifying the instance
- * at the end of the script can reuse a user's `$props.id()` binding. A script
- * transform that already identified the scope wins.
- */
-export function make_instance_identification(
-	source_scan: SvelteEffectSourceScan,
-	bindings: MarkupHelperBindings,
-	name_allocator: { reserve(name: string): string },
-): HelperDeclaration | undefined {
-	const script_text = source_scan.instance_script?.text ?? "";
-
-	if (script_text.includes(`${bindings.scope}.identify(`)) {
-		return undefined;
-	}
-
-	const source_file = ts.createSourceFile(
-		"markup-script.ts",
-		script_text,
-		ts.ScriptTarget.Latest,
-		true,
-		ts.ScriptKind.TS,
-	);
-	const user_declaration = find_props_id_declaration(source_file);
-
-	if (user_declaration) {
-		return { text: `${bindings.scope}.identify(${user_declaration.name});` };
-	}
-
-	const props_id = name_allocator.reserve("__SER___props_id");
-
-	return { text: `const ${props_id} = $props.id();\n${bindings.scope}.identify(${props_id});` };
 }
 
 export function create_relocations(

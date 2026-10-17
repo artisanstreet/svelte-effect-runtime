@@ -2,7 +2,6 @@ import {
 	create_relocations,
 	create_source_map,
 	inject_helpers,
-	make_instance_identification,
 	make_markup_helper_bindings,
 } from "./apply.ts";
 import type { MarkupTransformOptions, MarkupTransformResult } from "./types.ts";
@@ -88,27 +87,7 @@ export function transform_markup_effect(
 		helper_context.name_allocator,
 		options.target ?? "client",
 	);
-	/**
-	 * `{#await}` blocks stay pending during SSR and are legal in legacy mode,
-	 * where `$props.id()` would force runes, so only awaited expressions count.
-	 */
-	const emits_promise = replacements.some(
-		(replacement) =>
-			replacement.text.includes(`${helper_context.bindings.codes}.Markup.Promise`) &&
-			!replacement.text.includes(`ssr: "pending"`),
-	);
-	const identification = emits_promise
-		? make_instance_identification(
-				source_scan,
-				helper_context.bindings,
-				helper_context.name_allocator,
-			)
-		: undefined;
-
-	const helpers = [
-		...replacements.flatMap((replacement) => replacement.helpers ?? []),
-		...(identification ? [identification] : []),
-	];
+	const helpers = replacements.flatMap((replacement) => replacement.helpers ?? []);
 
 	const magic = new MagicString(content);
 

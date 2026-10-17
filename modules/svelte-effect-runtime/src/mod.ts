@@ -161,6 +161,8 @@ export { Live } from "$/live.ts";
 
 export { ProvideLayer } from "$/provide-layer.ts";
 
+export { Hydratable } from "$/hydratable.ts";
+
 /**
  * SvelteKit redirect control-flow export for `.remote.ts` files imported from
  * the root entrypoint. The Vite plugin rewrites it to the real server

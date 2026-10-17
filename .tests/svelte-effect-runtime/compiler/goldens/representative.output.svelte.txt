@@ -4,8 +4,6 @@ import { get_dispatcher, ToEffect, ComponentScopeRef } from "svelte-effect-runti
 import { onDestroy } from "svelte";
 const __SER___scope = new ComponentScopeRef(get_dispatcher);
 onDestroy(() => __SER___scope.dispose());
-const __SER___props_id = $props.id();
-__SER___scope.identify(__SER___props_id);
 
 	const values = [1, 2];
 	function* __SER___effect_page() { return (yield* ToEffect(Effect.succeed("ready"))); }
@@ -19,47 +17,47 @@ const doubled = $derived(await get_dispatcher().with_scope(__SER___scope.scope, 
 	});
 
 import { Dispatcher, Code, ToEffect as ToEffect_1 } from "svelte-effect-runtime/internal/generators";
-function* __SER___markup_effect_1418_1461() { return (yield* ToEffect_1(Effect.succeed(`${page}:${doubled}`))); }
-function* __SER___markup_effect_1472_1504() { return (yield* ToEffect_1(Effect.succeed(count > 0))); }
-function* __SER___markup_effect_1540_1568() { return (yield* ToEffect_1(Effect.succeed(false))); }
-function* __SER___markup_effect_1611_1640() { return (yield* ToEffect_1(Effect.succeed(values))); }
-function* __SER___markup_effect_1697_1724() { return (yield* ToEffect_1(Effect.succeed(page))); }
-function* __SER___markup_effect_1846_1873() { return (yield* ToEffect_1(Effect.succeed(page))); }
-function* __SER___markup_effect_1934_1964() { return (yield* ToEffect_1(Effect.succeed(doubled))); }
-function* __SER___markup_effect_1981_2012() { return (yield* ToEffect_1(Effect.succeed(declared))); }
-function* __SER___markup_effect_2039_2066() { return (yield* ToEffect_1(Effect.succeed(bare))); }
-function* __SER___markup_effect_2164_2194() { return (yield* ToEffect_1(Effect.succeed(doubled))); }
+function* __SER___markup_effect_1338_1381() { return (yield* ToEffect_1(Effect.succeed(`${page}:${doubled}`))); }
+function* __SER___markup_effect_1392_1424() { return (yield* ToEffect_1(Effect.succeed(count > 0))); }
+function* __SER___markup_effect_1460_1488() { return (yield* ToEffect_1(Effect.succeed(false))); }
+function* __SER___markup_effect_1531_1560() { return (yield* ToEffect_1(Effect.succeed(values))); }
+function* __SER___markup_effect_1617_1644() { return (yield* ToEffect_1(Effect.succeed(page))); }
+function* __SER___markup_effect_1766_1793() { return (yield* ToEffect_1(Effect.succeed(page))); }
+function* __SER___markup_effect_1854_1884() { return (yield* ToEffect_1(Effect.succeed(doubled))); }
+function* __SER___markup_effect_1901_1932() { return (yield* ToEffect_1(Effect.succeed(declared))); }
+function* __SER___markup_effect_1959_1986() { return (yield* ToEffect_1(Effect.succeed(bare))); }
+function* __SER___markup_effect_2084_2114() { return (yield* ToEffect_1(Effect.succeed(doubled))); }
 </script>
 
 {#snippet rendered(value)}
 	<span>{value}</span>
 {/snippet}
 
-<p>{await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise, id: "Representative.svelte:1418:1461", deps: [Effect, page, doubled], fn: () => __SER___markup_effect_1418_1461() }))}</p>
-{#if await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise, id: "Representative.svelte:1472:1504", deps: [Effect, count], fn: () => __SER___markup_effect_1472_1504() }))}
+<p>{await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise, id: "Representative.svelte:1338:1381", deps: [Effect, page, doubled], fn: () => __SER___markup_effect_1338_1381() }))}</p>
+{#if await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise, id: "Representative.svelte:1392:1424", deps: [Effect, count], fn: () => __SER___markup_effect_1392_1424() }))}
 	<strong>shown</strong>
-{:else if await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise, id: "Representative.svelte:1540:1568", deps: [Effect], fn: () => __SER___markup_effect_1540_1568() }))}
+{:else if await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise, id: "Representative.svelte:1460:1488", deps: [Effect], fn: () => __SER___markup_effect_1460_1488() }))}
 	<strong>alternate</strong>
 {/if}
-{#each await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise, id: "Representative.svelte:1611:1640", deps: [Effect, values], fn: () => __SER___markup_effect_1611_1640() })) as value (value)}
+{#each await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise, id: "Representative.svelte:1531:1560", deps: [Effect, values], fn: () => __SER___markup_effect_1531_1560() })) as value (value)}
 	<span>{value}</span>
 {/each}
-{#await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise, id: "Representative.svelte:1697:1724", deps: [Effect, page], fn: () => __SER___markup_effect_1697_1724(), ssr_fallback: undefined, options: { ssr: "pending" } }))}
+{#await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise, id: "Representative.svelte:1617:1644", deps: [Effect, page], fn: () => __SER___markup_effect_1617_1644(), ssr_fallback: undefined, options: { ssr: "pending" } }))}
 	<span>pending</span>
 {:then result}
 	<span>{result}</span>
 {:catch error}
 	<span>{error.message}</span>
 {/await}
-{#key await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise, id: "Representative.svelte:1846:1873", deps: [Effect, page], fn: () => __SER___markup_effect_1846_1873() }))}
+{#key await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise, id: "Representative.svelte:1766:1793", deps: [Effect, page], fn: () => __SER___markup_effect_1766_1793() }))}
 	<span>{page}</span>
 {/key}
 {#if true}
-	{@const declared = await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise, id: "Representative.svelte:1934:1964", deps: [Effect, doubled], fn: () => __SER___markup_effect_1934_1964() }))}
-	{const bare = await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise, id: "Representative.svelte:1981:2012", deps: [Effect, declared], fn: () => __SER___markup_effect_1981_2012() }))}
-	{let mutable = $derived(await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise, id: "Representative.svelte:2039:2066", deps: [Effect, bare], fn: () => __SER___markup_effect_2039_2066() })))}
+	{@const declared = await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise, id: "Representative.svelte:1854:1884", deps: [Effect, doubled], fn: () => __SER___markup_effect_1854_1884() }))}
+	{const bare = await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise, id: "Representative.svelte:1901:1932", deps: [Effect, declared], fn: () => __SER___markup_effect_1901_1932() }))}
+	{let mutable = $derived(await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise, id: "Representative.svelte:1959:1986", deps: [Effect, bare], fn: () => __SER___markup_effect_1959_1986() })))}
 	<span>{mutable}</span>
 {/if}
-{@html await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise, id: "Representative.svelte:2106:2144", deps: [Effect], fn: () => (function* () { return (yield* ToEffect_1(Effect.succeed("<em>html</em>"))); })() }))}
-{@render rendered(await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise, id: "Representative.svelte:2164:2194", deps: [Effect, doubled], fn: () => __SER___markup_effect_2164_2194() })))}
+{@html await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise, id: "Representative.svelte:2026:2064", deps: [Effect], fn: () => (function* () { return (yield* ToEffect_1(Effect.succeed("<em>html</em>"))); })() }))}
+{@render rendered(await Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Promise, id: "Representative.svelte:2084:2114", deps: [Effect, doubled], fn: () => __SER___markup_effect_2084_2114() })))}
 <button onclick={(event) => { Dispatcher.with_scope(__SER___scope.scope, () => Dispatcher.emit({ type: Code.Markup.Run, fn: function* () { yield* ToEffect_1(Increment); } })); }}>increment</button>
