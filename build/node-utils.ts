@@ -1,5 +1,5 @@
 import { Effect, FileSystem, Path, Stream } from "effect";
-import { ChildProcess } from "effect/unstable/process";
+import { ChildProcess } from "effect/process";
 
 export type CommandOutput = {
 	stdout: string;

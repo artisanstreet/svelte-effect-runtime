@@ -87,6 +87,6 @@ function make_unsupported_sveltekit_remote_runtime_message(reason: string): stri
 	return [
 		"Unsupported @sveltejs/kit remote client runtime.",
 		reason,
-		"SER expects the remote runtime layout used by SvelteKit 2.69.x and 3.0.0-next.x.",
+		"SER expects the remote runtime layout used by SvelteKit 2.69+ and 3.x.",
 	].join(" ");
 }

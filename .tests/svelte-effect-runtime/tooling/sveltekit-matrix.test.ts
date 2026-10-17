@@ -22,11 +22,11 @@ test("supported SvelteKit profiles select peer-compatible adapter generations", 
 			supports_subpath_lib_imports: false,
 			requires_explicit_module_extensions: false,
 			supports_published_stable: true,
-			sveltekit_version: "2.70.2",
+			sveltekit_version: "2.70.3",
 		},
 		{
 			name: "kit-3-primary",
-			adapter_node_version: "6.0.0-next.10",
+			adapter_node_version: "6.0.0",
 			browser_server: "preview",
 			generated_tsconfig_specifier: "$app/tsconfig",
 			supports_explicit_environment: true,
@@ -34,7 +34,7 @@ test("supported SvelteKit profiles select peer-compatible adapter generations", 
 			supports_subpath_lib_imports: true,
 			requires_explicit_module_extensions: true,
 			supports_published_stable: false,
-			sveltekit_version: "3.0.0-next.25",
+			sveltekit_version: "3.1.0",
 		},
 	]);
 });
@@ -98,6 +98,8 @@ test.each([
 	["3.0.0-next.20", "6.0.0-next.10"],
 	["3.0.0-next.21", "6.0.0-next.10"],
 	["3.0.0-next.25", "6.0.0-next.10"],
+	["3.0.0", "6.0.0"],
+	["3.1.0", "6.0.0"],
 ])("custom SvelteKit %s selects adapter-node %s", (sveltekit_version, adapter_node_version) => {
 	const [profile] = resolve_sveltekit_profiles({ SVELTEKIT_VERSION: sveltekit_version }, "linux");
 
@@ -113,6 +115,7 @@ test.each([
 	["3.0.0-next.19", true, false, "$app/tsconfig"],
 	["3.0.0-next.20", true, true, "$app/tsconfig"],
 	["3.0.0-next.25", true, true, "$app/tsconfig"],
+	["3.1.0", true, true, "$app/tsconfig"],
 ])(
 	"custom SvelteKit %s records the fixture layout that version requires",
 	(
