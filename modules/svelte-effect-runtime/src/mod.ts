@@ -176,6 +176,25 @@ export { Live } from "$/live.ts";
 export const Redirect: RedirectEffectFactory = make_server_only_function("Redirect") as never;
 
 /**
+ * Server `handleError` hook adapter export for `hooks.server.ts` files
+ * imported from the root entrypoint. The Vite plugin rewrites it to the real
+ * server implementation.
+ *
+ * @example
+ * ```ts
+ * import { HandleError } from "svelte-effect-runtime";
+ *
+ * export const handleError = HandleError<HandleServerError>(function* ({ error }) {
+ *   yield* Effect.logError(error);
+ * });
+ * ```
+ *
+ * @since 5.0.0
+ */
+export const HandleError: typeof import("$/server/handle-error.ts").HandleError =
+	make_server_only_function("HandleError") as never;
+
+/**
  * Client-requested refresh helper export for `.remote.ts` files imported from
  * the root entrypoint. The Vite plugin rewrites it to the real server
  * implementation.

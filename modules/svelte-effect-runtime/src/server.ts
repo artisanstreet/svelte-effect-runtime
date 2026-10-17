@@ -3,6 +3,7 @@ export {
 	Error,
 	Form,
 	get_server_runtime_or_throw,
+	HandleError,
 	Handler,
 	Live,
 	Prerender,

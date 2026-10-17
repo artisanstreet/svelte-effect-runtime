@@ -1,5 +1,6 @@
 import {
 	Error as HandlerError,
+	HandleError,
 	Handler,
 	Prerender,
 	Redirect,
@@ -162,6 +163,51 @@ test("Handler runs through the configured ServerRuntime Layer", async () => {
 	set_test_request_event(make_request_event("http://localhost/layer"));
 
 	assert_equals(await handler(), "configured");
+});
+
+test("HandleError runs on the ServerRuntime with the input event provided", async () => {
+	type NativeHook = (input: {
+		readonly error: unknown;
+		readonly event: ReturnType<typeof make_request_event>;
+	}) => Promise<{ readonly message: string }>;
+
+	const Reporter = Context.Service<{ readonly prefix: string }>("Reporter");
+	const hook = HandleError<NativeHook>(function* ({ error }) {
+		const reporter = yield* Reporter;
+		const event = yield* RequestEvent;
+
+		return { message: `${reporter.prefix}:${event.url.pathname}:${String(error)}` };
+	});
+
+	ServerRuntime.make(Layer.succeed(Reporter, { prefix: "reported" }));
+
+	const result = await hook({
+		error: "boom",
+		event: make_request_event("http://localhost/hook"),
+	});
+
+	assert_equals(result, { message: "reported:/hook:boom" });
+});
+
+test("HandleError still produces a body after the request aborts", async () => {
+	type NativeHook = (input: {
+		readonly event: ReturnType<typeof make_request_event>;
+	}) => Promise<{ readonly message: string }>;
+
+	const controller = new AbortController();
+	const hook = HandleError<NativeHook>(function* () {
+		yield* Effect.sleep("5 millis");
+
+		return { message: "handled" };
+	});
+
+	controller.abort();
+
+	const result = await hook({
+		event: make_request_event("http://localhost/aborted", controller.signal),
+	});
+
+	assert_equals(result, { message: "handled" });
 });
 
 test("Handler preserves SvelteKit HTTP error control flow", async () => {
