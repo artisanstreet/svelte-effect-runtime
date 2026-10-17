@@ -2,14 +2,19 @@ import { hydrate, mount, tick, unmount, type Component } from "svelte";
 import { describe, expect, test } from "vitest";
 import { render } from "virtual:signals-ssr-renderer";
 
-import NativeLifecycle from "./fixtures/native-lifecycle.svelte";
 import NativeLifecycleMissingAdvance from "./fixtures/native-lifecycle-missing-advance.svelte";
 import NativeLifecycleServer from "./fixtures/native-lifecycle.svelte?signals-ssr";
+import SerHydrationHtml from "./fixtures/ser-hydration.svelte?signals-ssr-html";
 import SerRunScopeLifecycle from "./fixtures/ser-run-scope-lifecycle.svelte";
-import NativeReactivity from "./fixtures/native-reactivity.svelte";
-import SerLifecycle from "./fixtures/ser-lifecycle.svelte";
 import SerLifecycleServer from "./fixtures/ser-lifecycle.svelte?signals-ssr";
+import NativeReactivity from "./fixtures/native-reactivity.svelte";
+import NativeLifecycle from "./fixtures/native-lifecycle.svelte";
 import SerReactivity from "./fixtures/ser-reactivity.svelte";
+import SerLifecycle from "./fixtures/ser-lifecycle.svelte";
+import SerHydration from "./fixtures/ser-hydration.svelte";
+import NativeFork from "./fixtures/native-fork.svelte";
+import SerAbort from "./fixtures/ser-abort.svelte";
+import SerFork from "./fixtures/ser-fork.svelte";
 
 interface ReactivityProps {
 	resolve_value: (primary: number, secondary: number) => Promise<string>;
@@ -370,6 +375,88 @@ async function observe_ssr_hydration(
 	}
 }
 
+/** Runs the server's hydration script the way a page load would. */
+function install_server_head(head: string): HTMLScriptElement {
+	const script = document.createElement("script");
+
+	script.textContent = /<script[^>]*>([\s\S]*)<\/script>/.exec(head)?.[1] ?? "";
+	document.head.append(script);
+
+	return script;
+}
+
+async function observe_server_hydration(): Promise<{
+	script: string;
+	markup: string;
+	opaque: string;
+	uid_matches: boolean;
+	client_events: string[];
+}> {
+	const recorder = new EventRecorder();
+	const server_head = install_server_head(SerHydrationHtml.head);
+	const target = create_target();
+	let instance: ReturnType<typeof hydrate> | undefined;
+
+	try {
+		target.innerHTML = SerHydrationHtml.body;
+
+		const server_uid = read_test_text(target, "uid");
+
+		instance = hydrate(SerHydration, {
+			target,
+			props: { record_event: recorder.record_event },
+		});
+
+		await wait_for_test_text(target, "opaque", "client");
+		await tick();
+
+		return {
+			script: read_test_text(target, "script"),
+			markup: read_test_text(target, "markup"),
+			opaque: read_test_text(target, "opaque"),
+			uid_matches: read_test_text(target, "uid") === server_uid,
+			client_events: recorder.snapshot(),
+		};
+	} finally {
+		try {
+			if (instance) {
+				await unmount(instance);
+			}
+		} finally {
+			target.remove();
+			server_head.remove();
+			delete (window as { __svelte?: unknown }).__svelte;
+		}
+	}
+}
+
+/** Speculates a state change in `fork()`, checks nothing is applied, then commits it. */
+async function observe_fork(component: Component<LifecycleProps>): Promise<string[]> {
+	const recorder = new EventRecorder();
+	const target = create_target();
+	const instance = mount(component, {
+		target,
+		props: { record_event: recorder.record_event },
+	}) as { speculate: () => { commit: () => Promise<void> } };
+
+	try {
+		await wait_for_test_text(target, "value", "ready:1");
+
+		const speculation = instance.speculate();
+
+		await tick();
+		expect(read_test_text(target, "value")).toBe("ready:1");
+
+		await speculation.commit();
+		await wait_for_test_text(target, "value", "ready:2");
+
+		return recorder.snapshot();
+	} finally {
+		await unmount(instance);
+		target.remove();
+	}
+}
+
 describe("Signals browser conformance", () => {
 	test("tracks dependencies and composes async completion with Svelte flush timing", async () => {
 		const native_observation = await observe_reactivity(NativeReactivity);
@@ -428,5 +515,49 @@ describe("Signals browser conformance", () => {
 			hydration_events: ["start:1", "finalize:1", "start:2", "finalize:2"],
 		});
 		expect(ser_observation).toEqual(native_observation);
+	});
+
+	test("hydrates server Effect results and reruns only values the server could not serialize", async () => {
+		const observation = await observe_server_hydration();
+
+		expect(SerHydrationHtml.body).toContain(">server</output>");
+		expect(observation).toEqual({
+			script: "server",
+			markup: "server",
+			opaque: "client",
+			uid_matches: true,
+			client_events: ["opaque"],
+		});
+	});
+
+	test("interrupts a pending markup Effect when Svelte discards its block", async () => {
+		const recorder = new EventRecorder();
+		const target = create_target();
+		const instance = mount(SerAbort, {
+			target,
+			props: { record_event: recorder.record_event },
+		});
+
+		try {
+			await tick();
+
+			const interrupted = recorder.next_event();
+
+			find_test_element(target, "hide").click();
+
+			expect(await interrupted).toBe("interrupted");
+			expect(read_test_text(target, "mounted")).toBe("mounted");
+		} finally {
+			await unmount(instance);
+			target.remove();
+		}
+	});
+
+	test("matches native fork speculation and commit", async () => {
+		const native_events = await observe_fork(NativeFork);
+		const ser_events = await observe_fork(SerFork);
+
+		expect(native_events).toEqual(["load:1", "load:2"]);
+		expect(ser_events).toEqual(native_events);
 	});
 });

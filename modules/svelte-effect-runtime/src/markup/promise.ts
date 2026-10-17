@@ -13,17 +13,21 @@ export function promise<A, E, R>(
 	ssr_fallback?: A,
 	options?: MarkupPromiseOptions,
 ): Promise<A> {
-	if (is_server_render()) {
-		if (options?.ssr === "pending") {
-			return new Promise<A>(() => {});
-		}
+	const server_render = is_server_render();
+	const has_fallback = arguments.length >= 4;
 
-		if (arguments.length >= 4) {
-			return Promise.resolve(ssr_fallback as A);
-		}
+	if (server_render && options?.ssr === "pending") {
+		return new Promise<A>(() => {});
 	}
 
-	return get_dispatcher().promise({ id, deps, factory });
+	const result = get_dispatcher().promise({ id, deps, factory });
+
+	/** A failed server Effect renders its fallback; the client runs it again. */
+	if (server_render && has_fallback) {
+		return result.catch(() => ssr_fallback as A);
+	}
+
+	return result;
 }
 
 function is_server_render(): boolean {

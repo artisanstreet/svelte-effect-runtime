@@ -9,3 +9,9 @@ declare module "*?signals-ssr" {
 declare module "virtual:signals-ssr-renderer" {
 	export { render } from "svelte/server";
 }
+
+declare module "*?signals-ssr-html" {
+	const rendered: { readonly head: string; readonly body: string };
+
+	export default rendered;
+}

@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { readFile, realpath } from "node:fs/promises";
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { registerHooks } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -14,6 +14,9 @@ const workspace_root = resolve(signals_root, "../../..");
 const runtime_source_root = resolve(workspace_root, "modules/svelte-effect-runtime/src");
 const svelte_source_root = resolve(workspace_root, "node_modules/svelte/src").replaceAll("\\", "/");
 const server_component_suffix = "?signals-ssr";
+const server_html_suffix = "?signals-ssr-html";
+const server_html_prefix = "\0signals-ssr-html:";
+const server_html_root = resolve(workspace_root, ".tmp/signals-ssr");
 const server_component_prefix = "\0signals-ssr:";
 const server_renderer_id = "virtual:signals-ssr-renderer";
 const resolved_server_renderer_id = "\0signals-ssr-renderer";
@@ -38,6 +41,14 @@ function server_component_plugin(transform_svelte_effect: TransformSvelteEffect)
 				return resolved_server_renderer_id;
 			}
 
+			if (source.endsWith(server_html_suffix) && importer) {
+				const source_path = source.slice(0, -server_html_suffix.length);
+				const importer_path = importer.split("?", 1)[0] ?? importer;
+				const filename = resolve(dirname(importer_path), source_path);
+
+				return `${server_html_prefix}${Buffer.from(filename).toString("base64url")}`;
+			}
+
 			if (!source.endsWith(server_component_suffix) || !importer) {
 				return undefined;
 			}
@@ -54,6 +65,13 @@ function server_component_plugin(transform_svelte_effect: TransformSvelteEffect)
 				const renderer = make_file_import(`${svelte_source_root}/server/index.js`);
 
 				return `export { render } from ${JSON.stringify(renderer)};`;
+			}
+
+			if (id.startsWith(server_html_prefix)) {
+				const encoded_filename = id.slice(server_html_prefix.length);
+				const filename = Buffer.from(encoded_filename, "base64url").toString("utf8");
+
+				return `export default ${JSON.stringify(await render_in_node(filename, encoded_filename))};`;
 			}
 
 			if (!id.startsWith(server_component_prefix)) {
@@ -75,9 +93,11 @@ function server_component_plugin(transform_svelte_effect: TransformSvelteEffect)
 			const server_runtime = make_file_import(
 				`${svelte_source_root}/internal/server/index.js`,
 			);
+			const server_entry = make_file_import(`${svelte_source_root}/index-server.js`);
 			const code = compiled.js.code
 				.replaceAll("'svelte/internal/flags/async'", JSON.stringify(async_flag))
-				.replaceAll("'svelte/internal/server'", JSON.stringify(server_runtime));
+				.replaceAll("'svelte/internal/server'", JSON.stringify(server_runtime))
+				.replaceAll(/from ["']svelte["']/g, `from ${JSON.stringify(server_entry)}`);
 
 			return { ...compiled.js, code };
 		},
@@ -95,6 +115,13 @@ registerHooks({
 			return { url: pathToFileURL(filename).href, shortCircuit: true };
 		}
 
+		if (specifier.startsWith("svelte-effect-runtime/internal/")) {
+			const entry = specifier.slice("svelte-effect-runtime/internal/".length);
+			const filename = resolve(runtime_source_root, "internal", `${entry}.ts`);
+
+			return { url: pathToFileURL(filename).href, shortCircuit: true };
+		}
+
 		return next_resolve(specifier, context);
 	},
 });
@@ -105,6 +132,35 @@ const [{ effect }, { transform_svelte_effect }] = await Promise.all([
 	import(compiler_url),
 	import(transform_url),
 ]);
+
+/**
+ * Renders a component with Node's server runtime, where SER takes its real
+ * server path and records hydration data, so browser tests can hydrate it.
+ */
+async function render_in_node(
+	filename: string,
+	cache_name: string,
+): Promise<{ head: string; body: string }> {
+	const source = await readFile(filename, "utf8");
+	const transformed = transform_svelte_effect(source, filename, { target: "server" });
+	const compiled = compile(transformed.code, {
+		filename,
+		generate: "server",
+		experimental: { async: true },
+	});
+	const output = resolve(server_html_root, `${cache_name}.js`);
+
+	await mkdir(server_html_root, { recursive: true });
+	await writeFile(output, compiled.js.code);
+
+	const [{ default: component }, { render }] = await Promise.all([
+		import(`${pathToFileURL(output).href}?t=${Date.now()}`),
+		import("svelte/server"),
+	]);
+	const { head, body } = await render(component, { props: {} });
+
+	return { head, body };
+}
 
 export default defineConfig({
 	plugins: [

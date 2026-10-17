@@ -47,7 +47,7 @@ export interface MarkupPromiseEvent<A> {
 	id: string;
 	deps: readonly unknown[];
 	fn: () => Effect.gen.Return<A, unknown, unknown>;
-	/** Value resolved during SSR when a fallback is required. */
+	/** Value rendered during SSR when the Effect fails there. */
 	ssr_fallback?: A;
 	/** Optional SSR behavior for await blocks and similar contexts. */
 	options?: MarkupPromiseOptions;

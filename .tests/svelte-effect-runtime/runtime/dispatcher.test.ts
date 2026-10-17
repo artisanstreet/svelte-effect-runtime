@@ -783,9 +783,8 @@ test("emit returns markup value fallback during SSR", () => {
 	assert_equals(ran, false);
 });
 
-test("emit returns markup promise fallback during SSR", async () => {
+test("emit runs markup promises during SSR", async () => {
 	const d = make_dispatcher();
-	let ran = false;
 
 	const result = await d.emit({
 		type: Code.Markup.Promise,
@@ -793,14 +792,27 @@ test("emit returns markup promise fallback during SSR", async () => {
 		deps: [],
 		ssr_fallback: "fallback",
 		fn: function* () {
-			ran = true;
-
 			return yield* Effect.succeed("resolved");
 		},
 	});
 
+	assert_equals(result, "resolved");
+});
+
+test("emit returns the markup promise fallback when the SSR Effect fails", async () => {
+	const d = make_dispatcher();
+
+	const result = await d.emit({
+		type: Code.Markup.Promise,
+		id: "emit-promise-failure",
+		deps: [],
+		ssr_fallback: "fallback",
+		fn: function* () {
+			return yield* Effect.fail("boom");
+		},
+	});
+
 	assert_equals(result, "fallback");
-	assert_equals(ran, false);
 });
 
 test("run rejects without executing after dispose", async () => {

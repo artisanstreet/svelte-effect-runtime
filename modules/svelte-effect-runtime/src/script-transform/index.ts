@@ -8,6 +8,7 @@ import type {
 } from "./types.ts";
 import {
 	collect_top_level_binding_names,
+	find_props_id_declaration,
 	has_local_import_binding,
 	make_imports,
 } from "./imports.ts";
@@ -206,6 +207,16 @@ export function transform_script_effect(
 		},
 	);
 
+	const user_props_id = uses_dispatcher_promise
+		? find_props_id_declaration(source_file)
+		: undefined;
+
+	/** The scope wiring must precede a user's `$props.id()` binding that it rewrites. */
+	first_effect_statement_start = Math.min(
+		first_effect_statement_start,
+		user_props_id?.statement_start ?? first_effect_statement_start,
+	);
+
 	const last_import = [...source_file.statements].reverse().find(ts.isImportDeclaration);
 	const injection_point = last_import
 		? Math.min(last_import.end, first_effect_statement_start)
@@ -222,7 +233,11 @@ export function transform_script_effect(
 	const scope_wiring = [
 		`const ${runtime_bindings.scope} = new ${runtime_bindings.component_scope_ref}(${runtime_bindings.dispatcher});`,
 		`${runtime_bindings.on_destroy}(() => ${runtime_bindings.scope}.dispose());`,
-	].join("\n");
+		uses_dispatcher_promise &&
+			identify_instance(source_file, magic, runtime_bindings, name_allocator, user_props_id),
+	]
+		.filter(Boolean)
+		.join("\n");
 
 	const injected = [imports, scope_wiring].filter(Boolean).join("\n");
 
@@ -495,4 +510,31 @@ function make_generated_name(hint: string, suffix: string): string {
 		: `temp_${normalized_hint}`;
 
 	return `__SER___${safe_hint}${suffix}`;
+}
+
+/**
+ * Awaited script Effects need the instance id before the script finishes, so
+ * the id is declared with the scope and a user's own `$props.id()` binding is
+ * pointed at it, since Svelte allows only one call per component.
+ */
+function identify_instance(
+	source_file: ts.SourceFile,
+	magic: MagicString,
+	bindings: RuntimeImportBindings,
+	name_allocator: { reserve(name: string): string },
+	user_declaration: ReturnType<typeof find_props_id_declaration>,
+): string {
+	const props_id = name_allocator.reserve("__SER___props_id");
+
+	if (user_declaration) {
+		magic.overwrite(
+			user_declaration.initializer.getStart(source_file),
+			user_declaration.initializer.end,
+			props_id,
+		);
+	}
+
+	return [`const ${props_id} = $props.id();`, `${bindings.scope}.identify(${props_id});`].join(
+		"\n",
+	);
 }

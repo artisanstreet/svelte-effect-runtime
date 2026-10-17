@@ -518,7 +518,8 @@ test("server and client markup share promise ids and dispose the scope", () => {
 
 	const client = transform_markup_effect(source, "Parity.svelte", { target: "client" });
 	const server = transform_markup_effect(source, "Parity.svelte", { target: "server" });
-	const read_ids = (code: string) => [...code.matchAll(/id: "([^"]+)"/g)].map((match) => match[1]);
+	const read_ids = (code: string) =>
+		[...code.matchAll(/id: "([^"]+)"/g)].map((match) => match[1]);
 
 	assert_equals(read_ids(server.code).length, 1);
 	assert_equals(read_ids(server.code), read_ids(client.code));
@@ -2041,25 +2042,29 @@ test("markup value returns fallback during SSR without starting effects", () => 
 	}
 });
 
-test("markup promise returns SSR fallback without starting effects", async () => {
+test("markup promise runs during SSR and falls back when the Effect fails", async () => {
 	try {
 		reset_dispatcher();
 
-		let called = false;
-
-		const result = await promise(
+		const resolved = await promise(
 			"ssr-promise",
 			[],
 			function* () {
-				called = true;
-
 				return yield* Effect.succeed("resolved");
 			},
 			"fallback",
 		);
+		const failed = await promise(
+			"ssr-promise-failure",
+			[],
+			function* () {
+				return yield* Effect.fail("boom");
+			},
+			"fallback",
+		);
 
-		assert_equals(result, "fallback");
-		assert_equals(called, false);
+		assert_equals(resolved, "resolved");
+		assert_equals(failed, "fallback");
 	} finally {
 		reset_dispatcher();
 	}

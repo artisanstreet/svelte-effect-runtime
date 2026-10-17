@@ -15,6 +15,8 @@ export class ComponentScope {
 	#scope: Scope.Closeable;
 	#disposed = false;
 	readonly #on_dispose: (scope: ComponentScope) => void;
+	/** The component instance id from `$props.id()`, used for hydration keys. */
+	instance: string | undefined = undefined;
 
 	private constructor(scope: Scope.Closeable, on_dispose: (scope: ComponentScope) => void) {
 		this.#scope = scope;
