@@ -1,4 +1,6 @@
 export { Command, Form, Prerender, Query } from "./factories.ts";
+export { Requested } from "./requested.ts";
+export type { RequestedFactory, RequestedLiveQuery, RequestedQuery } from "./requested.ts";
 export { Handler } from "./handler.ts";
 export { Error, Redirect } from "./control-flow.ts";
 export { get_server_runtime_or_throw, RequestEvent, ServerRuntime } from "./runtime.ts";
@@ -45,6 +47,7 @@ export type {
 	RemoteHandler,
 	RemoteLiveHandler,
 	RemoteLiveSource,
+	RemoteQueryValidatedArgument,
 	SchemaEncodedInput,
 	SchemaInput,
 	ServerRuntimeFactory,

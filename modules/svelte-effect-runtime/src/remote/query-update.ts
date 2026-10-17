@@ -19,6 +19,14 @@ export function attach_native_remote_query_update(target: unknown, native_update
 	});
 }
 
+export function get_native_remote_query_update(value: unknown): unknown {
+	if (!is_reference(value)) {
+		return undefined;
+	}
+
+	return (value as NativeRemoteQueryUpdateCarrier)[native_remote_query_update];
+}
+
 export function resolve_native_remote_query_updates(updates: readonly unknown[]): unknown[] {
 	return updates.map(resolve_native_remote_query_update);
 }

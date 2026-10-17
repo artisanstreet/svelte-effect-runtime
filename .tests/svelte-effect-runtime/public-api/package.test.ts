@@ -85,6 +85,7 @@ const required_root_exports = [
 	"RemoteHelperError",
 	"RequestEvent",
 	"RequestEventUnavailableError",
+	"Requested",
 	"RuntimeAlreadyInitializedError",
 	"RuntimeError",
 	"ServerOnlyImportError",
@@ -117,6 +118,7 @@ const required_server_exports = [
 	"Query",
 	"Redirect",
 	"RequestEvent",
+	"Requested",
 	"ServerRuntime",
 	"get_server_runtime_or_throw",
 ] as const;
@@ -327,6 +329,7 @@ async function write_app_server_stub(workspace: string): Promise<void> {
 			"export const form = () => undefined;",
 			"export const getRequestEvent = () => ({});",
 			"export const prerender = () => undefined;",
+			"export const requested = () => undefined;",
 			"export const query = Object.assign(() => undefined, {",
 			"  batch: () => undefined,",
 			"  live: () => undefined,",

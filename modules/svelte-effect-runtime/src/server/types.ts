@@ -326,19 +326,19 @@ export interface ServerRuntimeFactory {
 export interface QueryFactory {
 	<A, E = never, R = never>(
 		validate_or_handler: EffectLike<A, E, R> | RemoteHandler<void, A, E, R>,
-	): EffectRemoteQueryFunction<void, A, E>;
+	): EffectRemoteQueryFunction<void, A, E, void>;
 	<Input, A, E = never, R = never>(
 		validate_or_handler: "unchecked",
 		maybe_handler: RemoteHandler<Input, A, E, R>,
-	): EffectRemoteQueryFunction<Input, A, E>;
+	): EffectRemoteQueryFunction<Input, A, E, Input>;
 	<S extends Schema.Schema<unknown>, A, E = never, R = never>(
 		validate_or_handler: S,
 		maybe_handler: RemoteHandler<SchemaInput<S>, A, E, R>,
-	): EffectRemoteQueryFunction<SchemaEncodedInput<S>, A, E>;
+	): EffectRemoteQueryFunction<SchemaEncodedInput<S>, A, E, SchemaInput<S>>;
 	<S extends StandardSchema, A, E = never, R = never>(
 		validate_or_handler: S,
 		maybe_handler: RemoteHandler<StandardSchemaOutput<S>, A, E, R>,
-	): EffectRemoteQueryFunction<StandardSchemaInput<S>, A, E>;
+	): EffectRemoteQueryFunction<StandardSchemaInput<S>, A, E, StandardSchemaOutput<S>>;
 
 	readonly batch: QueryBatchFactory;
 	readonly live: QueryLiveFactory;
@@ -360,15 +360,15 @@ export interface QueryBatchFactory {
 	<Input, A, E = never, R = never>(
 		validate_or_handler: "unchecked",
 		maybe_handler: EffectRemoteBatchHandler<Input, A, E, R>,
-	): EffectRemoteQueryFunction<Input, A, E>;
+	): EffectRemoteQueryFunction<Input, A, E, Input>;
 	<S extends Schema.Schema<unknown>, A, E = never, R = never>(
 		validate_or_handler: S,
 		maybe_handler: EffectRemoteBatchHandler<SchemaInput<S>, A, E, R>,
-	): EffectRemoteQueryFunction<SchemaEncodedInput<S>, A, E>;
+	): EffectRemoteQueryFunction<SchemaEncodedInput<S>, A, E, SchemaInput<S>>;
 	<S extends StandardSchema, A, E = never, R = never>(
 		validate_or_handler: S,
 		maybe_handler: EffectRemoteBatchHandler<StandardSchemaOutput<S>, A, E, R>,
-	): EffectRemoteQueryFunction<StandardSchemaInput<S>, A, E>;
+	): EffectRemoteQueryFunction<StandardSchemaInput<S>, A, E, StandardSchemaOutput<S>>;
 }
 
 /**
@@ -384,19 +384,19 @@ export interface QueryBatchFactory {
 export interface QueryLiveFactory {
 	<A, E = never, R = never>(
 		validate_or_handler: RemoteLiveSource<A, E, R> | RemoteLiveHandler<void, A, E, R>,
-	): EffectRemoteLiveQueryFunction<void, A, E>;
+	): EffectRemoteLiveQueryFunction<void, A, E, void>;
 	<Input, A, E = never, R = never>(
 		validate_or_handler: "unchecked",
 		maybe_handler: RemoteLiveHandler<Input, A, E, R>,
-	): EffectRemoteLiveQueryFunction<Input, A, E>;
+	): EffectRemoteLiveQueryFunction<Input, A, E, Input>;
 	<S extends Schema.Schema<unknown>, A, E = never, R = never>(
 		validate_or_handler: S,
 		maybe_handler: RemoteLiveHandler<SchemaInput<S>, A, E, R>,
-	): EffectRemoteLiveQueryFunction<SchemaEncodedInput<S>, A, E>;
+	): EffectRemoteLiveQueryFunction<SchemaEncodedInput<S>, A, E, SchemaInput<S>>;
 	<S extends StandardSchema, A, E = never, R = never>(
 		validate_or_handler: S,
 		maybe_handler: RemoteLiveHandler<StandardSchemaOutput<S>, A, E, R>,
-	): EffectRemoteLiveQueryFunction<StandardSchemaInput<S>, A, E>;
+	): EffectRemoteLiveQueryFunction<StandardSchemaInput<S>, A, E, StandardSchemaOutput<S>>;
 }
 
 /**
@@ -570,11 +570,24 @@ export type EffectRemoteQuery<A, E = never> = ClientEffectRemoteQueryUpdateBrand
  *
  * @since 2.0.0
  */
-export type EffectRemoteQueryFunction<Input, A, E = never> = [Input] extends [void]
+export type EffectRemoteQueryFunction<Input, A, E = never, Validated = unknown> = ([Input] extends [
+	void,
+]
 	? () => EffectRemoteQuery<A, E>
 	: undefined extends Input
 		? (input?: Input) => EffectRemoteQuery<A, E>
-		: (input: Input) => EffectRemoteQuery<A, E>;
+		: (input: Input) => EffectRemoteQuery<A, E>) &
+	RemoteQueryValidatedArgument<Validated>;
+
+/**
+ * Type-only record of the argument a query handler receives after
+ * validation, which {@link Requested} reports as each entry's `arg`.
+ *
+ * @since 4.3.0
+ */
+export type RemoteQueryValidatedArgument<Validated> = {
+	readonly "~validated"?: Validated;
+};
 
 /**
  * Remote live query stream.
@@ -599,11 +612,14 @@ export type EffectRemoteLiveQuery<A, E = never> = RemoteLiveStream<A, E>;
  *
  * @since 3.4.8
  */
-export type EffectRemoteLiveQueryFunction<Input, A, E = never> = [Input] extends [void]
+export type EffectRemoteLiveQueryFunction<Input, A, E = never, Validated = unknown> = ([
+	Input,
+] extends [void]
 	? () => EffectRemoteLiveQuery<A, E>
 	: undefined extends Input
 		? (input?: Input) => EffectRemoteLiveQuery<A, E>
-		: (input: Input) => EffectRemoteLiveQuery<A, E>;
+		: (input: Input) => EffectRemoteLiveQuery<A, E>) &
+	RemoteQueryValidatedArgument<Validated>;
 
 /**
  * Effect returned by a command invocation, including SvelteKit's per-call

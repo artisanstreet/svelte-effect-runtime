@@ -77,6 +77,7 @@ export const capability_lanes: ReadonlyArray<CapabilityLane> = Object.freeze([
 		[
 			`${ser_test_root}/transport/remote-client.test.ts`,
 			`${ser_test_root}/transport/remote-server.test.ts`,
+			`${ser_test_root}/transport/requested.test.ts`,
 			`${ser_test_root}/transport/remote-shared.test.ts`,
 			`${ser_test_root}/unit/live-state.test.ts`,
 		],
