@@ -138,7 +138,7 @@ Never wrap a whole feature in one promise. Never `await` an Effect.
 
 ### 5. Services through layers, requests through RequestEvent
 
-- Dependencies are Effect services (`Context.Tag`) provided by Layers via
+- Dependencies are Effect services (`Context.Service`) provided by Layers via
   `ClientRuntime.make(...)` in `src/hooks.client.ts` and
   `ServerRuntime.make(...)` in `src/hooks.server.ts` — each called exactly
   once, in the `init` hook.
@@ -183,7 +183,8 @@ logic; never cast (`as`) as a substitute for validation.
 | Cookies / locals / params | `yield* RequestEvent` inside the handler |
 | HTTP error / redirect | `return yield* Error("NotFound", ...)` / `return yield* Redirect("SeeOther", ...)` |
 | Form field rejection | `return yield* invalid.email("...")` |
-| A dependency (db, storage, api) | `Context.Tag` service + Layer, installed once via `ClientRuntime.make` / `ServerRuntime.make` |
+| A dependency (db, storage, api) | `Context.Service` + Layer, installed once via `ClientRuntime.make` / `ServerRuntime.make` |
+| Services for one component subtree | `ProvideLayer(layer)` during component initialisation |
 | Environment variable | `DefineEnvVars` in `src/env.ts`; plain import from `$app/env/*` |
 
 ## Self-check before finishing
@@ -215,7 +216,8 @@ Read the matching reference completely before acting; each is short.
   Handler, RequestEvent, Requested (single-flight updates),
   Error/Redirect/invalid.
 - [runtimes-and-environment.md](references/runtimes-and-environment.md) —
-  before touching hooks, layers, services, or environment variables.
+  before touching hooks, layers, services, `ProvideLayer`, or environment
+  variables.
 - [setup-and-tooling.md](references/setup-and-tooling.md) — before changing
   Vite/Svelte config or choosing a validation command; explains tooling false
   positives.

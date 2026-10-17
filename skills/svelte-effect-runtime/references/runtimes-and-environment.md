@@ -75,19 +75,19 @@ Rules:
 
 ## Defining services
 
-Model capabilities as `Context.Tag` services with live Layers; construction
-lives in the Layer, consumers only yield the tag:
+Model capabilities as `Context.Service` services with live Layers;
+construction lives in the Layer, consumers only yield the service:
 
 ```ts
 import { Context, Effect, Layer } from "effect";
 
-export class BrowserStorage extends Context.Tag("BrowserStorage")<
+export class BrowserStorage extends Context.Service<
 	BrowserStorage,
 	{
 		readonly get: (key: string) => Effect.Effect<string | null>;
 		readonly set: (key: string, value: string) => Effect.Effect<void>;
 	}
->() {}
+>()("BrowserStorage") {}
 
 export const BrowserStorageLive = Layer.succeed(BrowserStorage, {
 	get: (key) => Effect.sync(() => localStorage.getItem(key)),
@@ -115,6 +115,35 @@ export const BrowserStorageLive = Layer.succeed(BrowserStorage, {
   layers; SER interrupts component fibers on destroy and runs finalizers.
 - Handlers describe request work; they never open connections or rebuild
   clients per call — that construction belongs in the Layer.
+
+## Services for one component subtree
+
+`ProvideLayer(layer)` builds a layer for one component instance and gives its
+services to every SER Effect in that component's descendants, on top of the
+runtime layer. Call it during component initialisation, like `setContext`:
+
+```svelte
+<script lang="ts" effect>
+	import { ProvideLayer } from "svelte-effect-runtime";
+	import { Workspace } from "$lib/workspace";
+
+	let { workspace_id } = $props();
+
+	ProvideLayer(Workspace.layer(workspace_id));
+</script>
+
+<WorkspaceSidebar />
+```
+
+- Descendants receive the services; the providing component's own Effects
+  do not. Put consumers in a child component.
+- Nested providers stack: an inner layer may require services from an outer
+  one, and descendants see both.
+- The layer is built once per instance from the values at initialisation,
+  and its resources are released when the component is destroyed. To rebuild
+  it for new inputs, key the component: `{#key workspace_id}`.
+- Prefer the runtime layer for app-wide services; reach for `ProvideLayer`
+  only when a service is genuinely tied to one subtree.
 
 ## Global vs request-scoped
 

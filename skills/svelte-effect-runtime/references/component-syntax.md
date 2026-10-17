@@ -180,8 +180,23 @@ pure UI state, wrong for anything effectful.
   pending fiber for the old one.
 - `{#await yield* ...}` receives a promise the Dispatcher creates and reuses
   while position + inputs are stable.
-- During SSR the server Dispatcher is used; after hydration client sites use
-  the client Dispatcher.
+- During SSR the server Dispatcher runs awaited component Effects (script
+  `$derived(yield* ...)` and markup expressions). An Effect that fails during
+  SSR renders its fallback and runs again on the client.
+- Serializable SSR results are embedded in the page with Svelte's
+  `hydratable()`, keyed by `$props.id()`, so the hydrating client reuses them
+  instead of running the Effect a second time. Values `devalue` cannot
+  serialize (functions, class instances, snippets) are rerun on the client.
+  This needs `experimental.async`; SER injects `$props.id()` itself and reuses
+  a component's own `const id = $props.id()`.
+- `{#await yield* ...}` blocks stay pending during SSR and resolve on the
+  client.
+- When Svelte aborts the derived or block that started an Effect (a rerun
+  with new inputs, an `{#if}` branch closing, a keyed block replaced), SER
+  interrupts the pending fiber. Treat component Effects like `fetch` with
+  `getAbortSignal()`: interruption is normal.
+- Effects work inside `fork()`: speculative state reaches the Effect, and a
+  committed fork shows the result without running it again.
 - Component destruction and HMR interrupt in-flight fibers, run finalizers,
   and clear component-local caches — including effects started by event
   handlers.
