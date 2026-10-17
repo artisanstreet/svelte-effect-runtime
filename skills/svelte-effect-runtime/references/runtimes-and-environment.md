@@ -44,6 +44,23 @@ export const init = () => {
 };
 ```
 
+`HandleError` adapts the server `handleError` hook the same way `Handler`
+adapts endpoints: the callback runs on `ServerRuntime` with `RequestEvent`
+provided, and it is not interrupted when the request aborts:
+
+```ts
+// src/hooks.server.ts
+import type { HandleServerError } from "@sveltejs/kit/hooks";
+import { Effect } from "effect";
+import { HandleError } from "svelte-effect-runtime";
+
+export const handleError = HandleError<HandleServerError>(function* ({ error, event }) {
+	yield* Effect.logError("request failed", event.url.pathname, error);
+
+	return { message: "Something went wrong" };
+});
+```
+
 Rules:
 
 - `make(...)` is the one sanctioned startup side effect; the `init` hook is

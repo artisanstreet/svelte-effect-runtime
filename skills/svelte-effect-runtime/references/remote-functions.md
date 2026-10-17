@@ -80,6 +80,12 @@ data) and a resource with reactive fields — usable without yielding:
 - `current` — last successful value (or `undefined`); `loading`, `ready`,
   `error`; `refresh()` — an Effect forcing a refetch:
   `<button onclick={yield* GetPosts().refresh()}>`.
+- `set(value)` and `withOverride(update)` are Effects too (since 5.0): a
+  discarded `GetPosts().set(posts)` does nothing. Yielding `withOverride`
+  applies the optimistic value and returns its release function; passing it
+  un-yielded to `.updates(...)` applies it when the command runs and releases
+  it when the command settles:
+  `yield* CreatePost(draft).updates(GetPosts().withOverride((posts) => [draft, ...posts]))`.
 - SvelteKit deduplicates by serialized argument: same args share cache and
   in-flight work. But each call returns a fresh wrapper —
   `GetPosts() !== GetPosts()`; never compare call results with `===`.
@@ -227,8 +233,8 @@ export const CreatePost = Command(PostInput, (input) =>
 );
 ```
 
-- `arg` is the query argument after validation; `query.refresh()` /
-  `query.set(value)` reach the client's cache entry.
+- `arg` is the query argument after validation; `yield* query.refresh()` /
+  `yield* query.set(value)` reach the client's cache entry.
 - `limit` is required: the client controls the list. Requests past it fail
   on the client.
 - Shorthands: `Requested.refreshAll(GetPosts, 1)`,
