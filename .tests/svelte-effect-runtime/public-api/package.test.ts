@@ -78,6 +78,7 @@ const required_root_exports = [
 	"Live",
 	"PreprocessError",
 	"Prerender",
+	"ProvideLayer",
 	"Query",
 	"Redirect",
 	"RemoteErrorDecodeError",

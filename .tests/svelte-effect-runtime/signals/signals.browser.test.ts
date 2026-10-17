@@ -12,6 +12,7 @@ import NativeLifecycle from "./fixtures/native-lifecycle.svelte";
 import SerReactivity from "./fixtures/ser-reactivity.svelte";
 import SerLifecycle from "./fixtures/ser-lifecycle.svelte";
 import SerHydration from "./fixtures/ser-hydration.svelte";
+import SerProvider from "./fixtures/ser-provider.svelte";
 import NativeFork from "./fixtures/native-fork.svelte";
 import SerAbort from "./fixtures/ser-abort.svelte";
 import SerFork from "./fixtures/ser-fork.svelte";
@@ -549,6 +550,29 @@ describe("Signals browser conformance", () => {
 			expect(read_test_text(target, "mounted")).toBe("mounted");
 		} finally {
 			await unmount(instance);
+			target.remove();
+		}
+	});
+
+	test("gives descendants the services of every ancestor ProvideLayer", async () => {
+		const recorder = new EventRecorder();
+		const target = create_target();
+		const instance = mount(SerProvider, {
+			target,
+			props: { record_event: recorder.record_event },
+		});
+
+		try {
+			await wait_for_test_text(target, "greeting", "hello");
+			await wait_for_test_text(target, "punctuated", "hello!");
+
+			const released = recorder.next_event().then(() => recorder.next_event());
+
+			await unmount(instance);
+
+			expect(await released).toBe("release");
+			expect(recorder.snapshot()).toEqual(["acquire", "release"]);
+		} finally {
 			target.remove();
 		}
 	});

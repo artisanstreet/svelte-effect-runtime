@@ -25,6 +25,7 @@ import {
 	record_hydration,
 	type HydrationRecord,
 } from "./hydration.ts";
+import { read_provided_services } from "./services.ts";
 import { make_dependency_hasher } from "./deps.ts";
 import { isRedirect } from "@sveltejs/kit";
 import { Code } from "./types.ts";
@@ -1025,6 +1026,7 @@ export class ComponentScopeRef {
 	#scope: ComponentScope | undefined;
 	#instance: string | undefined;
 	#disposed = false;
+	readonly #services = read_provided_services();
 
 	constructor(get_dispatcher_fn: () => Dispatcher) {
 		this.#get_dispatcher = get_dispatcher_fn;
@@ -1039,6 +1041,7 @@ export class ComponentScopeRef {
 		if (!this.#scope) {
 			this.#scope = this.#get_dispatcher().begin_scope();
 			this.#scope.instance = this.#instance;
+			this.#scope.services = this.#services;
 		}
 
 		return this.#scope;

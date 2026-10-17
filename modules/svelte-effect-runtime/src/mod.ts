@@ -159,6 +159,8 @@ export const Prerender: PrerenderFactory = make_server_only_function("Prerender"
 
 export { Live } from "$/live.ts";
 
+export { ProvideLayer } from "$/provide-layer.ts";
+
 /**
  * SvelteKit redirect control-flow export for `.remote.ts` files imported from
  * the root entrypoint. The Vite plugin rewrites it to the real server
