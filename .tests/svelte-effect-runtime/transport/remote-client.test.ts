@@ -123,8 +123,14 @@ test("remote query adapter captures synchronous invocation failures", async () =
 	const refresh_error = Exit.isFailure(refresh_exit)
 		? Cause.squash(refresh_exit.cause)
 		: undefined;
-	const set_error = assert_throws(() => QueryProgram.set("recovered"));
-	const override_error = assert_throws(() => QueryProgram.withOverride((current) => current));
+	const set_exit = await get_server_dispatcher().run(Effect.exit(QueryProgram.set("recovered")));
+	const override_exit = await get_server_dispatcher().run(
+		Effect.exit(QueryProgram.withOverride((current) => current)),
+	);
+	const set_error = Exit.isFailure(set_exit) ? Cause.squash(set_exit.cause) : undefined;
+	const override_error = Exit.isFailure(override_exit)
+		? Cause.squash(override_exit.cause)
+		: undefined;
 
 	assert_equals(Effect.isEffect(QueryProgram), true);
 	assert_equals(Exit.isFailure(exit), true);
@@ -451,9 +457,16 @@ test("remote query adapter preserves resource state and methods", async () => {
 	assert_equals(query.ready, true);
 	assert_equals(Effect.isEffect(query.refresh()), true);
 
-	query.set(7);
-	query.withOverride((current) => current + 1);
+	const SetValue = query.set(7);
+	const Override = query.withOverride((current) => current + 1);
 
+	assert_equals(set_value, 0);
+	assert_equals(override_called, false);
+
+	await get_server_dispatcher().run(SetValue);
+	const release = await get_server_dispatcher().run(Override);
+
+	assert_equals(typeof release, "function");
 	await get_server_dispatcher().run(query.refresh());
 	const result = await get_server_dispatcher().run(query);
 

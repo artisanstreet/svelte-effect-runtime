@@ -95,7 +95,7 @@ test("Requested passes the native query function and limit to SvelteKit", async 
 	assert_equals(calls.requested, [[native_query, 5]]);
 });
 
-test("Requested entries expose validated args, Effect refresh and set, and ignore", async () => {
+test("Requested entries expose validated args, Effect refresh, Effect set, and ignore", async () => {
 	const { calls } = install_native(["a", "b", "c"]);
 	const GetPosts = ServerQuery(Schema.String, (filter) => Effect.succeed([filter]));
 
@@ -108,7 +108,7 @@ test("Requested entries expose validated args, Effect refresh and set, and ignor
 				if (arg === "a") {
 					yield* query.refresh();
 				} else if (arg === "b") {
-					query.set([`set:${arg}`]);
+					yield* query.set([`set:${arg}`]);
 				} else {
 					yield* ignore;
 				}

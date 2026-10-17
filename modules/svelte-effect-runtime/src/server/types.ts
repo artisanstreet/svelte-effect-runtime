@@ -1,8 +1,4 @@
-import type {
-	NativeRemoteFormInput,
-	NativeRemoteQuery,
-	NativeRemoteQueryOverride,
-} from "$/remote/native-types.ts";
+import type { NativeRemoteFormInput } from "$/remote/native-types.ts";
 import type {
 	EffectRemoteCommandCall as ClientEffectRemoteCommandCall,
 	EffectRemoteForm as ClientEffectRemoteForm,
@@ -10,6 +6,7 @@ import type {
 } from "$/remote/client.ts";
 import type { Effect, Layer, ManagedRuntime, Schema, Stream } from "effect";
 import type { create_form_error, RemoteFailure } from "$/remote/shared.ts";
+import type { EffectRemoteQueryOverride } from "$/remote/query-methods.ts";
 import type { RemoteLiveStream } from "$/live.ts";
 
 /**
@@ -547,14 +544,14 @@ export type EffectRemotePrerenderFunction<Input, A, E = never> = [Input] extends
  * @since 2.0.0
  */
 export type EffectRemoteQuery<A, E = never> = ClientEffectRemoteQueryUpdateBrand &
-	Effect.Effect<A, RemoteFailure<E>, never> &
-	Pick<NativeRemoteQuery<A>, "set"> & {
+	Effect.Effect<A, RemoteFailure<E>, never> & {
 		readonly current: A | undefined;
 		readonly error: unknown;
 		readonly loading: boolean;
 		readonly ready: boolean;
 		readonly refresh: () => Effect.Effect<void, unknown, never>;
-		readonly withOverride: (update: (current: A) => A) => NativeRemoteQueryOverride;
+		readonly set: (value: A) => Effect.Effect<void, RemoteFailure<never>>;
+		readonly withOverride: (update: (current: A) => A) => EffectRemoteQueryOverride;
 	};
 
 /**

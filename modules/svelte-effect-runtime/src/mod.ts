@@ -298,6 +298,8 @@ export type { LiveFactory, LiveStatus, RemoteLiveStream } from "$/live.ts";
 
 export type { RequestedFactory, RequestedLiveQuery, RequestedQuery } from "$/server/requested.ts";
 
+export type { EffectRemoteQueryOverride } from "$/remote/query-methods.ts";
+
 export type {
 	CommandFactory,
 	EffectLike,

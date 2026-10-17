@@ -63,3 +63,5 @@ export type {
 	StandardSchemaInput,
 	StandardSchemaOutput,
 } from "./server/index.ts";
+
+export type { EffectRemoteQueryOverride } from "./remote/query-methods.ts";

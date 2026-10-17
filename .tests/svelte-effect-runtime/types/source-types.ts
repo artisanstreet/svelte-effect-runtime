@@ -676,7 +676,7 @@ export const Save = Command(() =>
 
       if (id > 1) {
         yield* query.refresh();
-        query.set({ id });
+        yield* query.set({ id });
       } else {
         yield* ignore;
       }
@@ -855,10 +855,15 @@ async function check_generated_markup_helpers() {
     posts_query.refresh();
   const sign_out_effect = SignOut();
 
-  posts_query.set(posts);
-  const release_override = posts_query.withOverride((current) => current);
+  await get_dispatcher().run(posts_query.set(posts));
+  const release_override = await get_dispatcher().run(
+    posts_query.withOverride((current) => current),
+  );
 
   release_override();
+  /** @ts-expect-error set is an Effect and must be yielded, not used as a value. */
+  const set_result: void = posts_query.set(posts);
+  void set_result;
   await get_dispatcher().run(refresh_effect);
   await get_dispatcher().run(summary_query.refresh());
   const sign_out_result = await get_dispatcher().run(sign_out_effect);

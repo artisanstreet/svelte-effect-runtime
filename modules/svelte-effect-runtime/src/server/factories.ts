@@ -62,6 +62,7 @@ import { is_handler, is_unchecked, normalize_validator } from "./schema.ts";
 import { copy_property_descriptors } from "$/internal/descriptors.ts";
 import { normalize_remote_helper_error } from "$/remote/server.ts";
 import { create_remote_transport_error } from "$/remote/shared.ts";
+import { make_query_override, MakeQuerySet } from "$/remote/query-methods.ts";
 import { get_remote_live_snapshot_encoder } from "./transport.ts";
 import type { NativeRemoteFormInput } from "$/remote/native-types.ts";
 import { Effect, Result, type Schema } from "effect";
@@ -425,14 +426,15 @@ function attach_query_resource_methods<Output, ErrorType = never>(
 	if (typeof set === "function") {
 		Object.defineProperty(effect, "set", {
 			configurable: true,
-			value: (value: Output) => set.call(resource, value),
+			value: (value: Output) => MakeQuerySet(resource, set, value),
 		});
 	}
 
 	if (typeof with_override === "function") {
 		Object.defineProperty(effect, "withOverride", {
 			configurable: true,
-			value: (update: (current: Output) => Output) => with_override.call(resource, update),
+			value: (update: (current: Output) => Output) =>
+				make_query_override(resource, with_override, update),
 		});
 	}
 }
