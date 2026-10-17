@@ -181,14 +181,32 @@ pure UI state, wrong for anything effectful.
 - `{#await yield* ...}` receives a promise the Dispatcher creates and reuses
   while position + inputs are stable.
 - During SSR the server Dispatcher runs awaited component Effects (script
-  `$derived(yield* ...)` and markup expressions). An Effect that fails during
-  SSR renders its fallback and runs again on the client.
-- Serializable SSR results are embedded in the page with Svelte's
-  `hydratable()`, keyed by `$props.id()`, so the hydrating client reuses them
-  instead of running the Effect a second time. Values `devalue` cannot
-  serialize (functions, class instances, snippets) are rerun on the client.
-  This needs `experimental.async`; SER injects `$props.id()` itself and reuses
-  a component's own `const id = $props.id()`.
+  `$derived(yield* ...)` and markup expressions), and the client runs them
+  again while hydrating, exactly like a native `await`. An Effect that fails
+  during SSR renders its fallback.
+- To reuse a server result instead of running the Effect again on the
+  client, wrap it in `Hydratable(key, effect)` — the Effect counterpart of
+  Svelte's `hydratable`. It must be the first Effect the expression yields:
+
+  ```svelte
+  <script lang="ts" effect>
+  	import { Hydratable } from "svelte-effect-runtime";
+
+  	let { city } = $props();
+
+  	const forecast = $derived(
+  		yield* Hydratable(`forecast:${city}`, Weather.forecast(city)),
+  	);
+  </script>
+
+  <p>{yield* Hydratable(`alerts:${city}`, Weather.alerts(city))}</p>
+  ```
+
+  The key must be unique per value, so include every input. Only use it for
+  Effects whose result is the same on server and client; anything reading
+  the environment (`window`, storage, the clock) must run on the client.
+  Values `devalue` cannot serialize and Effects that fail on the server run
+  again on the client. Requires `experimental.async`.
 - `{#await yield* ...}` blocks stay pending during SSR and resolve on the
   client.
 - When Svelte aborts the derived or block that started an Effect (a rerun

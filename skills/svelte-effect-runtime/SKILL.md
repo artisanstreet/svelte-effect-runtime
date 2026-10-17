@@ -185,6 +185,7 @@ logic; never cast (`as`) as a substitute for validation.
 | Form field rejection | `return yield* invalid.email("...")` |
 | A dependency (db, storage, api) | `Context.Service` + Layer, installed once via `ClientRuntime.make` / `ServerRuntime.make` |
 | Services for one component subtree | `ProvideLayer(layer)` during component initialisation |
+| Reuse an SSR result while hydrating | `yield* Hydratable(key, effect)` as the expression's first yield |
 | Environment variable | `DefineEnvVars` in `src/env.ts`; plain import from `$app/env/*` |
 
 ## Self-check before finishing
@@ -210,7 +211,8 @@ Read the matching reference completely before acting; each is short.
   reviewing any Effect code in `.ts` files: the full catalog of banned
   executor/masquerade patterns with corrections, interop, error modeling.
 - [component-syntax.md](references/component-syntax.md) — before editing
-  `.svelte` files: every supported and unsupported `yield*` position.
+  `.svelte` files: every supported and unsupported `yield*` position, SSR,
+  `Hydratable`, aborts, and `fork()`.
 - [remote-functions.md](references/remote-functions.md) — before editing
   `.remote.ts` or `+server.ts`: Query/batch/live, Command, Form, Prerender,
   Handler, RequestEvent, Requested (single-flight updates),
