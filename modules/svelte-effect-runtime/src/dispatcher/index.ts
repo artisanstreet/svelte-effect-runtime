@@ -18,6 +18,14 @@ import { InterruptFiber, WatchFiberExit } from "./fibers.ts";
 import { ComponentScope } from "./scope.ts";
 import type { Fiber as FiberType } from "effect/Fiber";
 import { createSubscriber } from "svelte/reactivity";
+import {
+	get_reaction_abort_signal,
+	read_hydratable_key,
+	read_hydration,
+	record_hydration,
+	type HydrationRecord,
+} from "./hydration.ts";
+import { read_provided_services } from "./services.ts";
 import { make_dependency_hasher } from "./deps.ts";
 import { isRedirect } from "@sveltejs/kit";
 import { Code } from "./types.ts";
@@ -58,6 +66,7 @@ export class Dispatcher {
 	#promise_values = new Map<string, Promise<unknown>>();
 	#value_ids = new Map<string, string>();
 	#promise_ids = new Map<string, string>();
+	#aborted_promises = new Set<string>();
 	#scope_ids = new WeakMap<ComponentScope, string>();
 	#hash_deps = make_dependency_hasher();
 	#disposed = false;
@@ -294,12 +303,35 @@ export class Dispatcher {
 		const existing = this.#promise_values.get(cache_key);
 
 		if (existing) {
+			this.#aborted_promises.delete(cache_key);
+
 			return existing as Promise<A>;
 		}
 
-		const promise = this.#start_promise_fiber(cache_key, options, cache_id);
+		const primed = prime_generator(options.factory);
+		const hydration_key = read_hydratable_key(primed.first_value);
+		const hydrated =
+			hydration_key === undefined || this.#is_server_render()
+				? undefined
+				: read_hydration(hydration_key);
+
+		const promise = hydrated
+			? this.#resume_hydrated_promise(hydrated, cache_key, primed.factory, cache_id)
+			: this.#start_promise_fiber(cache_key, primed.factory, cache_id);
 
 		this.#promise_values.set(cache_key, promise);
+
+		/**
+		 * The server records each result for the hydrating client; the client
+		 * cancels work whose derived or effect Svelte discarded.
+		 */
+		if (this.#is_server_render()) {
+			if (hydration_key !== undefined) {
+				record_hydration(hydration_key, promise);
+			}
+		} else {
+			this.#cancel_promise_on_abort(cache_key, cache_id, promise);
+		}
 
 		return promise;
 	}
@@ -381,21 +413,24 @@ export class Dispatcher {
 	}
 
 	#emit_markup_promise<A>(event: MarkupPromiseEvent<A>): Promise<A> {
-		if (this.#is_server_render()) {
-			if (event.options?.ssr === "pending") {
-				return new Promise<A>(() => {});
-			}
+		const server_render = this.#is_server_render();
 
-			if ("ssr_fallback" in event) {
-				return Promise.resolve(event.ssr_fallback as A);
-			}
+		if (server_render && event.options?.ssr === "pending") {
+			return new Promise<A>(() => {});
 		}
 
-		return this.promise({
+		const promise = this.promise({
 			id: event.id,
 			deps: event.deps,
 			factory: event.fn,
 		});
+
+		/** A failed server Effect renders its fallback; the client runs it again. */
+		if (server_render && "ssr_fallback" in event) {
+			return promise.catch(() => event.ssr_fallback as A);
+		}
+
+		return promise;
 	}
 
 	#emit_markup_run<A>(event: MarkupRunEvent<A>): Promise<A> {
@@ -425,6 +460,7 @@ export class Dispatcher {
 		this.#promise_values.clear();
 		this.#value_ids.clear();
 		this.#promise_ids.clear();
+		this.#aborted_promises.clear();
 
 		void this.#runtime.dispose().catch((error: unknown) => {
 			queueMicrotask(() => {
@@ -649,11 +685,11 @@ export class Dispatcher {
 
 	#start_promise_fiber<A>(
 		cache_key: string,
-		options: PromiseOptions<A>,
+		factory: PromiseOptions<A>["factory"],
 		cache_id: string,
 	): Promise<A> {
 		const Program = Effect.gen(function* () {
-			const result = yield* Effect.gen(options.factory);
+			const result = yield* Effect.gen(factory);
 
 			return result;
 		});
@@ -738,6 +774,80 @@ export class Dispatcher {
 		this.#promise_values.set(cache_key, promise);
 
 		return promise;
+	}
+
+	/** Uses the server's result while hydrating, running the Effect only when the server could not. */
+	#resume_hydrated_promise<A>(
+		record: Promise<HydrationRecord>,
+		cache_key: string,
+		factory: PromiseOptions<A>["factory"],
+		cache_id: string,
+	): Promise<A> {
+		const scope = this.#current_scope;
+
+		const promise: Promise<A> = record
+			.catch((): HydrationRecord => ({ skip: true }))
+			.then((entry) => {
+				if (this.#promise_values.get(cache_key) !== promise) {
+					return new Promise<A>(() => {});
+				}
+
+				if ("v" in entry) {
+					this.#release_promise(cache_key, cache_id);
+
+					return entry.v as A;
+				}
+
+				return scope
+					? this.with_scope(scope, () =>
+							this.#start_promise_fiber(cache_key, factory, cache_id),
+						)
+					: this.#start_promise_fiber(cache_key, factory, cache_id);
+			});
+
+		return promise;
+	}
+
+	/**
+	 * Svelte aborts a reaction's signal before rerunning it and when destroying
+	 * it. A rerun that asks for the same work again keeps it; anything left
+	 * unclaimed after the abort is interrupted.
+	 */
+	#cancel_promise_on_abort(cache_key: string, cache_id: string, promise: Promise<unknown>): void {
+		const signal = get_reaction_abort_signal();
+
+		signal?.addEventListener(
+			"abort",
+			() => {
+				if (this.#promise_values.get(cache_key) !== promise) {
+					return;
+				}
+
+				this.#aborted_promises.add(cache_key);
+
+				queueMicrotask(() => {
+					if (!this.#aborted_promises.delete(cache_key)) {
+						return;
+					}
+
+					if (this.#promise_values.get(cache_key) !== promise) {
+						return;
+					}
+
+					this.#interrupt_cached_fiber(cache_key);
+					this.#release_promise(cache_key, cache_id);
+				});
+			},
+			{ once: true },
+		);
+	}
+
+	#release_promise(cache_key: string, cache_id: string): void {
+		this.#promise_values.delete(cache_key);
+
+		if (this.#promise_ids.get(cache_id) === cache_key) {
+			this.#promise_ids.delete(cache_id);
+		}
 	}
 
 	#complete_fiber(cache_key: string, fiber: FiberType<unknown, unknown>): void {
@@ -831,10 +941,73 @@ export function reset_dispatcher(): void {
  *
  * @since 4.1.0
  */
+/**
+ * Runs a generator to its first `yield` now, so the expression in front of it
+ * reads reactive state inside the calling derived (including a `fork()`'s
+ * speculative values) rather than whenever the fiber starts. The first
+ * yielded value is returned too, which is where a `Hydratable` marker sits.
+ */
+function prime_generator<G extends Iterator<unknown, unknown, unknown>>(
+	factory: () => G,
+): { readonly factory: () => G; readonly first_value: unknown } {
+	let primed:
+		| { readonly iterator: G; readonly first: IteratorResult<unknown, unknown> }
+		| { readonly error: unknown };
+
+	try {
+		const iterator = factory();
+
+		primed = { iterator, first: iterator.next() };
+	} catch (error) {
+		primed = { error };
+	}
+
+	let used = false;
+
+	const primed_factory = (): G => {
+		if (used) {
+			return factory();
+		}
+
+		used = true;
+
+		const state = primed;
+
+		if ("error" in state) {
+			return {
+				next: () => {
+					throw state.error;
+				},
+			} as unknown as G;
+		}
+
+		let first: IteratorResult<unknown, unknown> | undefined = state.first;
+
+		return {
+			next: (value: unknown) => {
+				if (first) {
+					const result = first;
+					first = undefined;
+
+					return result;
+				}
+
+				return state.iterator.next(value);
+			},
+		} as unknown as G;
+	};
+
+	return {
+		factory: primed_factory,
+		first_value: "first" in primed && !primed.first.done ? primed.first.value : undefined,
+	};
+}
+
 export class ComponentScopeRef {
 	readonly #get_dispatcher: () => Dispatcher;
 	#scope: ComponentScope | undefined;
 	#disposed = false;
+	readonly #services = read_provided_services();
 
 	constructor(get_dispatcher_fn: () => Dispatcher) {
 		this.#get_dispatcher = get_dispatcher_fn;
@@ -846,7 +1019,10 @@ export class ComponentScopeRef {
 			throw new ScopeDisposedError();
 		}
 
-		this.#scope ??= this.#get_dispatcher().begin_scope();
+		if (!this.#scope) {
+			this.#scope = this.#get_dispatcher().begin_scope();
+			this.#scope.services = this.#services;
+		}
 
 		return this.#scope;
 	}

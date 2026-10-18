@@ -1,3 +1,4 @@
+import type { ProvidedServices } from "./services.ts";
 import { Effect, Exit, Scope } from "effect";
 import type { Fiber } from "effect";
 
@@ -15,6 +16,8 @@ export class ComponentScope {
 	#scope: Scope.Closeable;
 	#disposed = false;
 	readonly #on_dispose: (scope: ComponentScope) => void;
+	/** Services from the nearest ancestor `ProvideLayer`, given to every Effect in this scope. */
+	services: ProvidedServices | undefined = undefined;
 
 	private constructor(scope: Scope.Closeable, on_dispose: (scope: ComponentScope) => void) {
 		this.#scope = scope;
@@ -52,7 +55,7 @@ export class ComponentScope {
 		 * finalizers run when the scope closes.
 		 */
 		return Effect.forkIn(
-			Effect.provideService(effect, Scope.Scope, this.#scope),
+			Effect.provideService(this.#with_services(effect), Scope.Scope, this.#scope),
 			this.#scope,
 		) as Effect.Effect<Fiber.Fiber<A, E>, never, R>;
 	}
@@ -70,7 +73,7 @@ export class ComponentScope {
 	} {
 		const run_scope = Scope.forkUnsafe(this.#scope);
 		const fork_effect = Effect.forkIn(
-			Effect.provideService(effect, Scope.Scope, run_scope),
+			Effect.provideService(this.#with_services(effect), Scope.Scope, run_scope),
 			run_scope,
 		) as Effect.Effect<Fiber.Fiber<A, E>, never, R>;
 
@@ -78,6 +81,19 @@ export class ComponentScope {
 			fork_effect,
 			close_effect: (exit) => Scope.close(run_scope, exit),
 		};
+	}
+
+	#with_services<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
+		const services = this.services;
+
+		if (!services) {
+			return effect;
+		}
+
+		return Effect.flatMap(
+			Effect.promise(() => services),
+			(context) => Effect.provideContext(effect, context),
+		);
 	}
 
 	/** Effect that closes the scope. Must be run by the owning dispatcher. */

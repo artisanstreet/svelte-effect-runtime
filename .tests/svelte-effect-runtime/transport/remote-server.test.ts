@@ -204,6 +204,64 @@ test("Command updates unwrap Effect query functions and resources for SvelteKit"
 	}
 });
 
+test("Command updates apply a withOverride Effect when the command runs", async () => {
+	const update_targets: unknown[][] = [];
+	const release = () => {};
+	let override_calls = 0;
+
+	set_test_query(
+		() => () =>
+			Object.assign(Promise.resolve(["one"]), {
+				withOverride: () => {
+					override_calls += 1;
+
+					return release;
+				},
+			}),
+	);
+	set_test_command((...args) => {
+		const handler = args.at(-1) as (input: unknown) => Promise<unknown>;
+
+		return (input: unknown) => {
+			const result = handler(input) as Promise<unknown> & {
+				updates: (...updates: unknown[]) => Promise<unknown>;
+			};
+
+			result.updates = (...updates: unknown[]) => {
+				update_targets.push(updates);
+
+				return result;
+			};
+
+			return result;
+		};
+	});
+	set_test_request_event({
+		...make_request_event(),
+		isRemoteRequest: false,
+		request: new Request("http://localhost/test", { method: "POST" }),
+	});
+
+	try {
+		const GetPosts = ServerQuery(() => Effect.succeed(["one"]));
+		const SaveDraft = ServerCommand(Schema.String, (title) => Effect.succeed(title));
+		const Save = SaveDraft("publish").updates(
+			GetPosts().withOverride((posts) => [...posts, "two"]),
+		);
+
+		assert_equals(override_calls, 0);
+
+		await get_server_dispatcher().run(Save);
+
+		assert_equals(override_calls, 1);
+		assert_equals(update_targets, [[release]]);
+	} finally {
+		reset_test_command();
+		reset_test_query();
+		reset_test_request_event();
+	}
+});
+
 test("Command remote dispatch preserves the native result while nested Commands stay yieldable", async () => {
 	type NativeCommandRecord = {
 		readonly descriptor: { readonly index: number };

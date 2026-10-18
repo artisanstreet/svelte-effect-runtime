@@ -41,7 +41,7 @@ test("SvelteKit remote bridge appends the native transport exports once", () => 
 	assert_equals(append_sveltekit_remote_transport_bridge(rewritten), rewritten);
 });
 
-test("SvelteKit remote bridge accepts installed Kit 2.69 and Kit 3 next runtimes", async () => {
+test("SvelteKit remote bridge accepts installed Kit 2 and Kit 3 runtimes", async () => {
 	const workspace_root = fileURLToPath(new URL("../../../", import.meta.url));
 	const pnpm_root = join(workspace_root, "node_modules", ".pnpm");
 	const entries = await readdir(pnpm_root, { withFileTypes: true });
@@ -60,7 +60,7 @@ test("SvelteKit remote bridge accepts installed Kit 2.69 and Kit 3 next runtimes
 
 		if (
 			typeof version !== "string" ||
-			(!version.startsWith("2.69.") && !version.startsWith("3.0.0-next."))
+			(!version.startsWith("2.") && !version.startsWith("3."))
 		) {
 			continue;
 		}
@@ -84,11 +84,11 @@ test("SvelteKit remote bridge accepts installed Kit 2.69 and Kit 3 next runtimes
 	}
 
 	assert_equals(
-		versions.some((version) => version.startsWith("2.69.")),
+		versions.some((version) => version.startsWith("2.")),
 		true,
 	);
 	assert_equals(
-		versions.some((version) => version.startsWith("3.0.0-next.")),
+		versions.some((version) => version.startsWith("3.")),
 		true,
 	);
 });

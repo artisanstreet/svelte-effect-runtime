@@ -1,7 +1,6 @@
 import type {
 	HelperDeclaration,
 	Insertion,
-	MarkupTransformTarget,
 	MarkupHelperBindings,
 	MarkupRelocation,
 	MarkupScopeWiring,
@@ -90,10 +89,7 @@ export function inject_helpers(
 	}
 }
 
-export function make_markup_helper_bindings(
-	source_scan: SvelteEffectSourceScan,
-	target: MarkupTransformTarget = "client",
-): {
+export function make_markup_helper_bindings(source_scan: SvelteEffectSourceScan): {
 	bindings: MarkupHelperBindings;
 	name_allocator: { reserve(name: string): string };
 	scope_wiring: MarkupScopeWiring | undefined;
@@ -117,12 +113,10 @@ export function make_markup_helper_bindings(
 		scope,
 	};
 
-	const is_server_target = target === "server";
-
 	/**
 	 * The script transform declares the component scope holder when it lowers
 	 * a `<script effect>`. When no script declares one — a markup-only
-	 * component for client/editor targets — reserve the names the injected scope
+	 * component — reserve the names the injected scope
 	 * wiring needs so markup emit calls still have a scope to enter.
 	 */
 	const scope_present = detected_scope_name !== undefined;
@@ -131,7 +125,7 @@ export function make_markup_helper_bindings(
 		: {
 				component_scope_ref: name_allocator.reserve("ComponentScopeRef"),
 				get_dispatcher: name_allocator.reserve("get_dispatcher"),
-				...(is_server_target ? {} : { on_destroy: name_allocator.reserve("onDestroy") }),
+				on_destroy: name_allocator.reserve("onDestroy"),
 			};
 
 	return {

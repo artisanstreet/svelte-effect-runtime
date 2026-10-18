@@ -13,6 +13,9 @@ import {
 import { InvalidLiveQueryFactoryError, InvalidQueryFactoryError } from "$/errors.ts";
 import { FailWithRemoteError, MakeEffectFromPromise } from "$/remote/effect.ts";
 import { attach_native_remote_query_update } from "$/remote/query-update.ts";
+import { make_query_override, MakeQuerySet } from "$/remote/query-methods.ts";
+import type { EffectRemoteQueryOverride } from "$/remote/query-methods.ts";
+import type { RemoteFailure } from "$/remote/shared.ts";
 import type { EffectRemoteQueryUpdateBrand, NativeMethod } from "./types.ts";
 import { copy_property_descriptors, has_method } from "./utils.ts";
 import { normalize_native_error } from "$/remote/failures.ts";
@@ -34,8 +37,8 @@ type NativeQueryFactory<Input> =
 type RemoteQueryEffect<Output, ErrorType = never> = EffectRemoteQueryUpdateBrand &
 	RemoteResourceEffect<Output, ErrorType> & {
 		readonly refresh: () => Effect.Effect<void, unknown, never>;
-		readonly set: (value: Output) => void;
-		readonly withOverride: (update: (current: Output) => Output) => unknown;
+		readonly set: (value: Output) => Effect.Effect<void, RemoteFailure<never>>;
+		readonly withOverride: (update: (current: Output) => Output) => EffectRemoteQueryOverride;
 	};
 
 type NativeQueryResource<Output> = NativeRemoteResource<Output> & {
@@ -196,14 +199,15 @@ function attach_query_resource<Output, ErrorType = never>(
 	if (typeof set === "function") {
 		Object.defineProperty(effect, "set", {
 			configurable: true,
-			value: (value: Output) => set.call(resource, value),
+			value: (value: Output) => MakeQuerySet(resource, set, value),
 		});
 	}
 
 	if (typeof with_override === "function") {
 		Object.defineProperty(effect, "withOverride", {
 			configurable: true,
-			value: (update: (current: Output) => Output) => with_override.call(resource, update),
+			value: (update: (current: Output) => Output) =>
+				make_query_override(resource, with_override, update),
 		});
 	}
 }

@@ -12,11 +12,11 @@ import {
 	Redirect,
 	RequestEvent,
 } from "svelte-effect-runtime";
+import { RefreshRequested } from "$lib/server/requested.server";
 import { WaitForGate } from "$lib/server/gates.server";
 import { RecordLifecycleEvent } from "$lib/lifecycle";
 import { RuntimeLabel } from "$lib/server-runtime";
 import { Effect, Schema, Stream } from "effect";
-import { requested } from "$app/server";
 
 const ItemSchema = Schema.Struct({
 	name: Schema.NonEmptyString.pipe(Schema.mutableKey),
@@ -151,7 +151,7 @@ export const Mutate = Command(Schema.Number, (amount) =>
 		const event = yield* RequestEvent;
 
 		mutation_value += amount;
-		yield* Effect.promise(() => requested(GetMutation as never, 1).refreshAll());
+		yield* RefreshRequested(GetMutation, 1);
 
 		return {
 			method: event.request.method,

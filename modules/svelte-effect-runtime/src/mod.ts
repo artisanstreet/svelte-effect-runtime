@@ -7,6 +7,7 @@ import type {
 } from "$/server/types.ts";
 import type { ErrorEffectFactory, RedirectEffectFactory } from "$/server/control-flow.ts";
 import type { RequestEvent as RequestEventShape } from "$/server/runtime.ts";
+import type { RequestedFactory } from "$/server/requested.ts";
 import { Dispatcher as InternalDispatcher } from "$/dispatcher.ts";
 import type { Context, Layer, ManagedRuntime } from "effect";
 import { ServerOnlyImportError } from "$/errors.ts";
@@ -158,6 +159,10 @@ export const Prerender: PrerenderFactory = make_server_only_function("Prerender"
 
 export { Live } from "$/live.ts";
 
+export { ProvideLayer } from "$/provide-layer.ts";
+
+export { Hydratable } from "$/hydratable.ts";
+
 /**
  * SvelteKit redirect control-flow export for `.remote.ts` files imported from
  * the root entrypoint. The Vite plugin rewrites it to the real server
@@ -173,6 +178,45 @@ export { Live } from "$/live.ts";
  * @since 2.3.0
  */
 export const Redirect: RedirectEffectFactory = make_server_only_function("Redirect") as never;
+
+/**
+ * Server `handleError` hook adapter export for `hooks.server.ts` files
+ * imported from the root entrypoint. The Vite plugin rewrites it to the real
+ * server implementation.
+ *
+ * @example
+ * ```ts
+ * import { HandleError } from "svelte-effect-runtime";
+ *
+ * export const handleError = HandleError<HandleServerError>(function* ({ error }) {
+ *   yield* Effect.logError(error);
+ * });
+ * ```
+ *
+ * @since 5.0.0
+ */
+export const HandleError: typeof import("$/server/handle-error.ts").HandleError =
+	make_server_only_function("HandleError") as never;
+
+/**
+ * Client-requested refresh helper export for `.remote.ts` files imported from
+ * the root entrypoint. The Vite plugin rewrites it to the real server
+ * implementation.
+ *
+ * @example
+ * ```ts
+ * import { Requested } from "svelte-effect-runtime";
+ *
+ * yield* Requested.refreshAll(GetPosts, 1);
+ * ```
+ *
+ * @since 5.0.0
+ */
+export const Requested: RequestedFactory = Object.assign(make_server_only_function("Requested"), {
+	refreshAll: make_server_only_function("Requested.refreshAll"),
+	reconnectAll: make_server_only_function("Requested.reconnectAll"),
+	ignoreAll: make_server_only_function("Requested.ignoreAll"),
+}) as never;
 
 /**
  * Current SvelteKit request event service export for `.remote.ts` files
@@ -275,6 +319,10 @@ export type {
 
 export type { LiveFactory, LiveStatus, RemoteLiveStream } from "$/live.ts";
 
+export type { RequestedFactory, RequestedLiveQuery, RequestedQuery } from "$/server/requested.ts";
+
+export type { EffectRemoteQueryOverride } from "$/remote/query-methods.ts";
+
 export type {
 	CommandFactory,
 	EffectLike,
@@ -301,6 +349,7 @@ export type {
 	RemoteHandler,
 	RemoteLiveHandler,
 	RemoteLiveSource,
+	RemoteQueryValidatedArgument,
 	SchemaEncodedInput,
 	SchemaInput,
 	ServerRuntimeFactory,

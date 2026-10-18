@@ -647,6 +647,74 @@ void wrong_encoded_inputs;
 	);
 });
 
+type_contract("Requested entries carry the validated argument and query types", async () => {
+	await assert_type_checks(
+		"server-requested-types.ts",
+		`
+import { Effect, Schema, Stream } from "effect";
+import { Command, Live, Query, Requested } from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
+import type { EffectRemoteQueryFunction } from "__RUNTIME__/modules/svelte-effect-runtime/src/server.ts";
+
+class PostsUnavailable extends Schema.TaggedError<PostsUnavailable>()("PostsUnavailable", {}) {}
+
+const GetPost = Query(Schema.NumberFromString, (id) =>
+  id > 0 ? Effect.succeed({ id }) : Effect.fail(new PostsUnavailable()),
+);
+const GetPosts = Query.batch(Schema.String, (filters) =>
+  Effect.succeed((filter: string) => filters.indexOf(filter)),
+);
+const GetFeed = Query.live("unchecked", (topic: { readonly name: string }) => Stream.make(topic.name));
+
+const annotated: EffectRemoteQueryFunction<string, { readonly id: number }, PostsUnavailable> = GetPost;
+
+export const Save = Command(() =>
+  Effect.gen(function* () {
+    for (const { arg, query, ignore } of yield* Requested(GetPost, 10)) {
+      const id: number = arg;
+      /** @ts-expect-error the validated argument is the decoded number. */
+      const encoded: string = arg;
+
+      if (id > 1) {
+        yield* query.refresh();
+        yield* query.set({ id });
+      } else {
+        yield* ignore;
+      }
+
+      void encoded;
+    }
+
+    for (const { arg, query } of yield* Requested(GetPosts, 10)) {
+      const filter: string = arg;
+      const index: number = yield* query;
+
+      void filter;
+      void index;
+    }
+
+    for (const { arg, query } of yield* Requested(GetFeed, 10)) {
+      const name: string = arg.name;
+
+      yield* Live.reconnect(query);
+      void name;
+    }
+
+    yield* Requested.refreshAll(GetPost, 1);
+    yield* Requested.reconnectAll(GetFeed, 1);
+    yield* Requested.ignoreAll(GetPosts, 1);
+
+    /** @ts-expect-error live queries reconnect instead of refreshing. */
+    yield* Requested.refreshAll(GetFeed, 1);
+    /** @ts-expect-error regular queries refresh instead of reconnecting. */
+    yield* Requested.reconnectAll(GetPost, 1);
+  }),
+);
+
+void annotated;
+`,
+	);
+});
+
 type_contract("server remote helpers stay Effect-yieldable in markup helpers", async () => {
 	await assert_type_checks(
 		"server-remote-markup.ts",
@@ -787,10 +855,15 @@ async function check_generated_markup_helpers() {
     posts_query.refresh();
   const sign_out_effect = SignOut();
 
-  posts_query.set(posts);
-  const release_override = posts_query.withOverride((current) => current);
+  await get_dispatcher().run(posts_query.set(posts));
+  const release_override = await get_dispatcher().run(
+    posts_query.withOverride((current) => current),
+  );
 
   release_override();
+  /** @ts-expect-error set is an Effect and must be yielded, not used as a value. */
+  const set_result: void = posts_query.set(posts);
+  void set_result;
   await get_dispatcher().run(refresh_effect);
   await get_dispatcher().run(summary_query.refresh());
   const sign_out_result = await get_dispatcher().run(sign_out_effect);

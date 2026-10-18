@@ -1,4 +1,5 @@
 import { FailWithRemoteError, normalize_remote_effect_error } from "./effect.ts";
+import { attach_lazy_native_remote_query_update } from "./query-update.ts";
 import type { RemoteFailure } from "$/remote/shared.ts";
 import { Result, type Effect } from "effect";
 
@@ -17,7 +18,7 @@ type RemoteQueryResourceEffect<Output, ErrorType = never> = RemoteResourceEffect
 	ErrorType
 > & {
 	readonly refresh: () => Effect.Effect<void, unknown, never>;
-	readonly set: (value: Output) => void;
+	readonly set: (value: Output) => Effect.Effect<void, RemoteFailure<ErrorType>>;
 	readonly withOverride: (update: (current: Output) => Output) => unknown;
 };
 
@@ -94,6 +95,13 @@ export function attach_failed_remote_query_resource<Output, ErrorType = never>(
 	const throw_resource_error = (): never => {
 		throw normalized_error;
 	};
+	const FailedOverride = () => {
+		const OverrideEffect = FailWithRemoteError<ErrorType>(error);
+
+		attach_lazy_native_remote_query_update(OverrideEffect, throw_resource_error);
+
+		return OverrideEffect;
+	};
 
 	attach_failed_remote_resource_getters(normalized_error, effect);
 
@@ -104,11 +112,11 @@ export function attach_failed_remote_query_resource<Output, ErrorType = never>(
 		},
 		set: {
 			configurable: true,
-			value: throw_resource_error,
+			value: RefreshFailedResource,
 		},
 		withOverride: {
 			configurable: true,
-			value: throw_resource_error,
+			value: FailedOverride,
 		},
 	});
 }

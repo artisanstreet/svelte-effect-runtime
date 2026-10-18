@@ -62,6 +62,7 @@ import { is_handler, is_unchecked, normalize_validator } from "./schema.ts";
 import { copy_property_descriptors } from "$/internal/descriptors.ts";
 import { normalize_remote_helper_error } from "$/remote/server.ts";
 import { create_remote_transport_error } from "$/remote/shared.ts";
+import { make_query_override, MakeQuerySet } from "$/remote/query-methods.ts";
 import { get_remote_live_snapshot_encoder } from "./transport.ts";
 import type { NativeRemoteFormInput } from "$/remote/native-types.ts";
 import { Effect, Result, type Schema } from "effect";
@@ -247,22 +248,48 @@ function to_effect_remote_resource<
 			return ResourceEffect;
 		}
 
-		const resource = resource_attempt.success;
-		const started_result = mode === "batch" ? begin_batch_resource(resource) : undefined;
-		const ResourceEffect = MakeEffectFromPromise<Output, ErrorType>(
-			() => (started_result ?? Promise.resolve(resource)) as Promise<Output>,
-		) as Resource;
-
-		attach_native_remote_query_update(ResourceEffect, resource);
-		attach_resource(resource, ResourceEffect);
-
-		return ResourceEffect;
+		return wrap_remote_resource<Output, ErrorType, Resource>(
+			resource_attempt.success,
+			attach_resource,
+			mode,
+		);
 	}) as unknown as (input: Input) => Resource;
 
 	copy_property_descriptors(native, wrapped);
 	attach_native_remote_query_update(wrapped, native);
 
 	return wrapped;
+}
+
+function wrap_remote_resource<
+	Output,
+	ErrorType,
+	Resource extends RemoteResourceEffect<Output, ErrorType>,
+>(
+	resource: unknown,
+	attach_resource: AttachRemoteResource<Resource>,
+	mode: QueryAdapterMode,
+): Resource {
+	const started_result = mode === "batch" ? begin_batch_resource(resource) : undefined;
+	const ResourceEffect = MakeEffectFromPromise<Output, ErrorType>(
+		() => (started_result ?? Promise.resolve(resource)) as Promise<Output>,
+	) as Resource;
+
+	attach_native_remote_query_update(ResourceEffect, resource);
+	attach_resource(resource, ResourceEffect);
+
+	return ResourceEffect;
+}
+
+/** Wraps a native server query resource, such as one bound by `requested()`, as a SER query. */
+export function to_effect_query_resource<Output, ErrorType = never>(
+	resource: unknown,
+): EffectRemoteQuery<Output, ErrorType> {
+	return wrap_remote_resource<Output, ErrorType, EffectRemoteQuery<Output, ErrorType>>(
+		resource,
+		attach_query_resource_methods,
+		"standard",
+	);
 }
 
 function begin_batch_resource(resource: unknown): Promise<unknown> {
@@ -329,23 +356,41 @@ function to_effect_live_query<Input, Output, ErrorType = never>(
 			) as EffectRemoteLiveQuery<Output, ErrorType>;
 		}
 
-		const resource = resource_attempt.success;
-
-		const stream = make_remote_live_stream<Output, ErrorType>(
-			resource,
-			create_remote_transport_error,
+		return wrap_live_query_resource<Output, ErrorType>(
+			resource_attempt.success,
 			snapshot_encoder,
-		) as EffectRemoteLiveQuery<Output, ErrorType>;
-
-		attach_native_remote_query_update(stream, resource);
-
-		return stream;
+		);
 	}) as unknown as EffectRemoteLiveQueryFunction<Input, Output, ErrorType>;
 
 	copy_property_descriptors(native, wrapped);
 	attach_native_remote_query_update(wrapped, native);
 
 	return wrapped;
+}
+
+function wrap_live_query_resource<Output, ErrorType>(
+	resource: unknown,
+	snapshot_encoder: ReturnType<typeof get_remote_live_snapshot_encoder>,
+): EffectRemoteLiveQuery<Output, ErrorType> {
+	const stream = make_remote_live_stream<Output, ErrorType>(
+		resource,
+		create_remote_transport_error,
+		snapshot_encoder,
+	) as EffectRemoteLiveQuery<Output, ErrorType>;
+
+	attach_native_remote_query_update(stream, resource);
+
+	return stream;
+}
+
+/** Wraps a native server live query resource, such as one bound by `requested()`, as a SER live stream. */
+export function to_effect_live_query_resource<Output, ErrorType = never>(
+	resource: unknown,
+): EffectRemoteLiveQuery<Output, ErrorType> {
+	return wrap_live_query_resource<Output, ErrorType>(
+		resource,
+		get_remote_live_snapshot_encoder(),
+	);
 }
 
 type NativeQueryResource<Output> = NativeRemoteResource<Output> & {
@@ -381,14 +426,15 @@ function attach_query_resource_methods<Output, ErrorType = never>(
 	if (typeof set === "function") {
 		Object.defineProperty(effect, "set", {
 			configurable: true,
-			value: (value: Output) => set.call(resource, value),
+			value: (value: Output) => MakeQuerySet(resource, set, value),
 		});
 	}
 
 	if (typeof with_override === "function") {
 		Object.defineProperty(effect, "withOverride", {
 			configurable: true,
-			value: (update: (current: Output) => Output) => with_override.call(resource, update),
+			value: (update: (current: Output) => Output) =>
+				make_query_override(resource, with_override, update),
 		});
 	}
 }
@@ -408,19 +454,19 @@ function normalize_prerender_options<Input>(
 
 function QueryRoot<A, E = never, R = never>(
 	validate_or_handler: EffectLike<A, E, R> | RemoteHandler<void, A, E, R>,
-): EffectRemoteQueryFunction<void, A, E>;
+): EffectRemoteQueryFunction<void, A, E, void>;
 function QueryRoot<Input, A, E = never, R = never>(
 	validate_or_handler: "unchecked",
 	maybe_handler: RemoteHandler<Input, A, E, R>,
-): EffectRemoteQueryFunction<Input, A, E>;
+): EffectRemoteQueryFunction<Input, A, E, Input>;
 function QueryRoot<S extends Schema.Schema<unknown>, A, E = never, R = never>(
 	validate_or_handler: S,
 	maybe_handler: RemoteHandler<SchemaInput<S>, A, E, R>,
-): EffectRemoteQueryFunction<SchemaEncodedInput<S>, A, E>;
+): EffectRemoteQueryFunction<SchemaEncodedInput<S>, A, E, SchemaInput<S>>;
 function QueryRoot<S extends StandardSchema, A, E = never, R = never>(
 	validate_or_handler: S,
 	maybe_handler: RemoteHandler<StandardSchemaOutput<S>, A, E, R>,
-): EffectRemoteQueryFunction<StandardSchemaInput<S>, A, E>;
+): EffectRemoteQueryFunction<StandardSchemaInput<S>, A, E, StandardSchemaOutput<S>>;
 function QueryRoot(validate_or_handler: unknown, maybe_handler?: unknown): unknown {
 	try {
 		if (maybe_handler) {
@@ -449,15 +495,15 @@ function QueryRoot(validate_or_handler: unknown, maybe_handler?: unknown): unkno
 function QueryBatch<Input, A, E = never, R = never>(
 	validate_or_handler: "unchecked",
 	maybe_handler: EffectRemoteBatchHandler<Input, A, E, R>,
-): EffectRemoteQueryFunction<Input, A, E>;
+): EffectRemoteQueryFunction<Input, A, E, Input>;
 function QueryBatch<S extends Schema.Schema<unknown>, A, E = never, R = never>(
 	validate_or_handler: S,
 	maybe_handler: EffectRemoteBatchHandler<SchemaInput<S>, A, E, R>,
-): EffectRemoteQueryFunction<SchemaEncodedInput<S>, A, E>;
+): EffectRemoteQueryFunction<SchemaEncodedInput<S>, A, E, SchemaInput<S>>;
 function QueryBatch<S extends StandardSchema, A, E = never, R = never>(
 	validate_or_handler: S,
 	maybe_handler: EffectRemoteBatchHandler<StandardSchemaOutput<S>, A, E, R>,
-): EffectRemoteQueryFunction<StandardSchemaInput<S>, A, E>;
+): EffectRemoteQueryFunction<StandardSchemaInput<S>, A, E, StandardSchemaOutput<S>>;
 function QueryBatch(validate_or_handler: unknown, maybe_handler?: unknown): unknown {
 	try {
 		if (!maybe_handler) {
@@ -478,19 +524,19 @@ function QueryBatch(validate_or_handler: unknown, maybe_handler?: unknown): unkn
 
 function QueryLive<A, E = never, R = never>(
 	validate_or_handler: RemoteLiveSource<A, E, R> | RemoteLiveHandler<void, A, E, R>,
-): EffectRemoteLiveQueryFunction<void, A, E>;
+): EffectRemoteLiveQueryFunction<void, A, E, void>;
 function QueryLive<Input, A, E = never, R = never>(
 	validate_or_handler: "unchecked",
 	maybe_handler: RemoteLiveHandler<Input, A, E, R>,
-): EffectRemoteLiveQueryFunction<Input, A, E>;
+): EffectRemoteLiveQueryFunction<Input, A, E, Input>;
 function QueryLive<S extends Schema.Schema<unknown>, A, E = never, R = never>(
 	validate_or_handler: S,
 	maybe_handler: RemoteLiveHandler<SchemaInput<S>, A, E, R>,
-): EffectRemoteLiveQueryFunction<SchemaEncodedInput<S>, A, E>;
+): EffectRemoteLiveQueryFunction<SchemaEncodedInput<S>, A, E, SchemaInput<S>>;
 function QueryLive<S extends StandardSchema, A, E = never, R = never>(
 	validate_or_handler: S,
 	maybe_handler: RemoteLiveHandler<StandardSchemaOutput<S>, A, E, R>,
-): EffectRemoteLiveQueryFunction<StandardSchemaInput<S>, A, E>;
+): EffectRemoteLiveQueryFunction<StandardSchemaInput<S>, A, E, StandardSchemaOutput<S>>;
 function QueryLive(validate_or_handler: unknown, maybe_handler?: unknown): unknown {
 	try {
 		if (maybe_handler) {

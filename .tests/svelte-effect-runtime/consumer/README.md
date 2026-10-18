@@ -26,9 +26,9 @@ observations. SvelteKit 3 fixtures compile with the canonical direct adapter ori
 SvelteKit 2 profile omits the unsupported `paths.origin` option. Browser parity still drives the
 direct adapter URLs under both profiles, so remote-function and CSRF checks remain active.
 
-The compatibility matrix pins two reviewable profiles. `kit-2-stable` uses SvelteKit 2.70.2 and its
-peer-compatible adapter-node 5.5.7. `kit-3-primary` uses SvelteKit 3.0.0-next.25 and adapter-node
-6.0.0-next.10. Every target receives unpatched framework artifacts, and the Kit 3 profile verifies
+The compatibility matrix pins two reviewable profiles. `kit-2-stable` uses SvelteKit 2.70.3 and its
+peer-compatible adapter-node 5.5.7. `kit-3-primary` uses SvelteKit 3.1.0 and adapter-node
+6.0.0. Every target receives unpatched framework artifacts, and the Kit 3 profile verifies
 that adapter output contains client assets and resolves its emitted static root to the application
 build directory. Older Kit 3 prereleases remain selectable for diagnosis; the harness reports
 [upstream issue #16365](https://github.com/sveltejs/kit/issues/16365) on Windows when one requires

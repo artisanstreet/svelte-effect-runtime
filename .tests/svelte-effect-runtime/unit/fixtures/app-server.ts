@@ -8,6 +8,7 @@ let current_request_event: unknown;
 let current_command_factory: RemoteFactory | undefined;
 let current_prerender_factory: RemoteFactory | undefined;
 let current_query_factory: RemoteFactory | undefined;
+let current_requested: RemoteFactory | undefined;
 
 export function query(...args: unknown[]): unknown {
 	if (!current_query_factory) {
@@ -45,6 +46,14 @@ export function prerender(...args: unknown[]): unknown {
 	}
 
 	return current_prerender_factory(...args);
+}
+
+export function requested(...args: unknown[]): unknown {
+	if (!current_requested) {
+		return fail("requested");
+	}
+
+	return current_requested(...args);
 }
 
 export function getRequestEvent(): unknown {
@@ -95,4 +104,12 @@ export function set_test_prerender(factory: RemoteFactory): void {
 
 export function reset_test_prerender(): void {
 	current_prerender_factory = undefined;
+}
+
+export function set_test_requested(factory: RemoteFactory): void {
+	current_requested = factory;
+}
+
+export function reset_test_requested(): void {
+	current_requested = undefined;
 }

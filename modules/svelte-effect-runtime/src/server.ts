@@ -3,11 +3,13 @@ export {
 	Error,
 	Form,
 	get_server_runtime_or_throw,
+	HandleError,
 	Handler,
 	Live,
 	Prerender,
 	Query,
 	Redirect,
+	Requested,
 	RequestEvent,
 	ServerRuntime,
 } from "./server/index.ts";
@@ -49,8 +51,12 @@ export type {
 	RemoteFormHandler,
 	RemoteHandler,
 	RemoteLiveStream,
+	RequestedFactory,
+	RequestedLiveQuery,
+	RequestedQuery,
 	RemoteLiveHandler,
 	RemoteLiveSource,
+	RemoteQueryValidatedArgument,
 	SchemaEncodedInput,
 	SchemaInput,
 	ServerRuntimeFactory,
@@ -58,3 +64,5 @@ export type {
 	StandardSchemaInput,
 	StandardSchemaOutput,
 } from "./server/index.ts";
+
+export type { EffectRemoteQueryOverride } from "./remote/query-methods.ts";

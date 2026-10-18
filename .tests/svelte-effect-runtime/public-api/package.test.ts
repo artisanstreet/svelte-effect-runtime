@@ -67,6 +67,8 @@ const required_root_exports = [
 	"EmptyStreamYieldError",
 	"Error",
 	"Form",
+	"HandleError",
+	"Hydratable",
 	"InvalidCommandFactoryError",
 	"InvalidLiveQueryFactoryError",
 	"InvalidLiveQueryReturnError",
@@ -77,6 +79,7 @@ const required_root_exports = [
 	"Live",
 	"PreprocessError",
 	"Prerender",
+	"ProvideLayer",
 	"Query",
 	"Redirect",
 	"RemoteErrorDecodeError",
@@ -85,6 +88,7 @@ const required_root_exports = [
 	"RemoteHelperError",
 	"RequestEvent",
 	"RequestEventUnavailableError",
+	"Requested",
 	"RuntimeAlreadyInitializedError",
 	"RuntimeError",
 	"ServerOnlyImportError",
@@ -111,12 +115,14 @@ const required_server_exports = [
 	"Command",
 	"Error",
 	"Form",
+	"HandleError",
 	"Handler",
 	"Live",
 	"Prerender",
 	"Query",
 	"Redirect",
 	"RequestEvent",
+	"Requested",
 	"ServerRuntime",
 	"get_server_runtime_or_throw",
 ] as const;
@@ -140,7 +146,7 @@ test("packed package resolves every supported public and generated entrypoint", 
 	expect(manifest.version).toMatch(/^\d+\.\d+\.\d+/);
 	expect(manifest.files).toContain(".dist");
 	expect(Object.keys(manifest.exports).sort()).toEqual([...required_entrypoints].sort());
-	expect(manifest.peerDependencies?.["@sveltejs/kit"]).toBe("^2.69.0 || ^3.0.0-next.0");
+	expect(manifest.peerDependencies?.["@sveltejs/kit"]).toBe("^2.69.0 || ^3.0.0");
 	expect(JSON.stringify([manifest.dependencies, manifest.peerDependencies])).not.toContain(
 		"workspace:",
 	);
@@ -327,6 +333,7 @@ async function write_app_server_stub(workspace: string): Promise<void> {
 			"export const form = () => undefined;",
 			"export const getRequestEvent = () => ({});",
 			"export const prerender = () => undefined;",
+			"export const requested = () => undefined;",
 			"export const query = Object.assign(() => undefined, {",
 			"  batch: () => undefined,",
 			"  live: () => undefined,",

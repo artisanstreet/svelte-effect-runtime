@@ -195,10 +195,10 @@ Rules:
   not `A | null | undefined`.
 - Every boundary decodes with Effect Schema before data enters domain logic.
   Type assertions (`as`) are not validation.
-- Dependencies are `Context.Tag` services provided by Layers; construction
+- Dependencies are `Context.Service` services provided by Layers; construction
   lives in the Layer, handlers only `yield*` the service.
-- Resource lifetimes use scoped Effects/Layers (`Effect.acquireRelease`,
-  `Layer.scoped`), never manual open/close pairs.
+- Resource lifetimes use scoped Effects/Layers (`Effect.acquireRelease`
+  inside `Layer.effect`), never manual open/close pairs.
 - Use Effect's own retry, timeout, concurrency, scheduling, and caching
   operators instead of reimplementing them with timers and flags.
 

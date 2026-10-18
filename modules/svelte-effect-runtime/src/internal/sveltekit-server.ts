@@ -16,6 +16,10 @@ export function prerender(..._args: ReadonlyArray<unknown>): never {
 	throw make_sveltekit_server_error("prerender");
 }
 
+export function requested(..._args: ReadonlyArray<unknown>): never {
+	throw make_sveltekit_server_error("requested");
+}
+
 export function getRequestEvent(): never {
 	throw make_sveltekit_server_error("getRequestEvent");
 }

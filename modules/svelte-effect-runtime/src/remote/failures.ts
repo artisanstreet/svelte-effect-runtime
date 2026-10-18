@@ -43,7 +43,7 @@ const DecodedRemoteFailureSchema = Schema.Struct({
 	_tag: Schema.String,
 });
 
-const DecodeJsonString = Schema.decodeUnknownOption(Schema.UnknownFromJsonString);
+const DecodeJsonString = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown));
 const is_decoded_remote_failure_value = Schema.is(DecodedRemoteFailureSchema);
 const is_remote_error_message_envelope = Schema.is(RemoteErrorMessageEnvelopeSchema);
 

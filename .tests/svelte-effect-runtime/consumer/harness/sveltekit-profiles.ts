@@ -60,12 +60,12 @@ const kit_2_stable: SvelteKitProfile = {
 	supports_subpath_lib_imports: false,
 	requires_explicit_module_extensions: false,
 	supports_published_stable: true,
-	sveltekit_version: "2.70.2",
+	sveltekit_version: "2.70.3",
 };
 
 const kit_3_primary: SvelteKitProfile = {
 	name: "kit-3-primary",
-	adapter_node_version: "6.0.0-next.10",
+	adapter_node_version: "6.0.0",
 	browser_server: "preview",
 	generated_tsconfig_specifier: app_generated_tsconfig,
 	supports_explicit_environment: true,
@@ -73,7 +73,7 @@ const kit_3_primary: SvelteKitProfile = {
 	supports_subpath_lib_imports: true,
 	requires_explicit_module_extensions: true,
 	supports_published_stable: false,
-	sveltekit_version: "3.0.0-next.25",
+	sveltekit_version: "3.1.0",
 };
 
 /**
@@ -82,6 +82,7 @@ const kit_3_primary: SvelteKitProfile = {
  * alongside and records the fixture shape that version requires.
  */
 const kit_3_prerelease_steps = [
+	{ adapter_node_version: "6.0.0", sveltekit_version: "3.0.0" },
 	{ adapter_node_version: "6.0.0-next.10", sveltekit_version: "3.0.0-next.20" },
 	{ adapter_node_version: "6.0.0-next.9", sveltekit_version: "3.0.0-next.19" },
 	{ adapter_node_version: "6.0.0-next.8", sveltekit_version: "3.0.0-next.15" },

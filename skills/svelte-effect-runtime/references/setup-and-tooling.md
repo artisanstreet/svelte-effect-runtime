@@ -7,7 +7,7 @@ source. Setup mistakes and non-Vite tooling are the two root causes of
 ## Packages
 
 - `svelte-effect-runtime` — the plugin and runtime (peer: `effect`
-  `^4.0.0-beta`, `svelte` 5, `@sveltejs/kit` `^2.69.0 || ^3.0.0-next`).
+  `^4.0.0`, `svelte` `^5.44.0`, `@sveltejs/kit` `^2.69.0 || ^3.0.0`).
 - `svelte-plugin-composer` (dev) — recommended; makes plugins run in the
   order you wrote them instead of letting `enforce: "pre"` plugins skip the
   queue.
