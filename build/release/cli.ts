@@ -233,8 +233,8 @@ export function parse_cli_request(
 			notes: flags.notes,
 			repository: flags.repository ?? environment.GITHUB_REPOSITORY,
 			output: flags.output,
-			max_attempts: parse_integer_flag(flags, "max-attempts", 12, 1),
-			probe_delay_ms: parse_integer_flag(flags, "probe-delay-ms", 5_000, 0),
+			max_attempts: parse_integer_flag(flags, "max-attempts", 36, 1),
+			probe_delay_ms: parse_integer_flag(flags, "probe-delay-ms", 10_000, 0),
 			request_timeout_ms: parse_integer_flag(flags, "request-timeout-ms", 15_000, 1),
 		});
 	}
@@ -249,8 +249,8 @@ export function parse_cli_request(
 			repository: flags.repository ?? environment.GITHUB_REPOSITORY,
 			state_output: flags["state-output"],
 			summary_output: flags["summary-output"] ?? environment.GITHUB_STEP_SUMMARY,
-			max_attempts: parse_integer_flag(flags, "max-attempts", 12, 1),
-			probe_delay_ms: parse_integer_flag(flags, "probe-delay-ms", 5_000, 0),
+			max_attempts: parse_integer_flag(flags, "max-attempts", 36, 1),
+			probe_delay_ms: parse_integer_flag(flags, "probe-delay-ms", 10_000, 0),
 			request_timeout_ms: parse_integer_flag(flags, "request-timeout-ms", 15_000, 1),
 			command_timeout_ms: parse_integer_flag(flags, "command-timeout-ms", 120_000, 1),
 			dry_run: parse_boolean_flag(flags, "dry-run", false),
