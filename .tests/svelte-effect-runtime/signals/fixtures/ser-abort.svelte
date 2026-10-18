@@ -9,7 +9,8 @@
 
 	let shown = $state(true);
 
-	const Pending = Effect.never.pipe(
+	const Pending = Effect.sync(() => record_event("started")).pipe(
+		Effect.andThen(Effect.never),
 		Effect.onInterrupt(() => Effect.sync(() => record_event("interrupted"))),
 	);
 
