@@ -580,7 +580,7 @@ export type EffectRemoteQueryFunction<Input, A, E = never, Validated = unknown> 
  * Type-only record of the argument a query handler receives after
  * validation, which {@link Requested} reports as each entry's `arg`.
  *
- * @since 4.3.0
+ * @since 5.0.0
  */
 export type RemoteQueryValidatedArgument<Validated> = {
 	readonly "~validated"?: Validated;

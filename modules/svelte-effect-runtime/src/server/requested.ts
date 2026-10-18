@@ -37,7 +37,7 @@ type NativeQueryInternals = {
 /**
  * A query instance the client asked a command or form to refresh.
  *
- * @since 4.3.0
+ * @since 5.0.0
  */
 export interface RequestedQuery<Arg, A, E = never> {
 	/** The query argument after the query's schema validated it. */
@@ -51,7 +51,7 @@ export interface RequestedQuery<Arg, A, E = never> {
 /**
  * A live query instance the client asked a command or form to reconnect.
  *
- * @since 4.3.0
+ * @since 5.0.0
  */
 export interface RequestedLiveQuery<Arg, A, E = never> {
 	/** The live query argument after the query's schema validated it. */
@@ -65,7 +65,7 @@ export interface RequestedLiveQuery<Arg, A, E = never> {
 /**
  * Server export shape for answering client-requested refreshes.
  *
- * @since 4.3.0
+ * @since 5.0.0
  */
 export interface RequestedFactory {
 	/**
@@ -85,7 +85,7 @@ export interface RequestedFactory {
 	 * );
 	 * ```
 	 *
-	 * @since 4.3.0
+	 * @since 5.0.0
 	 * @param query - SER query or batch query function whose client instances
 	 *   should be inspected.
 	 * @param limit - Maximum number of client-requested instances to accept.
@@ -102,7 +102,7 @@ export interface RequestedFactory {
 	 * Lists the instances of a live query that the client asked this command
 	 * or form to reconnect through `.updates(...)`.
 	 *
-	 * @since 4.3.0
+	 * @since 5.0.0
 	 * @param query - SER live query function whose client instances should be
 	 *   inspected.
 	 * @param limit - Maximum number of client-requested instances to accept.
@@ -122,7 +122,7 @@ export interface RequestedFactory {
 	 * yield* Requested.refreshAll(GetPosts, 1);
 	 * ```
 	 *
-	 * @since 4.3.0
+	 * @since 5.0.0
 	 * @param query - SER query or batch query function to refresh.
 	 * @param limit - Maximum number of client-requested instances to refresh.
 	 * @returns An Effect that completes once every accepted instance has been
@@ -141,7 +141,7 @@ export interface RequestedFactory {
 	 * yield* Requested.reconnectAll(GetNotifications, 1);
 	 * ```
 	 *
-	 * @since 4.3.0
+	 * @since 5.0.0
 	 * @param query - SER live query function to reconnect.
 	 * @param limit - Maximum number of client-requested instances to reconnect.
 	 * @returns An Effect that completes once every accepted instance has been
@@ -162,7 +162,7 @@ export interface RequestedFactory {
 	 * yield* Requested.ignoreAll(GetPosts, 10);
 	 * ```
 	 *
-	 * @since 4.3.0
+	 * @since 5.0.0
 	 * @param query - SER query, batch query, or live query function to decline.
 	 * @param limit - Maximum number of client-requested instances to decline.
 	 * @returns An Effect that completes once every accepted instance is ignored.
@@ -271,7 +271,7 @@ function get_query_type(native: unknown): string | undefined {
  * );
  * ```
  *
- * @since 4.3.0
+ * @since 5.0.0
  */
 export const Requested: RequestedFactory = Object.assign(ListRequested, {
 	refreshAll: RefreshAll,

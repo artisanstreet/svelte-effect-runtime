@@ -210,7 +210,7 @@ export const HandleError: typeof import("$/server/handle-error.ts").HandleError 
  * yield* Requested.refreshAll(GetPosts, 1);
  * ```
  *
- * @since 4.3.0
+ * @since 5.0.0
  */
 export const Requested: RequestedFactory = Object.assign(make_server_only_function("Requested"), {
 	refreshAll: make_server_only_function("Requested.refreshAll"),
