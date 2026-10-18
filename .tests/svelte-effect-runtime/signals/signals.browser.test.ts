@@ -539,7 +539,7 @@ describe("Signals browser conformance", () => {
 		});
 
 		try {
-			await tick();
+			expect(await recorder.next_event()).toBe("started");
 
 			const interrupted = recorder.next_event();
 
