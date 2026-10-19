@@ -1255,6 +1255,9 @@ async function observe_live_query({
 	await request.post("/api/live-state", { data: { value: 3 } });
 	await expect(page.getByTestId("live-left")).toHaveText("shared:3");
 	await expect(page.getByTestId("live-right")).toHaveText("shared:3");
+	/** `Live.status` samples its resource, so a reconnected status can trail the first new value. */
+	await expect(page.getByTestId("live-left-status")).toHaveText("Open");
+	await expect(page.getByTestId("live-right-status")).toHaveText("Open");
 
 	const observation = {
 		availability: "ready",
