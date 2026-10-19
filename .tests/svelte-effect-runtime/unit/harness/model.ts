@@ -31,6 +31,26 @@ export const conformance_proxy_protocol = "https";
 
 export type ConformanceBrowser = "chromium" | "firefox" | "webkit";
 
+/** Development serves unbundled modules, so it exposes defects that production tree-shaking hides. */
+export type ConformanceServerMode = "production" | "development";
+
+export function get_conformance_server_mode(environment: NodeJS.ProcessEnv): ConformanceServerMode {
+	const mode = environment.CONFORMANCE_SERVER_MODE ?? "production";
+
+	if (mode !== "production" && mode !== "development") {
+		throw new Error(
+			`Unsupported CONFORMANCE_SERVER_MODE ${mode}; expected production or development.`,
+		);
+	}
+
+	return mode;
+}
+
+/** Production keeps its historical run ids so existing evidence paths stay stable. */
+export function get_conformance_run_id(mode: ConformanceServerMode, run: string): string {
+	return mode === "production" ? `playwright-${run}` : `playwright-${mode}-${run}`;
+}
+
 export function get_conformance_browsers(
 	lane: string,
 	platform: NodeJS.Platform,
