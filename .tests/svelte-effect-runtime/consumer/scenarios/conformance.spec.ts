@@ -11,7 +11,11 @@ import {
 import type { Observation, Scenario, TargetName } from "../../unit/harness/model.ts";
 import { resolve_sveltekit_target_names } from "../harness/sveltekit-profiles.ts";
 import { normalize_observation } from "../../unit/harness/normalization.ts";
-import { get_conformance_proxy_url } from "../../unit/harness/model.ts";
+import {
+	get_conformance_proxy_url,
+	get_conformance_run_id,
+	get_conformance_server_mode,
+} from "../../unit/harness/model.ts";
 import { compare_observations } from "../../unit/harness/comparison.ts";
 import { make_evidence } from "../../unit/harness/evidence.ts";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -154,6 +158,7 @@ type LiveFinalizationObservation = {
 	readonly finalized_after_close: boolean;
 };
 
+const server_mode = get_conformance_server_mode(process.env);
 const targets: ReadonlyArray<TargetEndpoint> = resolve_sveltekit_target_names(process.env).map(
 	(name) => ({ name, url: get_conformance_proxy_url(name) }),
 );
@@ -378,6 +383,7 @@ async function observe_browser_contracts({
 	});
 	const page = await context.newPage();
 	const console_errors: string[] = [];
+	const page_errors: string[] = [];
 	const network: Array<{ method: string; path: string; status: number }> = [];
 
 	page.on("console", (message) => {
@@ -385,6 +391,7 @@ async function observe_browser_contracts({
 			console_errors.push(message.text());
 		}
 	});
+	page.on("pageerror", (error) => page_errors.push(error.message));
 	page.on("response", (response) => {
 		const url = new URL(response.url());
 
@@ -402,6 +409,7 @@ async function observe_browser_contracts({
 	const observation = await observe_page(page);
 
 	expect(console_errors, `${target.name} browser console`).toEqual([]);
+	expect(page_errors, `${target.name} uncaught page errors`).toEqual([]);
 	expect(network.length, `${target.name} remote traffic`).toBeGreaterThan(0);
 	expect(network.every((response) => response.status < 400)).toBe(true);
 	await context.close();
@@ -771,7 +779,7 @@ async function assert_native_parity<Value>(
 
 	for (const target of targets) {
 		const value = await scenario.drive({ ...driver, target });
-		const run_id = `playwright-${test_info.project.name}`;
+		const run_id = get_conformance_run_id(server_mode, test_info.project.name);
 		const observation = normalize_observation({
 			scenario_id: scenario.id,
 			target: target.name,
@@ -814,7 +822,7 @@ async function assert_native_parity<Value>(
 		const documented = deviations[target] ?? {};
 		const evidence = make_evidence(
 			".dist/conformance/evidence",
-			`playwright-${test_info.project.name}`,
+			get_conformance_run_id(server_mode, test_info.project.name),
 			scenario.id,
 			target,
 			"compare",
@@ -1531,7 +1539,15 @@ async function capture_remote_traffic(
 					continue;
 				}
 
-				const stream_payload = record.payload.join("");
+				/**
+				 * Chromium rejects `streamResourceContent` once a response has already
+				 * finished, which development servers make likely, so a completed body
+				 * stands in for the stream it would have reported.
+				 */
+				const completed_body = incomplete_response_bodies.has(entry.response_body)
+					? ""
+					: entry.response_body;
+				const stream_payload = record.payload.join("") || completed_body;
 
 				used_records.add(record.request_id);
 				entry.response_stream_payload = stream_payload;
@@ -1543,6 +1559,8 @@ async function capture_remote_traffic(
 		},
 	};
 }
+
+const incomplete_response_bodies = new Set(["pending", "unavailable-while-stream-open"]);
 
 function is_remote_url(value: string): boolean {
 	const url = new URL(value);

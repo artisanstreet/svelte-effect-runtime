@@ -19,6 +19,13 @@ artifact, then restore the authored source after diagnostics complete. The fixtu
 source. Phase logs, startup stdout and stderr, artifact hashes, target metadata, browser traces,
 console events, and network observations are written under `.dist/conformance`.
 
+`test:conformance:browser` drives every scenario twice: first against production servers, then
+with `CONFORMANCE_SERVER_MODE=development` against `vite dev`. Vite serves installed packages to
+the browser as unbundled modules in development, so a defect that production tree-shaking removes,
+such as an eager `node:` import reachable from the root entrypoint, still fails the run. Native
+SvelteKit stays the oracle in both modes. Development results are written under
+`.dist/conformance/development`, and development evidence uses `playwright-development-*` run ids.
+
 Portless owns and registers every production server on a fixed loopback application port. Browser
 drivers use the named HTTPS origins, while Playwright readiness probes use side-effect-free direct
 endpoints so startup cannot open a live query. The fixed ports are normalized from recorded

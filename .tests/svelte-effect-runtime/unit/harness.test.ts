@@ -11,6 +11,8 @@ import {
 import {
 	get_conformance_browsers,
 	get_conformance_proxy_url,
+	get_conformance_run_id,
+	get_conformance_server_mode,
 	get_conformance_target_url,
 } from "./harness/model.ts";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -18,6 +20,25 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, test } from "vitest";
+
+describe("conformance server mode", () => {
+	test("defaults to production and accepts development", () => {
+		expect(get_conformance_server_mode({})).toBe("production");
+		expect(get_conformance_server_mode({ CONFORMANCE_SERVER_MODE: "development" })).toBe(
+			"development",
+		);
+		expect(() => get_conformance_server_mode({ CONFORMANCE_SERVER_MODE: "preview" })).toThrow(
+			/Unsupported CONFORMANCE_SERVER_MODE preview/,
+		);
+	});
+
+	test("keeps production run ids and separates development evidence", () => {
+		expect(get_conformance_run_id("production", "chromium")).toBe("playwright-chromium");
+		expect(get_conformance_run_id("development", "chromium")).toBe(
+			"playwright-development-chromium",
+		);
+	});
+});
 
 describe("conformance browser selection", () => {
 	test("keeps Firefox in broad lanes where Portless TLS is supported", () => {

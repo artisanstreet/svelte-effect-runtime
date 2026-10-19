@@ -1,5 +1,9 @@
 import { resolve_sveltekit_target_names } from "../harness/sveltekit-profiles.ts";
-import { get_conformance_proxy_url } from "../../unit/harness/model.ts";
+import {
+	get_conformance_proxy_url,
+	get_conformance_run_id,
+	get_conformance_server_mode,
+} from "../../unit/harness/model.ts";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { make_evidence } from "../../unit/harness/evidence.ts";
 import { expect, test } from "@playwright/test";
@@ -7,6 +11,7 @@ import { dirname, resolve } from "node:path";
 import { Schema } from "effect";
 
 const targets = resolve_sveltekit_target_names(process.env);
+const server_mode = get_conformance_server_mode(process.env);
 const repo_root = resolve(import.meta.dirname, "../../../../");
 const candidate_build_root = resolve(repo_root, ".dist/conformance/applications/candidate/build");
 const StartupBody = Schema.Struct({
@@ -34,7 +39,7 @@ test("packed candidate runtime excludes compiler-only CommonJS dependencies", as
 	expect(leaking_files).toEqual([]);
 });
 
-test("production servers start and answer through named HTTPS origins", async ({
+test(`${server_mode} servers start and answer through named HTTPS origins`, async ({
 	request,
 }, test_info) => {
 	for (const target of targets) {
@@ -46,7 +51,7 @@ test("production servers start and answer through named HTTPS origins", async ({
 		const body = Schema.decodeUnknownSync(StartupBody)(await response.json());
 		const evidence = make_evidence(
 			".dist/conformance/evidence",
-			"playwright-startup",
+			get_conformance_run_id(server_mode, "startup"),
 			"server-start",
 			target,
 			"start",
