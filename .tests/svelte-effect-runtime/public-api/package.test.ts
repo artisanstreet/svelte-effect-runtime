@@ -8,7 +8,8 @@ import {
 } from "./packed-artifact.ts";
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { expect, test } from "vitest";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Schema } from "effect";
 
 const StringRecord = Schema.Record(Schema.String, Schema.String);
@@ -291,6 +292,7 @@ test("packed browser and server entrypoints preserve their runtime boundaries", 
 
 	expect(browser.failures).toEqual(["ServerOnlyImportError", "ServerOnlyImportError"]);
 	expect(browser.resolved.replaceAll("\\", "/")).toMatch(/\/\.dist\/mod\.js$/);
+	expect(await collect_static_node_imports(fileURLToPath(browser.resolved))).toEqual([]);
 
 	await write_app_server_stub(workspace);
 
@@ -313,6 +315,36 @@ test("packed browser and server entrypoints preserve their runtime boundaries", 
 	expect([...server.exports].sort()).toEqual([...required_server_exports].sort());
 	expect(server.resolved.replaceAll("\\", "/")).toMatch(/\/\.dist\/server\.js$/);
 }, 180_000);
+
+/** Vite stubs `node:` builtins in browser bundles, so the root entry must not load one eagerly. */
+async function collect_static_node_imports(entry: string): Promise<string[]> {
+	const pending = [entry];
+	const visited = new Set<string>();
+	const node_imports = new Set<string>();
+
+	for (let file = pending.pop(); file !== undefined; file = pending.pop()) {
+		if (visited.has(file)) {
+			continue;
+		}
+
+		visited.add(file);
+
+		const source = await readFile(file, "utf8");
+		const specifiers = [
+			...source.matchAll(/^(?:import|export)\b(?:[^;]*?\bfrom)?\s*["']([^"']+)["']/gm),
+		].map(([, specifier]) => specifier);
+
+		for (const specifier of specifiers) {
+			if (specifier.startsWith("node:")) {
+				node_imports.add(`${specifier} from ${file}`);
+			} else if (specifier.startsWith(".")) {
+				pending.push(resolve(dirname(file), specifier));
+			}
+		}
+	}
+
+	return [...node_imports];
+}
 
 async function write_app_server_stub(workspace: string): Promise<void> {
 	const app_virtual_module = join(workspace, "node_modules", "$app");

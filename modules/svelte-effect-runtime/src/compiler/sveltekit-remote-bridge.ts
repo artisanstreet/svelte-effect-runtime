@@ -1,5 +1,3 @@
-import { readFile } from "node:fs/promises";
-
 const sveltekit_remote_runtime_suffix =
 	"/node_modules/@sveltejs/kit/src/runtime/client/remote-functions/index.js";
 
@@ -40,7 +38,10 @@ export async function read_sveltekit_remote_runtime_major(id: string): Promise<n
 		return undefined;
 	}
 
+	/** The root entrypoint re-exports this module, so browser bundles must not load `node:fs` eagerly. */
+	const { readFile } = await import("node:fs/promises");
 	const package_root = normalized_filename.slice(0, -runtime_path.length);
+
 	const manifest = await readFile(`${package_root}/package.json`, "utf8").catch(() => undefined);
 	const version: unknown = manifest === undefined ? undefined : JSON.parse(manifest).version;
 
