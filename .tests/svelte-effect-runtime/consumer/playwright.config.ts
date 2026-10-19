@@ -15,6 +15,7 @@ import { defineConfig, devices, type PlaywrightTestProject } from "@playwright/t
 import { make_evidence } from "../unit/harness/evidence.ts";
 import { delimiter, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { rmSync } from "node:fs";
 
 const consumer_dir = dirname(fileURLToPath(import.meta.url));
 const repo_root = resolve(consumer_dir, "../../..");
@@ -25,6 +26,16 @@ const portless_state_dir = resolve(
 	repo_root,
 	`.dist/conformance/portless-${conformance_proxy_port}`,
 );
+/**
+ * A portless process killed while it holds the route lock leaves the lock
+ * behind, and portless treats it as stale only after outliving its own acquire
+ * timeout. Back-to-back runs would then fail to register their servers, so the
+ * main process clears it before any server of this run starts.
+ */
+if (process.env.TEST_WORKER_INDEX === undefined) {
+	rmSync(resolve(portless_state_dir, "routes.lock"), { force: true, recursive: true });
+}
+
 const windows_openssl_dir = "C:\\Program Files\\Git\\usr\\bin";
 const executable_path = [process.platform === "win32" && windows_openssl_dir, process.env.PATH]
 	.filter(Boolean)
