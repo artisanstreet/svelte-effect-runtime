@@ -42,6 +42,7 @@ export const static_policy_test_files = Object.freeze([
 
 export const capability_lanes: ReadonlyArray<CapabilityLane> = Object.freeze([
 	make_lane("compiler", "Capability / Compiler", [
+		`${ser_test_root}/runtime/source-map.test.ts`,
 		`${ser_test_root}/compiler/dependencies.test.ts`,
 		`${ser_test_root}/compiler/detect.test.ts`,
 		`${ser_test_root}/compiler/diagnostic-contract.test.ts`,
@@ -97,11 +98,13 @@ export const capability_lanes: ReadonlyArray<CapabilityLane> = Object.freeze([
 		[
 			["pnpm", "run", "check:grammars"],
 			["pnpm", "run", "check:runtime"],
+			["pnpm", "run", "check:checker"],
 			["pnpm", "run", "check:lsp"],
 			["pnpm", "run", "check:vsix"],
 		],
 	),
 	make_lane("package-and-tooling", "Capability / Package and tooling", [
+		".tests/better-svelte-check/checker.test.ts",
 		`${ser_test_root}/tooling/packed-consumer.test.ts`,
 		`${ser_test_root}/tooling/sveltekit-matrix.test.ts`,
 		`${ser_test_root}/unit/artifact-manifest.test.ts`,

@@ -1,6 +1,7 @@
 import { type MarkupTransformTarget, transform_markup_effect } from "$/markup/transform.ts";
 import { scan_svelte_effect_source } from "$/compiler/source-scan.ts";
 import { transform_script_effect } from "$/script-transform/index.ts";
+import { create_component_source_map } from "./source-map.ts";
 
 /**
  * Result returned by the direct whole-file Svelte transform.
@@ -16,6 +17,8 @@ import { transform_script_effect } from "$/script-transform/index.ts";
 export interface SvelteTransformResult {
 	/** Transformed Svelte source. */
 	code: string;
+	/** Source map from lowered Svelte back to the authored component. */
+	map: Record<string, unknown>;
 }
 
 /**
@@ -62,6 +65,7 @@ export function transform_svelte_effect(
 	const script = scan.effect_script;
 
 	let combined = content;
+	let script_result: ReturnType<typeof transform_script_effect> | undefined;
 
 	if (script) {
 		const effect_attribute = script.effect_attribute;
@@ -71,6 +75,7 @@ export function transform_svelte_effect(
 			emit_types: script.is_typescript,
 			target: options.target ?? "client",
 		});
+		script_result = result;
 
 		combined =
 			content.slice(0, effect_attribute_start) +
@@ -82,7 +87,16 @@ export function transform_svelte_effect(
 	const markup_options = options.target === undefined ? {} : { target: options.target };
 	const result = transform_markup_effect(combined, filename, markup_options);
 
-	return { code: result.code };
+	return {
+		code: result.code,
+		map: create_component_source_map(
+			content,
+			combined,
+			result,
+			filename,
+			script && script_result ? { region: script, result: script_result } : undefined,
+		),
+	};
 }
 
 export {

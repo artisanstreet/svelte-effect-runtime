@@ -1,4 +1,5 @@
 packages:
+    - "modules/better-svelte-check"
     - "modules/svelte-effect-runtime"
     - "modules/svelte-effect-runtime-grammars"
     - "modules/svelte-effect-runtime-language-server"

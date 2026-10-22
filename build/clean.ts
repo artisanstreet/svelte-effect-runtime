@@ -11,6 +11,7 @@ type CleanTarget = {
 };
 
 const target_names = [
+	"better-svelte-check",
 	"svelte-effect-runtime",
 	"svelte-effect-runtime-grammars",
 	"svelte-effect-runtime-language-server",
@@ -57,6 +58,9 @@ const MakeCleanTargets = (repo_root: string) =>
 	Effect.gen(function* () {
 		const path = yield* Path.Path;
 		const clean_targets: Record<(typeof target_names)[number], CleanTarget> = {
+			"better-svelte-check": {
+				paths: [path.join(repo_root, ".dist", "better-svelte-check")],
+			},
 			"svelte-effect-runtime": {
 				paths: [
 					path.join(repo_root, ".dist", "svelte-effect-runtime"),

@@ -152,7 +152,7 @@ function make_svelte_transform_plugin(component_filter: SvelteComponentModuleFil
 				return undefined;
 			}
 
-			return { code: result.code, map: null };
+			return { code: result.code, map: result.map as unknown as Rolldown.SourceMap };
 		},
 	};
 }
