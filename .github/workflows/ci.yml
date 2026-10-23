@@ -110,7 +110,7 @@ jobs:
                   --github-output "$GITHUB_OUTPUT"
 
             - name: Upload release plan
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
               with:
                   name: release-plan-${{ github.run_id }}
                   path: release-plan.json
@@ -230,7 +230,7 @@ jobs:
                   done
             - name: Upload conformance evidence
               if: always() && !cancelled()
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
               with:
                   name: conformance-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
                   path: conformance-evidence
@@ -342,7 +342,7 @@ jobs:
                   mkdir -p release-output/runtime
                   cp -R .dist/svelte-effect-runtime/. release-output/runtime/
             - name: Upload exact runtime output
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
               with:
                   name: runtime-${{ github.sha }}
                   path: release-output/runtime
@@ -374,7 +374,7 @@ jobs:
                   mkdir -p release-output/grammars
                   cp ".dist/svelte-effect-runtime-grammars/${{ needs.plan.outputs.artifact_grammars }}" release-output/grammars/
             - name: Upload exact grammar package
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
               with:
                   name: grammars-${{ github.sha }}
                   path: release-output/grammars
@@ -412,7 +412,7 @@ jobs:
                   mkdir -p release-output/language-server
                   cp ".dist/svelte-effect-runtime-language-server/${{ needs.plan.outputs.artifact_language_server }}" release-output/language-server/
             - name: Upload exact language server package
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
               with:
                   name: language-server-${{ github.sha }}
                   path: release-output/language-server
@@ -443,7 +443,7 @@ jobs:
                   mkdir -p release-output/vsix
                   cp ".dist/svelte-effect-runtime-vsix/${{ needs.plan.outputs.artifact_vsix }}" release-output/vsix/
             - name: Upload exact VSIX
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
               with:
                   name: vsix-${{ github.sha }}
                   path: release-output/vsix
@@ -549,7 +549,7 @@ jobs:
                   cp release-source/release-plan.json release-candidate/source-plan.json
                   cp release-input/plan/release-plan.json release-candidate/release-plan.json
             - name: Upload immutable candidate bundle
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
               with:
                   name: release-candidate-${{ needs.plan.outputs.version }}-${{ github.sha }}
                   path: release-candidate
@@ -682,7 +682,7 @@ jobs:
                   --dry-run true
             - name: Upload dry-run evidence
               if: always()
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
               with:
                   name: promotion-state-${{ github.run_id }}
                   path: release-state.json
@@ -792,7 +792,7 @@ jobs:
                   --dry-run false
             - name: Upload GitHub preparation evidence
               if: always()
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
               with:
                   name: promotion-phase-github-prepare-${{ github.run_id }}
                   path: release-state.json
@@ -846,7 +846,7 @@ jobs:
                   --dry-run false
             - name: Upload npm evidence
               if: always()
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
               with:
                   name: promotion-phase-npm-${{ github.run_id }}
                   path: release-state.json
@@ -899,7 +899,7 @@ jobs:
                   --dry-run false
             - name: Upload GitHub asset evidence
               if: always()
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
               with:
                   name: promotion-phase-github-assets-${{ github.run_id }}
                   path: release-state.json
@@ -956,7 +956,7 @@ jobs:
                   --dry-run false
             - name: Upload OpenVSX evidence
               if: always()
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
               with:
                   name: promotion-phase-openvsx-${{ github.run_id }}
                   path: release-state.json
@@ -1013,7 +1013,7 @@ jobs:
                   --dry-run false
             - name: Upload finalization evidence
               if: always()
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
               with:
                   name: promotion-phase-github-finalize-${{ github.run_id }}
                   path: release-state.json
@@ -1062,7 +1062,7 @@ jobs:
                   --output release-state.json
             - name: Upload consolidated promotion evidence
               if: always()
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
               with:
                   name: promotion-state-${{ github.run_id }}
                   path: release-state.json
@@ -1130,7 +1130,7 @@ jobs:
                   --output release-report/timing.json
             - name: Upload timing evidence
               if: always()
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
               with:
                   name: timing-${{ github.run_id }}
                   path: release-report/timing.json
