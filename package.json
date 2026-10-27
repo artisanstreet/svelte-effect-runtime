@@ -1,5 +1,6 @@
 {
 	"name": "svelte-effect-runtime-workspace",
+	"license": "BSD-3-Clause",
 	"private": true,
 	"type": "module",
 	"scripts": {
